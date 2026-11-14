@@ -12,7 +12,7 @@
 ## 2. CI
 
 - [x] 2.1 GitHub Actions `ci.yml` with `dorny/paths-filter`. Rust job: fmt, clippy `-D warnings`, test on `macos-14` and `ubuntu-24.04` (x86_64 + arm64), `cargo check` on `windows-2022`, `cargo deny`. Web job: lint, typecheck, Vitest, build for `apps/*` and `packages/*`. Verify: a docs-only PR runs only the web job, and a crate PR runs only Rust.
-- [ ] 2.2 Enable branch protection on `main` (required CI, 1 review), GitHub secret scanning and push protection. Verify: a direct push to `main` is rejected.
+- [ ] 2.2 Enable branch protection on `main` (required CI, 1 review), GitHub secret scanning and push protection. Verify: a direct push to `main` is rejected. Blocked on the GitHub Free plan for private repos (2026-11-14); the CI `secret-scan` job (gitleaks over full history) stands in until the repo moves to Pro or public.
 
 ## 3. CLI core
 

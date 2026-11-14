@@ -90,3 +90,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/tree-check.sh
+
+  secret-scan:
+    # Free stand-in for GitHub secret scanning (not available on private repos without GHAS).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks git --no-banner --redact --exit-code 1 .

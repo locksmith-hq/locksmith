@@ -1,0 +1,53 @@
+schema: spec-driven
+
+context: |
+  Locksmith is a credential broker for AI coding agents (Claude Code, Cursor, Codex, Grok Build, OpenHands).
+  Core promise: agents perform authenticated operations without ever holding the real credential.
+
+  This repo is the single monorepo for the whole product: Rust core, backend services, landing page,
+  docs site, desktop app, agent-framework plugins, IDE extensions, CI integrations, infra.
+  Top-level layout (fixed; new things go into one of these):
+    crates/        Rust libraries and binaries (smith, locksmithd, locksmith-mcp)
+    services/      Rust (axum) backend services: license-server, sync-server
+    apps/          user-facing apps: web (landing + pricing + account), docs, desktop (Tauri)
+    packages/      shared TypeScript: ui (design system), tsconfig, eslint-config
+    integrations/  agent/IDE/CI plugins: claude-code, cursor, codex, grok-build, openhands,
+                   gemini-cli, vscode, github-action, devcontainer-feature
+    infra/         IaC (OpenTofu) for CDN, buckets, DNS, services
+    tests/         adversarial/ and cross-component e2e/
+    docs/          internal engineering and product docs (public docs live in apps/docs)
+
+  Language rules:
+  - Rust (edition 2024, pinned in rust-toolchain.toml) for every component that touches secrets,
+    keys, IPC, proxies, updates, licensing, and for all backend services.
+  - TypeScript for apps/ UIs, packages/, and plugin/extension shells in integrations/. npm workspaces
+    only (never pnpm/yarn); after changing any package.json run `npm i` in that package dir.
+  - Plugins are thin: manifests and config that call `smith hook <agent> <event>` or `locksmith-mcp`.
+    Security logic lives once, in Rust, never re-implemented per plugin.
+  - One task runner (`just`) at the root drives cargo and npm so `just ci` runs everything.
+
+  Platforms: macOS (arm64, x86_64) and Linux (x86_64, arm64) are first-class from M0.
+  Windows reaches parity in M16. Every design must say what happens on each platform.
+
+  Non-negotiable security rules:
+  - Never print, log, serialize or return a plaintext secret on any path an agent can read.
+  - Plaintext secrets live in `secrecy`/`zeroize` types only; no Debug/Display/Clone on them.
+  - Never hold user secrets hostage: licensing, update or telemetry failures may disable paid
+    features but must never block unlock, `smith export`, or Free-tier operation.
+  - No network calls carrying vault data except to the user's configured upstreams.
+  - State guarantees honestly: label each protection as prevention, containment, or detection.
+
+  Delivery rules:
+  - Every milestone ends with a binary a developer can install and use the same day.
+  - Every milestone adds checks to `smith doctor` and cases to tests/adversarial for what it ships.
+  - Acceptance gates are executable (cargo test, scripts in tests/), not prose.
+
+rules:
+  proposal:
+    - State what a user can do after this milestone that they could not do before ("Usable outcome").
+    - List explicitly what is out of scope.
+  design:
+    - Record alternatives rejected and why, especially where it deviates from docs/reference/locksmith-v5.md.
+  tasks:
+    - Each task group ends with a verification task naming the exact command or test that proves it.
+    - Tasks are sized to land in one PR (roughly half a day to two days).

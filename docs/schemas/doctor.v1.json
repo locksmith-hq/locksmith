@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://locksmith.dev/schemas/doctor.v1.json",
+  "title": "smith doctor report",
+  "type": "object",
+  "required": ["schema", "version", "platform", "checks"],
+  "properties": {
+    "schema": { "const": "doctor.v1" },
+    "version": { "type": "string" },
+    "platform": { "type": "string" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "summary", "fixable"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$" },
+          "status": { "enum": ["ok", "warn", "fail", "skip"] },
+          "summary": { "type": "string" },
+          "remediation": { "type": "string" },
+          "fixable": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

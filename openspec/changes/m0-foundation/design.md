@@ -72,12 +72,14 @@ Checks register through `inventory` so later crates add checks without editing a
 The JSON schema is versioned (`doctor.v1`) and snapshot-tested.
 
 ### D4. Release and basic self-update
-`cargo-dist` with GitHub Releases, plus a minisign signature over `manifest.json`
+A hand-written `release.yml` publishes raw `smith-<triple>` binaries to GitHub Releases, plus a minisign signature over `manifest.json`
 (`{version, targets: {triple: {url, sha256}}}`). The minisign public key is compiled into `smith`.
 The update path is: download to a temp file in the same directory, verify SHA-256, `rename()` over
 the running binary (safe on Unix), then re-exec `smith --version` as a smoke test. Downloading from
 a private repo requires `GH_TOKEN`. That is fine for internal testers, and M12 moves distribution to
 a public CDN.
+
+As built: `Source::GitHub` resolves assets through the GitHub API with `GH_TOKEN`. It follows the storage redirect *without* the token. `Source::Http` serves any mirror (`LOCKSMITH_UPDATE_URL`). The new binary is smoke-tested (`--version`) *before* the rename, so a broken build never replaces a working one. cargo-dist was dropped for M0: its installers and Homebrew tap assume public downloads, which a private repo cannot serve. It is reconsidered in M12.
 
 Alternative rejected: `axoupdater`. It is convenient, but it trusts the GitHub release without our
 own signature, and we would replace it in M12 anyway.

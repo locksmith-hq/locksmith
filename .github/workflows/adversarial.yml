@@ -1,0 +1,24 @@
+name: adversarial
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adversarial:
+    runs-on: ubuntu-24.04
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scripted adversarial cases
+        run: bash tests/adversarial/run.sh all
+      - name: Live adversarial cases
+        if: env.HAS_KEY == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: bash tests/adversarial/run.sh all --agent claude

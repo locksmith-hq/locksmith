@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "name": "@locksmith/tsconfig",
+  "version": "0.0.1",
+  "type": "module"
+}

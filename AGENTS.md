@@ -1,0 +1,37 @@
+# Locksmith monorepo
+
+Credential broker for AI coding agents. Agents perform authenticated operations without holding the credential.
+
+## Build and test
+
+- `just ci`: fmt, lint, test-rust, test-web, tree-check (run before every push)
+- `just fmt` / `just lint` / `just test-rust` / `just test-web` / `just tree-check`
+- `just dev <app>`: build one app, e.g. `just dev web`
+- `npm run build`, `npm test`, `npm run lint`: run across all npm workspaces
+- `cargo test --workspace`: run one Rust crate with `cargo test -p <crate>`
+
+## Layout
+
+- `crates/`: Rust core libraries and binaries (smith-cli, locksmithd, locksmith-mcp)
+- `services/`: Rust axum backend services
+- `apps/`: web, docs, desktop (npm workspaces, except desktop which is Tauri/Rust)
+- `packages/`: shared TypeScript (tsconfig, eslint-config, ui)
+- `integrations/`: thin agent/IDE/CI plugins that call `smith hook` or `locksmith-mcp`
+- `infra/`: OpenTofu IaC
+- `tests/`: cross-component end-to-end tests (`tests/e2e/`)
+- `docs/`: product and planning docs
+- `scripts/tree-check.sh`: enforces where Rust and package.json may live
+
+## Security rules
+
+- Never print, log or serialize a plaintext secret.
+- Secrets only in secrecy/zeroize types with no Debug/Display/Clone.
+- Never block unlock or export because of licensing or update failures.
+- Rust for anything touching secrets.
+- npm only. Never pnpm or yarn.
+
+## OpenSpec workflow
+
+- `openspec list`: see active changes
+- `/opsx:apply <id>`: implement a change
+- `/opsx:archive <id>`: archive a finished change

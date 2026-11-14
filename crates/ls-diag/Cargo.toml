@@ -1,0 +1,17 @@
+[package]
+name = "ls-diag"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ls-core = { path = "../ls-core" }
+inventory = "0.3"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-14
+          - target: x86_64-apple-darwin
+            runner: macos-14
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build smith
+        env:
+          LOCKSMITH_CHANNEL: stable
+        run: cargo build --release --locked -p smith-cli --target ${{ matrix.target }}
+
+      - name: Stage asset
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/smith" "dist/smith-${{ matrix.target }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smith-${{ matrix.target }}
+          path: dist/smith-${{ matrix.target }}
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: smith-*
+          path: dist
+          merge-multiple: true
+
+      - name: Check tag matches workspace version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          WS_VERSION="$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$3); print $3; exit}' Cargo.toml)"
+          if [ -z "$WS_VERSION" ] || [ "$VERSION" != "$WS_VERSION" ]; then
+            echo "Tag $TAG (version $VERSION) does not match [workspace.package] version '$WS_VERSION' in Cargo.toml" >&2
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install minisign
+        run: sudo apt-get install -y minisign
+
+      - name: Build manifest
+        run: scripts/make-manifest.sh "$VERSION" dist
+
+      - name: Sign manifest
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          umask 077
+          KEYFILE="$(mktemp)"
+          trap 'rm -f "$KEYFILE"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$KEYFILE"
+          minisign -S -s "$KEYFILE" -m dist/manifest.json -x dist/manifest.json.minisig </dev/null
+          rm -f "$KEYFILE"
+
+      - name: Verify signature
+        run: |
+          # Pubkey file is a single base64 line (no untrusted-comment header), as ls-update reads it.
+          PUBKEY="$(head -n 1 crates/ls-update/update-pubkey.txt | tr -d '[:space:]')"
+          minisign -V -P "$PUBKEY" -m dist/manifest.json -x dist/manifest.json.minisig
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE=()
+          case "$GITHUB_REF_NAME" in *-*) PRERELEASE=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --generate-notes "${PRERELEASE[@]}"

@@ -19,6 +19,8 @@ ls-update = { path = "../ls-update" }
 ls-crypto = { path = "../ls-crypto" }
 ls-platform = { path = "../ls-platform" }
 ls-vault = { path = "../ls-vault" }
+ls-ipc = { path = "../ls-ipc" }
+ls-broker = { path = "../ls-broker" }
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
 rpassword = "7"

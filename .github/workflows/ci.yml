@@ -64,7 +64,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # shortcut: SQLCipher needs OpenSSL on Windows; ls-vault and smith-cli rejoin this check in M16 (task 1.0).
-      - run: cargo check --workspace --exclude ls-vault --exclude smith-cli
+      - run: cargo check --workspace --exclude ls-vault --exclude smith-cli --exclude ls-ipc --exclude ls-broker --exclude locksmithd  # Unix-socket daemon; Windows named pipe lands in M16
 
   deny:
     needs: changes

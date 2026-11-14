@@ -1,4 +1,505 @@
-fn main() {
-    eprintln!("locksmithd: not implemented yet");
+//! `locksmithd`: the per-user broker daemon. Holds the unlocked vault key in memory, keeps
+//! session leases in memory only (a restart drops them: fail closed), and spawns `smith run`
+//! children itself so secrets never travel back over the socket.
+
+mod run;
+
+use ls_broker::{Denial, LeaseState, Leases, Manifest, Role};
+use ls_ipc::{AuditEvent, ErrorCode, Frame, LOCK_FILE, Request, Response, read_frame, write_frame};
+use ls_platform::proc::{Peer, ProcId, id_of};
+use ls_vault::audit::{AuditRecord, StoredEvent};
+use ls_vault::{Error as VErr, Vault};
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// sun_path is 104 bytes on macOS and 108 on Linux.
+const MAX_SOCKET_PATH: usize = 100;
+/// BLOCKED events recorded while locked wait here until the next unlock (lost on restart).
+const MAX_PENDING: usize = 1000;
+
+pub struct Actor {
+    pub pid: u32,
+    pub start: u64,
+    pub exe: String,
+    /// Pinned digest the caller matched; empty for unattested callers.
+    pub exe_hash: String,
+}
+
+impl Actor {
+    fn of(p: &Peer, m: &Manifest) -> Actor {
+        Actor {
+            pid: p.id.pid,
+            start: p.id.start,
+            exe: p.exe.display().to_string(),
+            exe_hash: m.digest_of(p).map(|d| d.hex()).unwrap_or_default(),
+        }
+    }
+}
+
+pub fn now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+pub fn rec(
+    a: &Actor,
+    action: &str,
+    target: Option<String>,
+    rule: &str,
+    decision: &str,
+    session: Option<String>,
+) -> AuditRecord {
+    AuditRecord {
+        ts: now(),
+        session_id: session,
+        actor_pid: a.pid,
+        actor_start: a.start,
+        actor_exe: a.exe.clone(),
+        actor_exe_hash: a.exe_hash.clone(),
+        action: action.into(),
+        target,
+        policy_rule: rule.into(),
+        decision: decision.into(),
+    }
+}
+
+pub struct State {
+    pub vault: Option<Vault>,
+    pub leases: Leases,
+    pub last: Instant,
+    pending: Vec<AuditRecord>,
+}
+
+impl State {
+    /// Append now when unlocked; while locked, queue (flushed on the next unlock).
+    pub fn audit(&mut self, r: AuditRecord) -> Result<(), String> {
+        let Some(v) = &self.vault else {
+            if self.pending.len() < MAX_PENDING {
+                self.pending.push(r);
+            }
+            return Ok(());
+        };
+        for p in std::mem::take(&mut self.pending) {
+            let _ = v.audit_append(&p);
+        }
+        v.audit_append(&r)
+            .map(|_| ())
+            .map_err(|e| format!("audit failed: {e}"))
+    }
+}
+
+pub struct Daemon {
+    st: Mutex<State>,
+    manifest: Manifest,
+    idle: Option<Duration>,
+    me: Actor,
+}
+
+impl Daemon {
+    pub fn state(&self) -> MutexGuard<'_, State> {
+        self.st.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Drop the key material (auditing first). Also the entry point for a future screen-lock
+    /// watcher: call `lock_now("screen_lock")`.
+    pub fn lock_now(&self, reason: &str) {
+        self.lock_as(&self.me, reason);
+    }
+
+    fn lock_as(&self, a: &Actor, reason: &str) {
+        let mut st = self.state();
+        if st.vault.is_some() {
+            let _ = st.audit(rec(a, "LOCK", None, reason, "ALLOW", None));
+            st.vault = None;
+        }
+    }
+}
+
+fn err(code: ErrorCode, m: impl Into<String>) -> Response {
+    Response::Error {
+        code,
+        message: m.into(),
+    }
+}
+
+fn vault_dir() -> std::path::PathBuf {
+    ls_core::config_dir().join("vault")
+}
+
+fn vault_open(passphrase: &[u8]) -> Result<Vault, Response> {
+    let dir = vault_dir();
+    if let Err(e) = ls_vault::check_perms(&dir) {
+        return Err(err(ErrorCode::Internal, e.to_string()));
+    }
+    if !ls_vault::exists(&dir) {
+        return Err(err(ErrorCode::NotFound, VErr::NotInitialized.to_string()));
+    }
+    Vault::open_passphrase(&dir, passphrase, weak_kdf()).map_err(|e| match e {
+        VErr::BadCredentials => err(ErrorCode::Denied, e.to_string()),
+        e => err(ErrorCode::Internal, e.to_string()),
+    })
+}
+
+/// Weak KDF parameters are accepted only in debug builds with the test switch.
+#[cfg(debug_assertions)]
+fn weak_kdf() -> bool {
+    std::env::var("LOCKSMITH_INSECURE_TEST_KDF").as_deref() == Ok("1")
+}
+#[cfg(not(debug_assertions))]
+fn weak_kdf() -> bool {
+    false
+}
+
+pub fn deny_response(d: &Denial) -> Response {
+    match d {
+        Denial::NoLease | Denial::Inactive { .. } => err(ErrorCode::Locked, d.to_string()),
+        Denial::OutOfScope { .. } => err(ErrorCode::Denied, d.to_string()),
+    }
+}
+
+pub fn deny_rule(d: &Denial) -> String {
+    match d {
+        Denial::NoLease => "no_lease".into(),
+        Denial::Inactive { state, .. } if *state == LeaseState::Revoked => "revoked".into(),
+        Denial::Inactive { .. } => "expired".into(),
+        Denial::OutOfScope { why, .. } => format!("out_of_scope: {why}"),
+    }
+}
+
+fn event(e: StoredEvent) -> AuditEvent {
+    let r = e.record;
+    AuditEvent {
+        seq: e.seq,
+        ts: r.ts,
+        session_id: r.session_id,
+        actor_pid: r.actor_pid,
+        actor_exe: r.actor_exe,
+        action: r.action,
+        target: r.target,
+        policy_rule: r.policy_rule,
+        decision: r.decision,
+    }
+}
+
+fn serve(d: Arc<Daemon>, mut s: UnixStream) {
+    let Ok(peer) = Peer::of(&s) else { return };
+    let role = d.manifest.classify(&peer);
+    let actor = Actor::of(&peer, &d.manifest);
+    loop {
+        let req = match read_frame::<Request>(&mut s) {
+            Ok(Some(Frame::Msg(r))) => r,
+            Ok(Some(Frame::Version(v))) => {
+                let _ = write_frame(
+                    &mut s,
+                    &err(
+                        ErrorCode::Version,
+                        format!(
+                            "daemon speaks protocol v{}, got v{v}",
+                            ls_ipc::PROTOCOL_VERSION
+                        ),
+                    ),
+                );
+                return;
+            }
+            _ => return,
+        };
+        if !peer.alive() {
+            return;
+        }
+        if role != Role::Smith {
+            let resp = if matches!(req, Request::Ping) {
+                Response::Pong {
+                    version: VERSION.into(),
+                }
+            } else {
+                let _ = d
+                    .state()
+                    .audit(rec(&actor, "BLOCKED", None, "attestation", "DENY", None));
+                err(
+                    ErrorCode::Denied,
+                    "caller is not an attested Locksmith binary",
+                )
+            };
+            if write_frame(&mut s, &resp).is_err() {
+                return;
+            }
+            continue;
+        }
+        d.state().last = Instant::now();
+        if let Request::Run(spec) = req {
+            run::run(&d, &peer, &actor, s, spec);
+            return;
+        }
+        if write_frame(&mut s, &handle(&d, &peer, &actor, req)).is_err() {
+            return;
+        }
+    }
+}
+
+fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
+    let t = now();
+    match req {
+        Request::Ping => Response::Pong {
+            version: VERSION.into(),
+        },
+        Request::Unlock { passphrase } => {
+            if d.state().vault.is_some() {
+                return Response::Ok;
+            }
+            match vault_open(passphrase.expose()) {
+                Ok(v) => {
+                    let mut st = d.state();
+                    if st.vault.is_none() {
+                        st.vault = Some(v);
+                    }
+                    let _ = st.audit(rec(actor, "UNLOCK", None, "passphrase", "ALLOW", None));
+                    Response::Ok
+                }
+                Err(e) => e,
+            }
+        }
+        Request::Lock => {
+            d.lock_as(actor, "request");
+            Response::Ok
+        }
+        Request::SessionStart {
+            passphrase,
+            ttl_secs,
+            project,
+            env,
+            scopes,
+            command,
+        } => {
+            let scopes = if scopes.is_empty() {
+                vec!["run".into()]
+            } else {
+                scopes
+            };
+            if ttl_secs == 0 || scopes.iter().any(|s| s != "run") {
+                return err(
+                    ErrorCode::BadRequest,
+                    "ttl must be > 0 and scopes limited to 'run'",
+                );
+            }
+            // Proof of the human: the passphrase opens the vault (and unlocks it if locked).
+            // Run the KDF outside the state lock.
+            let opened = vault_open(passphrase.expose());
+            let mut st = d.state();
+            match opened {
+                Ok(v) => {
+                    if st.vault.is_none() {
+                        st.vault = Some(v);
+                        let _ = st.audit(rec(actor, "UNLOCK", None, "passphrase", "ALLOW", None));
+                    }
+                }
+                Err(e) => {
+                    let _ = st.audit(rec(actor, "BLOCKED", None, "bad_passphrase", "DENY", None));
+                    return e;
+                }
+            }
+            // An agent must not mint itself a new (longer, wider) lease from inside a session.
+            if let Some(l) = st
+                .leases
+                .find(peer.id, t)
+                .filter(|l| l.info(t).state == "active")
+            {
+                return err(
+                    ErrorCode::Denied,
+                    format!("already inside session {}; sessions cannot be nested", l.id),
+                );
+            }
+            let target = format!("{project}/{env}");
+            let rule = scopes.join(",");
+            let l = st
+                .leases
+                .start(peer.id, ttl_secs, project, env, scopes, command, t);
+            let (id, expires_at) = (l.id.clone(), l.expires_at);
+            if let Err(e) = st.audit(rec(
+                actor,
+                "SESSION_START",
+                Some(target),
+                &rule,
+                "ALLOW",
+                Some(id.clone()),
+            )) {
+                st.leases.revoke(Some(&id), t);
+                return err(ErrorCode::Internal, e);
+            }
+            Response::Session { id, expires_at }
+        }
+        Request::SessionEnd => {
+            d.state().leases.end(peer.id);
+            Response::Ok
+        }
+        Request::Status => {
+            let st = d.state();
+            Response::Status {
+                locked: st.vault.is_none(),
+                leases: st.leases.active(t),
+            }
+        }
+        Request::Revoke { id } => {
+            let mut st = d.state();
+            let ids: Vec<String> = st
+                .leases
+                .active(t)
+                .into_iter()
+                .map(|l| l.id)
+                .filter(|i| id.as_ref().is_none_or(|w| w == i))
+                .collect();
+            let count = st.leases.revoke(id.as_deref(), t);
+            for i in ids {
+                let _ = st.audit(rec(
+                    actor,
+                    "REVOKE",
+                    Some(i.clone()),
+                    "user",
+                    "ALLOW",
+                    Some(i),
+                ));
+            }
+            Response::Revoked { count }
+        }
+        Request::AuditList { limit } => match &d.state().vault {
+            None => err(ErrorCode::Locked, "vault is locked"),
+            Some(v) => match v.audit_list(limit) {
+                Ok(e) => Response::Audit {
+                    events: e.into_iter().map(event).collect(),
+                },
+                Err(e) => err(ErrorCode::Internal, e.to_string()),
+            },
+        },
+        Request::AuditVerify => match &d.state().vault {
+            None => err(ErrorCode::Locked, "vault is locked"),
+            Some(v) => match v.audit_verify(None) {
+                Ok(r) => Response::AuditVerify {
+                    events: r.events,
+                    broken_at: r.broken_at,
+                    detail: r.detail,
+                },
+                Err(e) => err(ErrorCode::Internal, e.to_string()),
+            },
+        },
+        Request::Run(_) | Request::Signal { .. } => {
+            err(ErrorCode::BadRequest, "unexpected request")
+        }
+    }
+}
+
+/// Idle timeout and sleep detection. Wall-clock time advances across a sleep but the monotonic
+/// clock does not, so a gap of more than 5 s between them means the machine slept.
+fn watch(d: Arc<Daemon>) {
+    let (mut wall, mut mono) = (SystemTime::now(), Instant::now());
+    loop {
+        std::thread::sleep(Duration::from_secs(1));
+        let (w, m) = (SystemTime::now(), Instant::now());
+        let drift = w
+            .duration_since(wall)
+            .unwrap_or_default()
+            .saturating_sub(m - mono);
+        (wall, mono) = (w, m);
+        if drift > Duration::from_secs(5) {
+            d.lock_now("sleep");
+        } else if let Some(t) = d.idle {
+            let st = d.state();
+            if st.vault.is_some() && st.last.elapsed() >= t {
+                drop(st);
+                d.lock_now("idle");
+            }
+        }
+    }
+}
+
+fn die(msg: String) -> ! {
+    eprintln!("locksmithd: {msg}");
     std::process::exit(1);
+}
+
+fn main() {
+    let _ = ls_platform::disable_core_dumps();
+    ls_platform::proc::deny_debugger_attach();
+
+    let dir = ls_ipc::runtime_dir();
+    if let Err(e) = ls_core::ensure_private_dir(&dir) {
+        die(format!("cannot create {}: {e}", dir.display()));
+    }
+    if !ls_core::is_private_dir(&dir).unwrap_or(false) {
+        die(format!("{} is not private (0700)", dir.display()));
+    }
+    let sock = ls_ipc::socket_path();
+    if sock.as_os_str().len() > MAX_SOCKET_PATH {
+        die(format!(
+            "socket path is {} bytes (max {MAX_SOCKET_PATH}); set LOCKSMITH_RUNTIME_DIR to a shorter directory",
+            sock.as_os_str().len()
+        ));
+    }
+
+    let mut lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(dir.join(LOCK_FILE))
+        .unwrap_or_else(|e| die(format!("cannot open lock file: {e}")));
+    if lock.try_lock().is_err() {
+        let mut pid = String::new();
+        let _ = lock.read_to_string(&mut pid);
+        die(format!(
+            "already running (pid {}, socket {})",
+            pid.trim(),
+            sock.display()
+        ));
+    }
+    let _ = lock.set_len(0);
+    let _ = write!(lock, "{}", std::process::id());
+
+    let _ = std::fs::remove_file(&sock); // stale: we hold the lock, so no live daemon owns it
+    let listener = UnixListener::bind(&sock)
+        .unwrap_or_else(|e| die(format!("cannot bind {}: {e}", sock.display())));
+    if let Err(e) = std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o600)) {
+        die(format!("cannot chmod socket: {e}"));
+    }
+
+    let idle = std::env::var("LOCKSMITH_IDLE_LOCK_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(1800);
+    let me = Actor {
+        pid: std::process::id(),
+        start: id_of(std::process::id()).map_or(0, |i: ProcId| i.start),
+        exe: std::env::current_exe()
+            .map_or_else(|_| "locksmithd".into(), |p| p.display().to_string()),
+        exe_hash: String::new(),
+    };
+    let d = Arc::new(Daemon {
+        st: Mutex::new(State {
+            vault: None,
+            leases: Leases::default(),
+            last: Instant::now(),
+            pending: Vec::new(),
+        }),
+        manifest: Manifest::beside_current_exe(),
+        idle: (idle > 0).then(|| Duration::from_secs(idle)),
+        me,
+    });
+    let w = d.clone();
+    std::thread::spawn(move || watch(w));
+    let s = d.clone();
+    if let Err(e) = ls_platform::screen::watch(move |r| s.lock_now(r)) {
+        eprintln!(
+            "locksmithd: screen-lock watcher unavailable ({e}); idle and sleep auto-lock still apply"
+        );
+    }
+    for conn in listener.incoming().flatten() {
+        let d = d.clone();
+        std::thread::spawn(move || serve(d, conn));
+    }
+    drop(lock);
 }

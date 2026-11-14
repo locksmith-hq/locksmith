@@ -4,11 +4,15 @@
 //! Aho-Corasick automaton and replace any match with `[REDACTED:<LABEL>]`. [`Stream`] does the
 //! same over chunked output, so a secret split across writes is still caught.
 
+pub mod binding;
 pub mod doctor;
 
 use aho_corasick::{AhoCorasick, MatchKind};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+use std::io::{Read, Write};
+use std::sync::mpsc::{RecvTimeoutError, channel};
+use std::time::Duration;
 use zeroize::Zeroizing;
 
 /// Values shorter than this only get plain-form matching (encoded forms would false-positive).
@@ -195,6 +199,44 @@ impl Redactor {
             held: Zeroizing::new(Vec::new()),
         }
     }
+}
+
+const IDLE: Duration = Duration::from_millis(20);
+
+/// Copies `src` to `dst` through one redaction stream; flushes held bytes after 20 ms of quiet.
+pub fn relay(mut src: impl Read + Send, mut dst: impl Write, r: &Redactor) {
+    let (tx, rx) = channel::<Vec<u8>>();
+    std::thread::scope(|s| {
+        s.spawn(move || {
+            let mut buf = [0u8; 8192];
+            loop {
+                match src.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if tx.send(buf[..n].to_vec()).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        let mut st = r.stream();
+        let mut emit = |b: Vec<u8>| {
+            if !b.is_empty() {
+                let _ = dst.write_all(&b).and_then(|_| dst.flush());
+            }
+        };
+        loop {
+            match rx.recv_timeout(IDLE) {
+                Ok(c) => emit(st.push(&c)),
+                Err(RecvTimeoutError::Timeout) => emit(st.flush_idle()),
+                Err(RecvTimeoutError::Disconnected) => {
+                    emit(st.finish());
+                    return;
+                }
+            }
+        }
+    });
 }
 
 /// Back `cut` up so it does not split a UTF-8 code point (never below `floor`).

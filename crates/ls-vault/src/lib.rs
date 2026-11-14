@@ -1,6 +1,7 @@
 //! Encrypted vault storage: `vault.header` sidecar plus a SQLCipher `vault.db`.
 use std::path::Path;
 
+pub mod audit;
 mod doctor;
 mod header;
 mod vault;

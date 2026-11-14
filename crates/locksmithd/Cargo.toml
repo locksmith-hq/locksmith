@@ -7,3 +7,14 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+ls-core = { path = "../ls-core" }
+ls-crypto = { path = "../ls-crypto" }
+ls-ipc = { path = "../ls-ipc" }
+ls-broker = { path = "../ls-broker" }
+ls-platform = { path = "../ls-platform" }
+ls-redact = { path = "../ls-redact" }
+ls-vault = { path = "../ls-vault" }
+libc = "0.2"
+zeroize = "1"

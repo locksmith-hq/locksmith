@@ -1,0 +1,10 @@
+[Unit]
+Description=Locksmith credential broker daemon
+
+[Service]
+ExecStart={{LOCKSMITHD}}
+Restart=on-failure
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

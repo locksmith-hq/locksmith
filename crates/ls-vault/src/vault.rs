@@ -35,7 +35,7 @@ CREATE TABLE secret_versions(
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ";
 /// Index + 1 is the `PRAGMA user_version` a migration leads to.
-const MIGRATIONS: &[&str] = &[SCHEMA_V1];
+const MIGRATIONS: &[&str] = &[SCHEMA_V1, crate::audit::SCHEMA_V2];
 
 #[derive(Debug)]
 pub enum Error {
@@ -224,7 +224,10 @@ fn private_file(p: &Path) -> Result<()> {
 }
 
 fn tune(conn: &Connection) -> Result<()> {
-    conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;")?;
+    conn.execute_batch(
+        "PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON;",
+    )?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))?;
     Ok(())
 }
@@ -346,6 +349,9 @@ impl Vault {
         let mut conn = open_encrypted(&db_path, hkdf(vk.expose(), label::SQLCIPHER).expose())?;
         tune(&conn)?;
         migrate(&mut conn, &db_path, MIGRATIONS)?;
+        // K_1 of the audit ratchet comes from the recovery phrase, stored before the header
+        // makes the vault visible (v6 review §2.1).
+        crate::audit::root_from_phrase(&conn, &vk, phrase)?;
         header::write(dir, &header, &vk)?;
         Ok(Self {
             conn,
@@ -410,6 +416,7 @@ impl Vault {
         let mut conn = open_encrypted(&db_path, hkdf(vk.expose(), label::SQLCIPHER).expose())?;
         tune(&conn)?;
         migrate(&mut conn, &db_path, migrations)?;
+        crate::audit::ensure_key(&conn, &vk)?;
         Ok(Self {
             conn,
             dir: dir.to_path_buf(),
@@ -442,7 +449,12 @@ impl Vault {
         h.recovery_wrap = SealedDto::from(&wrap::recovery_wrap(phrase, &self.vk, h.vk_version)?);
         header::write(&self.dir, &h, &self.vk)?;
         self.header = h;
-        Ok(())
+        // Later audit events are verifiable from the new phrase (earlier ones by chain only).
+        crate::audit::root_from_phrase(&self.conn, &self.vk, phrase)
+    }
+
+    pub(crate) fn audit_parts(&self) -> (&Connection, &SecretKey32) {
+        (&self.conn, &self.vk)
     }
 
     pub fn kdf_params(&self) -> KdfParams {
@@ -965,13 +977,17 @@ mod tests {
         let t = Tmp::new("migrate");
         let (v, _) = make(&t);
         drop(v);
-        let two = [SCHEMA_V1, "CREATE TABLE extra(x INTEGER);"];
-        let v = Vault::open(&t.0, Unlock::Passphrase(b"pw", true), &two).unwrap();
+        let three = [
+            SCHEMA_V1,
+            crate::audit::SCHEMA_V2,
+            "CREATE TABLE extra(x INTEGER);",
+        ];
+        let v = Vault::open(&t.0, Unlock::Passphrase(b"pw", true), &three).unwrap();
         let ver: u32 = v
             .conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(ver, 2);
+        assert_eq!(ver, 3);
         let baks: Vec<_> = std::fs::read_dir(&t.0)
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
@@ -984,7 +1000,7 @@ mod tests {
         let bver: u32 = b
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(bver, 1);
+        assert_eq!(bver, 2);
         drop((v, b));
         // And an older build refuses a newer vault.
         assert!(matches!(

@@ -14,11 +14,7 @@ use std::io::{IsTerminal, Read, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
-const IDLE: Duration = Duration::from_millis(20);
 
 const EXPLAIN: &str = "\
 smith run: what this protects, and what it does not
@@ -93,7 +89,7 @@ fn cwd() -> Result<std::path::PathBuf, Fail> {
     std::env::current_dir().map_err(|e| Fail(ExitCode::Failure, format!("no current dir: {e}")))
 }
 
-fn bound() -> Result<Option<(binding::Binding, Vec<u8>)>, Fail> {
+pub(crate) fn bound() -> Result<Option<(binding::Binding, Vec<u8>)>, Fail> {
     binding::find(&cwd()?)
         .map(|p| binding::load(&p))
         .transpose()
@@ -125,6 +121,13 @@ pub fn run(o: &Opts, a: RunArgs) -> Result<ExitCode, Fail> {
         print!("{EXPLAIN}");
         return Ok(ExitCode::Ok);
     }
+    if std::env::var_os("LOCKSMITH_SESSION").is_some() {
+        let keys = a.only;
+        return crate::session::run_via_daemon(a.project, a.env, keys, a.yes, a.cmd);
+    }
+    // Only the direct path holds secret values in this process. The daemon path must stay
+    // dumpable: on Linux a non-dumpable process hides /proc/<pid>/exe, so the daemon could
+    // not attest it.
     let _ = ls_platform::disable_core_dumps();
     let b = bound()?;
     let bind = b.as_ref().map(|(b, _)| b);
@@ -193,6 +196,7 @@ pub fn run(o: &Opts, a: RunArgs) -> Result<ExitCode, Fail> {
     let mut secrets = Vec::new();
     for k in &keys {
         let val = v.get_secret(&project, &env, k).map_err(fail)?;
+        crate::audit_cmds::record(&v, "ACCESS", format!("{project}/{env}/{k}"), "run")?;
         secrets.push(Secret::new(k.clone(), val.expose()));
         vars.push((k.into(), val.expose().to_vec()));
     }
@@ -236,8 +240,8 @@ fn pipe(cmd: &[String], vars: &[(OsString, Vec<u8>)], stale: &[OsString], r: &Re
     forward_signals(child.id(), false, None);
     let (so, se) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
     std::thread::scope(|s| {
-        s.spawn(|| relay(so, std::io::stdout(), r));
-        relay(se, std::io::stderr(), r);
+        s.spawn(|| ls_redact::relay(so, std::io::stdout(), r));
+        ls_redact::relay(se, std::io::stderr(), r);
     });
     match child.wait() {
         Ok(st) => st.code().unwrap_or_else(|| 128 + st.signal().unwrap_or(0)),
@@ -305,7 +309,7 @@ fn pty(cmd: &[String], vars: &[(OsString, Vec<u8>)], stale: &[OsString], r: &Red
             }
         })),
     );
-    relay(reader, std::io::stdout(), r);
+    ls_redact::relay(reader, std::io::stdout(), r);
     let st = child.wait();
     drop(raw);
     match st {
@@ -338,7 +342,7 @@ fn signal_number(name: &str) -> i32 {
 
 /// SIGWINCH resizes the pty; in PTY mode SIGINT is forwarded too (raw mode turns terminal ^C
 /// into a byte). In pipe mode the child shares our terminal and gets ^C itself, so SIGINT is swallowed.
-fn forward_signals(pid: u32, pty: bool, resize: Option<Box<dyn Fn() + Send>>) {
+pub(crate) fn forward_signals(pid: u32, pty: bool, resize: Option<Box<dyn Fn() + Send>>) {
     let Ok(mut sigs) = signal_hook::iterator::Signals::new([SIGINT, SIGTERM, SIGHUP, SIGWINCH])
     else {
         return;
@@ -350,42 +354,6 @@ fn forward_signals(pid: u32, pty: bool, resize: Option<Box<dyn Fn() + Send>>) {
                 SIGINT if !pty => {}
                 s if pid != 0 => ls_platform::kill(pid, s),
                 _ => {}
-            }
-        }
-    });
-}
-
-/// Copies `src` to `dst` through one redaction stream; flushes held bytes after 20 ms of quiet.
-fn relay(mut src: impl Read + Send, mut dst: impl Write, r: &Redactor) {
-    let (tx, rx) = channel::<Vec<u8>>();
-    std::thread::scope(|s| {
-        s.spawn(move || {
-            let mut buf = [0u8; 8192];
-            loop {
-                match src.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        if tx.send(buf[..n].to_vec()).is_err() {
-                            break;
-                        }
-                    }
-                }
-            }
-        });
-        let mut st = r.stream();
-        let mut emit = |b: Vec<u8>| {
-            if !b.is_empty() {
-                let _ = dst.write_all(&b).and_then(|_| dst.flush());
-            }
-        };
-        loop {
-            match rx.recv_timeout(IDLE) {
-                Ok(c) => emit(st.push(&c)),
-                Err(RecvTimeoutError::Timeout) => emit(st.flush_idle()),
-                Err(RecvTimeoutError::Disconnected) => {
-                    emit(st.finish());
-                    return;
-                }
             }
         }
     });

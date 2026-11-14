@@ -7,3 +7,11 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+ls-ipc = { path = "../ls-ipc" }
+ls-platform = { path = "../ls-platform" }
+getrandom = "0.2"
+ls-core = { path = "../ls-core" }
+ls-diag = { path = "../ls-diag" }
+inventory = "0.3"

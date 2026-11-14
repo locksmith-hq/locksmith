@@ -5,13 +5,16 @@ use ls_core::ExitCode;
 use serde_json::json;
 use std::process;
 
+mod audit_cmds;
 mod binding;
 mod dotenv;
 mod input;
 mod run_cmd;
+mod session;
 mod vault_cmds;
 
 // Keep the diagnostics crates linked so their `inventory` checks register.
+use ls_broker as _; // daemon/platform/audit doctor checks
 use ls_diag as _;
 use ls_redact as _;
 use ls_update as _;
@@ -61,6 +64,32 @@ enum Cmd {
         /// Write `.locksmith.toml` in the current directory.
         #[arg(long)]
         binding_only: bool,
+    },
+    /// Manage the background daemon.
+    Daemon {
+        #[command(subcommand)]
+        cmd: session::DaemonCmd,
+    },
+    /// Authorize an agent for a bounded time.
+    Session {
+        #[command(subcommand)]
+        cmd: session::SessionCmd,
+    },
+    /// Show the daemon's lock state and active sessions.
+    Status,
+    /// Revoke a session (or all of them); effective immediately.
+    Revoke {
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        id: Option<String>,
+        #[arg(long)]
+        all: bool,
+    },
+    /// Lock the vault now.
+    Lock,
+    /// Inspect the tamper-evident audit ledger.
+    Audit {
+        #[command(subcommand)]
+        cmd: audit_cmds::AuditCmd,
     },
     /// Print a shell completion script.
     Completions { shell: clap_complete::Shell },
@@ -137,6 +166,12 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
         }
         Some(Cmd::Init { binding_only }) => run_cmd::init(binding_only),
         Some(Cmd::Run(a)) => run_cmd::run(&ro, a),
+        Some(Cmd::Daemon { cmd }) => session::daemon(cmd),
+        Some(Cmd::Session { cmd }) => session::session(&ro, cmd),
+        Some(Cmd::Status) => session::status(cli.json),
+        Some(Cmd::Revoke { id, .. }) => session::revoke(id),
+        Some(Cmd::Lock) => session::lock(),
+        Some(Cmd::Audit { cmd }) => audit_cmds::run(&ro, cmd),
         Some(Cmd::EnvTemplate(a)) => run_cmd::env_template(&ro, a),
         Some(Cmd::Vault(c)) => {
             let o = input::Opts {

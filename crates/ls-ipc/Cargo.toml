@@ -7,3 +7,9 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+ls-core = { path = "../ls-core" }
+ciborium = "0.2"
+serde = { version = "1", features = ["derive"] }
+zeroize = "1"

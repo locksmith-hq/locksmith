@@ -2,7 +2,7 @@
 //! Secret values appear only in `reveal --print` output and in files the user asks `export` to write.
 
 use crate::input::{self, Opts};
-use crate::{Fail, dotenv};
+use crate::{Fail, audit_cmds, dotenv};
 use clap::{Args, Subcommand};
 use ls_core::ExitCode;
 use ls_crypto::recovery::RecoveryPhrase;
@@ -184,7 +184,7 @@ pub struct ExportArgs {
     env: Option<String>,
 }
 
-fn dir() -> PathBuf {
+pub(crate) fn dir() -> PathBuf {
     ls_core::config_dir().join("vault")
 }
 
@@ -206,7 +206,7 @@ fn out(o: &Opts, msg: &str, j: serde_json::Value) {
 }
 
 /// Perms and existence are checked before any passphrase prompt.
-fn precheck(d: &Path) -> Result<(), Fail> {
+pub(crate) fn precheck(d: &Path) -> Result<(), Fail> {
     ls_vault::check_perms(d).map_err(fail)?;
     if !ls_vault::exists(d) {
         return Err(fail(VErr::NotInitialized));
@@ -481,6 +481,7 @@ fn add(o: &Opts, a: AddArgs) -> Result<(), Fail> {
     let ver = v
         .put_secret(&a.t.project, &a.t.env, &a.name, value.expose())
         .map_err(fail)?;
+    audit_write(&v, &a.t, &a.name, ver)?;
     out(
         o,
         &format!(
@@ -490,6 +491,12 @@ fn add(o: &Opts, a: AddArgs) -> Result<(), Fail> {
         json!({ "name": a.name, "project": a.t.project, "environment": a.t.env, "version": ver }),
     );
     Ok(())
+}
+
+/// Version 1 is a new secret (CREATE); later versions replace it (ROTATE).
+fn audit_write(v: &Vault, t: &Target, name: &str, ver: u32) -> Result<(), Fail> {
+    let action = if ver == 1 { "CREATE" } else { "ROTATE" };
+    audit_cmds::record(v, action, format!("{}/{}/{name}", t.project, t.env), "cli")
 }
 
 fn ls(o: &Opts, s: Scope) -> Result<(), Fail> {
@@ -741,7 +748,10 @@ fn import_dotenv(o: &Opts, file: &Path, t: &Target, yes: bool, keep: bool) -> Re
         ));
     }
     let mut v = unlock(o)?;
-    v.put_secrets(&t.project, &t.env, &items).map_err(fail)?;
+    let vers = v.put_secrets(&t.project, &t.env, &items).map_err(fail)?;
+    for ((k, _), ver) in items.iter().zip(vers) {
+        audit_write(&v, t, k, ver)?;
+    }
     let names: Vec<&String> = items.iter().map(|(k, _)| k).collect();
     let delete = if keep {
         false

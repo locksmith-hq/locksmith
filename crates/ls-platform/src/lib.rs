@@ -1,5 +1,9 @@
 //! OS-specific code. The only crate allowed `unsafe`; every block states why it is sound.
 
+#[cfg(unix)]
+pub mod proc;
+pub mod screen;
+
 use std::io;
 
 /// Disable core dumps for this process so decrypted memory never reaches disk.

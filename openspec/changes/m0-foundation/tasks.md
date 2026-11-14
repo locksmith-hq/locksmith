@@ -11,7 +11,7 @@
 
 ## 2. CI
 
-- [ ] 2.1 GitHub Actions `ci.yml` with `dorny/paths-filter`. Rust job: fmt, clippy `-D warnings`, test on `macos-14` and `ubuntu-24.04` (x86_64 + arm64), `cargo check` on `windows-2022`, `cargo deny`. Web job: lint, typecheck, Vitest, build for `apps/*` and `packages/*`. Verify: a docs-only PR runs only the web job, and a crate PR runs only Rust.
+- [x] 2.1 GitHub Actions `ci.yml` with `dorny/paths-filter`. Rust job: fmt, clippy `-D warnings`, test on `macos-14` and `ubuntu-24.04` (x86_64 + arm64), `cargo check` on `windows-2022`, `cargo deny`. Web job: lint, typecheck, Vitest, build for `apps/*` and `packages/*`. Verify: a docs-only PR runs only the web job, and a crate PR runs only Rust.
 - [ ] 2.2 Enable branch protection on `main` (required CI, 1 review), GitHub secret scanning and push protection. Verify: a direct push to `main` is rejected.
 
 ## 3. CLI core
@@ -27,13 +27,13 @@
 ## 5. Release and self-update
 
 - [x] 5.1 Write `release.yml` triggered by `v*` tags: build raw `smith-<triple>` binaries (macOS arm64/x86_64, Linux gnu x86_64/arm64), `scripts/make-manifest.sh`, and the `gh`-based `scripts/install.sh` for testers. cargo-dist, musl and the Homebrew tap move to M12 with the public CDN. Verify: tag `v0.0.1-alpha.1` produces a GitHub Release with archives and checksums.
-- [ ] 5.2 Generate a minisign keypair, store the secret key in Actions secrets, sign `manifest.json` in `release.yml`, embed the public key in `ls-update`. Verify: `minisign -V` on the release manifest succeeds.
+- [x] 5.2 Generate a minisign keypair, store the secret key in Actions secrets, sign `manifest.json` in `release.yml`, embed the public key in `ls-update`. Verify: `minisign -V` on the release manifest succeeds.
 - [x] 5.3 Implement `smith self update [--check]` with the hash plus signature check and atomic rename. Verify: integration test against a local HTTP fixture covers the valid, tampered-hash, bad-signature and interrupted-download cases.
 
 ## 6. Adversarial harness skeleton
 
 - [x] 6.1 Create `tests/adversarial/` with `run.sh`, the canary generator and the leak oracle (plain, base64 at 3 offsets, base64url, hex, percent, JSON-escaped). Verify: the oracle self-test detects a canary planted in each encoding.
-- [ ] 6.2 Add the `adversarial.yml` nightly workflow (scripted mode always, live-agent mode when `ANTHROPIC_API_KEY` is set). Verify: a manual dispatch runs green with zero cases.
+- [x] 6.2 Add the `adversarial.yml` nightly workflow (scripted mode always, live-agent mode when `ANTHROPIC_API_KEY` is set). Verify: a manual dispatch runs green with zero cases.
 
 ## 7. Milestone acceptance
 

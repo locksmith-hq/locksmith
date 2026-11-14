@@ -16,7 +16,12 @@ path = "src/main.rs"
 ls-core = { path = "../ls-core" }
 ls-diag = { path = "../ls-diag" }
 ls-update = { path = "../ls-update" }
+ls-crypto = { path = "../ls-crypto" }
+ls-platform = { path = "../ls-platform" }
+ls-vault = { path = "../ls-vault" }
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
+rpassword = "7"
 semver = "1"
 serde_json = "1"
+zeroize = "1"

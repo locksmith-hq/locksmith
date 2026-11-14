@@ -4,6 +4,9 @@ yanked = "deny"
 [licenses]
 allow = [
   "MIT",
+  "CC0-1.0",
+  "blessing",
+  "WTFPL",
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
   "BSD-2-Clause",

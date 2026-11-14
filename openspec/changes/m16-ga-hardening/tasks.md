@@ -5,6 +5,7 @@
 - [ ] 1.1 Named-pipe IPC and attestation (design D1). Verify: Windows CI e2e with signed and unsigned clients.
 - [ ] 1.2 TPM/Hello wrap. Verify: a manual test on 2 devices and a unit test with a CNG mock.
 - [ ] 1.3 Job Object containment and daemon service install. Verify: Windows CI revoke-kill e2e.
+- [ ] 1.0 Build SQLCipher on Windows (OpenSSL via vcpkg, static) and re-include `ls-vault` and `smith-cli` in the CI `windows-check`. Verify: `windows-2022` job runs `cargo check --workspace` with no excludes.
 - [ ] 1.4 Port the redactor PTY (ConPTY), hooks paths and the relays. Verify: the full adversarial suite on `windows-2022`.
 
 ## 2. Linux TPM2

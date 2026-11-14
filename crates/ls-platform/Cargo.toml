@@ -7,3 +7,6 @@ publish.workspace = true
 
 [lints.rust]
 unsafe_code = "allow"
+
+[dependencies]
+libc = "0.2"

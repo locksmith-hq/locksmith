@@ -7,3 +7,16 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+ls-platform = { path = "../ls-platform" }
+ls-core = { path = "../ls-core" }
+ls-crypto = { path = "../ls-crypto" }
+ls-diag = { path = "../ls-diag" }
+ciborium = "0.2"
+getrandom = "0.2"
+hmac = "0.12"
+inventory = "0.3"
+rusqlite = { version = "0.42", features = ["bundled-sqlcipher"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"

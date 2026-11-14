@@ -69,6 +69,10 @@ fn doctor_json_is_single_document() {
         "fs.config_dir_perms",
         "binary.signature",
         "update.reachable",
+        "vault.present",
+        "vault.perms",
+        "vault.kdf_params",
+        "vault.wraps",
     ] {
         assert!(ids.contains(&id), "missing check {id}");
     }

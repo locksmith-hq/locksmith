@@ -5,9 +5,14 @@ use ls_core::ExitCode;
 use serde_json::json;
 use std::process;
 
+mod dotenv;
+mod input;
+mod vault_cmds;
+
 // Keep the diagnostics crates linked so their `inventory` checks register.
 use ls_diag as _;
 use ls_update as _;
+use ls_vault as _;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const COMMIT: &str = env!("SMITH_COMMIT");
@@ -27,6 +32,13 @@ struct Cli {
     /// Print version information.
     #[arg(long, short = 'V')]
     version: bool,
+    /// Read the passphrase from the first line of stdin instead of prompting (not allowed for `reveal`).
+    #[arg(long, global = true)]
+    passphrase_stdin: bool,
+    /// Test hook (debug builds only): read the init confirmation words from stdin.
+    #[cfg(debug_assertions)]
+    #[arg(long, global = true, hide = true)]
+    test_confirm_words_from_stdin: bool,
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -35,6 +47,8 @@ struct Cli {
 enum Cmd {
     /// Check that Locksmith is healthy on this machine.
     Doctor,
+    #[command(flatten)]
+    Vault(vault_cmds::VaultCmds),
     /// Print a shell completion script.
     Completions { shell: clap_complete::Shell },
     /// Manage the Locksmith installation itself.
@@ -106,6 +120,17 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
             } else {
                 ExitCode::Ok
             })
+        }
+        Some(Cmd::Vault(c)) => {
+            let o = input::Opts {
+                json: cli.json,
+                passphrase_stdin: cli.passphrase_stdin,
+                #[cfg(debug_assertions)]
+                test_confirm: cli.test_confirm_words_from_stdin,
+                #[cfg(not(debug_assertions))]
+                test_confirm: false,
+            };
+            vault_cmds::run(c, &o)
         }
         Some(Cmd::Completions { shell }) => {
             clap_complete::generate(shell, &mut Cli::command(), "smith", &mut std::io::stdout());

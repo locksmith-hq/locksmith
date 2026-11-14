@@ -73,6 +73,8 @@ fn doctor_json_is_single_document() {
         "vault.perms",
         "vault.kdf_params",
         "vault.wraps",
+        "redact.selftest",
+        "run.pty_available",
     ] {
         assert!(ids.contains(&id), "missing check {id}");
     }

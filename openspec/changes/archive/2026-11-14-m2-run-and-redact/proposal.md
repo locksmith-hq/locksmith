@@ -24,7 +24,7 @@ delete `.env` for real.
 
 ## Usable outcome
 
-`smith run -- npm test` and `claude` launched with `smith run -- claude` both work without a `.env`.
+`smith run -- npm test` (and any app, test or script) works without a `.env`, and terminal output never shows a secret. Running an AI agent itself under `smith run` with injected secrets is NOT safe: the agent's tools return output to the model before redaction. Agent-context protection arrives with M4 (hooks) and M5+ (delegation).
 Any echo of a secret in their output appears as `[REDACTED:STRIPE_KEY]`.
 
 ## Capabilities

@@ -58,6 +58,54 @@ pub fn current_uid() -> u32 {
     unsafe { libc::getuid() }
 }
 
+/// Terminal put into raw mode on construction; the original settings are restored on drop.
+#[cfg(unix)]
+pub struct RawMode(libc::termios);
+
+#[cfg(unix)]
+impl RawMode {
+    /// Raw mode on stdin. Errors when stdin is not a terminal.
+    pub fn enable() -> io::Result<Self> {
+        // SAFETY: termios is plain data; tcgetattr fills it for fd 0 and we check the result.
+        let mut t: libc::termios = unsafe { std::mem::zeroed() };
+        if unsafe { libc::tcgetattr(0, &mut t) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let orig = RawMode(t);
+        // SAFETY: cfmakeraw edits the struct we own; tcsetattr reads it.
+        unsafe { libc::cfmakeraw(&mut t) };
+        // SAFETY: fd 0 is our terminal and `t` is a fully initialised termios from tcgetattr.
+        if unsafe { libc::tcsetattr(0, libc::TCSANOW, &t) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(orig)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        // SAFETY: restores the termios captured in `enable`; failure leaves nothing to undo.
+        unsafe { libc::tcsetattr(0, libc::TCSANOW, &self.0) };
+    }
+}
+
+/// (rows, cols) of the terminal on stdout, if it is one.
+#[cfg(unix)]
+pub fn term_size() -> Option<(u16, u16)> {
+    // SAFETY: winsize is plain data; TIOCGWINSZ writes into it.
+    let mut w: libc::winsize = unsafe { std::mem::zeroed() };
+    (unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut w) } == 0 && w.ws_row > 0)
+        .then_some((w.ws_row, w.ws_col))
+}
+
+/// Send `sig` to process `pid` (best effort).
+#[cfg(unix)]
+pub fn kill(pid: u32, sig: i32) {
+    // SAFETY: kill takes plain integers; a stale pid at worst signals nothing.
+    unsafe { libc::kill(pid as libc::pid_t, sig) };
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

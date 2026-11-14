@@ -40,3 +40,7 @@ prompt.
   does not stop this, and `--explain` says so. Containment comes in M8.
 - The idle flush can hold up to `max_len-1` bytes of a genuine partial prefix indefinitely until
   more output or EOF arrives. That is acceptable, because EOF flushes it.
+
+## Known limits (as built)
+- Base64 boundary bits: the stable-middle pattern excludes characters that mix the secret with neighbouring bytes, so up to 6 bits of the first and last secret byte can remain visible next to a `[REDACTED:...]` marker inside a base64 blob. No full secret byte is ever exposed.
+- Agents: injecting secrets into an AI agent is unsafe (its tools return output to the model before redaction); `smith run --explain` says so, and agent protection comes from M4/M5.

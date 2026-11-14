@@ -5,12 +5,15 @@ use ls_core::ExitCode;
 use serde_json::json;
 use std::process;
 
+mod binding;
 mod dotenv;
 mod input;
+mod run_cmd;
 mod vault_cmds;
 
 // Keep the diagnostics crates linked so their `inventory` checks register.
 use ls_diag as _;
+use ls_redact as _;
 use ls_update as _;
 use ls_vault as _;
 
@@ -49,6 +52,16 @@ enum Cmd {
     Doctor,
     #[command(flatten)]
     Vault(vault_cmds::VaultCmds),
+    /// Run a command with project secrets injected into its environment (output is redacted).
+    Run(run_cmd::RunArgs),
+    /// Print KEY= lines (names only) for the bound or selected keys.
+    EnvTemplate(run_cmd::TemplateArgs),
+    /// Create a project file (only `--binding-only` for now).
+    Init {
+        /// Write `.locksmith.toml` in the current directory.
+        #[arg(long)]
+        binding_only: bool,
+    },
     /// Print a shell completion script.
     Completions { shell: clap_complete::Shell },
     /// Manage the Locksmith installation itself.
@@ -100,6 +113,7 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
         }
         return Ok(ExitCode::Ok);
     }
+    let ro = opts(&cli);
     match cli.cmd {
         None => {
             Cli::command().print_help().ok();
@@ -121,6 +135,9 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
                 ExitCode::Ok
             })
         }
+        Some(Cmd::Init { binding_only }) => run_cmd::init(binding_only),
+        Some(Cmd::Run(a)) => run_cmd::run(&ro, a),
+        Some(Cmd::EnvTemplate(a)) => run_cmd::env_template(&ro, a),
         Some(Cmd::Vault(c)) => {
             let o = input::Opts {
                 json: cli.json,
@@ -139,6 +156,14 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
         Some(Cmd::Smith {
             cmd: SelfCmd::Update { check },
         }) => self_update(check, cli.json),
+    }
+}
+
+fn opts(cli: &Cli) -> input::Opts {
+    input::Opts {
+        json: cli.json,
+        passphrase_stdin: cli.passphrase_stdin,
+        test_confirm: false,
     }
 }
 

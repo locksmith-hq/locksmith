@@ -1,10 +1,9 @@
-# Spec Delta
+# secret-execution Specification
 
 ## Purpose
-
 Lets users run any command with the secrets it needs, without writing them to disk or putting them in shell history.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Run with injected secrets
 `smith run -- <cmd>` SHALL start the command with the selected secrets added to its environment and SHALL exit with the command's exit code.
@@ -44,3 +43,10 @@ The child environment SHALL NOT contain any `LOCKSMITH_` prefixed variable from 
 #### Scenario: Template contents
 - **WHEN** the user runs `smith env-template > .env.example`
 - **THEN** every line has the form `KEY=` with no value
+
+### Requirement: Agent injection warning
+`smith run --explain` SHALL warn that injecting secrets into an AI agent process is unsafe, because the agent's tools return output to the model before redaction, and SHALL point to delegated access instead.
+
+#### Scenario: Explain warns about agents
+- **WHEN** the user runs `smith run --explain`
+- **THEN** the output states that secrets should not be injected into AI agents and names delegated access as the alternative

@@ -188,7 +188,7 @@ fn dir() -> PathBuf {
     ls_core::config_dir().join("vault")
 }
 
-fn fail(e: VErr) -> Fail {
+pub(crate) fn fail(e: VErr) -> Fail {
     let code = match e {
         VErr::NotFound(_) => ExitCode::NotFound,
         VErr::Invalid(_) | VErr::AlreadyExists(_) => ExitCode::Usage,
@@ -215,7 +215,7 @@ fn precheck(d: &Path) -> Result<(), Fail> {
 }
 
 /// Every command that touches secrets unlocks with a fresh passphrase entry (nothing is cached).
-fn unlock(o: &Opts) -> Result<Vault, Fail> {
+pub(crate) fn unlock(o: &Opts) -> Result<Vault, Fail> {
     let d = dir();
     precheck(&d)?;
     let (_, weak) = input::kdf();

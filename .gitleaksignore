@@ -1,0 +1,4 @@
+# Fake test fixtures in pre-squash branch commits (values renamed in later commits).
+733b11bed61af252bbc8ea6737b2568d9d00dddd:crates/smith-cli/src/binding.rs:stripe-access-token:112
+6b27824c619b3eb9c5f61d370a07b7ad71cb7ef3:crates/ls-redact/tests/stream_props.rs:stripe-access-token:10
+6b27824c619b3eb9c5f61d370a07b7ad71cb7ef3:crates/ls-redact/tests/stream_props.rs:github-pat:12

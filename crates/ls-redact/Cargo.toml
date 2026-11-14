@@ -7,3 +7,19 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+aho-corasick = "1"
+base64 = "0.22"
+inventory = "0.3"
+ls-diag = { path = "../ls-diag" }
+serde_json = "1"
+zeroize = "1"
+
+[dev-dependencies]
+proptest = "1"
+criterion = "0.5"
+
+[[bench]]
+name = "redact"
+harness = false

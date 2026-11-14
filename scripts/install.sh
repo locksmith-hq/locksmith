@@ -29,7 +29,9 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-gh release download --repo "$REPO" \
+TAG="$(gh api repos/tomer555/locksmith/releases --jq '[.[]|select(.draft|not)][0].tag_name')"
+[ -n "$TAG" ] || { echo "no published release found" >&2; exit 1; }
+gh release download "$TAG" --repo "$REPO" \
   --pattern "smith-$TRIPLE" --pattern manifest.json --pattern manifest.json.minisig \
   --dir "$TMP"
 

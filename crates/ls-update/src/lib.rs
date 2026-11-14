@@ -109,7 +109,9 @@ impl Source {
                     Some(t) => r.header("Authorization", &format!("Bearer {t}")),
                     None => r,
                 };
-                let api = format!("https://api.github.com/repos/{repo}/releases/latest");
+                // `releases/latest` skips prereleases; M0 testers run alphas, so take the newest non-draft.
+                // shortcut: no channel filtering yet, M12 adds stable/beta/nightly channels.
+                let api = format!("https://api.github.com/repos/{repo}/releases?per_page=20");
                 let mut resp = auth(
                     agent
                         .get(&api)
@@ -123,7 +125,11 @@ impl Source {
                         resp.status()
                     )));
                 }
-                let release: serde_json::Value = resp.body_mut().read_json().map_err(net)?;
+                let releases: serde_json::Value = resp.body_mut().read_json().map_err(net)?;
+                let release = releases
+                    .as_array()
+                    .and_then(|r| r.iter().find(|x| x["draft"] == false))
+                    .ok_or_else(|| Error::Network("no published release".into()))?;
                 let asset_url = release["assets"]
                     .as_array()
                     .and_then(|a| a.iter().find(|x| x["name"] == file))

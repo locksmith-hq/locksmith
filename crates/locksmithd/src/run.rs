@@ -47,6 +47,23 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
         .or_else(|| binding.as_ref()?.env.clone())
         .unwrap_or("development".into());
 
+    if let Some(gh) = &spec.gh {
+        let (lease, tok) = crate::git::gh_token(
+            d,
+            peer,
+            actor,
+            binding.as_ref(),
+            &project,
+            &env,
+            gh.repo.as_deref(),
+        )?;
+        let redactor = Redactor::new(&[Secret::new("GH_TOKEN", tok.as_bytes())]);
+        return Ok(Prepared {
+            lease,
+            vars: vec![("GH_TOKEN".into(), tok.as_bytes().to_vec())],
+            redactor,
+        });
+    }
     let mut st = d.state();
     st.last = Instant::now();
     let t = now();

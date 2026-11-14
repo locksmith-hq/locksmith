@@ -1,6 +1,8 @@
 //! OS-specific code. The only crate allowed `unsafe`; every block states why it is sound.
 
 #[cfg(unix)]
+pub mod net;
+#[cfg(unix)]
 pub mod proc;
 pub mod screen;
 

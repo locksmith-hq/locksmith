@@ -2,6 +2,7 @@
 //! session leases in memory only (a restart drops them: fail closed), and spawns `smith run`
 //! children itself so secrets never travel back over the socket.
 
+mod git;
 mod run;
 mod scan;
 
@@ -100,6 +101,7 @@ pub struct Daemon {
     manifest: Manifest,
     idle: Option<Duration>,
     me: Actor,
+    git: git::Git,
 }
 
 impl Daemon {
@@ -278,14 +280,14 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
             command,
         } => {
             let scopes = if scopes.is_empty() {
-                vec!["run".into()]
+                vec!["run".into(), "git".into()]
             } else {
                 scopes
             };
-            if ttl_secs == 0 || scopes.iter().any(|s| s != "run") {
+            if ttl_secs == 0 || scopes.iter().any(|s| s != "run" && s != "git") {
                 return err(
                     ErrorCode::BadRequest,
-                    "ttl must be > 0 and scopes limited to 'run'",
+                    "ttl must be > 0 and scopes limited to 'run' and 'git'",
                 );
             }
             // Proof of the human: the passphrase opens the vault (and unlocks it if locked).
@@ -387,6 +389,22 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
                 Err(e) => err(ErrorCode::Internal, e.to_string()),
             },
         },
+        Request::GitCredential {
+            host,
+            repo,
+            binding,
+            remotes,
+        } => git::credential(d, peer, actor, &host, &repo, binding.as_deref(), &remotes),
+        Request::GitInfo => git::info(d),
+        Request::KeyNames { project, env } => match &d.state().vault {
+            None => err(ErrorCode::Locked, "vault is locked"),
+            Some(v) => match v.list_secrets(Some(&project), Some(&env)) {
+                Ok(m) => Response::Keys {
+                    keys: m.into_iter().map(|m| m.name).collect(),
+                },
+                Err(e) => err(ErrorCode::Internal, e.to_string()),
+            },
+        },
         Request::ScanText { text } => scan::scan_text(d, &text),
         Request::ScanPath { path } => scan::scan_path(d, &path),
         Request::HookAudit {
@@ -424,6 +442,25 @@ fn watch(d: Arc<Daemon>) {
             }
         }
     }
+}
+
+/// Git forwarder on a random loopback port (M5 D1). Failure is reported, not fatal: everything
+/// else the daemon does still works, and Git through the forwarder fails closed.
+fn start_git_forwarder(d: &Arc<Daemon>) {
+    let l = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(l) => l,
+        Err(e) => return eprintln!("locksmithd: Git forwarder unavailable ({e})"),
+    };
+    let Ok(port) = l.local_addr().map(|a| a.port()) else {
+        return;
+    };
+    let _ = d.git.port.set(port);
+    if let Err(e) = git::write_include(port) {
+        eprintln!("locksmithd: cannot write the Git include file ({e})");
+    }
+    let gate = Arc::new(git::Gate(d.clone()));
+    let up = Arc::new(git::upstream());
+    std::thread::spawn(move || ls_proxy::forward::serve(l, gate, up));
 }
 
 fn die(msg: String) -> ! {
@@ -498,7 +535,9 @@ fn main() {
         manifest: Manifest::beside_current_exe(),
         idle: (idle > 0).then(|| Duration::from_secs(idle)),
         me,
+        git: git::Git::default(),
     });
+    start_git_forwarder(&d);
     let w = d.clone();
     std::thread::spawn(move || watch(w));
     let s = d.clone();

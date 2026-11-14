@@ -44,6 +44,25 @@ check that covers delete and stale force pushes. A true ancestry check is in the
 `GH_TOKEN=<installation token>` via Mode C plus redaction. It is labelled contained, not delegated.
 The M6 local-CA mode can make it fully delegated for users who opt in.
 
+### D6. Implementation notes (as built)
+- The forwarder is synchronous: one thread per connection, like `locksmithd`, using `httparse`
+  and `rustls` (ring) with native roots plus webpki-roots. No hyper or tokio. Each request goes
+  upstream with `Connection: close` and the response bytes are copied verbatim, so no response
+  framing is re-encoded.
+- A refused push is answered with a receive-pack report (`ng <ref> <rule>`) when the client
+  sent `report-status`, so Git prints the rule. A bare 403 shows only "HTTP 403". Clients without
+  report-status get 403.
+- D4's stale-old check (`policy::check_with_advertised`) exists but is not wired yet; the
+  forwarder enforces delete-on-protected only. Backlog.
+- Allowlist: `[git] repos` in `.locksmith.toml`; when empty, the repository's own remotes (sent
+  by the credential helper). Protected refs: `[git] protected`, default `main` and `master`.
+  Credential key per host: `[git.credentials]`, default `GITHUB_TOKEN` / `GITLAB_TOKEN` /
+  `BITBUCKET_TOKEN`. A PAT or GitHub App JSON in that key selects the mode (D3).
+- Lease scopes: `git` joins `run`; `smith session start` grants both by default.
+- Limitation (detection, not prevention): the binding is a file the agent can edit, so an agent
+  can widen its own allowlist or unprotect a ref. Every credential mint and forwarded request is
+  audited with the repository, so this is visible in `smith audit`.
+
 ## Risks / Trade-offs
 - Some Git GUI clients ignore `insteadOf`. Out of scope, because agents use the CLI.
 - Corporate proxies: the forwarder honours `HTTPS_PROXY` for its upstream leg.

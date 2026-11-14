@@ -10,7 +10,9 @@ mod audit_cmds;
 mod binding;
 mod daemon_vault;
 mod doctor_m4;
+mod doctor_m5;
 mod dotenv;
+mod git_cmd;
 mod hook_cmd;
 mod init_cmd;
 mod input;
@@ -80,6 +82,13 @@ enum Cmd {
     Hook { agent: String, event: String },
     /// Scan files for vault secrets and well-known key formats (names only, never values).
     Scan(scan_cmd::ScanArgs),
+    /// Route Git for private hosts through Locksmith, so agents never hold a Git token.
+    Git {
+        #[command(subcommand)]
+        cmd: git_cmd::GitCmd,
+    },
+    /// Run the GitHub CLI with a token injected (contained: visible to `gh` only, output redacted).
+    Gh(git_cmd::GhArgs),
     /// Manage the background daemon.
     Daemon {
         #[command(subcommand)]
@@ -182,6 +191,8 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
         Some(Cmd::Init { binding_only, yes }) => init_cmd::run(&ro, binding_only, yes),
         Some(Cmd::Hook { agent, event }) => hook_cmd::run(&agent, &event),
         Some(Cmd::Scan(a)) => scan_cmd::run(&ro, a),
+        Some(Cmd::Git { cmd }) => git_cmd::run(cli.json, cmd),
+        Some(Cmd::Gh(a)) => git_cmd::gh(a),
         Some(Cmd::Run(a)) => run_cmd::run(&ro, a),
         Some(Cmd::Daemon { cmd }) => session::daemon(cmd),
         Some(Cmd::Session { cmd }) => session::session(&ro, cmd),

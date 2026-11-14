@@ -16,5 +16,7 @@ ls-broker = { path = "../ls-broker" }
 ls-platform = { path = "../ls-platform" }
 ls-redact = { path = "../ls-redact" }
 ls-vault = { path = "../ls-vault" }
+ls-proxy = { path = "../ls-proxy" }
+getrandom = "0.2"
 libc = "0.2"
 zeroize = "1"

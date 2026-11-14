@@ -126,8 +126,8 @@ pub enum SessionCmd {
 pub struct StartArgs {
     #[arg(long, default_value = "8h", value_parser = parse_ttl)]
     ttl: u64,
-    /// Operations the session allows (only `run` for now).
-    #[arg(long, default_value = "run")]
+    /// Operations the session allows: `run` (inject secrets) and `git` (the Git forwarder).
+    #[arg(long, default_values = ["run", "git"])]
     scope: Vec<String>,
     #[arg(short, long)]
     project: Option<String>,
@@ -263,6 +263,29 @@ pub fn run_via_daemon(
     all_keys: bool,
     cmd: Vec<String>,
 ) -> Result<ExitCode, Fail> {
+    run_spec(project, env, keys, all_keys, cmd, None)
+}
+
+/// `smith gh`: the daemon injects only GH_TOKEN.
+pub fn run_gh(repo: Option<String>, cmd: Vec<String>) -> Result<ExitCode, Fail> {
+    run_spec(
+        None,
+        None,
+        vec![],
+        false,
+        cmd,
+        Some(ls_ipc::GhSpec { repo }),
+    )
+}
+
+fn run_spec(
+    project: Option<String>,
+    env: Option<String>,
+    keys: Vec<String>,
+    all_keys: bool,
+    cmd: Vec<String>,
+    gh: Option<ls_ipc::GhSpec>,
+) -> Result<ExitCode, Fail> {
     let cwd = std::env::current_dir()
         .map_err(|e| fail(ExitCode::Failure, format!("no current dir: {e}")))?;
     let spec = RunSpec {
@@ -277,6 +300,7 @@ pub fn run_via_daemon(
             .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
             .filter(|(k, _)| !k.starts_with("LOCKSMITH_"))
             .collect(),
+        gh,
     };
     let mut c = connect(false).map_err(|Fail(_, m)| {
         fail(

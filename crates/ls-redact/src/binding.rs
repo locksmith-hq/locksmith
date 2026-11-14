@@ -11,6 +11,44 @@ pub struct Binding {
     pub env: Option<String>,
     #[serde(default)]
     pub keys: Vec<String>,
+    #[serde(default)]
+    pub git: Git,
+}
+
+/// `[git]`: which repositories the session may reach through the Git forwarder, which refs are
+/// protected, and which vault key holds each host's upstream credential (names only).
+#[derive(Deserialize, Default, Debug, PartialEq)]
+pub struct Git {
+    /// `host/owner/repo` entries. Empty: the repository's own remotes.
+    #[serde(default)]
+    pub repos: Vec<String>,
+    /// Ref patterns (`main`, `release/*`, `refs/tags/*`). Absent: `main` and `master`.
+    pub protected: Option<Vec<String>>,
+    /// Host -> vault key name (a PAT, or GitHub App JSON). Defaults in [`Git::credential_key`].
+    #[serde(default)]
+    pub credentials: std::collections::BTreeMap<String, String>,
+}
+
+impl Git {
+    pub fn protected(&self) -> Vec<String> {
+        self.protected
+            .clone()
+            .unwrap_or_else(|| vec!["main".into(), "master".into()])
+    }
+
+    /// Vault key holding `host`'s credential: configured, else `GITHUB_TOKEN`, `GITLAB_TOKEN`
+    /// or `BITBUCKET_TOKEN` for the public hosts.
+    pub fn credential_key(&self, host: &str) -> Option<String> {
+        self.credentials.get(host).cloned().or_else(|| {
+            match host {
+                "github.com" => Some("GITHUB_TOKEN"),
+                "gitlab.com" => Some("GITLAB_TOKEN"),
+                "bitbucket.org" => Some("BITBUCKET_TOKEN"),
+                _ => None,
+            }
+            .map(String::from)
+        })
+    }
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Binding, String> {
@@ -43,6 +81,27 @@ mod tests {
         assert_eq!(b.project.as_deref(), Some("p"));
         assert_eq!(b.keys, ["A", "B"]);
         assert!(parse(b"keys = 3").is_err());
+    }
+
+    #[test]
+    fn git_section_defaults_and_overrides() {
+        let b = parse(b"project=\"p\"\n").unwrap();
+        assert_eq!(b.git.protected(), ["main", "master"]);
+        assert_eq!(
+            b.git.credential_key("github.com").as_deref(),
+            Some("GITHUB_TOKEN")
+        );
+        assert_eq!(b.git.credential_key("git.example.com"), None);
+        let b = parse(
+            b"[git]\nrepos=[\"github.com/a/b\"]\nprotected=[]\n[git.credentials]\n\"git.example.com\"=\"CORP_GIT\"\n",
+        )
+        .unwrap();
+        assert_eq!(b.git.repos, ["github.com/a/b"]);
+        assert!(b.git.protected().is_empty());
+        assert_eq!(
+            b.git.credential_key("git.example.com").as_deref(),
+            Some("CORP_GIT")
+        );
     }
 
     #[test]

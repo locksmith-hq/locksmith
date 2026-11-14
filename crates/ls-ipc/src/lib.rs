@@ -125,6 +125,23 @@ pub enum Request {
     ScanPath {
         path: PathBuf,
     },
+    /// `smith git credential get`: mint a forwarder token for `host`/`repo` under the caller's
+    /// lease (scope `git`). `remotes` are the repository's own `host/owner/repo` remotes, used
+    /// as the allowlist when the binding lists none. Never returns the upstream credential.
+    GitCredential {
+        host: String,
+        repo: String,
+        binding: Option<Vec<u8>>,
+        remotes: Vec<String>,
+    },
+    /// Forwarder port and include-file path (for `smith git setup|status`, doctor).
+    GitInfo,
+    /// Names of the keys stored for `project`/`env` (never values; for doctor). Needs an
+    /// unlocked vault.
+    KeyNames {
+        project: String,
+        env: String,
+    },
     /// Record a hook decision (deny or ask) in the audit ledger.
     HookAudit {
         agent: String,
@@ -148,6 +165,15 @@ pub struct RunSpec {
     pub cwd: PathBuf,
     /// The client's environment (names and values), minus LOCKSMITH_* variables.
     pub environ: Vec<(String, String)>,
+    /// `smith gh`: inject only `GH_TOKEN` (the github.com upstream credential, an installation
+    /// token for this `owner/repo` in App mode) under the `git` scope. Contained (M5 D5).
+    #[serde(default)]
+    pub gh: Option<GhSpec>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct GhSpec {
+    pub repo: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -181,6 +207,16 @@ pub enum Response {
         /// First broken sequence number, if any.
         broken_at: Option<u64>,
         detail: String,
+    },
+    /// Session-scoped forwarder token (not the upstream credential).
+    GitToken {
+        username: String,
+        token: String,
+    },
+    GitInfo {
+        port: u16,
+        include: PathBuf,
+        hosts: Vec<String>,
     },
     Error {
         code: ErrorCode,
@@ -399,6 +435,16 @@ mod tests {
             Response::Keys {
                 keys: vec!["STRIPE_KEY".into()],
             },
+            // The forwarder token is session-scoped by design (M5 D2), never the upstream one.
+            Response::GitToken {
+                username: "locksmith".into(),
+                token: "fwd".into(),
+            },
+            Response::GitInfo {
+                port: 1,
+                include: "/x".into(),
+                hosts: vec!["github.com".into()],
+            },
         ];
         for r in &all {
             match r {
@@ -412,7 +458,9 @@ mod tests {
                 | Response::Audit { .. }
                 | Response::AuditVerify { .. }
                 | Response::Error { .. }
-                | Response::Keys { .. } => {}
+                | Response::Keys { .. }
+                | Response::GitToken { .. }
+                | Response::GitInfo { .. } => {}
             }
         }
         all

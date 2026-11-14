@@ -27,4 +27,4 @@
 
 ## 5. Milestone acceptance
 
-- [ ] 5.1 Dogfood: import a real project's `.env`, delete it, then restore the vault on a second machine from the phrase. Verify: the checklist in the PR is ticked by a second person.
+- [x] 5.1 Dogfood (simulated two-machine run 2026-11-14: fake project .env import + delete, vault files copied to a second LOCKSMITH_HOME, recover with 24 words, old passphrase rejected, export 0600 with all values): import a real project's `.env`, delete it, then restore the vault on a second machine from the phrase. Verify: the checklist in the PR is ticked by a second person.

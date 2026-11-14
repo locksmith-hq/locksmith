@@ -1,0 +1,7 @@
+{
+  "code": 0,
+  "stdout": {
+    "decision": "block",
+    "reason": "Blocked by Locksmith: your prompt contains the value of stripe-live-key; it was not sent. Instead: describe the problem without the value; the agent can use it through `smith run`"
+  }
+}

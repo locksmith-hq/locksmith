@@ -1,0 +1,10 @@
+{
+  "code": 0,
+  "stdout": {
+    "hookSpecificOutput": {
+      "hookEventName": "PreToolUse",
+      "permissionDecision": "ask",
+      "permissionDecisionReason": "Locksmith cannot verify this command (`eval` runs code that cannot be checked in advance); approve only if you trust it"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "code": 0,
+  "stdout": {
+    "hookSpecificOutput": {
+      "hookEventName": "PreToolUse",
+      "permissionDecision": "deny",
+      "permissionDecisionReason": "Blocked by Locksmith: `printenv` prints the whole environment. Instead: use `smith env-template` to see key names, or `printenv NAME` for a non-secret variable"
+    }
+  }
+}

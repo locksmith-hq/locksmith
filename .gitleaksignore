@@ -2,3 +2,6 @@
 733b11bed61af252bbc8ea6737b2568d9d00dddd:crates/smith-cli/src/binding.rs:stripe-access-token:112
 6b27824c619b3eb9c5f61d370a07b7ad71cb7ef3:crates/ls-redact/tests/stream_props.rs:stripe-access-token:10
 6b27824c619b3eb9c5f61d370a07b7ad71cb7ef3:crates/ls-redact/tests/stream_props.rs:github-pat:12
+# Fake fixture in an M4 branch commit (built at runtime in later commits).
+68f6ac3a456b927813126b1b52441bb1d5946761:crates/ls-hooks/src/generic.rs:stripe-access-token:83
+e9e0783bb9c0eccac8ae7a32607e2d1f53411e4c:crates/ls-hooks/src/generic.rs:private-key:104

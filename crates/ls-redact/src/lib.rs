@@ -41,6 +41,7 @@ pub struct Redactor {
     ac: Option<AhoCorasick>,
     patterns: Vec<Zeroizing<Vec<u8>>>,
     labels: Vec<Vec<u8>>, // replacement text per pattern
+    names: Vec<String>,   // secret label per pattern (for `find`)
     max_len: usize,
 }
 
@@ -124,10 +125,12 @@ impl Redactor {
     pub fn new(secrets: &[Secret]) -> Self {
         let mut patterns = Vec::new();
         let mut labels = Vec::new();
+        let mut names = Vec::new();
         for s in secrets {
             for p in forms(s) {
                 patterns.push(Zeroizing::new(p));
                 labels.push(format!("[REDACTED:{}]", s.label).into_bytes());
+                names.push(s.label.clone());
             }
         }
         let max_len = patterns.iter().map(|p| p.len()).max().unwrap_or(0);
@@ -141,8 +144,19 @@ impl Redactor {
             ac,
             patterns,
             labels,
+            names,
             max_len,
         }
+    }
+
+    /// Every secret occurrence in `input` (any encoding the redactor knows): label and byte
+    /// offset. Never returns the value.
+    pub fn find(&self, input: &[u8]) -> Vec<(&str, usize)> {
+        self.ac.as_ref().map_or_else(Vec::new, |ac| {
+            ac.find_iter(input)
+                .map(|m| (self.names[m.pattern().as_usize()].as_str(), m.start()))
+                .collect()
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -432,5 +446,18 @@ mod tests {
         out.extend(s.finish());
         assert_eq!(out, b"abc");
         assert!(clean(&out));
+    }
+
+    #[test]
+    fn find_reports_labels_and_offsets_in_any_encoding() {
+        use base64::Engine as _;
+        let r = Redactor::new(&[Secret::new("K", b"fake_value_123456")]);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(b"fake_value_123456");
+        let text = format!("a fake_value_123456 b {b64}");
+        let got = r.find(text.as_bytes());
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert_eq!(got[0], ("K", 2));
+        assert!(got.iter().all(|(l, _)| *l == "K"));
+        assert!(r.find(b"nothing here").is_empty());
     }
 }

@@ -7,7 +7,7 @@
 //! (3) the lease's project, environment and scopes cover the operation.
 
 use ls_ipc::LeaseInfo;
-use ls_platform::proc::{Digest, Peer, ProcId, descends_from, file_digest};
+use ls_platform::proc::{Digest, Peer, Pin, ProcId, descends_from, pin};
 use std::path::{Path, PathBuf};
 
 mod doctor;
@@ -34,7 +34,7 @@ impl Role {
 
 /// Digests of the Locksmith binaries installed beside the daemon, pinned when it starts.
 pub struct Manifest {
-    entries: Vec<(Digest, Role, PathBuf)>,
+    entries: Vec<(Pin, Role, PathBuf)>,
 }
 
 impl Manifest {
@@ -49,7 +49,7 @@ impl Manifest {
         .into_iter()
         .filter_map(|(name, role)| {
             let p = dir.join(name);
-            file_digest(&p).ok().map(|d| (d, role, p))
+            pin(&p).ok().map(|d| (d, role, p))
         })
         .collect();
         Manifest { entries }
@@ -66,7 +66,9 @@ impl Manifest {
     }
 
     pub fn pinned(&self) -> impl Iterator<Item = (&Digest, Role, &Path)> {
-        self.entries.iter().map(|(d, r, p)| (d, *r, p.as_path()))
+        self.entries
+            .iter()
+            .map(|(d, r, p)| (&d.digest, *r, p.as_path()))
     }
 
     /// Kernel-verified role of a peer. The request contents never influence this.
@@ -76,14 +78,14 @@ impl Manifest {
 
     /// The pinned digest a peer matched (for audit records).
     pub fn digest_of(&self, peer: &Peer) -> Option<&Digest> {
-        self.matched(peer).map(|(d, _, _)| d)
+        self.matched(peer).map(|(d, _, _)| &d.digest)
     }
 
-    fn matched(&self, peer: &Peer) -> Option<&(Digest, Role, PathBuf)> {
+    fn matched(&self, peer: &Peer) -> Option<&(Pin, Role, PathBuf)> {
         if peer.uid != ls_platform::current_uid() {
             return None;
         }
-        self.entries.iter().find(|(d, _, _)| peer.runs(d))
+        self.entries.iter().find(|(d, _, _)| peer.runs_pin(d))
     }
 }
 

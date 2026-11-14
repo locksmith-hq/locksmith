@@ -1,0 +1,8 @@
+{
+  "code": 0,
+  "stdout": {
+    "agent_message": "Locksmith cannot verify this command (`eval` runs code that cannot be checked in advance); approve only if you trust it",
+    "permission": "ask",
+    "user_message": "Locksmith cannot verify this command (`eval` runs code that cannot be checked in advance); approve only if you trust it"
+  }
+}

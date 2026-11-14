@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "beforeReadFile": [
+      {
+        "command": "command -v smith >/dev/null 2>&1 || { echo '{\"permission\":\"deny\",\"user_message\":\"Locksmith hook unavailable: run smith doctor\"}'; exit 0; }; smith hook cursor beforeReadFile",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "command -v smith >/dev/null 2>&1 || { echo '{\"agent_message\":\"Locksmith hook unavailable: run smith doctor\",\"permission\":\"deny\",\"user_message\":\"Locksmith hook unavailable: run smith doctor\"}'; exit 0; }; smith hook cursor beforeShellExecution",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "command -v smith >/dev/null 2>&1 || { echo '{\"continue\":false,\"user_message\":\"Locksmith hook unavailable: run smith doctor\"}'; exit 0; }; smith hook cursor beforeSubmitPrompt",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,1 @@
+{"conversation_id":"c1","hook_event_name":"beforeShellExecution","command":"eval \"$(echo Y2F0IC5lbnY= | base64 -d)\"","cwd":"__CWD__"}

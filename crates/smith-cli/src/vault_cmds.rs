@@ -119,9 +119,9 @@ pub enum ImportCmd {
 #[derive(Args)]
 pub struct Target {
     #[arg(short, long, default_value = "default")]
-    project: String,
+    pub(crate) project: String,
     #[arg(short, long, default_value = "development")]
-    env: String,
+    pub(crate) env: String,
 }
 
 #[derive(Args)]
@@ -732,7 +732,13 @@ fn export(o: &Opts, a: ExportArgs) -> Result<(), Fail> {
     Ok(())
 }
 
-fn import_dotenv(o: &Opts, file: &Path, t: &Target, yes: bool, keep: bool) -> Result<(), Fail> {
+pub(crate) fn import_dotenv(
+    o: &Opts,
+    file: &Path,
+    t: &Target,
+    yes: bool,
+    keep: bool,
+) -> Result<(), Fail> {
     let src = Zeroizing::new(std::fs::read_to_string(file).map_err(|e| {
         Fail(
             ExitCode::Failure,

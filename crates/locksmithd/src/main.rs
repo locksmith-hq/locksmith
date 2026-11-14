@@ -3,6 +3,7 @@
 //! children itself so secrets never travel back over the socket.
 
 mod run;
+mod scan;
 
 use ls_broker::{Denial, LeaseState, Leases, Manifest, Role};
 use ls_ipc::{AuditEvent, ErrorCode, Frame, LOCK_FILE, Request, Response, read_frame, write_frame};
@@ -386,6 +387,15 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
                 Err(e) => err(ErrorCode::Internal, e.to_string()),
             },
         },
+        Request::ScanText { text } => scan::scan_text(d, &text),
+        Request::ScanPath { path } => scan::scan_path(d, &path),
+        Request::HookAudit {
+            agent,
+            event,
+            decision,
+            rule,
+            target,
+        } => scan::hook_audit(d, actor, &agent, &event, &decision, &rule, &target),
         Request::Run(_) | Request::Signal { .. } => {
             err(ErrorCode::BadRequest, "unexpected request")
         }

@@ -117,6 +117,22 @@ pub enum Request {
         limit: u32,
     },
     AuditVerify,
+    /// Which vault secrets (any encoding) occur in `text`? Answered with key names only.
+    ScanText {
+        text: String,
+    },
+    /// Same for the content of the regular file at absolute `path` (read by the daemon).
+    ScanPath {
+        path: PathBuf,
+    },
+    /// Record a hook decision (deny or ask) in the audit ledger.
+    HookAudit {
+        agent: String,
+        event: String,
+        decision: String,
+        rule: String,
+        target: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -169,6 +185,10 @@ pub enum Response {
     Error {
         code: ErrorCode,
         message: String,
+    },
+    /// Names of the secrets a scan found (never values).
+    Keys {
+        keys: Vec<String>,
     },
 }
 
@@ -376,6 +396,9 @@ mod tests {
                 code: ErrorCode::Internal,
                 message: "m".into(),
             },
+            Response::Keys {
+                keys: vec!["STRIPE_KEY".into()],
+            },
         ];
         for r in &all {
             match r {
@@ -388,7 +411,8 @@ mod tests {
                 | Response::RunExited { .. }
                 | Response::Audit { .. }
                 | Response::AuditVerify { .. }
-                | Response::Error { .. } => {}
+                | Response::Error { .. }
+                | Response::Keys { .. } => {}
             }
         }
         all

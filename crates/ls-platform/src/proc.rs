@@ -51,8 +51,13 @@ pub struct Peer {
     pub exe: PathBuf,
     #[cfg(target_os = "linux")]
     pidfd: Option<OwnedFd>,
+    /// The executable inode the peer runs, its identity, and its SHA-256 (computed lazily).
     #[cfg(target_os = "linux")]
-    exe_hash: Option<[u8; 32]>,
+    exe_file: std::fs::File,
+    #[cfg(target_os = "linux")]
+    exe_id: Option<FileId>,
+    #[cfg(target_os = "linux")]
+    exe_hash: std::sync::OnceLock<Option<[u8; 32]>>,
     #[cfg(target_os = "macos")]
     code: Option<security_framework::os::macos::code_signing::SecCode>,
 }
@@ -71,7 +76,7 @@ impl Peer {
     pub fn runs(&self, d: &Digest) -> bool {
         match d {
             #[cfg(target_os = "linux")]
-            Digest::Sha256(h) => self.exe_hash.as_ref() == Some(h),
+            Digest::Sha256(h) => self.exe_sha256().as_ref() == Some(h),
             #[cfg(target_os = "macos")]
             Digest::CdHash(h) => self
                 .code
@@ -80,6 +85,27 @@ impl Peer {
             #[allow(unreachable_patterns)]
             _ => false,
         }
+    }
+
+    /// True when the peer runs the pinned binary. On Linux, when the peer's executable is the
+    /// very inode pinned, unchanged since (same dev/inode/size/mtime/ctime; ctime cannot be set
+    /// by the user, and Linux refuses writes to a running executable), the hash is skipped.
+    pub fn runs_pin(&self, p: &Pin) -> bool {
+        #[cfg(target_os = "linux")]
+        if p.id.is_some() && self.exe_id == p.id {
+            return true;
+        }
+        self.runs(&p.digest)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn exe_sha256(&self) -> Option<[u8; 32]> {
+        *self.exe_hash.get_or_init(|| {
+            use std::io::Seek;
+            let mut f = &self.exe_file;
+            f.rewind().ok()?;
+            sha256_reader(f).ok()
+        })
     }
 
     /// Kernel identity of the process connected on `s`. Errors when the kernel cannot say.
@@ -164,6 +190,49 @@ fn hop(pid: u32) -> io::Result<ProcInfo> {
     }
     #[cfg(not(target_os = "linux"))]
     info(pid)
+}
+
+/// File identity used to skip re-hashing an unchanged pinned binary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileId {
+    dev: u64,
+    ino: u64,
+    size: u64,
+    mtime: (i64, i64),
+    ctime: (i64, i64),
+}
+
+impl FileId {
+    fn of(m: &std::fs::Metadata) -> FileId {
+        use std::os::unix::fs::MetadataExt;
+        FileId {
+            dev: m.dev(),
+            ino: m.ino(),
+            size: m.size(),
+            mtime: (m.mtime(), m.mtime_nsec()),
+            ctime: (m.ctime(), m.ctime_nsec()),
+        }
+    }
+}
+
+/// A pinned binary: its digest, plus its file identity when that is stable.
+#[derive(Debug, Clone)]
+pub struct Pin {
+    pub digest: Digest,
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))] // macOS validates the cdhash live
+    id: Option<FileId>,
+}
+
+/// Pin the binary at `path`. The identity is kept only if the file did not change while it
+/// was being hashed.
+pub fn pin(path: &std::path::Path) -> io::Result<Pin> {
+    let before = std::fs::metadata(path).map(|m| FileId::of(&m)).ok();
+    let digest = file_digest(path)?;
+    let after = std::fs::metadata(path).map(|m| FileId::of(&m)).ok();
+    Ok(Pin {
+        digest,
+        id: before.filter(|b| Some(*b) == after),
+    })
 }
 
 /// Digest that pins the binary at `path` (see [`Digest`]).
@@ -398,7 +467,9 @@ mod linux {
             id: i.id,
             exe,
             pidfd,
-            exe_hash: super::sha256_reader(exe_file).ok(),
+            exe_id: exe_file.metadata().ok().map(|m| FileId::of(&m)),
+            exe_file,
+            exe_hash: std::sync::OnceLock::new(),
         })
     }
 }
@@ -624,6 +695,29 @@ mod tests {
             }
         };
         assert!(!p.runs(&other));
+    }
+
+    #[test]
+    fn pin_matches_own_binary_and_not_a_changed_copy() {
+        let (a, _b) = UnixStream::pair().unwrap();
+        let p = Peer::of(&a).unwrap();
+        let exe = std::env::current_exe().unwrap();
+        let Ok(own) = pin(&exe) else { return };
+        assert!(p.runs_pin(&own));
+        let dir = std::env::temp_dir().join(format!("ls-pin-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let copy = dir.join("bin");
+        let mut b = std::fs::read(&exe).unwrap();
+        // A different file (new inode) with different content never matches by identity.
+        let n = b.len() / 2;
+        b[n] ^= 0xff;
+        std::fs::write(&copy, &b).unwrap();
+        if let Ok(other) = pin(&copy)
+            && other.digest != own.digest
+        {
+            assert!(!p.runs_pin(&other));
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

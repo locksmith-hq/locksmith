@@ -121,3 +121,78 @@ impl Drop for Home {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
+/// A throwaway git repo with a local identity, for scan / pre-commit / init e2e tests.
+pub struct Repo(pub PathBuf);
+impl Repo {
+    pub fn new() -> Self {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let p = std::env::temp_dir().join(format!(
+            "smith-repo-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap();
+        let r = Repo(p);
+        r.git(&["init", "-q"]);
+        r.git(&["config", "user.email", "t@example.com"]);
+        r.git(&["config", "user.name", "T"]);
+        r.git(&["config", "commit.gpgsign", "false"]);
+        r
+    }
+    pub fn git(&self, args: &[&str]) -> Output {
+        Command::new("git")
+            .args(args)
+            .current_dir(&self.0)
+            .output()
+            .unwrap()
+    }
+    pub fn write(&self, rel: &str, body: &str) {
+        let f = self.0.join(rel);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(f, body).unwrap();
+    }
+}
+impl Drop for Repo {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+impl Home {
+    /// `smith --passphrase-stdin <args>` run inside `dir`; the passphrase line is on stdin.
+    pub fn smith_in(&self, dir: &std::path::Path, args: &[&str]) -> Output {
+        let mut full = vec!["--passphrase-stdin"];
+        full.extend_from_slice(args);
+        let mut c = self.cmd(&full);
+        c.current_dir(dir);
+        let mut ch = c.spawn().unwrap();
+        let _ = ch
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(format!("{PW}\n").as_bytes());
+        ch.wait_with_output().unwrap()
+    }
+
+    /// A directory holding a `smith` wrapper that supplies the passphrase and this home, so
+    /// git hooks (which have no terminal) can run the real binary. Returns the directory.
+    pub fn smith_shim(&self) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let d = self.0.join("shim");
+        std::fs::create_dir_all(&d).unwrap();
+        let f = d.join("smith");
+        std::fs::write(
+            &f,
+            format!(
+                "#!/bin/sh\nexport LOCKSMITH_HOME='{}' LOCKSMITH_INSECURE_TEST_KDF=1\nprintf '%s\\n' '{PW}' | '{}' --passphrase-stdin \"$@\"\n",
+                self.0.display(),
+                env!("CARGO_BIN_EXE_smith")
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o755)).unwrap();
+        d
+    }
+}

@@ -5,11 +5,18 @@ use ls_core::ExitCode;
 use serde_json::json;
 use std::process;
 
+mod agents;
 mod audit_cmds;
 mod binding;
+mod daemon_vault;
+mod doctor_m4;
 mod dotenv;
+mod hook_cmd;
+mod init_cmd;
 mod input;
+mod precommit;
 mod run_cmd;
+mod scan_cmd;
 mod session;
 mod vault_cmds;
 
@@ -60,11 +67,19 @@ enum Cmd {
     /// Print KEY= lines (names only) for the bound or selected keys.
     EnvTemplate(run_cmd::TemplateArgs),
     /// Create a project file (only `--binding-only` for now).
+    /// Set up this project: binding, .env import, .gitignore, pre-commit scanner, agent hooks.
     Init {
-        /// Write `.locksmith.toml` in the current directory.
+        /// Only write `.locksmith.toml` in the current directory.
         #[arg(long)]
         binding_only: bool,
+        /// Apply every change without asking (CI).
+        #[arg(long)]
+        yes: bool,
     },
+    /// Agent hook entry point: `smith hook <agent> <event>` reads the hook JSON on stdin.
+    Hook { agent: String, event: String },
+    /// Scan files for vault secrets and well-known key formats (names only, never values).
+    Scan(scan_cmd::ScanArgs),
     /// Manage the background daemon.
     Daemon {
         #[command(subcommand)]
@@ -164,7 +179,9 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
                 ExitCode::Ok
             })
         }
-        Some(Cmd::Init { binding_only }) => run_cmd::init(binding_only),
+        Some(Cmd::Init { binding_only, yes }) => init_cmd::run(&ro, binding_only, yes),
+        Some(Cmd::Hook { agent, event }) => hook_cmd::run(&agent, &event),
+        Some(Cmd::Scan(a)) => scan_cmd::run(&ro, a),
         Some(Cmd::Run(a)) => run_cmd::run(&ro, a),
         Some(Cmd::Daemon { cmd }) => session::daemon(cmd),
         Some(Cmd::Session { cmd }) => session::session(&ro, cmd),

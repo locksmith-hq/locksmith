@@ -1,0 +1,10 @@
+{
+  "code": 0,
+  "stdout": {
+    "hookSpecificOutput": {
+      "hookEventName": "PreToolUse",
+      "permissionDecision": "deny",
+      "permissionDecisionReason": "Blocked by Locksmith: cannot verify this command (`eval` runs code that cannot be checked in advance). Codex cannot ask for approval here; run it yourself in a terminal if you trust it"
+    }
+  }
+}

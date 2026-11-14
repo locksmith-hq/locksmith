@@ -32,10 +32,12 @@ pub fn load(path: &Path) -> Result<(Binding, Vec<u8>), Fail> {
 }
 
 /// `smith init --binding-only`: writes a binding for `dir` using the vault's default project.
+pub const DEFAULT_BODY: &str = "# Names only. Never put secret values in this file.\n\
+                project = \"default\"\nenv = \"development\"\nkeys = []\n";
+
 pub fn init(dir: &Path) -> Result<PathBuf, Fail> {
     let f = dir.join(FILE);
-    let body = "# Names only. Never put secret values in this file.\n\
-                project = \"default\"\nenv = \"development\"\nkeys = []\n";
+    let body = DEFAULT_BODY;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

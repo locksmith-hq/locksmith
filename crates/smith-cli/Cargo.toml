@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 ls-core = { path = "../ls-core" }
 ls-diag = { path = "../ls-diag" }
+inventory = "0.3"
 ls-update = { path = "../ls-update" }
 ls-crypto = { path = "../ls-crypto" }
 ls-platform = { path = "../ls-platform" }
@@ -32,3 +33,4 @@ signal-hook = "0.4.6"
 toml = "1.2.1"
 serde = { version = "1.0.229", features = ["derive"] }
 ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
+ls-hooks = { version = "0.0.1-alpha.4", path = "../ls-hooks" }

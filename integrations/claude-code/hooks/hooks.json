@@ -1,0 +1,28 @@
+{
+  "description": "Locksmith guardrails: block secret reads and env dumps",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "command -v smith >/dev/null 2>&1 || { echo 'Locksmith hook unavailable: run smith doctor' >&2; exit 2; }; smith hook claude-code PreToolUse",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Read|Edit|MultiEdit|Grep|Glob"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "command -v smith >/dev/null 2>&1 || { echo 'Locksmith hook unavailable: run smith doctor' >&2; exit 2; }; smith hook claude-code UserPromptSubmit",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

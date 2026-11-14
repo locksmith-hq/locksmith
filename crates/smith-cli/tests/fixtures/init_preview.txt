@@ -1,0 +1,26 @@
+--- /dev/null
++++ b/.locksmith.toml
+@@ -0,0 +1,4 @@
++# Names only. Never put secret values in this file.
++project = "default"
++env = "development"
++keys = []
+
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,1 +1,6 @@
+ node_modules/
++# Locksmith
++.env*
++!.env.example
++.claude/settings.local.json
++.locksmith/
+
+--- a/.husky/pre-commit
++++ b/.husky/pre-commit
+@@ -1,1 +1,4 @@
+ echo hi
++# locksmith:pre-commit
++command -v smith >/dev/null 2>&1 || { echo "locksmith: 'smith' not found on PATH; the secret scan cannot run (install Locksmith or remove this hook step)" >&2; exit 1; }
++smith scan --staged || exit 1
+

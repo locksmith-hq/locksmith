@@ -13,6 +13,7 @@
 
 ## 3. Distribution and supply chain
 
+- [ ] 3.0 Clean-machine install + self-update test on a fresh macOS VM and an Ubuntu container (deferred from M0 7.1). Verify: recorded transcript in the PR.
 - [ ] 3.1 MSI plus WinGet, an apt/rpm repo, cask and formula updates, devcontainer feature, GitHub Action. Verify: clean-VM installs per channel.
 - [ ] 3.2 SLSA provenance, CycloneDX SBOM, `cargo-vet`, `smith self verify`. Verify: `gh attestation verify` in a release smoke job.
 

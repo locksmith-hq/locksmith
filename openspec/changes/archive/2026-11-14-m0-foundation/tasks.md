@@ -12,7 +12,6 @@
 ## 2. CI
 
 - [x] 2.1 GitHub Actions `ci.yml` with `dorny/paths-filter`. Rust job: fmt, clippy `-D warnings`, test on `macos-14` and `ubuntu-24.04` (x86_64 + arm64), `cargo check` on `windows-2022`, `cargo deny`. Web job: lint, typecheck, Vitest, build for `apps/*` and `packages/*`. Verify: a docs-only PR runs only the web job, and a crate PR runs only Rust.
-- [ ] 2.2 Enable branch protection on `main` (required CI, 1 review), GitHub secret scanning and push protection. Verify: a direct push to `main` is rejected. Blocked on the GitHub Free plan for private repos (2026-11-14); the CI `secret-scan` job (gitleaks over full history) stands in until the repo moves to Pro or public.
 
 ## 3. CLI core
 
@@ -37,4 +36,8 @@
 
 ## 7. Milestone acceptance
 
-- [ ] 7.1 Fresh-machine test: install from the release on a clean macOS VM and an Ubuntu container, run `smith doctor`, publish `v0.0.1-alpha.2`, run `smith self update`. Verify: the recorded transcript is attached to the milestone PR.
+## Workflow follow-up
+
+- Deferred 2.2: Enable branch protection on `main` (required CI, 1 review), GitHub secret scanning and push protection. Verify: a direct push to `main` is rejected. Blocked on the GitHub Free plan for private repos (2026-11-14); the CI `secret-scan` job (gitleaks over full history) stands in until the repo moves to Pro or public.
+- Deferred 7.1: Fresh-machine test: install from the release on a clean macOS VM and an Ubuntu container, run `smith doctor`, publish `v0.0.1-alpha.2`, run `smith self update`. Verify: the recorded transcript is attached to the milestone PR.
+- 7.1 was run on the developer Mac (install.sh + self update alpha.3 → alpha.4 against the private repo, 2026-11-14); the clean macOS VM and Ubuntu container runs move to M16 GA hardening.

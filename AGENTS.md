@@ -35,3 +35,17 @@ Credential broker for AI coding agents. Agents perform authenticated operations 
 - `openspec list`: see active changes
 - `/opsx:apply <id>`: implement a change
 - `/opsx:archive <id>`: archive a finished change
+
+## Delegating to subagents
+
+Pick the subagent model by how hard and how critical the task is:
+
+- **Opus 5.5** (`model: opus`): hard or critical work. Anything touching secrets, crypto, the vault,
+  the daemon's authorization or audit paths, relays and forwarders, adversarial gates, protocol
+  implementations, and cross-cutting design or merge decisions.
+- **Sonnet 5.5** (`model: sonnet`): medium-hard work. Feature code outside the secret paths, CLI
+  commands, doctor checks, integration tests, CI fixes, and non-trivial refactors.
+- **Haiku 5.5** (`model: haiku`): easy-medium work. Searches and code exploration, docs and
+  OpenSpec text edits, catalog/config data, formatting and lint fixes, and simple mechanical changes.
+
+When unsure, go one tier up. Split a mixed task so each part runs on the right tier.

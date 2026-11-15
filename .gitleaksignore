@@ -5,3 +5,9 @@
 # Fake fixture in an M4 branch commit (built at runtime in later commits).
 68f6ac3a456b927813126b1b52441bb1d5946761:crates/ls-hooks/src/generic.rs:stripe-access-token:83
 e9e0783bb9c0eccac8ae7a32607e2d1f53411e4c:crates/ls-hooks/src/generic.rs:private-key:104
+# AWS SigV4 test suite's documented example session token (vendored fixture, not a credential).
+crates/ls-proxy/tests/fixtures/sigv4/get-vanilla-with-session-token/context.json:generic-api-key:5
+crates/ls-proxy/tests/fixtures/sigv4/get-vanilla-with-session-token/header-canonical-request.txt:generic-api-key:6
+# Fake dummy-key ids in the M7 relay tests (not credentials).
+430a6ddbafc6ab608731c03ed43f06a164d12b0c:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+430a6ddbafc6ab608731c03ed43f06a164d12b0c:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21

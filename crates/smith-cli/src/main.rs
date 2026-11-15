@@ -7,6 +7,7 @@ use std::process;
 
 mod agents;
 mod audit_cmds;
+mod aws_cmd;
 mod binding;
 mod daemon_vault;
 mod db_cmd;
@@ -14,6 +15,7 @@ mod doctor_m4;
 mod doctor_m5;
 mod doctor_m6;
 mod doctor_m6_db;
+mod doctor_m7;
 mod dotenv;
 mod git_cmd;
 mod hook_cmd;
@@ -105,6 +107,11 @@ enum Cmd {
     Http {
         #[command(subcommand)]
         cmd: http_cmd::HttpCmd,
+    },
+    /// AWS helpers: `smith aws creds --contained -- <cmd>` (short-lived STS credentials).
+    Aws {
+        #[command(subcommand)]
+        cmd: aws_cmd::AwsCmd,
     },
     /// Run the GitHub CLI with a token injected (contained: visible to `gh` only, output redacted).
     Gh(git_cmd::GhArgs),
@@ -212,6 +219,7 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
         Some(Cmd::Scan(a)) => scan_cmd::run(&ro, a),
         Some(Cmd::Git { cmd }) => git_cmd::run(cli.json, cmd),
         Some(Cmd::Gh(a)) => git_cmd::gh(a),
+        Some(Cmd::Aws { cmd }) => aws_cmd::run(&ro, cmd),
         Some(Cmd::Db { cmd }) => db_cmd::run(cli.json, cmd),
         Some(Cmd::Token { cmd }) => http_cmd::token(cli.json, cmd),
         Some(Cmd::Http { cmd }) => http_cmd::http(&ro, cmd),

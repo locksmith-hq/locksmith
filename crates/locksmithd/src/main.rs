@@ -2,6 +2,7 @@
 //! session leases in memory only (a restart drops them: fail closed), and spawns `smith run`
 //! children itself so secrets never travel back over the socket.
 
+mod aws;
 mod db;
 mod git;
 mod http;
@@ -22,7 +23,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Lease operation scopes: `run` (M2), `git` (M5), `http` and `db` (M6).
-const SCOPES: [&str; 4] = ["run", "git", "http", "db"];
+const SCOPES: [&str; 5] = ["run", "git", "http", "db", "aws"];
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// sun_path is 104 bytes on macOS and 108 on Linux.
 const MAX_SOCKET_PATH: usize = 100;
@@ -109,6 +110,7 @@ pub struct Daemon {
     git: git::Git,
     db: db::Db,
     http: http::Http,
+    aws: aws::Aws,
 }
 
 impl Daemon {
@@ -342,7 +344,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
             if ttl_secs == 0 || scopes.iter().any(|s| !SCOPES.contains(&s.as_str())) {
                 return err(
                     ErrorCode::BadRequest,
-                    "ttl must be > 0 and scopes limited to 'run', 'git', 'http' and 'db'",
+                    "ttl must be > 0 and scopes limited to 'run', 'git', 'http', 'db' and 'aws'",
                 );
             }
             // Proof of the human: the passphrase opens the vault (and unlocks it if locked).
@@ -394,6 +396,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
         }
         Request::SessionEnd => {
             d.state().leases.end(peer.id);
+            aws::prune(d, &d.state());
             db::sweep(d);
             Response::Ok
         }
@@ -413,8 +416,10 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                 .map(|l| l.id)
                 .filter(|i| id.as_ref().is_none_or(|w| w == i))
                 .collect();
+            let revoked = ids.clone();
             let count = st.leases.revoke(id.as_deref(), t);
             http::prune(d, &st); // relay tokens die with their lease
+            aws::prune(d, &st);
             for i in ids {
                 let _ = st.audit(rec(
                     actor,
@@ -428,6 +433,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
             drop(st);
             // Relayed database connections close now, not at the next watcher tick.
             db::sweep(d);
+            aws::revoke_older(d, &revoked);
             Response::Revoked { count }
         }
         Request::AuditList { limit } => match &d.state().vault {
@@ -479,6 +485,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
         Request::TokenList => http::list(d),
         Request::TokenRevoke { token } => http::revoke(d, actor, token.as_deref()),
         Request::HttpInfo => http::info(d),
+        Request::AwsInfo => aws::info(d),
         Request::KeyNames { project, env } => match &d.state().vault {
             None => err(ErrorCode::Locked, "vault is locked"),
             Some(v) => match v.list_secrets(Some(&project), Some(&env)) {
@@ -564,6 +571,21 @@ fn start_http_relay(d: &Arc<Daemon>) {
     std::thread::spawn(move || ls_proxy::http::serve(l, auth, up));
 }
 
+/// SigV4 re-signing relay on its own random loopback port (M7).
+fn start_aws_relay(d: &Arc<Daemon>) {
+    let l = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(l) => l,
+        Err(e) => return eprintln!("locksmithd: AWS relay unavailable ({e})"),
+    };
+    let Ok(port) = l.local_addr().map(|a| a.port()) else {
+        return;
+    };
+    let _ = d.aws.port.set(port);
+    let auth = Arc::new(aws::Relay(d.clone()));
+    let up = Arc::new(aws::upstream());
+    std::thread::spawn(move || ls_proxy::aws::relay::serve(l, auth, up));
+}
+
 fn die(msg: String) -> ! {
     eprintln!("locksmithd: {msg}");
     std::process::exit(1);
@@ -639,9 +661,11 @@ fn main() {
         git: git::Git::default(),
         db: db::Db::default(),
         http: http::Http::default(),
+        aws: aws::Aws::default(),
     });
     start_git_forwarder(&d);
     start_http_relay(&d);
+    start_aws_relay(&d);
     let w = d.clone();
     std::thread::spawn(move || watch(w));
     let s = d.clone();

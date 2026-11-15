@@ -172,6 +172,8 @@ pub enum Request {
     },
     /// HTTP relay port and the hosts enabled for explicit-proxy mode (doctor, `smith http`).
     HttpInfo,
+    /// AWS relay port (doctor `aws.relay`).
+    AwsInfo,
     /// Record a hook decision (deny or ask) in the audit ledger.
     HookAudit {
         agent: String,
@@ -199,6 +201,14 @@ pub struct RunSpec {
     /// token for this `owner/repo` in App mode) under the `git` scope. Contained (M5 D5).
     #[serde(default)]
     pub gh: Option<GhSpec>,
+    /// `smith run --aws <profile>`: dummy credentials and the relay endpoint instead of keys
+    /// (M7). Needs the `aws` scope.
+    #[serde(default)]
+    pub aws: Option<String>,
+    /// With `aws`: contained mode (`smith aws creds --contained`): real 15-minute STS
+    /// credentials limited by the project policy, visible to the child (M7 2.1).
+    #[serde(default)]
+    pub aws_contained: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -272,6 +282,9 @@ pub enum Response {
         port: u16,
         /// Hosts the local CA is constrained to; empty when explicit-proxy mode is off.
         ca_hosts: Vec<String>,
+    },
+    AwsInfo {
+        port: u16,
     },
 }
 
@@ -547,6 +560,7 @@ mod tests {
                 port: 1,
                 ca_hosts: vec![],
             },
+            Response::AwsInfo { port: 1 },
         ];
         for r in &all {
             match r {
@@ -566,7 +580,8 @@ mod tests {
                 | Response::DbEndpoint { .. }
                 | Response::HttpToken(_)
                 | Response::HttpTokens { .. }
-                | Response::HttpInfo { .. } => {}
+                | Response::HttpInfo { .. }
+                | Response::AwsInfo { .. } => {}
             }
         }
         all

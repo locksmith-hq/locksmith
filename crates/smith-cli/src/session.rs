@@ -128,7 +128,7 @@ pub struct StartArgs {
     ttl: u64,
     /// Operations the session allows: `run` (inject secrets), `git` (the Git forwarder), `http`
     /// (the HTTP relay and opaque tokens) and `db` (database relays).
-    #[arg(long, default_values = ["run", "git", "http", "db"])]
+    #[arg(long, default_values = ["run", "git", "http", "db", "aws"])]
     scope: Vec<String>,
     #[arg(short, long)]
     project: Option<String>,
@@ -264,8 +264,9 @@ pub fn run_via_daemon(
     keys: Vec<String>,
     all_keys: bool,
     cmd: Vec<String>,
+    aws: Option<(String, bool)>,
 ) -> Result<ExitCode, Fail> {
-    run_spec(project, env, keys, all_keys, cmd, None)
+    run_spec(project, env, keys, all_keys, cmd, None, aws)
 }
 
 /// `smith gh`: the daemon injects only GH_TOKEN.
@@ -277,6 +278,7 @@ pub fn run_gh(repo: Option<String>, cmd: Vec<String>) -> Result<ExitCode, Fail> 
         false,
         cmd,
         Some(ls_ipc::GhSpec { repo }),
+        None,
     )
 }
 
@@ -290,6 +292,7 @@ pub fn run_leased(
     keys: Vec<String>,
     all_keys: bool,
     cmd: Vec<String>,
+    aws: Option<(String, bool)>,
 ) -> Result<ExitCode, Fail> {
     let (project, env) = resolve(project, env)?;
     let mut c = connect(true)?;
@@ -299,7 +302,7 @@ pub fn run_leased(
         ttl_secs: 24 * 3600,
         project: project.clone(),
         env: env.clone(),
-        scopes: vec!["run".into(), "http".into()],
+        scopes: vec!["run".into(), "http".into(), "aws".into()],
         command: format!("smith run -- {}", cmd.join(" ")),
         binding: run_cmd::bound()?.map(|(_, bytes)| bytes),
     };
@@ -307,7 +310,7 @@ pub fn run_leased(
     let Response::Session { .. } = call(&mut c, &req)? else {
         return Err(fail(ExitCode::Failure, "unexpected daemon reply"));
     };
-    let code = run_spec_code(Some(project), Some(env), keys, all_keys, cmd, None);
+    let code = run_spec_code(Some(project), Some(env), keys, all_keys, cmd, None, aws);
     let _ = c.call(&Request::SessionEnd);
     std::process::exit(code?);
 }
@@ -319,8 +322,9 @@ fn run_spec(
     all_keys: bool,
     cmd: Vec<String>,
     gh: Option<ls_ipc::GhSpec>,
+    aws: Option<(String, bool)>,
 ) -> Result<ExitCode, Fail> {
-    let code = run_spec_code(project, env, keys, all_keys, cmd, gh)?;
+    let code = run_spec_code(project, env, keys, all_keys, cmd, gh, aws)?;
     std::process::exit(code);
 }
 
@@ -332,6 +336,7 @@ fn run_spec_code(
     all_keys: bool,
     cmd: Vec<String>,
     gh: Option<ls_ipc::GhSpec>,
+    aws: Option<(String, bool)>,
 ) -> Result<i32, Fail> {
     let cwd = std::env::current_dir()
         .map_err(|e| fail(ExitCode::Failure, format!("no current dir: {e}")))?;
@@ -348,6 +353,8 @@ fn run_spec_code(
             .filter(|(k, _)| !k.starts_with("LOCKSMITH_"))
             .collect(),
         gh,
+        aws_contained: aws.as_ref().is_some_and(|a| a.1),
+        aws: aws.map(|a| a.0),
     };
     let mut c = connect(false).map_err(|Fail(_, m)| {
         fail(
@@ -358,7 +365,17 @@ fn run_spec_code(
     c.send(&Request::Run(spec))
         .map_err(|e| fail(ExitCode::Locked, format!("locksmithd: {e}")))?;
     // If the daemon already refused, the error reply is still readable below.
-    let _ = ls_platform::proc::send_fds(&c.stream, &[0, 1, 2]);
+    if let Err(e) = ls_platform::proc::send_fds(&c.stream, &[0, 1, 2]) {
+        // The daemon may already have refused the request: prefer its reply if one is there.
+        let _ = c.stream.set_read_timeout(Some(Duration::from_secs(2)));
+        if let Ok(Response::Error { code, message }) = c.recv() {
+            return Err(fail(exit_of(code), message));
+        }
+        return Err(fail(
+            ExitCode::Failure,
+            format!("cannot pass stdio to locksmithd: {e}"),
+        ));
+    }
     let mut tx = c
         .stream
         .try_clone()

@@ -18,6 +18,32 @@ pub struct Binding {
     /// `[db.<name>]` database relay targets (M6).
     #[serde(default)]
     pub db: std::collections::BTreeMap<String, DbTarget>,
+    /// `[aws]` profiles and policy (M7).
+    #[serde(default)]
+    pub aws: Aws,
+}
+
+/// `[aws]`: `[aws.profiles.<name>]` say where the real credentials live (vault key names
+/// only); `[aws.policy]` is parsed by `ls_proxy::aws::policy::Policy` (absent: read-only).
+#[derive(Deserialize, Default, Debug, PartialEq)]
+pub struct Aws {
+    #[serde(default)]
+    pub profiles: std::collections::BTreeMap<String, AwsProfile>,
+    pub policy: Option<toml::Table>,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Clone)]
+pub struct AwsProfile {
+    /// Vault key holding JSON `{"access_key_id","secret_access_key","session_token"?}`.
+    pub key: String,
+    pub region: String,
+    /// Assume this role with the stored keys and sign with the role's STS credentials.
+    pub role_arn: Option<String>,
+    pub external_id: Option<String>,
+    /// On `smith revoke`, attach a deny-all policy to `role_arn` for sessions issued before
+    /// now (revokes contained STS credentials already handed out). Needs iam:PutRolePolicy.
+    #[serde(default)]
+    pub revoke_older_sessions: bool,
 }
 
 /// `[db.<name>]`: one upstream database for `smith db connect <name>`. Names only: the password

@@ -293,11 +293,24 @@ pub fn send_fds(s: &UnixStream, fds: &[RawFd]) -> io::Result<()> {
         (*c).cmsg_len = libc::CMSG_LEN(payload) as _;
         std::ptr::copy_nonoverlapping(fds.as_ptr(), libc::CMSG_DATA(c).cast::<RawFd>(), fds.len());
     }
-    // SAFETY: msg and everything it points to are live for the duration of the call.
-    if unsafe { libc::sendmsg(s.as_raw_fd(), &msg, 0) } != 1 {
-        return Err(io::Error::last_os_error());
+    // macOS refuses (EMSGSIZE/ENOBUFS) instead of blocking while the socket buffer still holds
+    // a frame the peer has not read yet, so retry until it drains.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        // SAFETY: msg and everything it points to are live for the duration of the call.
+        if unsafe { libc::sendmsg(s.as_raw_fd(), &msg, 0) } == 1 {
+            return Ok(());
+        }
+        let e = io::Error::last_os_error();
+        let full = matches!(
+            e.raw_os_error(),
+            Some(libc::EMSGSIZE | libc::ENOBUFS | libc::EAGAIN | libc::EINTR)
+        );
+        if !full || std::time::Instant::now() >= deadline {
+            return Err(e);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    Ok(())
 }
 
 /// Receive up to `max` fds sent with [`send_fds`]. Each returned fd is owned (closed on drop).
@@ -635,6 +648,27 @@ mod macho {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `smith run` writes a large frame and passes its stdio right after; the peer may not have
+    /// read the frame yet (macOS then refuses the fd message instead of blocking).
+    #[test]
+    fn send_fds_waits_for_a_full_buffer_to_drain() {
+        use std::io::{Read, Write};
+        let (mut a, mut b) = UnixStream::pair().unwrap();
+        const BIG: usize = 256 << 10;
+        let w = std::thread::spawn(move || {
+            a.write_all(&vec![7u8; BIG]).unwrap();
+            send_fds(&a, &[0]).map(|_| a)
+        });
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut buf = vec![0u8; BIG];
+        b.read_exact(&mut buf).unwrap();
+        let got = recv_fds(&b, 3).unwrap();
+        assert_eq!(got.len(), 1);
+        w.join()
+            .unwrap()
+            .expect("send_fds succeeds once the buffer drains");
+    }
 
     #[test]
     fn self_identity_is_stable_and_descends_from_itself() {

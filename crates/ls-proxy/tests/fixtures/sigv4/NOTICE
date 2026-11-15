@@ -1,0 +1,9 @@
+These SigV4 test cases are vendored from the AWS signing test suite in awslabs/aws-c-auth
+(tests/aws-signing-test-suite/v4, https://github.com/awslabs/aws-c-auth), licensed under the
+Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Modifications: only the header-based files are kept (request.txt, context.json,
+header-canonical-request.txt, header-string-to-sign.txt, header-signature.txt); the query-signing
+and signed-request files were removed. File contents are unchanged.
+The credentials in context.json are AWS's documented example values, not real keys.

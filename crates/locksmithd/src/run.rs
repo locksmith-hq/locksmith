@@ -47,6 +47,20 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
         .or_else(|| binding.as_ref()?.env.clone())
         .unwrap_or("development".into());
 
+    if let (Some(profile), true) = (&spec.aws, spec.aws_contained) {
+        let (lease, vars) =
+            crate::aws::contained(d, peer, actor, binding.as_ref(), &project, &env, profile)?;
+        let secrets: Vec<Secret> = vars
+            .iter()
+            .filter(|(k, _)| k == "AWS_SECRET_ACCESS_KEY" || k == "AWS_SESSION_TOKEN")
+            .map(|(k, v)| Secret::new(format!("{k}(contained)"), v))
+            .collect();
+        return Ok(Prepared {
+            lease,
+            vars,
+            redactor: Redactor::new(&secrets),
+        });
+    }
     if let Some(gh) = &spec.gh {
         let (lease, tok) = crate::git::gh_token(
             d,
@@ -144,6 +158,26 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
         }
     }
     vars.extend(http_vars);
+    // --aws: dummy keys and the relay endpoint; the dummy secret is redacted too (M7).
+    if let Some(profile) = &spec.aws {
+        let aws = crate::aws::for_run(
+            d,
+            &mut st,
+            peer,
+            actor,
+            &lease,
+            &project,
+            &env,
+            binding.as_ref(),
+            profile,
+        )?;
+        for (k, v) in &aws {
+            if k == "AWS_SECRET_ACCESS_KEY" {
+                secrets.push(Secret::new("AWS_SECRET_ACCESS_KEY(dummy)", v));
+            }
+        }
+        vars.extend(aws);
+    }
     Ok(Prepared {
         lease,
         vars,
@@ -209,8 +243,11 @@ fn read_secrets(
 }
 
 pub fn run(d: &Daemon, peer: &Peer, actor: &Actor, mut s: UnixStream, spec: RunSpec) {
-    // The client sends its stdio right after the request; take it before replying.
+    // The client sends its stdio right after the request; take it before replying. Bounded, so
+    // a client that never sends them cannot pin this thread.
+    let _ = s.set_read_timeout(Some(Duration::from_secs(10)));
     let fds = recv_fds(&s, 3).ok().filter(|f| f.len() == 3);
+    let _ = s.set_read_timeout(None);
     let Some(mut fds) = fds.filter(|_| !spec.cmd.is_empty()) else {
         let _ = write_frame(
             &mut s,

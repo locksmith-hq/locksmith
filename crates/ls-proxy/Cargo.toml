@@ -27,7 +27,7 @@ toml = "1.2.1"
 x509-parser = "0.18.1"
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
 ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
-time = "0.3"
+time = { version = "0.3", features = ["parsing", "formatting"] }
 
 [dev-dependencies]
 brotli = "9.1.1"

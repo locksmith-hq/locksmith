@@ -42,7 +42,11 @@ handing it over:
                [http.keys] in .locksmith.toml reach the child as opaque lsk_
                tokens plus base-URL variables pointing at the local relay
   smith db     delegated database access
-  smith aws    delegated AWS access (a later milestone)
+  smith run --aws <profile>
+               delegated AWS access: the child gets dummy keys and AWS_ENDPOINT_URL
+               pointing at a local relay that checks [aws.policy] and signs with the real
+               keys. Contained fallback for tools that ignore the endpoint: `smith aws creds
+               --contained` (15-minute STS credentials visible to that process).
 ";
 
 #[derive(Args)]
@@ -60,6 +64,10 @@ pub struct RunArgs {
     /// Explain the security model of `run` and exit.
     #[arg(long)]
     explain: bool,
+    /// Give the command dummy AWS credentials for this `[aws.profiles.<name>]`; Locksmith
+    /// signs its AWS calls with the real ones (M7).
+    #[arg(long, value_name = "PROFILE")]
+    aws: Option<String>,
     /// Command to run, after `--`.
     #[arg(last = true, required_unless_present = "explain")]
     cmd: Vec<String>,
@@ -124,14 +132,29 @@ pub fn run(o: &Opts, a: RunArgs) -> Result<ExitCode, Fail> {
     }
     if std::env::var_os("LOCKSMITH_SESSION").is_some() {
         let keys = a.only;
-        return crate::session::run_via_daemon(a.project, a.env, keys, a.yes, a.cmd);
+        return crate::session::run_via_daemon(
+            a.project,
+            a.env,
+            keys,
+            a.yes,
+            a.cmd,
+            a.aws.map(|p| (p, false)),
+        );
     }
     // Only the direct path holds secret values in this process. The daemon path must stay
     // dumpable: on Linux a non-dumpable process hides /proc/<pid>/exe, so the daemon could
     // not attest it.
     let b = bound()?;
-    if b.as_ref().is_some_and(|(b, _)| !b.http.keys.is_empty()) {
-        return crate::session::run_leased(o, a.project, a.env, a.only, a.yes, a.cmd);
+    if a.aws.is_some() || b.as_ref().is_some_and(|(b, _)| !b.http.keys.is_empty()) {
+        return crate::session::run_leased(
+            o,
+            a.project,
+            a.env,
+            a.only,
+            a.yes,
+            a.cmd,
+            a.aws.map(|p| (p, false)),
+        );
     }
     let _ = ls_platform::disable_core_dumps();
     let bind = b.as_ref().map(|(b, _)| b);

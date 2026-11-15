@@ -7,6 +7,7 @@
 //! no response framing is re-encoded. Who may use it and with which upstream credential is decided
 //! by the daemon through [`Authority`]; this crate never sees the vault.
 
+pub mod aws;
 pub mod ca;
 pub mod catalog;
 pub mod db;

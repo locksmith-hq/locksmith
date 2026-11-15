@@ -299,7 +299,7 @@ impl Upstream {
         }
     }
 
-    fn plain(&self, host: &str) -> Option<SocketAddr> {
+    pub(crate) fn plain(&self, host: &str) -> Option<SocketAddr> {
         self.insecure_http
             .iter()
             .find(|(h, _)| h.eq_ignore_ascii_case(host))
@@ -437,7 +437,7 @@ struct Ctx<'a> {
     server: SocketAddr,
 }
 
-fn is_hop(l: &str) -> bool {
+pub(crate) fn is_hop(l: &str) -> bool {
     matches!(
         l,
         "connection" | "keep-alive" | "proxy-connection" | "te" | "trailer" | "upgrade"

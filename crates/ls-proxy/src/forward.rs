@@ -23,8 +23,8 @@ pub struct Upstream {
     pub insecure_http: Option<(String, SocketAddr)>,
 }
 
-trait Io: Read + Write {}
-impl<T: Read + Write> Io for T {}
+pub(crate) trait Io: Read + Write + Send {}
+impl<T: Read + Write + Send> Io for T {}
 
 /// Accepts connections forever, one thread each.
 pub fn serve(listener: TcpListener, auth: Arc<dyn Authority>, up: Arc<Upstream>) {
@@ -87,21 +87,21 @@ pub fn parse_route(path: &str) -> Option<Route> {
     })
 }
 
-struct Head {
-    method: String,
-    path: String,
-    headers: Vec<(String, Vec<u8>)>,
+pub(crate) struct Head {
+    pub(crate) method: String,
+    pub(crate) path: String,
+    pub(crate) headers: Vec<(String, Vec<u8>)>,
 }
 
 impl Head {
-    fn header(&self, name: &str) -> Option<&[u8]> {
+    pub(crate) fn header(&self, name: &str) -> Option<&[u8]> {
         let mut it = self
             .headers
             .iter()
             .filter(|(n, _)| n.eq_ignore_ascii_case(name));
         it.next().map(|(_, v)| v.as_slice())
     }
-    fn count(&self, name: &str) -> usize {
+    pub(crate) fn count(&self, name: &str) -> usize {
         self.headers
             .iter()
             .filter(|(n, _)| n.eq_ignore_ascii_case(name))
@@ -121,7 +121,7 @@ impl Head {
 }
 
 /// Reads the request head. `Err(status)` means reply with that status.
-fn read_head(c: &mut TcpStream) -> io::Result<Result<(Head, Vec<u8>), u16>> {
+pub(crate) fn read_head(c: &mut dyn Read) -> io::Result<Result<(Head, Vec<u8>), u16>> {
     let mut buf = Vec::new();
     let mut tmp = [0u8; 8192];
     loop {
@@ -167,15 +167,15 @@ enum St {
 
 /// Finds the end of a request body (Content-Length or chunked) in a raw byte stream, optionally
 /// collecting the de-chunked payload. The raw bytes are forwarded unchanged.
-struct Framer {
+pub(crate) struct Framer {
     st: St,
     line: Vec<u8>,
     collect: bool,
-    decoded: Vec<u8>,
+    pub(crate) decoded: Vec<u8>,
 }
 
 impl Framer {
-    fn new(chunked: bool, len: u64, collect: bool) -> Self {
+    pub(crate) fn new(chunked: bool, len: u64, collect: bool) -> Self {
         let st = match (chunked, len) {
             (true, _) => St::ChSize,
             (false, 0) => St::Done,
@@ -189,12 +189,12 @@ impl Framer {
         }
     }
 
-    fn done(&self) -> bool {
+    pub(crate) fn done(&self) -> bool {
         matches!(self.st, St::Done)
     }
 
     /// Consumes bytes of `d` that belong to the body; returns how many.
-    fn feed(&mut self, d: &[u8]) -> Result<usize, ()> {
+    pub(crate) fn feed(&mut self, d: &[u8]) -> Result<usize, ()> {
         let mut i = 0;
         while i < d.len() {
             match self.st {
@@ -257,7 +257,7 @@ impl Framer {
     }
 }
 
-fn reason(status: u16) -> &'static str {
+pub(crate) fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
         400 => "Bad Request",
@@ -267,6 +267,7 @@ fn reason(status: u16) -> &'static str {
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
         415 => "Unsupported Media Type",
+        429 => "Too Many Requests",
         431 => "Request Header Fields Too Large",
         502 => "Bad Gateway",
         _ => "Error",
@@ -576,11 +577,20 @@ fn dial(host: &str, port: u16) -> io::Result<TcpStream> {
 }
 
 fn connect(up: &Upstream, host: &str) -> io::Result<Box<dyn Io>> {
-    if let Some((h, addr)) = &up.insecure_http
-        && h.eq_ignore_ascii_case(host)
-    {
-        let s = TcpStream::connect_timeout(addr, CONNECT_TIMEOUT)?;
+    let plain = up
+        .insecure_http
+        .as_ref()
+        .filter(|(h, _)| h.eq_ignore_ascii_case(host))
+        .map(|(_, a)| *a);
+    connect_to(host, plain)
+}
+
+/// TLS to `host` (`name[:port]`, default 443), or plain TCP to `plain` (test switch).
+pub(crate) fn connect_to(host: &str, plain: Option<SocketAddr>) -> io::Result<Box<dyn Io>> {
+    if let Some(addr) = plain {
+        let s = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)?;
         s.set_read_timeout(Some(IO_TIMEOUT))?;
+        s.set_write_timeout(Some(IO_TIMEOUT))?;
         return Ok(Box::new(s));
     }
     let (name, port) = match host.rsplit_once(':') {
@@ -597,7 +607,7 @@ fn connect(up: &Upstream, host: &str) -> io::Result<Box<dyn Io>> {
     Ok(Box::new(rustls::StreamOwned::new(conn, tcp)))
 }
 
-fn tls_config() -> Arc<rustls::ClientConfig> {
+pub(crate) fn tls_config() -> Arc<rustls::ClientConfig> {
     static CFG: OnceLock<Arc<rustls::ClientConfig>> = OnceLock::new();
     CFG.get_or_init(|| {
         let mut roots = rustls::RootCertStore::empty();

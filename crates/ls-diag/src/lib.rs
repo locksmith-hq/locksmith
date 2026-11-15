@@ -64,6 +64,14 @@ pub struct Check {
 }
 inventory::collect!(Check);
 
+/// A family of checks whose ids are only known at run time (e.g. `db.relay.<name>` per
+/// configured target). `run` returns `(id, outcome)` pairs; ids should start with `prefix`.
+pub struct CheckSet {
+    pub prefix: &'static str,
+    pub run: fn() -> Vec<(String, Outcome)>,
+}
+inventory::collect!(CheckSet);
+
 #[derive(Debug, Serialize)]
 pub struct CheckResult {
     pub id: &'static str,
@@ -104,19 +112,26 @@ impl Report {
 
 /// Run every registered check, sorted by id for stable output.
 pub fn run_all(version: &'static str) -> Report {
-    let mut checks: Vec<&Check> = inventory::iter::<Check>.into_iter().collect();
+    let mut checks: Vec<CheckResult> = inventory::iter::<Check>
+        .into_iter()
+        .map(|c| CheckResult {
+            id: c.id,
+            outcome: (c.run)(),
+        })
+        .collect();
+    for set in inventory::iter::<CheckSet> {
+        // The process runs doctor once and exits: leaking the few dynamic ids is fine.
+        checks.extend((set.run)().into_iter().map(|(id, outcome)| CheckResult {
+            id: id.leak(),
+            outcome,
+        }));
+    }
     checks.sort_by_key(|c| c.id);
     Report {
         schema: "doctor.v1",
         version,
         platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
-        checks: checks
-            .iter()
-            .map(|c| CheckResult {
-                id: c.id,
-                outcome: (c.run)(),
-            })
-            .collect(),
+        checks,
     }
 }
 

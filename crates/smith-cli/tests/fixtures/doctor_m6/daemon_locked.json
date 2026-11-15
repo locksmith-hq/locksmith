@@ -1,0 +1,40 @@
+[
+  {
+    "fixable": false,
+    "id": "db.relay.cache",
+    "status": "ok",
+    "summary": "redis 127.0.0.1:<port> reachable; vault locked, keys not checked"
+  },
+  {
+    "fixable": false,
+    "id": "db.relay.legacy_db",
+    "remediation": "edit [db.Legacy DB] in .locksmith.toml",
+    "status": "fail",
+    "summary": "invalid [db.Legacy DB]: kind \"mongo\" is not one of postgres, mysql, redis"
+  },
+  {
+    "fixable": false,
+    "id": "db.relay.main",
+    "status": "ok",
+    "summary": "postgres app@127.0.0.1:<port> reachable; vault locked, keys not checked"
+  },
+  {
+    "fixable": false,
+    "id": "db.relay.prod-ro",
+    "remediation": "check host and port in [db.prod-ro] and the network",
+    "status": "warn",
+    "summary": "127.0.0.1:<port> is unreachable (Connection refused (os error <n>))"
+  },
+  {
+    "fixable": false,
+    "id": "http.ca_constraints",
+    "status": "skip",
+    "summary": "explicit-proxy mode is off (no local CA)"
+  },
+  {
+    "fixable": false,
+    "id": "http.relay",
+    "status": "ok",
+    "summary": "listening on 127.0.0.1:<port>"
+  }
+]

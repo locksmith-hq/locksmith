@@ -13,8 +13,22 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      # A case that skips (exit 77, e.g. A3 without Postgres) fails the run instead of passing.
+      ADVERSARIAL_REQUIRE_ALL: '1'
     steps:
       - uses: actions/checkout@v4
+      - name: Install case prerequisites
+        # A3 needs a Postgres server (initdb, postgres) and psql; A3b curl; both use ss/lsof and
+        # openssl. The ubuntu image usually ships Postgres, so install only what is missing.
+        run: |
+          need="libssl-dev pkg-config"
+          ls /usr/lib/postgresql/*/bin/postgres >/dev/null 2>&1 || need="$need postgresql"
+          for t in psql:postgresql-client curl:curl lsof:lsof ss:iproute2 openssl:openssl; do
+            command -v "${t%%:*}" >/dev/null 2>&1 || need="$need ${t#*:}"
+          done
+          sudo apt-get update -q && sudo apt-get install -y -q $need
+          # The packaged cluster is not used (A3 runs its own throwaway server).
+          sudo systemctl stop postgresql 2>/dev/null || true
       - name: Scripted adversarial cases
         run: bash tests/adversarial/run.sh all
       - name: Live adversarial cases

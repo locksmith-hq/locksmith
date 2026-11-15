@@ -1,0 +1,301 @@
+# Built-in HTTP provider catalog (M6). Embedded in ls-proxy; `smith http providers` lists it.
+#
+# hosts         upstream hosts an opaque token for this provider may reach (`*.x` = subdomains)
+# placement     where the credential goes: bearer (Authorization header, token replaced in place,
+#               so `Bearer`, `Token`, `Bot` and bare values all work), basic (inside Basic auth),
+#               header:<Name>, query:<param>; comma-separated when the SDK sends several
+# base_url      canonical API base; the relay URL is http://127.0.0.1:<port>/h/<host><path>
+#               (empty: per-account host such as <shop>.myshopify.com, configure it yourself)
+# base_url_env  variables `smith run` sets to the relay base URL
+# override      env: the official SDK reads base_url_env itself
+#               config: the SDK takes a base-URL option; pass base_url_env through in code
+#               none: no base-URL override; needs explicit-proxy mode (`smith http ca install`)
+# keys          usual variable names, for suggestions only
+
+[stripe]
+name = "Stripe"
+hosts = ["api.stripe.com", "files.stripe.com"]
+placement = "bearer"
+base_url = "https://api.stripe.com"
+base_url_env = ["STRIPE_API_BASE"]
+override = "config"
+keys = ["STRIPE_SECRET_KEY", "STRIPE_API_KEY", "STRIPE_KEY"]
+
+[openai]
+name = "OpenAI"
+hosts = ["api.openai.com"]
+placement = "bearer"
+base_url = "https://api.openai.com/v1"
+base_url_env = ["OPENAI_BASE_URL"]
+override = "env"
+keys = ["OPENAI_API_KEY"]
+
+[anthropic]
+name = "Anthropic"
+hosts = ["api.anthropic.com"]
+placement = "header:x-api-key,bearer"
+base_url = "https://api.anthropic.com"
+base_url_env = ["ANTHROPIC_BASE_URL"]
+override = "env"
+keys = ["ANTHROPIC_API_KEY"]
+
+[twilio]
+name = "Twilio"
+hosts = ["api.twilio.com", "*.twilio.com"]
+placement = "basic"
+base_url = "https://api.twilio.com"
+base_url_env = []
+override = "none"
+keys = ["TWILIO_AUTH_TOKEN", "TWILIO_API_SECRET"]
+
+[sendgrid]
+name = "SendGrid"
+hosts = ["api.sendgrid.com"]
+placement = "bearer"
+base_url = "https://api.sendgrid.com"
+base_url_env = ["SENDGRID_API_BASE"]
+override = "config"
+keys = ["SENDGRID_API_KEY"]
+
+[mailgun]
+name = "Mailgun"
+hosts = ["api.mailgun.net", "api.eu.mailgun.net"]
+placement = "basic"
+base_url = "https://api.mailgun.net"
+base_url_env = ["MAILGUN_API_URL"]
+override = "config"
+keys = ["MAILGUN_API_KEY"]
+
+[github]
+name = "GitHub API"
+hosts = ["api.github.com", "uploads.github.com"]
+placement = "bearer"
+base_url = "https://api.github.com"
+base_url_env = ["GITHUB_API_URL"]
+override = "config"
+keys = ["GITHUB_TOKEN", "GH_TOKEN"]
+
+[gitlab]
+name = "GitLab API"
+hosts = ["gitlab.com"]
+placement = "header:PRIVATE-TOKEN,bearer"
+base_url = "https://gitlab.com/api/v4"
+base_url_env = ["GITLAB_API_URL"]
+override = "config"
+keys = ["GITLAB_TOKEN"]
+
+[slack]
+name = "Slack"
+hosts = ["slack.com"]
+placement = "bearer"
+base_url = "https://slack.com/api/"
+base_url_env = ["SLACK_API_URL"]
+override = "config"
+keys = ["SLACK_BOT_TOKEN", "SLACK_TOKEN"]
+
+[discord]
+name = "Discord"
+hosts = ["discord.com"]
+placement = "bearer"
+base_url = "https://discord.com/api"
+base_url_env = ["DISCORD_API_URL"]
+override = "config"
+keys = ["DISCORD_BOT_TOKEN", "DISCORD_TOKEN"]
+
+[linear]
+name = "Linear"
+hosts = ["api.linear.app"]
+placement = "bearer"
+base_url = "https://api.linear.app"
+base_url_env = ["LINEAR_API_URL"]
+override = "config"
+keys = ["LINEAR_API_KEY"]
+
+[notion]
+name = "Notion"
+hosts = ["api.notion.com"]
+placement = "bearer"
+base_url = "https://api.notion.com"
+base_url_env = ["NOTION_BASE_URL"]
+override = "config"
+keys = ["NOTION_API_KEY", "NOTION_TOKEN"]
+
+[airtable]
+name = "Airtable"
+hosts = ["api.airtable.com"]
+placement = "bearer"
+base_url = "https://api.airtable.com"
+base_url_env = ["AIRTABLE_ENDPOINT_URL"]
+override = "env"
+keys = ["AIRTABLE_API_KEY", "AIRTABLE_TOKEN"]
+
+[shopify]
+name = "Shopify Admin API"
+hosts = ["*.myshopify.com"]
+placement = "header:X-Shopify-Access-Token"
+base_url = ""
+base_url_env = []
+override = "config"
+keys = ["SHOPIFY_ACCESS_TOKEN", "SHOPIFY_ADMIN_TOKEN"]
+
+[cloudflare]
+name = "Cloudflare"
+hosts = ["api.cloudflare.com"]
+placement = "bearer"
+base_url = "https://api.cloudflare.com/client/v4"
+base_url_env = ["CLOUDFLARE_BASE_URL"]
+override = "env"
+keys = ["CLOUDFLARE_API_TOKEN"]
+
+[vercel]
+name = "Vercel"
+hosts = ["api.vercel.com"]
+placement = "bearer"
+base_url = "https://api.vercel.com"
+base_url_env = ["VERCEL_API_URL"]
+override = "config"
+keys = ["VERCEL_TOKEN"]
+
+[netlify]
+name = "Netlify"
+hosts = ["api.netlify.com"]
+placement = "bearer"
+base_url = "https://api.netlify.com/api/v1"
+base_url_env = ["NETLIFY_API_URL"]
+override = "config"
+keys = ["NETLIFY_AUTH_TOKEN"]
+
+[supabase]
+name = "Supabase"
+hosts = ["*.supabase.co"]
+placement = "header:apikey,bearer"
+base_url = ""
+base_url_env = []
+override = "config"
+keys = ["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY"]
+
+[algolia]
+name = "Algolia"
+hosts = ["*.algolia.net", "*.algolianet.com"]
+placement = "header:X-Algolia-API-Key"
+base_url = ""
+base_url_env = []
+override = "config"
+keys = ["ALGOLIA_API_KEY", "ALGOLIA_ADMIN_KEY"]
+
+[postmark]
+name = "Postmark"
+hosts = ["api.postmarkapp.com"]
+placement = "header:X-Postmark-Server-Token,header:X-Postmark-Account-Token"
+base_url = "https://api.postmarkapp.com"
+base_url_env = ["POSTMARK_API_URL"]
+override = "config"
+keys = ["POSTMARK_SERVER_TOKEN", "POSTMARK_API_TOKEN"]
+
+[resend]
+name = "Resend"
+hosts = ["api.resend.com"]
+placement = "bearer"
+base_url = "https://api.resend.com"
+base_url_env = ["RESEND_BASE_URL"]
+override = "env"
+keys = ["RESEND_API_KEY"]
+
+[datadog]
+name = "Datadog"
+hosts = ["api.datadoghq.com", "api.datadoghq.eu", "api.us3.datadoghq.com", "api.us5.datadoghq.com"]
+placement = "header:DD-API-KEY,header:DD-APPLICATION-KEY"
+base_url = "https://api.datadoghq.com"
+base_url_env = []
+override = "none"
+keys = ["DD_API_KEY", "DATADOG_API_KEY", "DD_APP_KEY"]
+
+[sentry]
+name = "Sentry"
+hosts = ["sentry.io", "*.sentry.io"]
+placement = "bearer"
+base_url = "https://sentry.io"
+base_url_env = ["SENTRY_URL"]
+override = "env"
+keys = ["SENTRY_AUTH_TOKEN"]
+
+[pagerduty]
+name = "PagerDuty"
+hosts = ["api.pagerduty.com", "events.pagerduty.com"]
+placement = "bearer"
+base_url = "https://api.pagerduty.com"
+base_url_env = ["PAGERDUTY_API_URL"]
+override = "config"
+keys = ["PAGERDUTY_API_KEY", "PAGERDUTY_TOKEN"]
+
+[mistral]
+name = "Mistral AI"
+hosts = ["api.mistral.ai"]
+placement = "bearer"
+base_url = "https://api.mistral.ai"
+base_url_env = ["MISTRAL_BASE_URL"]
+override = "config"
+keys = ["MISTRAL_API_KEY"]
+
+[cohere]
+name = "Cohere"
+hosts = ["api.cohere.com", "api.cohere.ai"]
+placement = "bearer"
+base_url = "https://api.cohere.com"
+base_url_env = ["CO_API_URL"]
+override = "env"
+keys = ["CO_API_KEY", "COHERE_API_KEY"]
+
+[groq]
+name = "Groq"
+hosts = ["api.groq.com"]
+placement = "bearer"
+base_url = "https://api.groq.com"
+base_url_env = ["GROQ_BASE_URL"]
+override = "env"
+keys = ["GROQ_API_KEY"]
+
+[replicate]
+name = "Replicate"
+hosts = ["api.replicate.com"]
+placement = "bearer"
+base_url = "https://api.replicate.com/v1"
+base_url_env = ["REPLICATE_BASE_URL"]
+override = "config"
+keys = ["REPLICATE_API_TOKEN"]
+
+[huggingface]
+name = "Hugging Face"
+hosts = ["huggingface.co", "router.huggingface.co", "api-inference.huggingface.co"]
+placement = "bearer"
+base_url = "https://huggingface.co"
+base_url_env = ["HF_ENDPOINT"]
+override = "env"
+keys = ["HF_TOKEN", "HUGGINGFACE_API_KEY"]
+
+[gemini]
+name = "Google Gemini API"
+hosts = ["generativelanguage.googleapis.com"]
+placement = "header:x-goog-api-key,query:key"
+base_url = "https://generativelanguage.googleapis.com"
+base_url_env = ["GOOGLE_GEMINI_BASE_URL"]
+override = "config"
+keys = ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+
+[openrouter]
+name = "OpenRouter"
+hosts = ["openrouter.ai"]
+placement = "bearer"
+base_url = "https://openrouter.ai/api/v1"
+base_url_env = ["OPENROUTER_BASE_URL"]
+override = "config"
+keys = ["OPENROUTER_API_KEY"]
+
+[mapbox]
+name = "Mapbox"
+hosts = ["api.mapbox.com"]
+placement = "query:access_token"
+base_url = "https://api.mapbox.com"
+base_url_env = ["MAPBOX_API_URL"]
+override = "config"
+keys = ["MAPBOX_ACCESS_TOKEN", "MAPBOX_TOKEN"]

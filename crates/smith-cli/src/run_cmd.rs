@@ -38,10 +38,11 @@ variables are never passed on.
 For stronger isolation, let Locksmith use the credential for the agent instead of
 handing it over:
   smith git    delegated git operations
-  smith http   delegated HTTP calls with the credential attached
+  smith http   delegated HTTP calls with the credential attached: keys under
+               [http.keys] in .locksmith.toml reach the child as opaque lsk_
+               tokens plus base-URL variables pointing at the local relay
   smith db     delegated database access
-  smith aws    delegated AWS access
-These delegation commands arrive in later milestones.
+  smith aws    delegated AWS access (a later milestone)
 ";
 
 #[derive(Args)]
@@ -128,8 +129,11 @@ pub fn run(o: &Opts, a: RunArgs) -> Result<ExitCode, Fail> {
     // Only the direct path holds secret values in this process. The daemon path must stay
     // dumpable: on Linux a non-dumpable process hides /proc/<pid>/exe, so the daemon could
     // not attest it.
-    let _ = ls_platform::disable_core_dumps();
     let b = bound()?;
+    if b.as_ref().is_some_and(|(b, _)| !b.http.keys.is_empty()) {
+        return crate::session::run_leased(o, a.project, a.env, a.only, a.yes, a.cmd);
+    }
+    let _ = ls_platform::disable_core_dumps();
     let bind = b.as_ref().map(|(b, _)| b);
     let project = a
         .project

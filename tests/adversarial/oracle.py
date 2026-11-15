@@ -35,13 +35,21 @@ def variants(canary):
         ("hex-lower", raw.hex().encode(), raw.hex().encode()),
         ("hex-upper", raw.hex().upper().encode(), raw.hex().upper().encode()),
     ]
-    for k in range(3):
-        padded = b"\x00" * k + raw
-        for label, enc in (("b64", base64.b64encode), ("b64url", base64.urlsafe_b64encode)):
-            full = enc(padded).decode()
-            # Keep only the characters that do not depend on the zero prefix or the padding.
-            needle = full[math.ceil(4 * k / 3):-4]
-            out.append(("%s-offset%d" % (label, k), full.encode(), needle.encode()))
+    # The canary text itself (as a credential it travels as text) hex- and base64-encoded too,
+    # e.g. inside `Authorization: Basic base64(user:<canary>)`.
+    text = canary.encode()
+    out += [
+        ("text-hex-lower", text.hex().encode(), text.hex().encode()),
+        ("text-hex-upper", text.hex().upper().encode(), text.hex().upper().encode()),
+    ]
+    for src, prefix in ((raw, ""), (text, "text-")):
+        for k in range(3):
+            padded = b"\x00" * k + src
+            for label, enc in (("b64", base64.b64encode), ("b64url", base64.urlsafe_b64encode)):
+                full = enc(padded).decode()
+                # Keep only the characters that do not depend on the zero prefix or the padding.
+                needle = full[math.ceil(4 * k / 3):-4]
+                out.append(("%s%s-offset%d" % (prefix, label, k), full.encode(), needle.encode()))
     return out
 
 

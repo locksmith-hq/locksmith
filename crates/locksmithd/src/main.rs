@@ -2,13 +2,16 @@
 //! session leases in memory only (a restart drops them: fail closed), and spawns `smith run`
 //! children itself so secrets never travel back over the socket.
 
+mod db;
 mod git;
+mod http;
 mod run;
 mod scan;
 
 use ls_broker::{Denial, LeaseState, Leases, Manifest, Role};
 use ls_ipc::{AuditEvent, ErrorCode, Frame, LOCK_FILE, Request, Response, read_frame, write_frame};
 use ls_platform::proc::{Peer, ProcId, id_of};
+use ls_redact::binding::{Binding, parse as parse_binding};
 use ls_vault::audit::{AuditRecord, StoredEvent};
 use ls_vault::{Error as VErr, Vault};
 use std::fs::OpenOptions;
@@ -18,6 +21,8 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+/// Lease operation scopes: `run` (M2), `git` (M5), `http` and `db` (M6).
+const SCOPES: [&str; 4] = ["run", "git", "http", "db"];
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// sun_path is 104 bytes on macOS and 108 on Linux.
 const MAX_SOCKET_PATH: usize = 100;
@@ -102,6 +107,8 @@ pub struct Daemon {
     idle: Option<Duration>,
     me: Actor,
     git: git::Git,
+    db: db::Db,
+    http: http::Http,
 }
 
 impl Daemon {
@@ -175,6 +182,53 @@ pub fn deny_rule(d: &Denial) -> String {
     }
 }
 
+/// The binding a credential-routing request must use (M6 gates A3/A3b): the copy pinned when the
+/// caller's session started, because an agent inside the session can edit `.locksmith.toml`.
+/// The client's copy is accepted only when `same(client, pinned)` holds for the part the request
+/// uses; otherwise the request is refused and audited `BLOCKED binding_changed`. A client that
+/// sends no binding gets the pinned one. Without any lease the client copy is returned as is:
+/// the scope check that follows refuses the request.
+pub fn effective_binding(
+    st: &mut State,
+    peer: &Peer,
+    actor: &Actor,
+    target: &str,
+    client: Option<&[u8]>,
+    same: impl Fn(&Binding, &Binding) -> bool,
+) -> Result<Binding, Response> {
+    let mine = match client.map(parse_binding).transpose() {
+        Ok(b) => b.unwrap_or_default(),
+        Err(e) => return Err(err(ErrorCode::BadRequest, format!("invalid binding: {e}"))),
+    };
+    let Some(l) = st.leases.find(peer.id, now()) else {
+        return Ok(mine);
+    };
+    let lease = l.id.clone();
+    let pinned = l
+        .binding
+        .as_ref()
+        .and_then(|p| parse_binding(&p.0).ok())
+        .unwrap_or_default();
+    if client.is_none() || same(&mine, &pinned) {
+        return Ok(pinned);
+    }
+    let _ = st.audit(rec(
+        actor,
+        "BLOCKED",
+        Some(target.to_string()),
+        "binding_changed",
+        "DENY",
+        Some(lease),
+    ));
+    Err(err(
+        ErrorCode::Denied,
+        format!(
+            "{target}: .locksmith.toml differs from the copy this session started with; nothing \
+             was sent. Start a new session to use the edited file"
+        ),
+    ))
+}
+
 fn event(e: StoredEvent) -> AuditEvent {
     let r = e.record;
     AuditEvent {
@@ -245,7 +299,7 @@ fn serve(d: Arc<Daemon>, mut s: UnixStream) {
     }
 }
 
-fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
+fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response {
     let t = now();
     match req {
         Request::Ping => Response::Pong {
@@ -278,16 +332,17 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
             env,
             scopes,
             command,
+            binding,
         } => {
             let scopes = if scopes.is_empty() {
-                vec!["run".into(), "git".into()]
+                SCOPES.iter().map(|s| s.to_string()).collect()
             } else {
                 scopes
             };
-            if ttl_secs == 0 || scopes.iter().any(|s| s != "run" && s != "git") {
+            if ttl_secs == 0 || scopes.iter().any(|s| !SCOPES.contains(&s.as_str())) {
                 return err(
                     ErrorCode::BadRequest,
-                    "ttl must be > 0 and scopes limited to 'run' and 'git'",
+                    "ttl must be > 0 and scopes limited to 'run', 'git', 'http' and 'db'",
                 );
             }
             // Proof of the human: the passphrase opens the vault (and unlocks it if locked).
@@ -323,6 +378,7 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
                 .leases
                 .start(peer.id, ttl_secs, project, env, scopes, command, t);
             let (id, expires_at) = (l.id.clone(), l.expires_at);
+            st.leases.pin(&id, binding);
             if let Err(e) = st.audit(rec(
                 actor,
                 "SESSION_START",
@@ -338,6 +394,7 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
         }
         Request::SessionEnd => {
             d.state().leases.end(peer.id);
+            db::sweep(d);
             Response::Ok
         }
         Request::Status => {
@@ -357,6 +414,7 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
                 .filter(|i| id.as_ref().is_none_or(|w| w == i))
                 .collect();
             let count = st.leases.revoke(id.as_deref(), t);
+            http::prune(d, &st); // relay tokens die with their lease
             for i in ids {
                 let _ = st.audit(rec(
                     actor,
@@ -367,6 +425,9 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
                     Some(i),
                 ));
             }
+            drop(st);
+            // Relayed database connections close now, not at the next watcher tick.
+            db::sweep(d);
             Response::Revoked { count }
         }
         Request::AuditList { limit } => match &d.state().vault {
@@ -396,6 +457,28 @@ fn handle(d: &Daemon, peer: &Peer, actor: &Actor, req: Request) -> Response {
             remotes,
         } => git::credential(d, peer, actor, &host, &repo, binding.as_deref(), &remotes),
         Request::GitInfo => git::info(d),
+        Request::DbConnect { name, binding } => {
+            db::connect(d, peer, actor, &name, binding.as_deref())
+        }
+        Request::TokenIssue {
+            key,
+            provider,
+            hosts,
+            placement,
+            binding,
+        } => http::issue(
+            d,
+            peer,
+            actor,
+            &key,
+            provider.as_deref(),
+            &hosts,
+            placement.as_deref(),
+            binding.as_deref(),
+        ),
+        Request::TokenList => http::list(d),
+        Request::TokenRevoke { token } => http::revoke(d, actor, token.as_deref()),
+        Request::HttpInfo => http::info(d),
         Request::KeyNames { project, env } => match &d.state().vault {
             None => err(ErrorCode::Locked, "vault is locked"),
             Some(v) => match v.list_secrets(Some(&project), Some(&env)) {
@@ -432,6 +515,8 @@ fn watch(d: Arc<Daemon>) {
             .unwrap_or_default()
             .saturating_sub(m - mono);
         (wall, mono) = (w, m);
+        db::sweep(&d); // leases that expired
+
         if drift > Duration::from_secs(5) {
             d.lock_now("sleep");
         } else if let Some(t) = d.idle {
@@ -461,6 +546,22 @@ fn start_git_forwarder(d: &Arc<Daemon>) {
     let gate = Arc::new(git::Gate(d.clone()));
     let up = Arc::new(git::upstream());
     std::thread::spawn(move || ls_proxy::forward::serve(l, gate, up));
+}
+
+/// HTTP relay on a random loopback port (M6). Like the Git forwarder, failure is reported,
+/// not fatal; relayed requests then fail closed.
+fn start_http_relay(d: &Arc<Daemon>) {
+    let l = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(l) => l,
+        Err(e) => return eprintln!("locksmithd: HTTP relay unavailable ({e})"),
+    };
+    let Ok(port) = l.local_addr().map(|a| a.port()) else {
+        return;
+    };
+    let _ = d.http.port.set(port);
+    let auth = Arc::new(http::Relay(d.clone()));
+    let up = Arc::new(http::upstream());
+    std::thread::spawn(move || ls_proxy::http::serve(l, auth, up));
 }
 
 fn die(msg: String) -> ! {
@@ -536,8 +637,11 @@ fn main() {
         idle: (idle > 0).then(|| Duration::from_secs(idle)),
         me,
         git: git::Git::default(),
+        db: db::Db::default(),
+        http: http::Http::default(),
     });
     start_git_forwarder(&d);
+    start_http_relay(&d);
     let w = d.clone();
     std::thread::spawn(move || watch(w));
     let s = d.clone();

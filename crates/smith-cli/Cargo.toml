@@ -34,3 +34,8 @@ toml = "1.2.1"
 serde = { version = "1.0.229", features = ["derive"] }
 ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
 ls-hooks = { version = "0.0.1-alpha.4", path = "../ls-hooks" }
+ls-proxy = { version = "0.0.1-alpha.4", path = "../ls-proxy" }
+
+[dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+regex = "1.13.1"

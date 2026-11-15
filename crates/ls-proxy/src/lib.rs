@@ -1,13 +1,22 @@
-//! Forwarders that add upstream credentials on behalf of a session (M5: Git smart HTTP).
+//! Forwarders that add upstream credentials on behalf of a session (M5: Git smart HTTP; M6:
+//! the HTTP relay, its provider catalog and the local CA for explicit-proxy mode; database relays
+//! in [`db`]).
 //!
 //! The forwarder is synchronous (one thread per connection, like `locksmithd`). Each proxied
 //! request goes upstream with `Connection: close` and the response bytes are copied verbatim, so
 //! no response framing is re-encoded. Who may use it and with which upstream credential is decided
 //! by the daemon through [`Authority`]; this crate never sees the vault.
 
+pub mod ca;
+pub mod catalog;
+pub mod db;
 pub mod forward;
 pub mod github;
+pub mod http;
 pub mod policy;
+
+/// The TLS stack the relay uses (for [`http::HttpAuthority::intercept`] implementors).
+pub use rustls;
 
 use std::net::SocketAddr;
 use zeroize::Zeroizing;

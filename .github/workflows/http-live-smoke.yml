@@ -1,0 +1,27 @@
+name: http-live-smoke
+
+# M6 task 1.4: Stripe test mode and OpenAI through the HTTP relay with real TLS upstreams.
+# Manual only. Needs the repository secrets LIVE_STRIPE_TEST_KEY (an sk_test_ key) and
+# LIVE_OPENAI_API_KEY. The test fails if either key appears in the child's output.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SQLCipher build deps and curl
+        run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev pkg-config curl
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Debug build: the e2e harness uses the debug-only fast-KDF switch for its throwaway vault.
+      - run: cargo build -p locksmithd -p smith-cli
+      - name: Stripe and OpenAI through the relay
+        env:
+          LIVE_STRIPE_TEST_KEY: ${{ secrets.LIVE_STRIPE_TEST_KEY }}
+          LIVE_OPENAI_API_KEY: ${{ secrets.LIVE_OPENAI_API_KEY }}
+        run: cargo test -p smith-cli --test http -- --ignored --exact live_stripe_and_openai_through_the_relay

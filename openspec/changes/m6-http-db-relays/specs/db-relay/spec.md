@@ -20,6 +20,10 @@ The database password or client key SHALL NOT appear in any environment variable
 - **WHEN** the agent inspects env, config files, `ss -tp` output and server error messages
 - **THEN** the oracle finds no encoding of the password
 
+#### Scenario: Edited binding
+- **WHEN** a process inside the session edits the target in `.locksmith.toml` to point at a server it controls
+- **THEN** the relay keeps the target the session started with, refuses the edited one, and audits BLOCKED
+
 ### Requirement: Session-bound listener
 The relay SHALL accept only connections from processes inside the authorized session tree and SHALL close all relayed connections when the session is revoked.
 

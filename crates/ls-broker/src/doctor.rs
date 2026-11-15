@@ -149,7 +149,7 @@ fn core_dumps_outcome(r: io::Result<()>) -> Outcome {
 }
 
 fn core_dumps() -> Outcome {
-    core_dumps_outcome(ls_platform::disable_core_dumps())
+    core_dumps_outcome(ls_platform::probe_core_dumps())
 }
 
 fn audit_outcome(reply: io::Result<Response>) -> Outcome {

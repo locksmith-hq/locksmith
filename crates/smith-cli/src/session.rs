@@ -126,8 +126,9 @@ pub enum SessionCmd {
 pub struct StartArgs {
     #[arg(long, default_value = "8h", value_parser = parse_ttl)]
     ttl: u64,
-    /// Operations the session allows: `run` (inject secrets) and `git` (the Git forwarder).
-    #[arg(long, default_values = ["run", "git"])]
+    /// Operations the session allows: `run` (inject secrets), `git` (the Git forwarder), `http`
+    /// (the HTTP relay and opaque tokens) and `db` (database relays).
+    #[arg(long, default_values = ["run", "git", "http", "db"])]
     scope: Vec<String>,
     #[arg(short, long)]
     project: Option<String>,
@@ -151,6 +152,7 @@ pub fn session(o: &Opts, cmd: SessionCmd) -> Result<ExitCode, Fail> {
         env,
         scopes: a.scope,
         command: a.cmd.join(" "),
+        binding: run_cmd::bound()?.map(|(_, bytes)| bytes),
     };
     let Response::Session { id, .. } = call(&mut c, &req)? else {
         return Err(fail(ExitCode::Failure, "unexpected daemon reply"));
@@ -278,6 +280,38 @@ pub fn run_gh(repo: Option<String>, cmd: Vec<String>) -> Result<ExitCode, Fail> 
     )
 }
 
+/// `smith run` outside a session when the binding has `[http]` keys: their opaque tokens must
+/// belong to a lease, so start one rooted here (passphrase as for any session; scopes `run` and
+/// `http`), run through the daemon and end it when the child exits.
+pub fn run_leased(
+    o: &Opts,
+    project: Option<String>,
+    env: Option<String>,
+    keys: Vec<String>,
+    all_keys: bool,
+    cmd: Vec<String>,
+) -> Result<ExitCode, Fail> {
+    let (project, env) = resolve(project, env)?;
+    let mut c = connect(true)?;
+    let pw = input::passphrase(o, "Passphrase: ")?;
+    let req = Request::SessionStart {
+        passphrase: Passphrase::new(pw.as_bytes().to_vec()),
+        ttl_secs: 24 * 3600,
+        project: project.clone(),
+        env: env.clone(),
+        scopes: vec!["run".into(), "http".into()],
+        command: format!("smith run -- {}", cmd.join(" ")),
+        binding: run_cmd::bound()?.map(|(_, bytes)| bytes),
+    };
+    drop(pw);
+    let Response::Session { .. } = call(&mut c, &req)? else {
+        return Err(fail(ExitCode::Failure, "unexpected daemon reply"));
+    };
+    let code = run_spec_code(Some(project), Some(env), keys, all_keys, cmd, None);
+    let _ = c.call(&Request::SessionEnd);
+    std::process::exit(code?);
+}
+
 fn run_spec(
     project: Option<String>,
     env: Option<String>,
@@ -286,6 +320,19 @@ fn run_spec(
     cmd: Vec<String>,
     gh: Option<ls_ipc::GhSpec>,
 ) -> Result<ExitCode, Fail> {
+    let code = run_spec_code(project, env, keys, all_keys, cmd, gh)?;
+    std::process::exit(code);
+}
+
+/// Runs the command through the daemon; returns the child's exit code.
+fn run_spec_code(
+    project: Option<String>,
+    env: Option<String>,
+    keys: Vec<String>,
+    all_keys: bool,
+    cmd: Vec<String>,
+    gh: Option<ls_ipc::GhSpec>,
+) -> Result<i32, Fail> {
     let cwd = std::env::current_dir()
         .map_err(|e| fail(ExitCode::Failure, format!("no current dir: {e}")))?;
     let spec = RunSpec {
@@ -330,7 +377,7 @@ fn run_spec(
     loop {
         match c.recv() {
             Ok(Response::RunStarted { .. }) => {}
-            Ok(Response::RunExited { code }) => std::process::exit(code),
+            Ok(Response::RunExited { code }) => return Ok(code),
             Ok(Response::Error { code, message }) => return Err(fail(exit_of(code), message)),
             Ok(_) => return Err(fail(ExitCode::Failure, "unexpected daemon reply")),
             Err(e) => return Err(fail(ExitCode::Locked, format!("lost locksmithd: {e}"))),

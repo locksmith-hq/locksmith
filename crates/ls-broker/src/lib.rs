@@ -96,9 +96,24 @@ pub enum LeaseState {
     Expired,
 }
 
+/// The raw `.locksmith.toml` a session was started with. An agent inside the session can edit the
+/// file (same OS user), so decisions about where a credential may go (HTTP token hosts, database
+/// relay targets) use this copy, taken while the human typed the passphrase. Debug shows only
+/// the length: a binding should hold names only, but a mistaken literal must not reach a log.
+#[derive(Clone, PartialEq, Eq)]
+pub struct PinnedBinding(pub Vec<u8>);
+
+impl std::fmt::Debug for PinnedBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PinnedBinding({} bytes)", self.0.len())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Lease {
     pub id: String,
+    /// The `.locksmith.toml` the session was started with, if any (see [`PinnedBinding`]).
+    pub binding: Option<PinnedBinding>,
     pub root: ProcId,
     /// Processes the daemon spawned for this lease (`smith run` children): their descendants
     /// are in the session too.
@@ -210,6 +225,7 @@ impl Leases {
         }
         self.all.push(Lease {
             id: new_id(),
+            binding: None,
             root,
             spawned: Vec::new(),
             project,
@@ -293,6 +309,13 @@ impl Leases {
             .find(|l| l.root == root && l.state == LeaseState::Active)?;
         l.state = LeaseState::Revoked;
         Some(l.id.clone())
+    }
+
+    /// Pin the binding a lease was started with (`SessionStart`).
+    pub fn pin(&mut self, id: &str, binding: Option<Vec<u8>>) {
+        if let Some(l) = self.all.iter_mut().find(|l| l.id == id) {
+            l.binding = binding.map(PinnedBinding);
+        }
     }
 
     pub fn add_spawned(&mut self, id: &str, p: ProcId) {

@@ -20,12 +20,20 @@ The relay SHALL refuse to attach a credential for a host outside that token's al
 - **WHEN** a request carries the Stripe opaque token toward `evil.example`
 - **THEN** the relay returns 403 without contacting the host and audits BLOCKED
 
+#### Scenario: Agent widens the allowlist
+- **WHEN** a process inside the session edits `.locksmith.toml` or passes `--host` to mint a token for a host the binding did not give that key (and the provider catalog does not list)
+- **THEN** no token is issued, nothing is sent, and the attempt is audited BLOCKED
+
 ### Requirement: Response cleansing
 Any occurrence of the real credential in upstream response headers or bodies, including compressed bodies, SHALL be masked before reaching the client.
 
 #### Scenario: Key echoed by API
 - **WHEN** an upstream response body echoes the real key
 - **THEN** the client receives the body with the key masked
+
+#### Scenario: Coding the relay cannot undo
+- **WHEN** the upstream body stays encoded after the relay's decoding (stacked or repeated content-codings, a gzip transfer-coding)
+- **THEN** the relay answers 502 instead of passing the encoded body on
 
 ### Requirement: Name-constrained local CA
 When the user enables explicit-proxy mode, the generated certificate authority SHALL be technically constrained to the enabled API hosts, and SHALL be removable with one command.

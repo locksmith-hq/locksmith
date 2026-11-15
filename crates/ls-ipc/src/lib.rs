@@ -97,6 +97,11 @@ pub enum Request {
         scopes: Vec<String>,
         /// Agent command line, for `smith status` display only.
         command: String,
+        /// The `.locksmith.toml` in effect where the session starts. The daemon pins it for the
+        /// lease: HTTP token hosts and database targets come from this copy, never from a file
+        /// edited later inside the session.
+        #[serde(default)]
+        binding: Option<Vec<u8>>,
     },
     /// End the lease rooted at the calling process (agent exited).
     SessionEnd,
@@ -136,12 +141,37 @@ pub enum Request {
     },
     /// Forwarder port and include-file path (for `smith git setup|status`, doctor).
     GitInfo,
+    /// `smith db connect <name>`: open (or reuse) this session's loopback relay for the
+    /// binding's `[db.<name>]` target, under the caller's lease (scope `db`). Answered with
+    /// [`Response::DbEndpoint`]; never returns the password.
+    DbConnect {
+        name: String,
+        binding: Option<Vec<u8>>,
+    },
     /// Names of the keys stored for `project`/`env` (never values; for doctor). Needs an
     /// unlocked vault.
     KeyNames {
         project: String,
         env: String,
     },
+    /// `smith token issue`: mint an opaque `lsk_` token for vault key `key` under the caller's
+    /// lease (scope `http`). Hosts and placement come from these fields, else the binding's
+    /// `[http.keys]` entry, else the provider catalog. Never returns the value (M6 D1).
+    TokenIssue {
+        key: String,
+        provider: Option<String>,
+        hosts: Vec<String>,
+        placement: Option<String>,
+        binding: Option<Vec<u8>>,
+    },
+    /// Live opaque tokens: names, hosts, placements, leases and a short prefix only.
+    TokenList,
+    /// Revoke one token (the token or a unique prefix of at least 12 characters), or all.
+    TokenRevoke {
+        token: Option<String>,
+    },
+    /// HTTP relay port and the hosts enabled for explicit-proxy mode (doctor, `smith http`).
+    HttpInfo,
     /// Record a hook decision (deny or ask) in the audit ledger.
     HookAudit {
         agent: String,
@@ -218,6 +248,13 @@ pub enum Response {
         include: PathBuf,
         hosts: Vec<String>,
     },
+    /// A password-less local database endpoint on `127.0.0.1:<port>` (M6). Identifiers only.
+    DbEndpoint {
+        kind: String,
+        port: u16,
+        user: String,
+        database: Option<String>,
+    },
     Error {
         code: ErrorCode,
         message: String,
@@ -226,6 +263,40 @@ pub enum Response {
     Keys {
         keys: Vec<String>,
     },
+    /// Opaque relay token (a placeholder, not the credential) and the relay base URL.
+    HttpToken(Box<IssuedToken>),
+    HttpTokens {
+        tokens: Vec<HttpTokenInfo>,
+    },
+    HttpInfo {
+        port: u16,
+        /// Hosts the local CA is constrained to; empty when explicit-proxy mode is off.
+        ca_hosts: Vec<String>,
+    },
+}
+
+/// `Response::HttpToken` (boxed: keeps `Response` small).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct IssuedToken {
+    pub token: String,
+    pub key: String,
+    pub hosts: Vec<String>,
+    pub placement: String,
+    pub lease: String,
+    pub base_url: Option<String>,
+}
+
+/// A live opaque token as `smith token ls` shows it: never the full token, never a value.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct HttpTokenInfo {
+    pub prefix: String,
+    pub key: String,
+    pub project: String,
+    pub env: String,
+    pub hosts: Vec<String>,
+    pub placement: String,
+    pub lease: String,
+    pub created_at: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -445,6 +516,37 @@ mod tests {
                 include: "/x".into(),
                 hosts: vec!["github.com".into()],
             },
+            Response::DbEndpoint {
+                kind: "postgres".into(),
+                port: 5432,
+                user: "app".into(),
+                database: Some("appdb".into()),
+            },
+            // Opaque relay token: a placeholder bound to a lease (M6 D1), not the credential.
+            Response::HttpToken(Box::new(IssuedToken {
+                token: "lsk_x".into(),
+                key: "STRIPE_KEY".into(),
+                hosts: vec!["api.stripe.com".into()],
+                placement: "bearer".into(),
+                lease: "s".into(),
+                base_url: Some("http://127.0.0.1:1/h/api.stripe.com".into()),
+            })),
+            Response::HttpTokens {
+                tokens: vec![HttpTokenInfo {
+                    prefix: "lsk_12345678".into(),
+                    key: "STRIPE_KEY".into(),
+                    project: "p".into(),
+                    env: "e".into(),
+                    hosts: vec!["api.stripe.com".into()],
+                    placement: "bearer".into(),
+                    lease: "s".into(),
+                    created_at: 1,
+                }],
+            },
+            Response::HttpInfo {
+                port: 1,
+                ca_hosts: vec![],
+            },
         ];
         for r in &all {
             match r {
@@ -460,7 +562,11 @@ mod tests {
                 | Response::Error { .. }
                 | Response::Keys { .. }
                 | Response::GitToken { .. }
-                | Response::GitInfo { .. } => {}
+                | Response::GitInfo { .. }
+                | Response::DbEndpoint { .. }
+                | Response::HttpToken(_)
+                | Response::HttpTokens { .. }
+                | Response::HttpInfo { .. } => {}
             }
         }
         all

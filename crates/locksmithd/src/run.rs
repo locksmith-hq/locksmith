@@ -93,10 +93,17 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
         );
         let _ = st.audit(r);
     };
+    // [http] keys: an opaque token and the relay base URL instead of the value (M6).
+    let (http_vars, http_keys) = match &binding {
+        Some(b) if st.vault.is_some() => crate::http::for_run(
+            d, &mut st, peer, actor, &lease, &project, &env, b, &spec.keys,
+        )?,
+        _ => (Vec::new(), Vec::new()),
+    };
     let Some(out) = st
         .vault
         .as_ref()
-        .map(|v| read_secrets(v, spec, binding.as_ref(), &project, &env))
+        .map(|v| read_secrets(v, spec, binding.as_ref(), &project, &env, &http_keys))
     else {
         blocked(&mut st, "vault_locked");
         return Err(err(
@@ -104,7 +111,7 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
             "vault is locked; unlock with `smith session start`",
         ));
     };
-    let (keys, vars) = match out {
+    let (keys, mut vars) = match out {
         Ok(x) => x,
         Err((code, msg)) => {
             if code == ErrorCode::Denied {
@@ -126,10 +133,17 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
             return Err(err(ErrorCode::Internal, e));
         }
     }
-    let secrets: Vec<Secret> = vars
+    let mut secrets: Vec<Secret> = vars
         .iter()
         .map(|(k, v)| Secret::new(k.clone(), v))
         .collect();
+    // Opaque tokens are placeholders, redacted under a low-sensitivity label (M6 D1).
+    for (k, v) in &http_vars {
+        if http_keys.contains(k) {
+            secrets.push(Secret::new(format!("{k}(opaque)"), v));
+        }
+    }
+    vars.extend(http_vars);
     Ok(Prepared {
         lease,
         vars,
@@ -145,6 +159,7 @@ fn read_secrets(
     binding: Option<&Binding>,
     project: &str,
     env: &str,
+    skip: &[String],
 ) -> Result<Fetched, (ErrorCode, String)> {
     let internal = |e: VErr| match e {
         VErr::NotFound(_) => (ErrorCode::NotFound, e.to_string()),
@@ -182,6 +197,7 @@ fn read_secrets(
     } else {
         return Err((ErrorCode::Denied, "no binding; use --only or --yes".into()));
     };
+    let keys: Vec<String> = keys.into_iter().filter(|k| !skip.contains(k)).collect();
     let mut vars = Vec::new();
     for k in &keys {
         let val = v.get_secret(project, env, k).map_err(internal)?;

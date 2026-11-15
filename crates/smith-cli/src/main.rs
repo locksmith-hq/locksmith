@@ -9,11 +9,15 @@ mod agents;
 mod audit_cmds;
 mod binding;
 mod daemon_vault;
+mod db_cmd;
 mod doctor_m4;
 mod doctor_m5;
+mod doctor_m6;
+mod doctor_m6_db;
 mod dotenv;
 mod git_cmd;
 mod hook_cmd;
+mod http_cmd;
 mod init_cmd;
 mod input;
 mod precommit;
@@ -86,6 +90,21 @@ enum Cmd {
     Git {
         #[command(subcommand)]
         cmd: git_cmd::GitCmd,
+    },
+    /// Password-less local endpoints for the project's databases (inside a session).
+    Db {
+        #[command(subcommand)]
+        cmd: db_cmd::DbCmd,
+    },
+    /// Opaque tokens for the HTTP relay: the app holds `lsk_…`, Locksmith attaches the key.
+    Token {
+        #[command(subcommand)]
+        cmd: http_cmd::TokenCmd,
+    },
+    /// HTTP relay status, provider catalog and the opt-in local CA (explicit-proxy mode).
+    Http {
+        #[command(subcommand)]
+        cmd: http_cmd::HttpCmd,
     },
     /// Run the GitHub CLI with a token injected (contained: visible to `gh` only, output redacted).
     Gh(git_cmd::GhArgs),
@@ -193,6 +212,9 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
         Some(Cmd::Scan(a)) => scan_cmd::run(&ro, a),
         Some(Cmd::Git { cmd }) => git_cmd::run(cli.json, cmd),
         Some(Cmd::Gh(a)) => git_cmd::gh(a),
+        Some(Cmd::Db { cmd }) => db_cmd::run(cli.json, cmd),
+        Some(Cmd::Token { cmd }) => http_cmd::token(cli.json, cmd),
+        Some(Cmd::Http { cmd }) => http_cmd::http(&ro, cmd),
         Some(Cmd::Run(a)) => run_cmd::run(&ro, a),
         Some(Cmd::Daemon { cmd }) => session::daemon(cmd),
         Some(Cmd::Session { cmd }) => session::session(&ro, cmd),

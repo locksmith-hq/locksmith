@@ -30,6 +30,19 @@ pub fn disable_core_dumps() -> io::Result<()> {
     Ok(())
 }
 
+/// Doctor probe: check [`disable_core_dumps`] works, then mark the process dumpable again. A
+/// non-dumpable process's `/proc/<pid>/exe` is unreadable to its own (non-root) user, so leaving
+/// `smith doctor` non-dumpable would make the daemon refuse to attest it for the checks that follow.
+pub fn probe_core_dumps() -> io::Result<()> {
+    disable_core_dumps()?;
+    #[cfg(target_os = "linux")]
+    // SAFETY: prctl(PR_SET_DUMPABLE, 1) takes plain integer arguments.
+    if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 1, 0, 0, 0) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 /// Best-effort: keep `len` bytes at `ptr` out of swap. Returns false when the OS refuses
 /// (e.g. RLIMIT_MEMLOCK exhausted); callers continue without the lock.
 pub fn mlock(ptr: *const u8, len: usize) -> bool {

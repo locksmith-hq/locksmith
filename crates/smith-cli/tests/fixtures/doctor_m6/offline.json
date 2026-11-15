@@ -1,0 +1,20 @@
+[
+  {
+    "fixable": false,
+    "id": "db.relay",
+    "status": "skip",
+    "summary": "no [db.<name>] targets in .locksmith.toml"
+  },
+  {
+    "fixable": false,
+    "id": "http.ca_constraints",
+    "status": "skip",
+    "summary": "explicit-proxy mode is off (no local CA)"
+  },
+  {
+    "fixable": false,
+    "id": "http.relay",
+    "status": "skip",
+    "summary": "locksmithd is not running"
+  }
+]

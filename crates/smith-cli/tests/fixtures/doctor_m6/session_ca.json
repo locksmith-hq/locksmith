@@ -1,0 +1,40 @@
+[
+  {
+    "fixable": false,
+    "id": "db.relay.cache",
+    "status": "ok",
+    "summary": "redis 127.0.0.1:<port> reachable; no credential configured"
+  },
+  {
+    "fixable": false,
+    "id": "db.relay.legacy_db",
+    "remediation": "edit [db.Legacy DB] in .locksmith.toml",
+    "status": "fail",
+    "summary": "invalid [db.Legacy DB]: kind \"mongo\" is not one of postgres, mysql, redis"
+  },
+  {
+    "fixable": false,
+    "id": "db.relay.main",
+    "status": "ok",
+    "summary": "postgres app@127.0.0.1:<port> reachable; key(s) API_KEY present"
+  },
+  {
+    "fixable": false,
+    "id": "db.relay.prod-ro",
+    "remediation": "smith add MISSING_KEY",
+    "status": "warn",
+    "summary": "vault key(s) missing: MISSING_KEY"
+  },
+  {
+    "fixable": false,
+    "id": "http.ca_constraints",
+    "status": "ok",
+    "summary": "local CA constrained to 1 host(s): api.relay.test"
+  },
+  {
+    "fixable": false,
+    "id": "http.relay",
+    "status": "ok",
+    "summary": "listening on 127.0.0.1:<port>"
+  }
+]

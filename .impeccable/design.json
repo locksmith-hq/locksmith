@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T17:18:00.512684+00:00",
+  "title": "Design System: Locksmith",
+  "extensions": {
+    "colorMeta": {
+      "cobalt-ink": {
+        "role": "primary",
+        "displayName": "Cobalt Ink",
+        "tonalRamp": [
+          "#0b1640",
+          "#122673",
+          "#17318a",
+          "#1f3fae",
+          "#4a63c2",
+          "#8597d8",
+          "#c3cdee",
+          "#e4e9f6"
+        ]
+      },
+      "cobalt-ink-deep": {
+        "role": "primary",
+        "displayName": "Deep Cobalt",
+        "tonalRamp": [
+          "#0b1640",
+          "#122673",
+          "#17318a",
+          "#1f3fae",
+          "#4a63c2",
+          "#8597d8",
+          "#c3cdee",
+          "#e4e9f6"
+        ]
+      },
+      "brass": {
+        "role": "secondary",
+        "displayName": "Brass",
+        "tonalRamp": [
+          "#3a2c08",
+          "#5e470d",
+          "#8a6812",
+          "#a8852c",
+          "#c8a044",
+          "#dcc07a",
+          "#ecdcb2",
+          "#f8f1df"
+        ]
+      },
+      "brass-edge": {
+        "role": "secondary",
+        "displayName": "Brass Edge",
+        "tonalRamp": [
+          "#3a2c08",
+          "#5e470d",
+          "#8a6812",
+          "#a8852c",
+          "#c8a044",
+          "#dcc07a",
+          "#ecdcb2",
+          "#f8f1df"
+        ]
+      },
+      "revoke-red": {
+        "role": "tertiary",
+        "displayName": "Revoke Red",
+        "tonalRamp": [
+          "#3d0c0a",
+          "#6b1612",
+          "#8f1e18",
+          "#b3261e",
+          "#d2584f",
+          "#e8968f",
+          "#f4c9c5",
+          "#fbeceb"
+        ]
+      },
+      "revoke-wash": {
+        "role": "tertiary",
+        "displayName": "Revoke Wash",
+        "tonalRamp": [
+          "#3d0c0a",
+          "#6b1612",
+          "#8f1e18",
+          "#b3261e",
+          "#d2584f",
+          "#e8968f",
+          "#f4c9c5",
+          "#fbeceb"
+        ]
+      },
+      "drafting-ground": {
+        "role": "neutral",
+        "displayName": "Drafting Ground",
+        "tonalRamp": [
+          "#1a1d22",
+          "#2b2f36",
+          "#3f4550",
+          "#565e6d",
+          "#7c8492",
+          "#a7adb8",
+          "#d3d7de",
+          "#f3f5f7"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "tonalRamp": [
+          "#1a1d22",
+          "#2b2f36",
+          "#3f4550",
+          "#565e6d",
+          "#7c8492",
+          "#a7adb8",
+          "#d3d7de",
+          "#f3f5f7"
+        ]
+      },
+      "cobalt-wash": {
+        "role": "neutral",
+        "displayName": "Cobalt Wash",
+        "tonalRamp": [
+          "#0b1640",
+          "#122673",
+          "#17318a",
+          "#1f3fae",
+          "#4a63c2",
+          "#8597d8",
+          "#c3cdee",
+          "#e4e9f6"
+        ]
+      },
+      "graphite": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "tonalRamp": [
+          "#1a1d22",
+          "#2b2f36",
+          "#3f4550",
+          "#565e6d",
+          "#7c8492",
+          "#a7adb8",
+          "#d3d7de",
+          "#f3f5f7"
+        ]
+      },
+      "quiet-graphite": {
+        "role": "neutral",
+        "displayName": "Quiet Graphite",
+        "tonalRamp": [
+          "#1a1d22",
+          "#2b2f36",
+          "#3f4550",
+          "#565e6d",
+          "#7c8492",
+          "#a7adb8",
+          "#d3d7de",
+          "#f3f5f7"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "tonalRamp": [
+          "#0b1640",
+          "#122673",
+          "#17318a",
+          "#1f3fae",
+          "#4a63c2",
+          "#8597d8",
+          "#c3cdee",
+          "#e4e9f6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Vault state",
+        "purpose": "The vault state word in the top band only."
+      },
+      "headline": {
+        "displayName": "Screen title",
+        "purpose": "Screen titles and the daemon-down heading."
+      },
+      "title": {
+        "displayName": "Section head",
+        "purpose": "Section heads with a quiet count beside."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "All interface text; tabular figures on."
+      },
+      "label": {
+        "displayName": "Column head",
+        "purpose": "Ruled-table column heads, sentence case."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Ids, key names, hosts, commands, ledger payloads; ligatures off."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "ease-mechanical",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The only easing."
+      },
+      {
+        "name": "plug-turn",
+        "value": "transform 420ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Keyway turns 90deg when the vault opens."
+      },
+      {
+        "name": "revoke-strike",
+        "value": "480ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "1.5px red line draws across a revoked row before it moves to Struck."
+      },
+      {
+        "name": "hover",
+        "value": "background-color 120ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Button hover fill."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "none",
+        "purpose": "prefers-reduced-motion: reduce removes all transitions and animations and skips the strike delay."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "overview-stack",
+        "value": "1180px"
+      }
+    ],
+    "focus": {
+      "value": "outline: 2px solid #1f3fae; outline-offset: 2px; border-radius: 3px"
+    }
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default outline action (Lock now).",
+      "html": "<button class=\"ds-btn\">Lock now</button>",
+      "css": ".ds-btn{height:36px;padding:0 16px;border-radius:6px;border:1px solid #1f3fae;background:#fff;color:#1f3fae;font:600 14px/20px 'IBM Plex Sans',system-ui,sans-serif;cursor:pointer;transition:background-color 120ms cubic-bezier(0.16,1,0.3,1)}.ds-btn:hover{background:#e4e9f6}.ds-btn:focus-visible{outline:2px solid #1f3fae;outline-offset:2px}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "One per context: Unlock, Add or rotate key.",
+      "html": "<button class=\"ds-btn-primary\">Unlock</button>",
+      "css": ".ds-btn-primary{height:36px;padding:0 16px;border-radius:6px;border:1px solid #1f3fae;background:#1f3fae;color:#fff;font:600 14px/20px 'IBM Plex Sans',system-ui,sans-serif;cursor:pointer;transition:background-color 120ms cubic-bezier(0.16,1,0.3,1)}.ds-btn-primary:hover{background:#17318a}.ds-btn-primary:focus-visible{outline:2px solid #1f3fae;outline-offset:2px}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Revoke all sessions.",
+      "html": "<button class=\"ds-btn-danger\">Revoke all sessions</button>",
+      "css": ".ds-btn-danger{height:36px;padding:0 16px;border-radius:6px;border:1px solid #b3261e;background:#fff;color:#b3261e;font:600 14px/20px 'IBM Plex Sans',system-ui,sans-serif;cursor:pointer;transition:background-color 120ms cubic-bezier(0.16,1,0.3,1)}.ds-btn-danger:hover{background:#fbeceb}.ds-btn-danger:focus-visible{outline:2px solid #1f3fae;outline-offset:2px}"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Label above a 36px input; names only, never secret values.",
+      "html": "<label class=\"ds-field\">Key name<input placeholder=\"e.g. NPM_TOKEN\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:6px;font:600 13px 'IBM Plex Sans',system-ui,sans-serif;color:#2b2f36}.ds-field input{height:36px;width:280px;padding:0 10px;border:1px solid rgba(31,63,174,.24);border-radius:6px;background:#fff;font:400 14px 'IBM Plex Sans',system-ui,sans-serif;color:#2b2f36;caret-color:#1f3fae}.ds-field input::placeholder{color:#565e6d}.ds-field input:focus-visible{outline:2px solid #1f3fae;outline-offset:0;border-color:#1f3fae}"
+    },
+    {
+      "name": "Rail navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Left rail; current item gets wash and a brass dot.",
+      "html": "<nav class=\"ds-nav\"><button aria-current=\"page\"><i></i>Overview</button><button><i></i>Keys</button><button><i></i>Tokens</button></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:2px;width:184px}.ds-nav button{display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border:0;border-radius:6px;background:none;font:500 14px 'IBM Plex Sans',system-ui,sans-serif;color:#2b2f36;text-align:left;cursor:pointer}.ds-nav button:hover{background:rgba(31,63,174,.06)}.ds-nav button:focus-visible{outline:2px solid #1f3fae;outline-offset:2px}.ds-nav i{width:7px;height:7px;border-radius:50%;border:1.5px solid #565e6d}.ds-nav [aria-current=page]{background:#e4e9f6;color:#1f3fae;font-weight:600}.ds-nav [aria-current=page] i{background:#c8a044;border-color:#8a6812}"
+    },
+    {
+      "name": "Ruled table",
+      "kind": "custom",
+      "refersTo": "ruled-table-row",
+      "description": "Drafting-sheet table on the ground: cobalt head rule, hairline rows, no card.",
+      "html": "<table class=\"ds-grid\"><thead><tr><th>Session</th><th>Agent</th><th class=\"num\">Time left</th><th></th></tr></thead><tbody><tr><td class=\"id\">ls_8f2a1c04</td><td>claude</td><td class=\"num\">3 h 12 min</td><td class=\"num\"><a>Revoke</a></td></tr><tr><td class=\"id\">ls_c03e44a1</td><td>codex</td><td class=\"num soon\">6 min</td><td class=\"num\"><a>Revoke</a></td></tr></tbody></table>",
+      "css": ".ds-grid{width:100%;border-collapse:collapse;border-top:1px solid #1f3fae;border-bottom:1px solid rgba(31,63,174,.24);font:400 14px/20px 'IBM Plex Sans',system-ui,sans-serif;color:#2b2f36;font-variant-numeric:tabular-nums}.ds-grid th,.ds-grid td{padding:0 12px;height:56px;text-align:left;border-top:1px solid rgba(31,63,174,.24)}.ds-grid th:first-child,.ds-grid td:first-child{padding-left:0}.ds-grid th:last-child,.ds-grid td:last-child{padding-right:0}.ds-grid thead th{height:40px;border-top:0;border-bottom:1px solid #1f3fae;font-size:12px;line-height:16px;font-weight:600;letter-spacing:.02em;color:#1f3fae;vertical-align:bottom;padding-bottom:8px}.ds-grid .num{text-align:right;font-weight:600}.ds-grid .soon{color:#b3261e}.ds-grid .id{font:400 12.5px 'IBM Plex Mono',ui-monospace,monospace;font-variant-ligatures:none}.ds-grid a{color:#b3261e;font-weight:600;cursor:pointer;text-underline-offset:3px;text-decoration:underline transparent}.ds-grid a:hover{text-decoration-color:currentColor}"
+    },
+    {
+      "name": "KeyCut",
+      "kind": "custom",
+      "refersTo": "keycut",
+      "description": "Signature: key blade with five pin positions (run git http db aws); granted = deep cut with brass pin, not granted = shallow cut with hollow pin.",
+      "html": "<svg class=\"ds-keycut\" width=\"136\" height=\"30\" viewBox=\"0 0 136 30\" role=\"img\" aria-label=\"Scopes granted: run, git, http, aws\"><path class=\"b\" d=\"M8.5 3.5H125.5L133.5 14L125.5 24.5H123.5L120.5 11.5H112.5L109.5 24.5H99.5L96.5 19.5H88.5L85.5 24.5H75.5L72.5 11.5H64.5L61.5 24.5H51.5L48.5 11.5H40.5L37.5 24.5H27.5L24.5 11.5H16.5L13.5 24.5H8.5Z\"/><rect class=\"p\" x=\"18\" y=\"5\" width=\"5\" height=\"4\" rx=\"1\"/><rect class=\"p\" x=\"42\" y=\"5\" width=\"5\" height=\"4\" rx=\"1\"/><rect class=\"p\" x=\"66\" y=\"5\" width=\"5\" height=\"4\" rx=\"1\"/><rect class=\"e\" x=\"90\" y=\"5\" width=\"5\" height=\"4\" rx=\"1\"/><rect class=\"p\" x=\"114\" y=\"5\" width=\"5\" height=\"4\" rx=\"1\"/></svg>",
+      "css": ".ds-keycut{display:block}.ds-keycut .b{fill:#e4e9f6;stroke:#1f3fae;stroke-width:1;stroke-linejoin:round}.ds-keycut .p{fill:#c8a044;stroke:#8a6812;stroke-width:1}.ds-keycut .e{fill:none;stroke:#565e6d;stroke-width:1}"
+    },
+    {
+      "name": "Shear-line mark",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Unlocked: body split along the shear line, pins split on it. Locked variant: body whole, pins off the line.",
+      "html": "<span class=\"ds-mark\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 64 64\" fill=\"currentColor\"><mask id=\"ds-shear\"><rect width=\"64\" height=\"64\" fill=\"#fff\"/><rect y=\"27\" width=\"64\" height=\"5\" fill=\"#000\"/></mask><rect x=\"6\" y=\"6\" width=\"52\" height=\"52\" rx=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"6\" mask=\"url(#ds-shear)\"/><rect x=\"17\" y=\"14\" width=\"8\" height=\"13\" rx=\"2\"/><rect x=\"28\" y=\"14\" width=\"8\" height=\"13\" rx=\"2\"/><rect x=\"39\" y=\"14\" width=\"8\" height=\"13\" rx=\"2\"/><rect x=\"17\" y=\"32\" width=\"8\" height=\"17\" rx=\"2\"/><rect x=\"28\" y=\"32\" width=\"8\" height=\"10\" rx=\"2\"/><rect x=\"39\" y=\"32\" width=\"8\" height=\"14\" rx=\"2\"/></svg>Locksmith</span>",
+      "css": ".ds-mark{display:inline-flex;align-items:center;gap:10px;color:#1f3fae;font:600 18px/24px 'IBM Plex Sans',system-ui,sans-serif;letter-spacing:-.01em}"
+    },
+    {
+      "name": "Alert",
+      "kind": "custom",
+      "refersTo": "alert",
+      "description": "Action error, role=alert; the one red.",
+      "html": "<p class=\"ds-alert\">Session ls_8f2a1c04 could not be revoked.</p>",
+      "css": ".ds-alert{margin:0;padding:10px 14px;border:1px solid #b3261e;border-radius:6px;background:#fbeceb;color:#b3261e;font:500 14px/20px 'IBM Plex Sans',system-ui,sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Keying Schedule",
+    "overview": "Every session is a key cut for one job. The interface is the locksmith's keying schedule drawn on cool drafting film: cobalt technical ink for rules, headings and the mark, graphite for text, brass only where a pin sits in a cut, and a single red for anything revoked, blocked or about to run out. It reads as a technical drawing, not an admin console: hairline-ruled tables sit directly on the ground, nothing floats on a card, and the one large word on screen is the vault's state.\n\nDensity is exact rather than airy: a 36 px control height, 44 to 56 px ruled rows, a 4 px spacing base. Type is one neutral grotesk (IBM Plex Sans) for the interface and its mono sibling only for identifiers, commands and ledger payloads. Motion is mechanical and brief: a plug turns a quarter, a revoked row is struck through.\n\nThe desktop app (`apps/desktop`) is the first surface built in this world; the mark, palette and type are company-wide.",
+    "keyCharacteristics": [
+      "Drafting-film ground with cobalt hairline rules; flat, no shadows, no cards.",
+      "Brass is a material, not an accent: it means \"pin present in a cut\".",
+      "One red, reserved for revoke, blocked and time-low.",
+      "The shear-line mark and the KeyCut blade are drawn parts, built on the pixel grid.",
+      "Names, never values: no surface accepts or renders a secret."
+    ],
+    "rules": [
+      {
+        "name": "The One Red Rule",
+        "body": "Red appears only for revoke, blocked and time-low (under 600 s). No second warning hue, no amber, no green success.",
+        "section": "colors"
+      },
+      {
+        "name": "The Brass Is Metal Rule",
+        "body": "Brass marks a physical pin and nothing else. If it is not a pin in a drawing, it is not brass.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Hyphens Rule",
+        "body": "Mono has ligatures off (`font-variant-ligatures: none`): `--` in a copyable command must read as two hyphens.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Is Data Rule",
+        "body": "Mono is for identifiers and payloads only, never for labels, headings or UI chrome.",
+        "section": "typography"
+      },
+      {
+        "name": "The Stopping Is Adjacent Rule",
+        "body": "Lock and Revoke all live in the top band on every screen; per-row revoke sits at the row's end. Never move them into a menu.",
+        "section": "layout"
+      },
+      {
+        "name": "The Drafting Sheet Rule",
+        "body": "Tables and lists sit directly on the ground between rules; they are never wrapped in a card, a border box or a shadow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Shear Line Rule",
+        "body": "Unlocked splits the body along the shear line; locked keeps the body whole and the pins off the line. Never show a generic padlock or shield.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** keep tables on the ground between a cobalt top rule and hairline row rules.",
+      "**Do** show scopes with the KeyCut blade, never as coloured chips.",
+      "**Do** use the unlocked shear-line mark by default and the locked mark only for a closed or unreachable vault.",
+      "**Do** redraw tray glyphs on the 18px integer grid as single-colour template images.",
+      "**Do** bundle fonts locally and keep ligatures off in mono.",
+      "**Do** honour reduced motion by removing the strike and the turn, not by shortening them."
+    ],
+    "donts": [
+      "**Don't** add a text field, textarea or reveal toggle for any secret value or passphrase; secret entry goes through the native Locksmith prompt and the window only learns \"submitted\" or \"cancelled\".",
+      "**Don't** introduce a second warning colour, a green success colour or coloured status chips.",
+      "**Don't** use brass for text, buttons or decoration.",
+      "**Don't** add shadows or wrap tables in cards.",
+      "**Don't** use a generic padlock, shield or icon-font glyph for the brand."
+    ]
+  }
+}

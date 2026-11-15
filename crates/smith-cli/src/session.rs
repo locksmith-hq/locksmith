@@ -196,7 +196,11 @@ pub fn status(json: bool) -> Result<ExitCode, Fail> {
         .ok()
         .map(|mut c| call(&mut c, &Request::Status))
     {
-        Some(Ok(Response::Status { locked, leases })) => (true, locked, leases),
+        Some(Ok(Response::Status { locked, leases })) => (
+            true,
+            locked,
+            leases.into_iter().filter(|l| l.state == "active").collect(),
+        ),
         Some(Err(e)) => return Err(e),
         _ => (false, true, vec![]),
     };

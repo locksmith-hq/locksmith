@@ -13,3 +13,8 @@ ls-core = { path = "../ls-core" }
 ciborium = "0.2"
 serde = { version = "1", features = ["derive"] }
 zeroize = "1"
+ts-rs = { version = "12", optional = true }
+
+[features]
+# TypeScript bindings for packages/api-types (desktop app); off in the normal build.
+ts = ["dep:ts-rs"]

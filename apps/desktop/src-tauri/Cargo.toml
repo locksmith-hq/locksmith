@@ -1,0 +1,45 @@
+[package]
+name = "locksmith-desktop"
+edition = "2024"
+version = "0.0.1-alpha.4"
+license = "UNLICENSED"
+publish = false
+
+# Not in the root workspace (see the root Cargo.toml `exclude`): Tauri pulls webkit/gtk.
+[workspace]
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ls-ipc = { path = "../../../crates/ls-ipc" }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+zeroize = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSGeometry"] }
+objc2-app-kit = { version = "0.3", features = [
+  "NSAlert",
+  "NSApplication",
+  "NSControl",
+  "NSResponder",
+  "NSRunningApplication",
+  "NSSecureTextField",
+  "NSTextField",
+  "NSView",
+  "NSWindow",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
+[dev-dependencies]
+serde_json = "1"

@@ -246,6 +246,66 @@ fn event(e: StoredEvent) -> AuditEvent {
     }
 }
 
+/// What each caller role may ask. `smith` gets everything except `SecretPut` (an agent can
+/// reach an attested `smith`; writing vault values without the passphrase is the desktop
+/// app's job only). The desktop app gets an explicit allowlist (M14); everything else, `Ping`.
+fn allowed(role: Role, req: &Request) -> bool {
+    match role {
+        Role::Smith => !matches!(req, Request::SecretPut { .. }),
+        Role::Desktop => matches!(
+            req,
+            Request::Ping
+                | Request::Unlock { .. }
+                | Request::Lock
+                | Request::Status
+                | Request::Revoke { .. }
+                | Request::AuditList { .. }
+                | Request::AuditVerify
+                | Request::KeyNames { .. }
+                | Request::TokenList
+                | Request::TokenRevoke { .. }
+                | Request::GitInfo
+                | Request::HttpInfo
+                | Request::AwsInfo
+                | Request::SecretPut { .. }
+        ),
+        Role::Mcp | Role::Unknown => matches!(req, Request::Ping),
+    }
+}
+
+/// `SecretPut`: a new version of the key, audited `SECRET_PUT` with the target only.
+fn secret_put(
+    st: &mut State,
+    actor: &Actor,
+    project: &str,
+    env: &str,
+    name: &str,
+    value: &[u8],
+) -> Response {
+    let Some(v) = st.vault.as_mut() else {
+        return err(ErrorCode::Locked, "vault is locked");
+    };
+    // The vault validates the name (as for `smith add`); its errors never echo the value.
+    let ver = match v.put_secret(project, env, name, value) {
+        Ok(ver) => ver,
+        Err(e @ VErr::Invalid(_)) => return err(ErrorCode::BadRequest, e.to_string()),
+        Err(e @ VErr::NotFound(_)) => return err(ErrorCode::NotFound, e.to_string()),
+        Err(e) => return err(ErrorCode::Internal, e.to_string()),
+    };
+    let target = format!("{project}/{env}/{name}");
+    match st.audit(rec(
+        actor,
+        "SECRET_PUT",
+        Some(target),
+        &format!("desktop v{ver}"),
+        "ALLOW",
+        None,
+    )) {
+        Ok(()) => Response::Ok,
+        Err(e) => err(ErrorCode::Internal, e),
+    }
+}
+
 fn serve(d: Arc<Daemon>, mut s: UnixStream) {
     let Ok(peer) = Peer::of(&s) else { return };
     let role = d.manifest.classify(&peer);
@@ -271,26 +331,29 @@ fn serve(d: Arc<Daemon>, mut s: UnixStream) {
         if !peer.alive() {
             return;
         }
-        if role != Role::Smith {
-            let resp = if matches!(req, Request::Ping) {
-                Response::Pong {
-                    version: VERSION.into(),
-                }
-            } else {
-                let _ = d
-                    .state()
-                    .audit(rec(&actor, "BLOCKED", None, "attestation", "DENY", None));
-                err(
-                    ErrorCode::Denied,
-                    "caller is not an attested Locksmith binary",
-                )
+        if !allowed(role, &req) {
+            let (rule, msg) = match role {
+                Role::Unknown => (
+                    "attestation".to_string(),
+                    "caller is not an attested Locksmith binary".to_string(),
+                ),
+                r => (
+                    format!("role: {}", r.as_str()),
+                    format!("request not served to {}", r.as_str()),
+                ),
             };
-            if write_frame(&mut s, &resp).is_err() {
+            let _ = d
+                .state()
+                .audit(rec(&actor, "BLOCKED", None, &rule, "DENY", None));
+            if write_frame(&mut s, &err(ErrorCode::Denied, msg)).is_err() {
                 return;
             }
             continue;
         }
-        d.state().last = Instant::now();
+        // The desktop tray polls Status every few seconds; that must not hold off idle lock.
+        if !matches!(req, Request::Ping | Request::Status) {
+            d.state().last = Instant::now();
+        }
         if let Request::Run(spec) = req {
             run::run(&d, &peer, &actor, s, spec);
             return;
@@ -404,7 +467,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
             let st = d.state();
             Response::Status {
                 locked: st.vault.is_none(),
-                leases: st.leases.active(t),
+                leases: st.leases.with_recent(t, 10),
             }
         }
         Request::Revoke { id } => {
@@ -495,6 +558,12 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                 Err(e) => err(ErrorCode::Internal, e.to_string()),
             },
         },
+        Request::SecretPut {
+            project,
+            env,
+            name,
+            value,
+        } => secret_put(&mut d.state(), actor, &project, &env, &name, value.expose()),
         Request::ScanText { text } => scan::scan_text(d, &text),
         Request::ScanPath { path } => scan::scan_path(d, &path),
         Request::HookAudit {
@@ -679,4 +748,232 @@ fn main() {
         std::thread::spawn(move || serve(d, conn));
     }
     drop(lock);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ls_ipc::Passphrase;
+
+    fn every_request() -> Vec<Request> {
+        let s = || String::from("x");
+        let pw = || Passphrase::new(b"pw".to_vec());
+        vec![
+            Request::Ping,
+            Request::Unlock { passphrase: pw() },
+            Request::Lock,
+            Request::SessionStart {
+                passphrase: pw(),
+                ttl_secs: 1,
+                project: s(),
+                env: s(),
+                scopes: vec![],
+                command: s(),
+                binding: None,
+            },
+            Request::SessionEnd,
+            Request::Status,
+            Request::Revoke { id: None },
+            Request::Run(ls_ipc::RunSpec {
+                project: None,
+                env: None,
+                keys: vec![],
+                all_keys: false,
+                binding: None,
+                cmd: vec![],
+                cwd: "/".into(),
+                environ: vec![],
+                gh: None,
+                aws: None,
+                aws_contained: false,
+            }),
+            Request::Signal { sig: 2 },
+            Request::AuditList { limit: 1 },
+            Request::AuditVerify,
+            Request::ScanText { text: s() },
+            Request::ScanPath { path: "/x".into() },
+            Request::GitCredential {
+                host: s(),
+                repo: s(),
+                binding: None,
+                remotes: vec![],
+            },
+            Request::GitInfo,
+            Request::DbConnect {
+                name: s(),
+                binding: None,
+            },
+            Request::KeyNames {
+                project: s(),
+                env: s(),
+            },
+            Request::TokenIssue {
+                key: s(),
+                provider: None,
+                hosts: vec![],
+                placement: None,
+                binding: None,
+            },
+            Request::TokenList,
+            Request::TokenRevoke { token: None },
+            Request::HttpInfo,
+            Request::AwsInfo,
+            Request::HookAudit {
+                agent: s(),
+                event: s(),
+                decision: s(),
+                rule: s(),
+                target: s(),
+            },
+            Request::SecretPut {
+                project: s(),
+                env: s(),
+                name: s(),
+                value: pw(),
+            },
+        ]
+    }
+
+    /// Exhaustive: a new request variant fails to compile here until it is classified.
+    fn name(r: &Request) -> &'static str {
+        match r {
+            Request::Ping => "Ping",
+            Request::Unlock { .. } => "Unlock",
+            Request::Lock => "Lock",
+            Request::SessionStart { .. } => "SessionStart",
+            Request::SessionEnd => "SessionEnd",
+            Request::Status => "Status",
+            Request::Revoke { .. } => "Revoke",
+            Request::Run(_) => "Run",
+            Request::Signal { .. } => "Signal",
+            Request::AuditList { .. } => "AuditList",
+            Request::AuditVerify => "AuditVerify",
+            Request::ScanText { .. } => "ScanText",
+            Request::ScanPath { .. } => "ScanPath",
+            Request::GitCredential { .. } => "GitCredential",
+            Request::GitInfo => "GitInfo",
+            Request::DbConnect { .. } => "DbConnect",
+            Request::KeyNames { .. } => "KeyNames",
+            Request::TokenIssue { .. } => "TokenIssue",
+            Request::TokenList => "TokenList",
+            Request::TokenRevoke { .. } => "TokenRevoke",
+            Request::HttpInfo => "HttpInfo",
+            Request::AwsInfo => "AwsInfo",
+            Request::HookAudit { .. } => "HookAudit",
+            Request::SecretPut { .. } => "SecretPut",
+        }
+    }
+
+    #[test]
+    fn role_allowlists() {
+        const DESKTOP: &[&str] = &[
+            "Ping",
+            "Unlock",
+            "Lock",
+            "Status",
+            "Revoke",
+            "AuditList",
+            "AuditVerify",
+            "KeyNames",
+            "TokenList",
+            "TokenRevoke",
+            "GitInfo",
+            "HttpInfo",
+            "AwsInfo",
+            "SecretPut",
+        ];
+        for r in every_request() {
+            let n = name(&r);
+            assert_eq!(
+                allowed(Role::Desktop, &r),
+                DESKTOP.contains(&n),
+                "desktop {n}"
+            );
+            assert_eq!(allowed(Role::Smith, &r), n != "SecretPut", "smith {n}");
+            assert_eq!(allowed(Role::Mcp, &r), n == "Ping", "mcp {n}");
+            assert_eq!(allowed(Role::Unknown, &r), n == "Ping", "unknown {n}");
+        }
+    }
+
+    struct Tmp(std::path::PathBuf);
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn secret_put_stores_value_and_audits_only_the_target() {
+        let tmp = Tmp(std::env::temp_dir().join(format!("lsd-put-{}", std::process::id())));
+        let _ = std::fs::remove_dir_all(&tmp.0);
+        let weak = ls_crypto::kdf::KdfParams {
+            m_kib: 64,
+            t: 1,
+            p: 1,
+        };
+        let phrase = ls_crypto::recovery::RecoveryPhrase::generate().unwrap();
+        let mut v = Vault::create(&tmp.0.join("vault"), b"pw", weak, true, &phrase).unwrap();
+        v.add_project("p").unwrap();
+        v.add_env("p", "dev").unwrap();
+        let mut st = State {
+            vault: None,
+            leases: Leases::default(),
+            last: Instant::now(),
+            pending: Vec::new(),
+        };
+        let a = Actor {
+            pid: 1,
+            start: 1,
+            exe: "/Applications/Locksmith.app/locksmith-desktop".into(),
+            exe_hash: String::new(),
+        };
+        const VALUE: &[u8] = b"sk_live_desktop_typed_9876";
+        let locked = secret_put(&mut st, &a, "p", "dev", "K", VALUE);
+        assert!(matches!(
+            locked,
+            Response::Error {
+                code: ErrorCode::Locked,
+                ..
+            }
+        ));
+
+        st.vault = Some(v);
+        assert_eq!(
+            secret_put(&mut st, &a, "p", "dev", "K", VALUE),
+            Response::Ok
+        );
+        assert_eq!(
+            secret_put(&mut st, &a, "p", "dev", "K", b"v2"),
+            Response::Ok
+        );
+        let bad = secret_put(&mut st, &a, "p", "dev", "bad name", VALUE);
+        assert!(matches!(
+            bad,
+            Response::Error {
+                code: ErrorCode::BadRequest,
+                ..
+            }
+        ));
+        let missing = secret_put(&mut st, &a, "p", "nope", "K", VALUE);
+        assert!(matches!(
+            missing,
+            Response::Error {
+                code: ErrorCode::NotFound,
+                ..
+            }
+        ));
+
+        let v = st.vault.as_ref().unwrap();
+        assert_eq!(v.get_secret("p", "dev", "K").unwrap().expose(), b"v2");
+        let events = v.audit_list(100).unwrap();
+        let puts: Vec<_> = events
+            .iter()
+            .filter(|e| e.record.action == "SECRET_PUT")
+            .collect();
+        assert_eq!(puts.len(), 2);
+        assert_eq!(puts[0].record.target.as_deref(), Some("p/dev/K"));
+        assert_eq!(puts[1].record.policy_rule, "desktop v2");
+        let text = format!("{:?}", events.iter().map(|e| &e.record).collect::<Vec<_>>());
+        assert!(!text.contains("sk_live_desktop_typed"));
+    }
 }

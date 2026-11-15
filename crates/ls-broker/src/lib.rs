@@ -331,6 +331,21 @@ impl Leases {
     }
 
     /// Active leases for `smith status`.
+    /// Active leases plus up to `ended` most recently created ended ones (revoked or expired),
+    /// for the desktop's "struck from the schedule" view. Memory only, like every lease.
+    pub fn with_recent(&self, now: i64, ended: usize) -> Vec<LeaseInfo> {
+        let mut out = self.active(now);
+        out.extend(
+            self.all
+                .iter()
+                .rev()
+                .filter(|l| l.state_at(now) != LeaseState::Active)
+                .take(ended)
+                .map(|l| l.info(now)),
+        );
+        out
+    }
+
     pub fn active(&self, now: i64) -> Vec<LeaseInfo> {
         self.all
             .iter()
@@ -428,6 +443,19 @@ mod tests {
             })
         ));
         assert!(ls.active(2002).is_empty());
+        // Ended leases follow the active ones, newest first, capped.
+        let live = start(&mut ls, me(), 600, 3000);
+        let all = ls.with_recent(3001, 1);
+        assert_eq!(all.len(), 2);
+        assert_eq!(
+            (all[0].id.as_str(), all[0].state.as_str()),
+            (live.as_str(), "active")
+        );
+        assert_eq!(
+            (all[1].id.as_str(), all[1].state.as_str()),
+            (id2.as_str(), "revoked")
+        );
+        assert_eq!(ls.with_recent(3001, 10).len(), 3);
     }
 
     #[test]

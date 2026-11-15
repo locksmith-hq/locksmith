@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: core defaults and the app's own daemon commands, nothing else.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:tray:default",
+    "allow-status",
+    "allow-lock",
+    "allow-unlock-secure",
+    "allow-revoke",
+    "allow-audit-list",
+    "allow-audit-verify",
+    "allow-key-names",
+    "allow-put-secret-secure",
+    "allow-token-list",
+    "allow-token-revoke",
+    "allow-relay-info"
+  ]
+}

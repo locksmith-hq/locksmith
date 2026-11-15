@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Locksmith</title>
+  <!-- Shear-line mark (packages/ui/brand/locksmith-mark.svg) on the macOS icon grid:
+       cobalt ground, off-white split housing, brass pins. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#1F3FAE"/>
+  <g transform="translate(512 512) scale(10) translate(-32 -32)">
+    <mask id="shear"><rect width="64" height="64" fill="#fff"/><rect y="27" width="64" height="5" fill="#000"/></mask>
+    <rect x="6" y="6" width="52" height="52" rx="16" fill="none" stroke="#F3F5F7" stroke-width="6" mask="url(#shear)"/>
+    <g fill="#C8A044">
+      <rect x="17" y="14" width="8" height="13" rx="2"/><rect x="28" y="14" width="8" height="13" rx="2"/><rect x="39" y="14" width="8" height="13" rx="2"/>
+      <rect x="17" y="32" width="8" height="17" rx="2"/><rect x="28" y="32" width="8" height="10" rx="2"/><rect x="39" y="32" width="8" height="14" rx="2"/>
+    </g>
+  </g>
+</svg>

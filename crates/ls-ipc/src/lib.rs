@@ -37,7 +37,9 @@ pub fn socket_path() -> PathBuf {
     runtime_dir().join(SOCKET_FILE)
 }
 
-/// Passphrase sent client → daemon for unlock. Zeroized on drop; no Debug/Display/Clone.
+pub mod desktop;
+
+/// Passphrase sent client → daemon for unlock (also the secret value of `SecretPut`). Zeroized on drop; no Debug/Display/Clone.
 pub struct Passphrase(Vec<u8>);
 
 impl Passphrase {
@@ -174,6 +176,15 @@ pub enum Request {
     HttpInfo,
     /// AWS relay port (doctor `aws.relay`).
     AwsInfo,
+    /// Store a new version of `project`/`env`/`name` (desktop app, M14). The value was typed
+    /// by the human into a native secure field; it travels client -> daemon only. Needs an
+    /// unlocked vault; served to `locksmith-desktop` only.
+    SecretPut {
+        project: String,
+        env: String,
+        name: String,
+        value: Passphrase,
+    },
     /// Record a hook decision (deny or ask) in the audit ledger.
     HookAudit {
         agent: String,
@@ -301,6 +312,7 @@ pub struct IssuedToken {
 
 /// A live opaque token as `smith token ls` shows it: never the full token, never a value.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct HttpTokenInfo {
     pub prefix: String,
     pub key: String,
@@ -326,6 +338,7 @@ pub enum ErrorCode {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct LeaseInfo {
     pub id: String,
     pub root_pid: u32,
@@ -340,6 +353,7 @@ pub struct LeaseInfo {
 
 /// An audit row as shown to users. Never holds a value, only identifiers.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct AuditEvent {
     pub seq: u64,
     pub ts: i64,
@@ -633,6 +647,41 @@ mod tests {
         }
     }
 
+    /// What the desktop webview receives obeys the same rule (M14 D1). `SecretPut` carries a
+    /// value by design, but only as a request (client -> daemon).
+    #[test]
+    fn no_desktop_view_carries_secret_material() {
+        use desktop::*;
+        let Response::Status { leases, .. } = &every_response()[3] else {
+            panic!("status")
+        };
+        let views = [
+            Value::serialized(&StatusView {
+                locked: false,
+                leases: leases.clone(),
+            }),
+            Value::serialized(&AuditVerifyView {
+                events: 1,
+                broken_at: Some(1),
+                detail: String::new(),
+            }),
+            Value::serialized(&RelayInfo {
+                git_port: Some(1),
+                http_port: None,
+                aws_port: Some(2),
+                ca_hosts: vec!["api.stripe.com".into()],
+            }),
+            Value::serialized(&SecureOutcome::Submitted),
+            Value::serialized(&CommandError {
+                code: CommandErrorCode::Unavailable,
+                message: "m".into(),
+            }),
+        ];
+        for v in views {
+            audit(&v.unwrap(), "view");
+        }
+    }
+
     #[test]
     fn frames_roundtrip() {
         let (mut a, mut b) = UnixStream::pair().unwrap();
@@ -655,6 +704,22 @@ mod tests {
                 assert_eq!(passphrase.expose(), b"pw")
             }
             _ => panic!("bad unlock"),
+        }
+        write_frame(
+            &mut a,
+            &Request::SecretPut {
+                project: "p".into(),
+                env: "e".into(),
+                name: "K".into(),
+                value: Passphrase::new(b"v".to_vec()),
+            },
+        )
+        .unwrap();
+        match read_frame::<Request>(&mut b).unwrap() {
+            Some(Frame::Msg(Request::SecretPut { name, value, .. })) => {
+                assert_eq!((name.as_str(), value.expose()), ("K", &b"v"[..]))
+            }
+            _ => panic!("bad secret put"),
         }
         drop(a);
         assert!(

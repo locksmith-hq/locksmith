@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# Tauri app: own lockfile, keeps webkit/gtk out of the core build.
+exclude = ["apps/desktop/src-tauri"]
 
 [workspace.package]
 edition = "2024"

@@ -122,7 +122,7 @@ All four avoid peak hours (weekdays about 15:00–21:00).
 | [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Sat 10:35 (after the Saturday 10:00 weekly reset) | re-verify finished work, quality review, write the next change |
 | [Daily health check](https://claude.ai/code/routines/trig_012bR8F2aWP91W3D9xGDpVUn) | Haiku 5.5 | Default | daily 08:30 | detects silent failures: worker silent for more than 24h, red CI on main, owner decisions waiting more than 3 days, finished PRs waiting more than 2 days; stays silent when healthy |
 | [Rescue (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-dev` | daily 09:35, 23:35 (exits at once if idle) | fixes the oldest `needs-rescue` issue at its root cause and checks the fix with an independent Opus evaluator; after 2 failed attempts it hands the issue to the owner |
-| Learning loop | Opus 5.5 | `locksmith-dev` | daily 00:35 (exits at once when there was no friction) | reads the last 24h of run metadata, rescues and CI failures; fixes the top 1–3 causes in setup, scripts or agent instructions; appends a measurable lesson to `docs/agents/lessons.md`; opens a draft PR and one `needs-owner` review issue |
+| Learning loop | Opus 5.5 | `locksmith-dev` | daily 00:35 (exits at once when there was no friction) | reads the last 24h of run metadata, rescues and CI failures; fixes the top 1–3 causes in setup, scripts or agent instructions; fixes them in scripts or skills, keeping the instruction word count flat; opens a PR that auto-merges through the gates |
 | [Monthly research refresh](https://claude.ai/code/routines/trig_016jEjKwShdcdfhWKBcp8kHs) | Sonnet 5.5 | `locksmith-research` | 1st of month, 10:35 | re-checks OSS versions and licences, `cargo audit` and `npm audit`, new MCP servers, Infisical changes; draft PR only if something changed |
 
 Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.
@@ -149,3 +149,19 @@ Every agent-log comment and every agent-opened issue ends with a `run-metadata` 
 - each subagent's tier, duration, tokens and tool uses.
 
 The weekly review turns these blocks into a stats table.
+
+## Skills and scripts instead of long instructions
+Agent guidance lives in repo skills (`.claude/skills/`), so each run loads only the procedure it is using. Rules are enforced by scripts:
+- `merge-gate.sh` runs the merge gates;
+- `agent-start.sh` and `agent-preflight.sh` check the environment at the start of each run;
+- `bg.sh` runs long commands in the background;
+- `run-meta.sh` builds the run's metadata block;
+- `check-task-edits.sh` and `check-agent-docs.sh` are the guards.
+
+`scripts/check-agent-docs.sh` caps the instruction size in CI:
+- `common.md`: 600 words
+- each role file: 400 words
+- each skill: 500 words
+- active lessons: 5
+
+The learning loop must not increase the total. Learning PRs merge through the same gates as everything else, with no waiting window (owner decision, 2026-11-16).

@@ -2,7 +2,7 @@
 
 The project rule is to decide from evidence and to reuse maintained OSS. This run keeps that evidence current.
 
-1. Run `bash scripts/run-meta.sh start research`. Read `docs/research/oss-building-blocks.md`, `docs/research/infisical.md`, and the "OSS used" tables in `openspec/changes/*/design.md`.
+1. Use the `run-start` skill with `research`. Read `docs/research/oss-building-blocks.md`, `docs/research/infisical.md`, and the "OSS used" tables in `openspec/changes/*/design.md`.
 2. Check every listed package and MCP server against primary sources: `gh api repos/<o>/<r>`, `.../releases/latest`, and the crates.io, npm and PyPI APIs. Use haiku subagents in batches. For each one, record:
    - latest version and release date
    - licence, flagging any change to AGPL, SSPL or BSL
@@ -22,4 +22,4 @@ The project rule is to decide from evidence and to reuse maintained OSS. This ru
    - an archived dependency
    - a high or critical advisory that affects us
    - an Infisical change that changes the roadmap
-8. Post an agent-log comment with the metadata.
+8. Use the `run-log` skill.

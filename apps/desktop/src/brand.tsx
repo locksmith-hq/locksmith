@@ -1,89 +1,81 @@
-// Drawn parts: the shear-line mark (packages/ui/brand), the cylinder plug and the key-cut blade.
-import { useId } from "react";
+// Drawn parts: the logo slot (its dial follows the vault state) and the icon set (one 16px grid, 1.6 stroke).
 
-/** Geometry of packages/ui/brand/locksmith-mark.svg (open) and locksmith-mark-locked.svg. */
-export function Mark({ locked = false, size = 24 }: { locked?: boolean; size?: number }) {
-  const id = useId();
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="currentColor" aria-hidden="true" className="mark">
-      {locked ? (
-        <>
-          <rect x="6" y="6" width="52" height="52" rx="16" fill="none" stroke="currentColor" strokeWidth="6" />
-          <rect x="17" y="14" width="8" height="18" rx="2" /><rect x="28" y="14" width="8" height="9" rx="2" /><rect x="39" y="14" width="8" height="14" rx="2" />
-          <rect x="17" y="37" width="8" height="12" rx="2" /><rect x="28" y="28" width="8" height="14" rx="2" /><rect x="39" y="33" width="8" height="13" rx="2" />
-        </>
-      ) : (
-        <>
-          <mask id={id}><rect width="64" height="64" fill="#fff" /><rect y="27" width="64" height="5" fill="#000" /></mask>
-          <rect x="6" y="6" width="52" height="52" rx="16" fill="none" stroke="currentColor" strokeWidth="6" mask={`url(#${id})`} />
-          <rect x="17" y="14" width="8" height="13" rx="2" /><rect x="28" y="14" width="8" height="13" rx="2" /><rect x="39" y="14" width="8" height="13" rx="2" />
-          <rect x="17" y="32" width="8" height="17" rx="2" /><rect x="28" y="32" width="8" height="10" rx="2" /><rect x="39" y="32" width="8" height="14" rx="2" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-/** The cylinder face seen end-on: the keyway turns a quarter when the vault is open. */
-export function Plug({ open }: { open: boolean }) {
-  return (
-    <svg className="plug" data-open={open} width="48" height="48" viewBox="0 0 48 48" aria-hidden="true">
-      <circle cx="24" cy="24" r="21.5" className="plug-housing" />
-      <circle cx="24" cy="24" r="14.5" className="plug-core" />
-      <path d="M24 2.5v5M24 40.5v5M2.5 24h5M40.5 24h5" className="plug-tick" />
-      <g className="plug-turn">
-        <rect x="22.5" y="12.5" width="3" height="23" rx="1" className="plug-slot" />
-        <circle cx="24" cy="16" r="1.75" className="plug-pin" />
-        <circle cx="24" cy="24" r="1.75" className="plug-pin" />
-        <circle cx="24" cy="32" r="1.75" className="plug-pin" />
-      </g>
-    </svg>
-  );
-}
-
-export const SCOPES = ["run", "git", "http", "db", "aws"] as const;
-/** Blade drawing, in px at 1:1 so every edge lands on the pixel grid. */
-export const CUT = { width: 136, height: 30, pitch: 24, first: 20 } as const;
-const pinX = (i: number) => CUT.first + i * CUT.pitch;
-
-/** Bottom edge of the blade, tip at the right: each pin position is cut deep when granted. */
-function bladePath(granted: boolean[]) {
-  const top = 3.5, base = 24.5, deep = 11.5, shallow = 19.5;
-  let d = `M8.5 ${top}H${CUT.width - 10.5}L${CUT.width - 2.5} ${(top + base) / 2}L${CUT.width - 10.5} ${base}`;
-  for (let i = SCOPES.length - 1; i >= 0; i--) {
-    const x = pinX(i) + 0.5, y = granted[i] ? deep : shallow;
-    d += `H${x + 7}L${x + 4} ${y}H${x - 4}L${x - 7} ${base}`;
+// The Locksmith mark: a round vault dial. Outer ring in six segments, six bolts that start on a
+// segmented inner ring and are thrown out through the outer ring's gaps, a keyhole hub. Unlocking
+// turns the outer ring 30 degrees (closing its gaps) and withdraws the bolts. Geometry matches
+// packages/ui/brand/gen.py.
+const C = 60;
+function ring(r: number, n: number, gap: number, off: number) {
+  const pt = (a: number) => [C + r * Math.cos((a * Math.PI) / 180), C + r * Math.sin((a * Math.PI) / 180)].map((v) => v.toFixed(2)).join(" ");
+  let d = "";
+  for (let i = 0; i < n; i++) {
+    const a0 = off + (i * 360) / n + gap / 2, a1 = off + ((i + 1) * 360) / n - gap / 2;
+    d += `M${pt(a0)}A${r} ${r} 0 0 1 ${pt(a1)}`;
   }
-  return `${d}H8.5Z`;
+  return d;
 }
+const OUTER = ring(42, 6, 20, -90), OUTER_SMALL = ring(40, 6, 30, -90), INNER = ring(25, 6, 22, -60);
 
-const granted = (scopes: readonly string[]) => SCOPES.filter((s) => scopes.includes(s));
-
-/** The key cut for one session: scopes as cut depths. */
-export function KeyCut({ scopes }: { scopes: readonly string[] }) {
-  const g = SCOPES.map((s) => scopes.includes(s));
-  const on = granted(scopes);
+export function VaultMark({ open = false, small = false, size }: { open?: boolean; small?: boolean; size?: number }) {
+  const [w, rIn, rOut] = small ? [10, 26, 53] : [7, 25, 52];
   return (
-    <svg
-      className="keycut" role="img" width={CUT.width} height={CUT.height}
-      viewBox={`0 0 ${CUT.width} ${CUT.height}`}
-      aria-label={on.length ? `Scopes granted: ${on.join(", ")}` : "No scopes granted"}
-    >
-      <path d={bladePath(g)} className="keycut-blade" />
-      {/* Granted: a brass pin sits in the cut. Not granted: a hollow pin, present but not cut for. */}
-      {g.map((cut, i) => <rect key={i} x={pinX(i) - 2} y={5} width={5} height={4} rx={1} className={cut ? "keycut-pin" : "keycut-pin-empty"} />)}
+    <svg className="vault-mark" data-open={open} width={size} height={size} viewBox="0 0 120 120" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth={w}>
+        <path className="vm-ring" d={small ? OUTER_SMALL : OUTER} />
+        {!small && <path d={INNER} />}
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <g key={i} transform={`rotate(${-90 + i * 60} 60 60)`}>
+            <line className="vm-bolt" x1={C + rIn} y1={C} x2={C + rOut} y2={C} style={{ transformOrigin: `${C + rIn}px ${C}px` }} />
+          </g>
+        ))}
+      </g>
+      <g fill="currentColor"><circle cx="60" cy="56" r="8.5" /><path d="M55.5 59L53 74H67L64.5 59Z" /></g>
     </svg>
   );
 }
 
-/** Column heading for KeyCut: the scope names over their pin positions. */
-export function KeyCutLegend() {
+/** The sidebar mark; `open` turns its outer ring and withdraws the bolts when the vault unlocks. */
+export function Logo({ size = 26, open = false }: { size?: number; open?: boolean }) {
+  return <span className="logo"><VaultMark small open={open} size={size} /></span>;
+}
+
+/** The wordmark: lowercase "locksmith" set in Unbounded 500. */
+export function Wordmark() {
+  return <span className="wordmark" aria-label="Locksmith">locksmith</span>;
+}
+
+const PATHS = {
+  run: <path d="M3.5 4.5L7 8l-3.5 3.5M8.5 12h4" />,
+  git: <><circle cx="5" cy="4" r="1.5" /><circle cx="5" cy="12" r="1.5" /><circle cx="11" cy="6" r="1.5" /><path d="M5 5.5v5M11 7.5c0 2-2 2.5-6 3" /></>,
+  http: <><circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.7 1.6 2.5 3.4 2.5 5.5S9.7 11.9 8 13.5M8 2.5C6.3 4.1 5.5 5.9 5.5 8s.8 3.9 2.5 5.5" /></>,
+  db: <><ellipse cx="8" cy="4.5" rx="4.5" ry="2" /><path d="M3.5 4.5v7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2v-7M3.5 8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2" /></>,
+  aws: <path d="M4.5 12h7a2.5 2.5 0 0 0 .4-5A3.5 3.5 0 0 0 5.2 6.3 2.9 2.9 0 0 0 4.5 12z" />,
+  lock: <><rect x="3" y="7" width="10" height="7" rx="1.75" /><path d="M5.25 7V5a2.75 2.75 0 0 1 5.5 0v2" /></>,
+  unlock: <><rect x="3" y="7" width="10" height="7" rx="1.75" /><path d="M5.25 7V5a2.75 2.75 0 0 1 5.35-.9" /></>,
+  x: <><circle cx="8" cy="8" r="5.75" /><path d="M6 6l4 4M10 6l-4 4" /></>,
+  block: <><circle cx="8" cy="8" r="5.75" /><path d="M4 12L12 4" /></>,
+  arrow: <path d="M3 8h9.5M9 4.5L12.5 8 9 11.5" />,
+  key: <><circle cx="5" cy="11" r="2.75" /><path d="M7 9l6.5-6.5M11 4.5l1.75 1.75M9.5 6l1.25 1.25" /></>,
+  token: <path d="M2.5 5.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1.25a1.25 1.25 0 0 0 0 2.5v1.25a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V9.25a1.25 1.25 0 0 0 0-2.5z" />,
+  shield: <><path d="M8 1.75l5 2v4c0 3-2.2 5.3-5 6.5-2.8-1.2-5-3.5-5-6.5v-4z" /><path d="M5.75 8.25l1.6 1.6 3-3.1" /></>,
+  broken: <><path d="M8 1.75l5 2v4c0 3-2.2 5.3-5 6.5-2.8-1.2-5-3.5-5-6.5v-4z" /><path d="M8 5v3.5M8 10.75v.25" /></>,
+  clock: <><circle cx="8" cy="8" r="5.75" /><path d="M8 5v3.25l2 1.25" /></>,
+  grid: <><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" /><rect x="9" y="9" width="4.5" height="4.5" rx="1" /></>,
+  relay: <path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13" />,
+  doc: <><path d="M4 2.5h5.5L12 5v8.5H4z" /><path d="M6 7.5h4M6 10h4" /></>,
+  plus: <path d="M8 3.5v9M3.5 8h9" />,
+  rotate: <path d="M12.5 8a4.5 4.5 0 1 1-1.3-3.2M12.5 3v2.5H10" />,
+  power: <><path d="M8 2.5V8" /><path d="M5 4.2a5 5 0 1 0 6 0" /></>,
+  alert: <><path d="M8 2.5l6 10.5H2z" /><path d="M8 6.5v3M8 11.25v.25" /></>,
+  search: <><circle cx="7" cy="7" r="4.25" /><path d="M10.25 10.25L13.5 13.5" /></>,
+  sun: <><circle cx="8" cy="8" r="2.75" /><path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1 1M11.4 11.4l1 1M3.6 12.4l1-1M11.4 4.6l1-1" /></>,
+  moon: <path d="M12.75 9.5A5.25 5.25 0 0 1 6.5 3.25a5.25 5.25 0 1 0 6.25 6.25z" />,
+  monitor: <><rect x="2" y="3" width="12" height="8" rx="1.5" /><path d="M6 13.5h4" /></>,
+} as const;
+export type IconName = keyof typeof PATHS;
+
+export function Icon({ name, className }: { name: IconName; className?: string }) {
   return (
-    <span className="keycut-legend" style={{ width: CUT.width }}>
-      Key cut
-      <span aria-hidden="true">
-        {SCOPES.map((s, i) => <span key={s} style={{ left: pinX(i) + 0.5 }}>{s}</span>)}
-      </span>
-    </span>
+    <svg className={className ? `i ${className}` : "i"} viewBox="0 0 16 16" aria-hidden="true">{PATHS[name]}</svg>
   );
 }

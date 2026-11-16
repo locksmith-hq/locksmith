@@ -32,5 +32,14 @@ while IFS= read -r f; do
   fi
 done < <(git diff --name-only "$base" -- 'openspec/changes/*/tasks.md')
 
+# progress.md is append-only: the base version must remain an exact prefix.
+while IFS= read -r f; do
+  git cat-file -e "$base:$f" 2>/dev/null || continue
+  old=$(git show "$base:$f" | wc -c)
+  if [ ! -f "$f" ] || ! cmp -s -n "$old" <(git show "$base:$f") "$f"; then
+    echo "task-edit guard: $f is append-only, but earlier entries changed"; fail=1
+  fi
+done < <(git diff --name-only "$base" -- 'openspec/changes/*/progress.md')
+
 [ "$fail" -eq 0 ] && echo "task-edit guard: OK ($branch)"
 exit "$fail"

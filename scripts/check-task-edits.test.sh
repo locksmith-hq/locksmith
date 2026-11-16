@@ -18,4 +18,8 @@ expect 0 claude/planning-x "planning branch skips"
 git checkout -q -- openspec/changes/c1/tasks.md
 mkdir -p openspec/changes/c2; printf -- '- [ ] 1.1 New\n' > openspec/changes/c2/tasks.md
 git add -A; expect 0 claude/change-c1 "new change file"
+git checkout -q main; printf '# log\n## e1\n' > openspec/changes/c1/progress.md; git add -A; git commit -qm log
+git update-ref refs/remotes/origin/main HEAD; git switch -qc claude/change-c1b
+printf '## e2\n' >> openspec/changes/c1/progress.md; expect 0 claude/change-c1b "progress append"
+printf '# log\n## edited\n## e2\n' > openspec/changes/c1/progress.md; expect 1 claude/change-c1b "progress rewrite"
 echo "check-task-edits: all tests passed"

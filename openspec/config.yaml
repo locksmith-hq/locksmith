@@ -34,7 +34,8 @@ context: |
     Cloud dev env (AWS) comes only when a change cannot be tested locally.
   - Agent transparency: every datastore, log and trace in the local stack is reachable by the coding
     agent through an MCP server or a `just` command (read-only by default). Prefer an existing MCP.
-  - Token frugality: tasks are sized for a Sonnet-class agent; mark tasks that need Opus with [opus]
+  - Token frugality: every task is tagged with its model tier: [haiku] fast execution (isolated, well-defined,
+    research, tests, repetitive), [sonnet] default feature work, [opus]
     (secrets, crypto, auth, gateway, adversarial gates, cross-cutting design).
 
 rules:
@@ -48,7 +49,7 @@ rules:
     - "Explain anything built in-house instead of reused, and what was searched for first."
     - "Include a \"How an agent debugs this\" section: the MCP servers, `just` commands, logs, traces and DB tables involved."
   tasks:
-    - "Size each task to one PR (half a day to two days of agent work); mark Opus-tier tasks with [opus]."
+    - "Size each task to one PR (half a day to two days of agent work); tag each task [haiku], [sonnet] or [opus] (untagged means sonnet)."
     - "Each task group ends with a verification task naming the exact local command (`just ...`, `cargo nextest ...`) that proves it."
     - "The last group is \"Local verification\" running `just up`, the change's smoke test, then `just ci`."
   specs:

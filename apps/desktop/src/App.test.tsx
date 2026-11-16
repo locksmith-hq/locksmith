@@ -10,6 +10,7 @@ const m = vi.mocked(api);
 const lease = {
   id: "L1", root_pid: 1, command: "claude", project: "default", env: "development",
   scopes: ["git", "http"], created_at: 0, expires_at: Math.floor(Date.now() / 1000) + 600, state: "active",
+  root_exe: "/bin/claude", started_by: "human" as const, source: { kind: "claude_code_cli" as const, label: "Claude Code" }, host: null, report: null,
 };
 const ev = (seq: number, action: string) => ({
   seq, ts: 1700000000, session_id: "L1", actor_pid: 2, actor_exe: "/bin/git",
@@ -64,7 +65,7 @@ test("unlock calls unlock_secure and shows result, no password input anywhere", 
   await go("Unlock vault");
   expect(m.unlockSecure).toHaveBeenCalled();
   expect(await screen.findByText(/Unlock cancelled/)).toBeInTheDocument();
-  for (const t of ["Overview", "Keys", "Tokens", "Relays", "Audit"]) {
+  for (const t of ["Overview", "Sessions", "Keys", "Tokens", "Relays", "Audit"]) {
     await nav(t);
     noPassword(container);
   }
@@ -237,4 +238,40 @@ test("appearance override sets the theme and is remembered", async () => {
   expect(document.documentElement.dataset.theme).toBe("light");
   await userEvent.click(screen.getByRole("radio", { name: "System" }));
   expect(localStorage.getItem("locksmith.appearance")).toBeNull();
+});
+
+test("sessions: tab count, source, host, badges, reported model, unknown source, revoke", async () => {
+  const soon = Math.floor(Date.now() / 1000) + 3000;
+  m.status.mockResolvedValue({ locked: false, leases: [
+    { ...lease, id: "A1", expires_at: soon, started_by: "agent", host: "iTerm2", report: { agent: "claude-code", model: "claude-fable-5-2", reported: true } },
+    { ...lease, id: "A2", expires_at: soon, started_by: "agent", report: null },
+    { ...lease, id: "H1", expires_at: soon, source: { kind: "unknown", label: "mystery-agent" } },
+    { ...lease, id: "E1", state: "revoked", expires_at: soon },
+  ] });
+  render(<App />);
+  expect(await within(screen.getByRole("navigation", { name: "Main" })).findByRole("button", { name: "Sessions 3" })).toBeInTheDocument();
+  await nav("Sessions");
+  const a1 = (await screen.findByRole("button", { name: "Claude Code session A1" })).closest("li")!;
+  expect(a1).toHaveTextContent("in iTerm2");
+  expect(a1).toHaveTextContent("Agent started");
+  const rep = within(a1).getByText("claude-fable-5-2 (reported by agent)");
+  expect(rep).toHaveAttribute("title", expect.stringMatching(/unverified/));
+  const a2 = screen.getByRole("button", { name: "Claude Code session A2" }).closest("li")!;
+  expect(a2).toHaveTextContent("model not reported");
+  const h1 = screen.getByRole("button", { name: "mystery-agent session H1" }).closest("li")!;
+  expect(h1).toHaveTextContent("Human started");
+  expect(h1).not.toHaveTextContent("reported");
+  expect(screen.getAllByText(/Source and host are hints/)).toHaveLength(1);
+  expect(within(screen.getByRole("list", { name: "Ended sessions" })).getByText("revoked", { selector: ".left" })).toBeInTheDocument();
+  await userEvent.click(within(a1).getByRole("button", { name: "Claude Code session A1" }));
+  expect(within(a1).getByText("/bin/claude · pid 1")).toBeInTheDocument();
+  await go("Revoke Claude Code session A1");
+  expect(m.revoke).toHaveBeenCalledWith("A1");
+});
+
+test("sessions: empty state", async () => {
+  m.status.mockResolvedValue({ locked: false, leases: [] });
+  render(<App />);
+  await nav("Sessions");
+  expect(await screen.findByText("No sessions yet.")).toBeInTheDocument();
 });

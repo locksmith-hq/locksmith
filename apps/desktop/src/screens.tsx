@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type {
-  AuditEvent, AuditVerifyView, HttpTokenInfo, LeaseInfo, RelayInfo, StatusView,
+  AuditEvent, AuditVerifyView, HttpTokenInfo, LeaseInfo, RelayInfo, SourceKind, StatusView,
 } from "@locksmith/api-types";
 import * as api from "./api";
 import { Icon, type IconName } from "./brand";
@@ -10,7 +10,7 @@ export interface ScreenProps {
   /** Runs an action, shows its rejection under the vault banner and refreshes status. */
   act: <T>(fn: () => Promise<T>, label?: (r: T) => string) => Promise<void>;
   /** Switches the main screen. */
-  go: (tab: "Overview" | "Keys" | "Tokens" | "Relays" | "Audit") => void;
+  go: (tab: "Overview" | "Sessions" | "Keys" | "Tokens" | "Relays" | "Audit") => void;
 }
 
 export const msg = (e: unknown) =>
@@ -235,6 +235,98 @@ const ScopeText = ({ scopes }: { scopes: readonly string[] }) => (
     {scopes.map((s) => <li key={s}>{s}</li>)}
   </ul>
 );
+
+const SOURCE_GLYPH: Record<SourceKind, IconName> = {
+  claude_code_cli: "s_terminal", codex: "s_terminal", gemini_cli: "s_terminal", aider: "s_terminal", opencode: "s_terminal", grok: "s_terminal",
+  claude_desktop_app: "s_window",
+  cursor: "s_code", windsurf: "s_code", vscode: "s_code", jetbrains: "s_code", copilot: "s_code",
+  other: "s_spark", unknown: "s_unknown",
+};
+const SELF_REPORTED = "Self-reported by the agent and unverified. Locksmith never uses it to decide anything.";
+const useNow = () => {
+  const [n, setN] = useState(nowSecs);
+  useEffect(() => { const t = setInterval(() => setN(nowSecs()), 1000); return () => clearInterval(t); }, []);
+  return n;
+};
+
+export function Sessions({ st, act }: ScreenProps) {
+  const now = useNow();
+  const [open, setOpen] = useState<string | null>(null);
+  const all = st?.leases ?? [];
+  const live = all.filter((l) => l.state === "active").sort((a, b) => a.expires_at - b.expires_at);
+  const ended = all.filter((l) => l.state !== "active").sort((a, b) => b.expires_at - a.expires_at);
+  const row = (l: LeaseInfo) => {
+    const active = l.state === "active";
+    const r = l.report;
+    const claim = r?.model ?? r?.agent;
+    const rest = l.expires_at - now;
+    const name = l.source.label;
+    return (
+      <li key={l.id} className="sess" data-state={l.state} data-open={open === l.id || undefined}>
+        <div className="sess-main">
+          <button type="button" className="sess-toggle" aria-expanded={open === l.id} aria-label={`${name} session ${l.id}`}
+            onClick={() => setOpen(open === l.id ? null : l.id)}>
+            <span className="av" data-kind={l.source.kind} aria-hidden="true"><Icon name={SOURCE_GLYPH[l.source.kind] ?? "s_unknown"} /></span>
+            <span className="who">
+              <span className="who-1">
+                <b className="who-name">{name}</b>
+                {l.host && <span className="muted"> in {l.host}</span>}
+                <span className="badge" data-by={l.started_by}>{l.started_by === "agent" ? "Agent started" : "Human started"}</span>
+              </span>
+              <span className="who-2">
+                {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
+                {claim
+                  ? <> · <span className="reported" title={SELF_REPORTED}>{claim} (reported by agent)</span></>
+                  : l.started_by === "agent" && <> · <span className="muted" title={SELF_REPORTED}>model not reported</span></>}
+              </span>
+            </span>
+          </button>
+          <Scopes scopes={l.scopes} />
+          <span className="r mono left">
+            {active ? <>{left(rest)}<span className="sr-only"> left, expires {clock(l.expires_at)}</span></> : l.state}
+          </span>
+          {active
+            ? <button type="button" className="btn sm quiet danger-text" aria-label={`Revoke ${name} session ${l.id}`}
+                onClick={() => act(() => api.revoke(l.id), (n) => `Revoked ${plural(n, "session")}`)}>Revoke</button>
+            : <span />}
+        </div>
+        {open === l.id && (
+          <dl className="sess-det">
+            <dt>Session</dt><dd className="mono">{l.id}</dd>
+            <dt>Command</dt><dd className="mono">{l.command}</dd>
+            <dt>Root</dt><dd className="mono">{l.root_exe || "unknown"} · pid {l.root_pid}</dd>
+            <dt>Created</dt><dd className="mono">{stamp(l.created_at)}</dd>
+            <dt>{active ? "Expires" : "Expired or ended"}</dt><dd className="mono">{stamp(l.expires_at)}</dd>
+            {r && (r.agent || r.model) && <><dt>Reported</dt><dd title={SELF_REPORTED}>{[r.agent, r.model].filter(Boolean).join(" · ")} (reported by agent, unverified)</dd></>}
+          </dl>
+        )}
+      </li>
+    );
+  };
+  return (
+    <section className="screen" aria-labelledby="h-sessions">
+      <Head id="h-sessions" title="Sessions" sub="Every agent that has been given access, who started it and when it runs out." />
+      {!st ? <Loading what="sessions" /> : all.length === 0 ? (
+        <Empty icon="sessions">
+          {st.locked
+            ? <><b>No sessions.</b> The vault is locked, so no agent can start one until you unlock it.</>
+            : <><b>No sessions yet.</b> Agents get access only inside a session: start one with <code>smith session start -- &lt;agent&gt;</code></>}
+        </Empty>
+      ) : (
+        <>
+          {live.length > 0 && <ul className="sess-list" aria-label="Active sessions">{live.map(row)}</ul>}
+          {ended.length > 0 && (
+            <>
+              <div className="sec-h spaced"><h2>Recently ended</h2></div>
+              <ul className="sess-list" aria-label="Ended sessions">{ended.map(row)}</ul>
+            </>
+          )}
+          <p className="log-foot">Source and host are hints read from process names and paths. Any process running as you can imitate them.</p>
+        </>
+      )}
+    </section>
+  );
+}
 
 const uniq = (xs: string[]) => [...new Set(xs)];
 

@@ -81,7 +81,7 @@ pub struct CommandError {
 #[cfg(all(test, feature = "ts"))]
 mod export {
     use super::*;
-    use crate::{AuditEvent, HttpTokenInfo};
+    use crate::{AuditEvent, HttpTokenInfo, SelfReport, SessionSource, SourceKind, StartedBy};
     use ts_rs::{Config, TS};
 
     #[test]
@@ -100,6 +100,10 @@ mod export {
         }
         export!(
             LeaseInfo,
+            StartedBy,
+            SessionSource,
+            SourceKind,
+            SelfReport,
             AuditEvent,
             HttpTokenInfo,
             StatusView,

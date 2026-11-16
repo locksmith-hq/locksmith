@@ -6,11 +6,12 @@
 //! re-done on every request, from the root of an active lease ([`Leases::authorize`]), and
 //! (3) the lease's project, environment and scopes cover the operation.
 
-use ls_ipc::LeaseInfo;
+use ls_ipc::{LeaseInfo, SelfReport, SessionSource, StartedBy};
 use ls_platform::proc::{Digest, Peer, Pin, ProcId, descends_from, info, pin};
 use std::path::{Path, PathBuf};
 
 mod doctor;
+pub mod source;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
@@ -125,6 +126,12 @@ pub struct Lease {
     /// Started by the agent through `AgentSessionStart` (only such a lease may be replaced by
     /// another agent start from the same root).
     pub agent: bool,
+    /// Display-only origin hints (M10d), set once at start by [`Leases::describe`].
+    pub root_exe: String,
+    pub source: SessionSource,
+    pub host: Option<String>,
+    /// The agent's own claim about its client and model. Never used for authorization.
+    pub report: Option<SelfReport>,
     pub created_at: i64,
     pub expires_at: i64,
     pub state: LeaseState,
@@ -154,6 +161,15 @@ impl Lease {
                 LeaseState::Expired => "expired",
             }
             .into(),
+            root_exe: self.root_exe.clone(),
+            started_by: if self.agent {
+                StartedBy::Agent
+            } else {
+                StartedBy::Human
+            },
+            source: self.source.clone(),
+            host: self.host.clone(),
+            report: self.report.clone(),
         }
     }
 }
@@ -263,6 +279,10 @@ impl Leases {
             scopes,
             command,
             agent: false,
+            root_exe: String::new(),
+            source: SessionSource::default(),
+            host: None,
+            report: None,
             created_at: now,
             expires_at: now.saturating_add(ttl_secs.min(i64::MAX as u64) as i64),
             state: LeaseState::Active,
@@ -352,6 +372,18 @@ impl Leases {
     pub fn mark_agent(&mut self, id: &str) {
         if let Some(l) = self.all.iter_mut().find(|l| l.id == id) {
             l.agent = true;
+        }
+    }
+
+    /// Record where the lease's agent runs (display only, see [`source`]).
+    pub fn describe(
+        &mut self,
+        id: &str,
+        (source, host, root_exe): (SessionSource, Option<String>, String),
+        report: Option<SelfReport>,
+    ) {
+        if let Some(l) = self.all.iter_mut().find(|l| l.id == id) {
+            (l.source, l.host, l.root_exe, l.report) = (source, host, root_exe, report);
         }
     }
 

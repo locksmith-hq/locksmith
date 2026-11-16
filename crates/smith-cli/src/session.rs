@@ -220,8 +220,16 @@ pub fn status(json: bool) -> Result<ExitCode, Fail> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
     for l in leases {
+        // Source and host are hints from executable names; model is the agent's own claim.
+        let mut from = l.source.label.clone();
+        if let Some(h) = &l.host {
+            from.push_str(&format!(" in {h}"));
+        }
+        if let Some(m) = l.report.as_ref().and_then(|r| r.model.as_deref()) {
+            from.push_str(&format!(", model {m} (self-reported)"));
+        }
         println!(
-            "{}  pid {}  {}/{}  [{}]  created {} ago  expires in {}  {}",
+            "{}  pid {}  {}/{}  [{}]  created {} ago  expires in {}  {}  ({}, {})",
             l.id,
             l.root_pid,
             l.project,
@@ -229,7 +237,12 @@ pub fn status(json: bool) -> Result<ExitCode, Fail> {
             l.scopes.join(","),
             human(now - l.created_at),
             human(l.expires_at - now),
-            l.command
+            l.command,
+            match l.started_by {
+                ls_ipc::StartedBy::Agent => "agent",
+                ls_ipc::StartedBy::Human => "human",
+            },
+            from
         );
     }
     Ok(ExitCode::Ok)

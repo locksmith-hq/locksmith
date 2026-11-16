@@ -204,6 +204,11 @@ mod tests {
             created_at: 0,
             expires_at,
             state: "active".into(),
+            root_exe: String::new(),
+            started_by: Default::default(),
+            source: Default::default(),
+            host: None,
+            report: None,
         }
     }
 

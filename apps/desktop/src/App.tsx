@@ -2,11 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { StatusView } from "@locksmith/api-types";
 import * as api from "./api";
 import { Icon, Logo, Wordmark, type IconName } from "./brand";
-import { Audit, Keys, Overview, Relays, Tokens, clock, errCode, msg, plural, type ScreenProps } from "./screens";
+import { Audit, Keys, Overview, Relays, Sessions, Tokens, clock, errCode, msg, plural, type ScreenProps } from "./screens";
 
-const TABS = { Overview, Keys, Tokens, Relays, Audit } as const;
+const TABS = { Overview, Sessions, Keys, Tokens, Relays, Audit } as const;
 export type Tab = keyof typeof TABS;
-const TAB_ICON: Record<Tab, IconName> = { Overview: "grid", Keys: "key", Tokens: "token", Relays: "relay", Audit: "doc" };
+const TAB_ICON: Record<Tab, IconName> = { Overview: "grid", Sessions: "sessions", Keys: "key", Tokens: "token", Relays: "relay", Audit: "doc" };
 const POLL_MS = 5000;
 
 type Appearance = "system" | "light" | "dark";
@@ -85,7 +85,7 @@ export function App() {
   const live = st ? st.leases.filter((l) => l.state === "active") : [];
   const Screen = TABS[tab];
   const open = st ? !st.locked : false;
-  const count: Partial<Record<Tab, number>> = { Overview: st ? live.length : undefined, Tokens: counts.tokens, Relays: counts.relays };
+  const count: Partial<Record<Tab, number>> = { Overview: st ? live.length : undefined, Sessions: st ? live.length : undefined, Tokens: counts.tokens, Relays: counts.relays };
   const lock = () => act(api.lock, () => "Vault locked");
   const unlock = () => act(api.unlockSecure, (r) => (r === "cancelled" ? "Unlock cancelled, the vault stays locked" : ""));
   const revokeAll = () => act(() => api.revoke(null), (n) => `Revoked ${plural(n, "session")}`);

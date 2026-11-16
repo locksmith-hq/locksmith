@@ -1,7 +1,7 @@
 // Dev-only stand-in for the Tauri commands, loaded by api.ts when the page runs in a plain
 // browser under `vite` (never inside Tauri, never in a build). `?mock=error|empty|locked` or the
 // corner select switches the scenario.
-import type { AuditEvent, HttpTokenInfo, LeaseInfo } from "@locksmith/api-types";
+import type { AuditEvent, HttpTokenInfo, LeaseInfo, SelfReport, SessionSource, StartedBy } from "@locksmith/api-types";
 
 type Scenario = "normal" | "error" | "empty" | "locked";
 const SCENARIOS: Scenario[] = ["normal", "error", "empty", "locked"];
@@ -10,19 +10,26 @@ const scenario: Scenario = pick && SCENARIOS.includes(pick) ? pick : "normal";
 
 const now = Math.floor(Date.now() / 1000);
 const m = 60;
-const lease = (id: string, command: string, project: string, env: string, scopes: string[], age: number, left: number, state = "active"): LeaseInfo =>
-  ({ id, root_pid: 4100, command, project, env, scopes, created_at: now - age, expires_at: now + left, state });
+interface Who { exe: string; by: StartedBy; source: SessionSource; host: string | null; report: SelfReport | null }
+const lease = (id: string, command: string, project: string, env: string, scopes: string[], age: number, left: number, who: Who, state = "active"): LeaseInfo =>
+  ({ id, root_pid: 4100, command, project, env, scopes, created_at: now - age, expires_at: now + left, state,
+    root_exe: who.exe, started_by: who.by, source: who.source, host: who.host, report: who.report });
+const CLAUDE: Who = { exe: "/opt/homebrew/bin/claude", by: "agent", source: { kind: "claude_code_cli", label: "Claude Code" }, host: "iTerm2",
+  report: { agent: "claude-code", model: "claude-fable-5-2", reported: true } };
+const CURSOR: Who = { exe: "/Applications/Cursor.app/Contents/MacOS/cursor-agent", by: "human", source: { kind: "cursor", label: "Cursor" }, host: null, report: null };
+const CODEX: Who = { exe: "/opt/homebrew/bin/codex", by: "human", source: { kind: "codex", label: "Codex" }, host: "tmux", report: null };
+const UNKNOWN: Who = { exe: "/usr/local/bin/mystery-agent", by: "human", source: { kind: "unknown", label: "mystery-agent" }, host: null, report: null };
 
 let locked = scenario === "locked";
 // The vault was unlocked 2h 20m ago; sessions started after that, two have since ended.
 const unlockedAt = now - 140 * m;
 let leases: LeaseInfo[] = scenario === "normal" ? [
-  lease("ls_8f2a1c04", "/opt/homebrew/bin/claude --continue", "acme-api", "development", ["run", "git", "http", "aws"], 128 * m, 3 * 60 * m + 12 * m),
-  lease("ls_51d9e7b2", "cursor-agent", "acme-web", "development", ["run", "git", "http"], 73 * m, 47 * m),
-  lease("ls_c03e44a1", "codex exec", "billing", "staging", ["run", "db"], 54 * m, 6 * m),
-  lease("ls_a4410e3f", "claude", "infra", "staging", ["run", "aws"], 21 * m, 99 * m),
-  lease("ls_77ab0910", "claude", "acme-api", "production", ["run", "git", "aws"], 118 * m, 60 * m, "revoked"),
-  lease("ls_2e6f1d88", "codex exec --full-auto", "billing", "staging", ["db"], 132 * m, -61 * m, "expired"),
+  lease("ls_8f2a1c04", "/opt/homebrew/bin/claude --continue", "acme-api", "development", ["run", "git", "http", "aws"], 128 * m, 3 * 60 * m + 12 * m, CLAUDE),
+  lease("ls_51d9e7b2", "cursor-agent", "acme-web", "development", ["run", "git", "http"], 73 * m, 47 * m, CURSOR),
+  lease("ls_c03e44a1", "codex exec", "billing", "staging", ["run", "db"], 54 * m, 6 * m, CODEX),
+  lease("ls_a4410e3f", "claude", "infra", "staging", ["run", "aws"], 21 * m, 99 * m, UNKNOWN),
+  lease("ls_77ab0910", "claude", "acme-api", "production", ["run", "git", "aws"], 118 * m, 60 * m, CLAUDE, "revoked"),
+  lease("ls_2e6f1d88", "codex exec --full-auto", "billing", "staging", ["db"], 132 * m, -61 * m, CODEX, "expired"),
 ] : [];
 const KEYS: Record<string, string[]> = {
   "acme-api/development": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "OPENAI_API_KEY", "STRIPE_SECRET_KEY"],

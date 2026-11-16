@@ -140,16 +140,21 @@ pub fn info(pid: u32) -> io::Result<ProcInfo> {
 /// File name of the executable `pid` runs, for audit text only (never for trust). Reads the
 /// executable path only, never the command line or environment, which can hold secrets.
 pub fn exe_name(pid: u32) -> Option<String> {
+    Some(exe_path(pid)?.file_name()?.to_string_lossy().into_owned())
+}
+
+/// Executable path of `pid` as the kernel reports it, for display hints only (never for trust).
+/// Like [`exe_name`], never reads the command line or environment.
+pub fn exe_path(pid: u32) -> Option<PathBuf> {
     #[cfg(target_os = "linux")]
-    let p = std::fs::read_link(format!("/proc/{pid}/exe")).ok()?;
+    return std::fs::read_link(format!("/proc/{pid}/exe")).ok();
     #[cfg(target_os = "macos")]
-    let p = macos::pid_path(pid).ok()?;
+    return macos::pid_path(pid).ok();
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    let p: PathBuf = {
+    {
         let _ = pid;
-        return None;
-    };
-    Some(p.file_name()?.to_string_lossy().into_owned())
+        None
+    }
 }
 
 /// Identity of a just-spawned child or of this process.

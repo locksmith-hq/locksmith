@@ -116,6 +116,12 @@ pub enum Request {
         command: String,
         #[serde(default)]
         binding: Option<Vec<u8>>,
+        /// Self-reported client name (e.g. "claude-code"), display and audit only.
+        #[serde(default)]
+        agent: Option<String>,
+        /// Self-reported model id, display and audit only.
+        #[serde(default)]
+        model: Option<String>,
     },
     /// End the lease rooted at the calling process (agent exited).
     SessionEnd,
@@ -364,6 +370,73 @@ pub struct LeaseInfo {
     pub created_at: i64,
     pub expires_at: i64,
     pub state: String,
+    // New fields default so a client still parses a daemon from before M10d.
+    /// Executable path of the lease root, as the kernel reported it at start (display only).
+    #[serde(default)]
+    pub root_exe: String,
+    #[serde(default)]
+    pub started_by: StartedBy,
+    /// Where the agent runs: a hint from executable names and paths, never used for trust.
+    #[serde(default)]
+    pub source: SessionSource,
+    /// Terminal, multiplexer or IDE above the root, when one is recognized.
+    #[serde(default)]
+    pub host: Option<String>,
+    /// What the agent said about itself in `locksmith_start_session`. Unverified.
+    #[serde(default)]
+    pub report: Option<SelfReport>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "lowercase")]
+pub enum StartedBy {
+    /// `smith session start` (passphrase typed by the human).
+    #[default]
+    Human,
+    /// `locksmith_start_session` through `locksmith-mcp`, inside the agent policy.
+    Agent,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum SourceKind {
+    ClaudeCodeCli,
+    ClaudeDesktopApp,
+    Codex,
+    Cursor,
+    Grok,
+    GeminiCli,
+    Aider,
+    Windsurf,
+    Vscode,
+    Copilot,
+    Opencode,
+    Jetbrains,
+    /// Not in the table; the label is the executable name.
+    Other,
+    /// The executable could not be read.
+    #[default]
+    Unknown,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SessionSource {
+    pub kind: SourceKind,
+    /// Display name ("Claude Code", or the executable name for `other`).
+    pub label: String,
+}
+
+/// Self-reported agent client and model. Never used for any authorization decision.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SelfReport {
+    pub agent: Option<String>,
+    pub model: Option<String>,
+    /// Always true: marks these values as claims of the agent, not kernel facts.
+    pub reported: bool,
 }
 
 /// An audit row as shown to users. Never holds a value, only identifiers.
@@ -518,6 +591,18 @@ mod tests {
                     created_at: 1,
                     expires_at: 2,
                     state: "active".into(),
+                    root_exe: "/usr/local/bin/claude".into(),
+                    started_by: StartedBy::Agent,
+                    source: SessionSource {
+                        kind: SourceKind::ClaudeCodeCli,
+                        label: "Claude Code".into(),
+                    },
+                    host: Some("iTerm2".into()),
+                    report: Some(SelfReport {
+                        agent: Some("claude-code".into()),
+                        model: Some("claude-fable-5-2".into()),
+                        reported: true,
+                    }),
                 }],
             },
             Response::Revoked { count: 1 },
@@ -707,8 +792,122 @@ mod tests {
             ttl_secs: 60,
             command: "agent".into(),
             binding: Some(b"[http]".to_vec()),
+            agent: Some("claude-code".into()),
+            model: Some("claude-fable-5-2".into()),
         };
         audit(&Value::serialized(&r).unwrap(), "request");
+    }
+
+    /// M10d: a request from an MCP server built before `agent`/`model` existed still parses.
+    #[test]
+    fn old_agent_session_start_still_parses() {
+        #[derive(Serialize)]
+        enum Old {
+            AgentSessionStart {
+                project: String,
+                env: String,
+                scopes: Vec<String>,
+                ttl_secs: u64,
+                command: String,
+            },
+        }
+        let mut buf = vec![];
+        ciborium::into_writer(
+            &Old::AgentSessionStart {
+                project: "p".into(),
+                env: "dev".into(),
+                scopes: vec!["http".into()],
+                ttl_secs: 60,
+                command: "agent".into(),
+            },
+            &mut buf,
+        )
+        .unwrap();
+        let Ok(Request::AgentSessionStart {
+            project,
+            agent,
+            model,
+            binding,
+            ..
+        }) = ciborium::from_reader::<Request, _>(&buf[..])
+        else {
+            panic!("old request rejected")
+        };
+        assert_eq!(
+            (project.as_str(), agent, model, binding),
+            ("p", None, None, None)
+        );
+    }
+
+    /// M10d: LeaseInfo wire shape (snake_case kinds, lowercase started_by), and a status from a
+    /// daemon without the new fields still parses with honest defaults.
+    #[test]
+    fn lease_info_shape_and_back_compat() {
+        let Response::Status { leases, .. } = &every_response()[3] else {
+            panic!("status")
+        };
+        let v = Value::serialized(&leases[0]).unwrap();
+        let field = |k: &str| {
+            v.as_map()
+                .unwrap()
+                .iter()
+                .find(|(x, _)| x.as_text() == Some(k))
+                .map(|(_, y)| y.clone())
+                .unwrap_or_else(|| panic!("no {k}"))
+        };
+        assert_eq!(field("started_by"), Value::Text("agent".into()));
+        let src = field("source");
+        let kind = src
+            .as_map()
+            .unwrap()
+            .iter()
+            .find(|(k, _)| k.as_text() == Some("kind"));
+        assert_eq!(kind.unwrap().1, Value::Text("claude_code_cli".into()));
+        for k in [
+            "root_exe",
+            "host",
+            "report",
+            "root_pid",
+            "created_at",
+            "expires_at",
+            "scopes",
+        ] {
+            field(k);
+        }
+
+        #[derive(Serialize)]
+        struct OldLease {
+            id: String,
+            root_pid: u32,
+            command: String,
+            project: String,
+            env: String,
+            scopes: Vec<String>,
+            created_at: i64,
+            expires_at: i64,
+            state: String,
+        }
+        let mut buf = vec![];
+        ciborium::into_writer(
+            &OldLease {
+                id: "s".into(),
+                root_pid: 1,
+                command: "c".into(),
+                project: "p".into(),
+                env: "e".into(),
+                scopes: vec![],
+                created_at: 1,
+                expires_at: 2,
+                state: "active".into(),
+            },
+            &mut buf,
+        )
+        .unwrap();
+        let l: LeaseInfo = ciborium::from_reader(&buf[..]).unwrap();
+        assert_eq!(
+            (l.source.kind, l.started_by, l.host, l.report),
+            (SourceKind::Unknown, StartedBy::Human, None, None)
+        );
     }
 
     #[test]

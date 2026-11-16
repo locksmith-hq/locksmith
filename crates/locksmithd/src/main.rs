@@ -11,7 +11,9 @@ mod run;
 mod scan;
 
 use ls_broker::{Denial, LeaseState, Leases, Manifest, Role};
-use ls_ipc::{AuditEvent, ErrorCode, Frame, LOCK_FILE, Request, Response, read_frame, write_frame};
+use ls_ipc::{
+    AuditEvent, ErrorCode, Frame, LOCK_FILE, Request, Response, SelfReport, read_frame, write_frame,
+};
 use ls_platform::proc::{Peer, ProcId, id_of};
 use ls_redact::binding::{Binding, parse as parse_binding};
 use ls_vault::audit::{AuditRecord, StoredEvent};
@@ -327,6 +329,19 @@ fn load_agent_policy() -> Result<policy::Policy, String> {
     policy::load(&policy::default_path(), ls_platform::current_uid())
 }
 
+/// Self-reported `agent`/`model` (M10d): 1..=64 printable ASCII characters.
+fn valid_report(v: &str) -> bool {
+    (1..=64).contains(&v.len()) && v.bytes().all(|b| (0x20..=0x7e).contains(&b))
+}
+
+/// Wire name of a source kind (snake_case, as in `LeaseInfo`), for audit text.
+fn kind_str(k: ls_ipc::SourceKind) -> String {
+    serde_json::to_value(k)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_default()
+}
+
 /// `AgentSessionStart` (M10b D1, D4): a lease without the passphrase, only on an unlocked vault
 /// and only when the request fits the agent policy exactly, rooted at the agent process that
 /// launched the MCP server (`caller`). Grants, replacements and refusals are audited.
@@ -341,12 +356,24 @@ fn agent_session_start(
     ttl_secs: u64,
     command: String,
     binding: Option<Vec<u8>>,
+    report: Option<SelfReport>,
 ) -> Response {
     let t = now();
     if ttl_secs == 0 || scopes.is_empty() || scopes.iter().any(|s| !SCOPES.contains(&s.as_str())) {
         return err(
             ErrorCode::BadRequest,
             "ttl must be > 0 and scopes a non-empty list of 'run', 'git', 'http', 'db', 'aws'",
+        );
+    }
+    if let Some(r) = &report
+        && [&r.agent, &r.model]
+            .into_iter()
+            .flatten()
+            .any(|v| !valid_report(v))
+    {
+        return err(
+            ErrorCode::BadRequest,
+            "agent and model must be at most 64 printable ASCII characters",
         );
     }
     if st.vault.is_none() {
@@ -406,12 +433,22 @@ fn agent_session_start(
             format!("agent_policy: {why}; ask the human to start this session"),
         );
     }
-    let rule = format!(
-        "agent_policy {}; root pid {} ({})",
+    let origin = ls_broker::source::detect(root.pid, None);
+    let mut rule = format!(
+        "agent_policy {}; root pid {} ({}); source {}",
         scopes.join(","),
         root.pid,
-        ls_platform::proc::exe_name(root.pid).unwrap_or_else(|| "?".into())
+        ls_platform::proc::exe_name(root.pid).unwrap_or_else(|| "?".into()),
+        kind_str(origin.0.kind)
     );
+    if let Some(r) = &report {
+        // As the agent reported them (validated printable ASCII); never trusted.
+        rule.push_str(&format!(
+            "; reported agent={:?} model={:?}",
+            r.agent.as_deref().unwrap_or(""),
+            r.model.as_deref().unwrap_or("")
+        ));
+    }
     // Revokes `replaced` (same root) before the new lease exists.
     let l = st
         .leases
@@ -419,6 +456,7 @@ fn agent_session_start(
     let (id, expires_at) = (l.id.clone(), l.expires_at);
     st.leases.pin(&id, binding);
     st.leases.mark_agent(&id);
+    st.leases.describe(&id, origin, report);
     if let Some(old) = replaced {
         let _ = st.audit(rec(
             actor,
@@ -577,12 +615,14 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                 );
             }
             let target = format!("{project}/{env}");
-            let rule = scopes.join(",");
+            let origin = ls_broker::source::detect(peer.id.pid, Some(&command));
+            let rule = format!("{}; source {}", scopes.join(","), kind_str(origin.0.kind));
             let l = st
                 .leases
                 .start(peer.id, ttl_secs, project, env, scopes, command, t);
             let (id, expires_at) = (l.id.clone(), l.expires_at);
             st.leases.pin(&id, binding);
+            st.leases.describe(&id, origin, None);
             if let Err(e) = st.audit(rec(
                 actor,
                 "SESSION_START",
@@ -603,11 +643,18 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
             ttl_secs,
             command,
             binding,
+            agent,
+            model,
         } => {
             let mut st = d.state();
             let before = st.leases.active(t);
+            let report = (agent.is_some() || model.is_some()).then_some(SelfReport {
+                agent,
+                model,
+                reported: true,
+            });
             let r = agent_session_start(
-                &mut st, peer.id, actor, project, env, scopes, ttl_secs, command, binding,
+                &mut st, peer.id, actor, project, env, scopes, ttl_secs, command, binding, report,
             );
             // A replaced lease's relays and tokens die with it, as on Revoke.
             let live = st.leases.active(t);
@@ -966,6 +1013,8 @@ mod tests {
                 ttl_secs: 1,
                 command: s(),
                 binding: None,
+                agent: None,
+                model: None,
             },
             Request::SessionEnd,
             Request::Status,
@@ -1229,7 +1278,12 @@ mod tests {
         let root = id_of(agent.id()).unwrap();
         let me = id_of(std::process::id()).unwrap();
         let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        let ask_as = |st: &mut State, caller, env: &str, scopes: &[&str], ttl| {
+        let report = |agent: &str, model: &str| SelfReport {
+            agent: Some(agent.into()),
+            model: Some(model.into()),
+            reported: true,
+        };
+        let ask_with = |st: &mut State, caller, env: &str, scopes: &[&str], ttl, r| {
             agent_session_start(
                 st,
                 caller,
@@ -1240,6 +1294,17 @@ mod tests {
                 ttl,
                 "agent".into(),
                 None,
+                Some(r),
+            )
+        };
+        let ask_as = |st: &mut State, caller, env: &str, scopes: &[&str], ttl| {
+            ask_with(
+                st,
+                caller,
+                env,
+                scopes,
+                ttl,
+                report("claude-code", "claude-fable-5-2"),
             )
         };
         let ask =
@@ -1248,6 +1313,28 @@ mod tests {
             Response::Error { code, .. } => Some(*code),
             _ => None,
         };
+
+        // M10d: self-reported fields are validated first (BadRequest even while locked).
+        for (ag, mo) in [
+            ("x".repeat(65), "m".to_string()),
+            ("claude-code".into(), "model\n".into()),
+            ("claude\u{1b}[2J".into(), "m".into()),
+            ("café".into(), "m".into()),
+            (String::new(), "m".into()),
+        ] {
+            assert_eq!(
+                code(&ask_with(
+                    &mut st,
+                    mcp,
+                    "dev",
+                    &["http"],
+                    60,
+                    report(&ag, &mo)
+                )),
+                Some(ErrorCode::BadRequest),
+                "{ag:?} {mo:?}"
+            );
+        }
 
         assert_eq!(
             code(&ask(&mut st, "dev", &["http"], 60)),
@@ -1325,6 +1412,17 @@ mod tests {
         let active = st.leases.active(now());
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].id, id2);
+        let i = &active[0];
+        assert_eq!(i.started_by, ls_ipc::StartedBy::Agent);
+        assert_eq!(i.source.kind, ls_ipc::SourceKind::Other);
+        // `sh` may be dash or bash on Linux: the label is whatever the kernel names.
+        assert_eq!(
+            Some(i.source.label.as_str()),
+            std::path::Path::new(&i.root_exe)
+                .file_name()
+                .and_then(|f| f.to_str())
+        );
+        assert_eq!(i.report, Some(report("claude-code", "claude-fable-5-2")));
 
         // Nesting: the agent inside a human-started lease, or a same-root human lease, refuses.
         st.leases.revoke(None, now());
@@ -1377,6 +1475,14 @@ mod tests {
         assert!(
             !rule("SESSION_START")[0].contains("(?)"),
             "exe name resolved"
+        );
+        // `sh` is not in the agent table: honest `other`, and the report as the agent gave it.
+        assert!(
+            rule("SESSION_START")[0].ends_with(
+                "; source other; reported agent=\"claude-code\" model=\"claude-fable-5-2\""
+            ),
+            "{}",
+            rule("SESSION_START")[0]
         );
         assert_eq!(
             rule("REVOKE")[0],

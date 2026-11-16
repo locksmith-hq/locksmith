@@ -34,7 +34,9 @@ fn tools() -> Value {
              "project": {"type": "string"},
              "env": {"type": "string"},
              "scopes": {"type": "array", "items": {"type": "string", "enum": ["run", "git", "http", "db", "aws"]}},
-             "ttl_secs": {"type": "integer", "minimum": 1}}}},
+             "ttl_secs": {"type": "integer", "minimum": 1},
+             "agent": {"type": "string", "maxLength": 64, "description": "Your client name, e.g. claude-code. Shown to the human as self-reported; never affects what is granted."},
+             "model": {"type": "string", "maxLength": 64, "description": "Your model id, e.g. claude-fable-5-2. Shown as self-reported; never affects what is granted."}}}},
         {"name": "locksmith_explain_block",
          "description": "Explain why an action was blocked and what the supported path is.",
          "inputSchema": {"type": "object", "required": ["reason"], "properties": {
@@ -152,6 +154,15 @@ fn tool_call(name: &str, args: &Value) -> Value {
                 ttl_secs,
                 command: "agent via locksmith-mcp".into(),
                 binding: binding_bytes(),
+                // Validated by the daemon (the trust boundary); empty means not reported.
+                agent: args["agent"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(String::from),
+                model: args["model"]
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(String::from),
             }
         }
         "locksmith_explain_block" => {

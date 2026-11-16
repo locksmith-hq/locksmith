@@ -1,0 +1,44 @@
+name: ci-platforms
+
+# macOS costs ~10x Linux per minute and Windows ~1.7x on private repos (see ci.yml header), so these
+# run only on demand and on release tags, never on every PR.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: ci-platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: tauri build (macOS app bundle)
+        working-directory: apps/desktop
+        run: npm exec -- tauri build --debug --bundles app --config '{"bundle":{"active":true}}'
+
+  windows-check:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # shortcut: SQLCipher needs OpenSSL on Windows; ls-vault and smith-cli rejoin this check in GA hardening.
+      - run: cargo check --workspace --exclude ls-vault --exclude smith-cli --exclude ls-ipc --exclude ls-broker --exclude locksmithd

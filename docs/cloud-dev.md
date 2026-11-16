@@ -81,5 +81,5 @@ Pending: the owner chose to test first. Run a worker manually that stops on an o
 1. Create `locksmith-dev`: Limited network, package managers on, paste `scripts/cloud-setup.sh` as the setup script.
 2. Create `locksmith-research`: as above, plus the documentation domains.
 3. Make sure the Claude GitHub App is installed on `locksmith-hq/locksmith`.
-4. Decide on branch protection: upgrade to GitHub Team, or make the repo public.
+4. Branch protection: **owner decision 2026-11-16: not protected for now.** Revisit before the repo goes public or anyone else gets write access.
 5. Start one interactive cloud session on `locksmith-dev` and confirm `just ci` passes, plus `just up` once F0 exists.

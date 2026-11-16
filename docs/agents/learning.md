@@ -11,6 +11,7 @@ Collect the last 24h of signals, all read-only:
 
 If all of the following hold, reply "no friction" and stop:
 - every run's outcome is `done`, `idle` or `healthy`
+- no run recorded `friction` entries totalling more than 120 s
 - there were no escalations, rescues or CI failures
 - no run took more than 2700 s
 - no run used more than 2 attempts
@@ -37,6 +38,7 @@ Put each friction point into one category:
 - `task-spec`: the OpenSpec task was wrong or vague
 - `slow`: a step that dominates `duration_s` or `just_ci_s`
 - `tooling-gap`: the agent needed a tool, MCP server or script that doesn't exist
+- `stuck-time`: time lost while the run still succeeded. Examples: the agent didn't know Docker was down, ran a long build in the foreground, used a fixed sleep instead of polling, made repeated identical attempts, or did discovery the preflight script or a lesson should have provided. Fix these by extending `scripts/agent-preflight.sh`, adding a `just` recipe, or adding a lesson. Rank them by summed `friction.lost_s`.
 
 ## 4. Choose
 Pick at most 3 fixes. Rank them by cost: minutes and tokens lost, times the frequency.
@@ -46,10 +48,11 @@ Prefer root-cause fixes over workarounds. Prefer reusing an existing tool or OSS
 ## 5. Fix
 - Work on branch `claude/learning-<YYYY-MM-DD>` from origin/main. The guard allows these files on learning branches:
   - `docs/agents/*.md`, including `lessons.md`
-  - `scripts/run-meta.sh`, `scripts/cloud-setup.sh`
+  - `scripts/run-meta.sh`, `scripts/cloud-setup.sh`, `scripts/agent-preflight.sh`
   - the `justfile`
   - test and harness code
   - flaky-test fixes in crates
+- Never create, change or delete routines or schedules. Propose schedule changes in the owner issue; the owner approves every schedule change.
 - Never touch `.github/workflows`, the guard scripts, `CLAUDE.md`, `openspec/config.yaml` or `.claude/`. Propose those in the owner issue instead.
 - `task-spec` problems are never edited directly. Write them up as proposed corrected task text in the owner issue.
 - Cloud-environment settings (allowlist, the claude.ai setup script) can't be changed from here. Make the change in `scripts/cloud-setup.sh` and ask the owner to re-paste it.

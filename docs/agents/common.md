@@ -6,7 +6,15 @@ Each scheduled routine (worker, rescue, review, health, research, learning) read
 - You run in a fresh Claude cloud VM with the repo cloned. You start with no memory, and anything you don't push is lost.
 - GitHub works through REST only: `gh api repos/locksmith-hq/locksmith/...`. `gh pr` and `gh issue` (GraphQL) are blocked.
 - First command of every run: `bash scripts/run-meta.sh start <kind>`.
+- Second: `bash scripts/agent-preflight.sh`. It checks and fixes the Docker daemon, `just`, the toolchain, disk, network and `gh`. Fix any FAIL line before doing real work, and record each FIXED, FAIL or WARN line in `friction`.
 - Then read the last 15 entries of `docs/agents/lessons.md` from origin/main (`git show origin/main:docs/agents/lessons.md`). Follow them unless your role file says otherwise.
+
+## Don't get stuck
+- **Long commands.** Run anything expected to take more than about 2 minutes in the background with a hard timeout (cold `cargo build`/`test`, `just ci`, `docker compose pull`, `cargo install`): use the Bash tool's `run_in_background`, or `timeout 900 <cmd> > /tmp/<name>.log 2>&1 &`. Do other useful work, such as reading files or preparing the next step, and check the log with `tail` until the command finishes. Never sit idle waiting on a foreground command.
+- **Wait for state, not time.** Poll the thing you need instead of sleeping a fixed time. For example: `until docker info >/dev/null 2>&1; do sleep 2; done` with a timeout, or loop on `curl -fs <healthcheck>`.
+- **No interactive prompts.** Use `-y` and `--yes`, set `CI=1`, use `--no-pager` and `GIT_EDITOR=true`, and never open an editor.
+- **When to stop.** If the same command fails twice with the same error, stop retrying it, write down the error, and move to the evaluate-then-escalate loop or to a rescue.
+- **Record lost time.** Every time you lose more than about 2 minutes, add a `friction` entry, even if the run succeeds. Examples: a daemon was down, a tool was missing, an allowlist blocked a host, a build ran in the foreground, a test was flaky, instructions were unclear, a search came back empty.
 
 ## Actions budget
 The repo is private on GitHub Free: $12/month of Actions, and macOS minutes cost about 10x Linux. Every push triggers CI. So:
@@ -21,7 +29,7 @@ The repo is private on GitHub Free: $12/month of Actions, and macOS minutes cost
 - When unsure, go one tier up.
 
 ## Run metadata (on every agent-log comment and every issue you open)
-End each comment or issue body with the output of `bash scripts/run-meta.sh report`. Inside that same yaml block, append the fields only you know:
+End each comment or issue body with ONE ```yaml fenced block. Inside it, put the output of `bash scripts/run-meta.sh report` (plain YAML with no fences), then append the fields only you know:
 
 ```yaml
   orchestrator: <model you run on>
@@ -36,9 +44,11 @@ End each comment or issue body with the output of `bash scripts/run-meta.sh repo
   subagents:
     - {role: implementer|evaluator|tester|research|diagnosis, tier: haiku|sonnet|opus, duration_ms: <n>, tokens: <n>, tool_uses: <n>, result: ok|fail}
   escalations: <e.g. "sonnet->opus", or none>
+  friction:
+    - {what: "<short description>", lost_s: <seconds, estimate allowed>, fix_idea: "<one line>"}
 ```
 
-Take `duration_ms`, `tokens` and `tool_uses` from the usage each Agent result reports. Write `unknown` if it doesn't report them, and never estimate. Never put secrets in metadata.
+If you implemented a task yourself instead of delegating, list it as `{role: implementer, tier: <your model>, self: true}`. Take `duration_ms`, `tokens` and `tool_uses` from the usage each Agent result reports. Write `unknown` if it doesn't report them, and never estimate. Never put secrets in metadata.
 
 ## Logs
 - `openspec/changes/<id>/progress.md` on the change branch is append-only, and `scripts/check-task-edits.sh` enforces this.
@@ -70,4 +80,5 @@ How to raise one:
 - Never mark a PR ready, and never approve one.
 - Never write secret values anywhere.
 - Never change repository, Actions or account settings.
+- Never create, delete, enable, disable or reschedule any routine or scheduled task. Schedule changes need the owner's approval: propose them in a `needs-owner` issue.
 - Commit messages end with `Co-Authored-By: Claude <noreply@anthropic.com>`. PR bodies end with `Generated with Claude Code`.

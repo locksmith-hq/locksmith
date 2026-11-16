@@ -27,7 +27,7 @@ Create these at claude.ai/code → environment selector → New environment.
   - registry.npmjs.org
   - pypi.org, for `uvx postgres-mcp`
   - Docker Hub, which hosts postgres, grafana/otel-lgtm, wiremock and mcp-grafana
-  - ghcr.io, which hosts openbao (use `ghcr.io/openbao/openbao`, not quay.io, which is **not** on the list)
+  - ghcr.io is on the documented allowlist, but **it returned 403 in practice** (first worker run, 2026-11-16). Use Docker Hub images instead, for example `openbao/openbao:2.7.2`.
   - github.com, including release assets, and Ubuntu apt
 - **Extra allowed domains:** none for now.
 - **Environment variables:** `BASH_MAX_TIMEOUT_MS=600000`, `CARGO_TERM_COLOR=never`. **No secrets here.** Environment variables are readable by the model and by any command it runs.

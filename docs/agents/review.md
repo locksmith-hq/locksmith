@@ -17,6 +17,7 @@
    | escalations and rescues | |
    | subagent tokens by tier (sum) | |
    | subagent count by role | |
+   | friction: total lost_s, top 3 causes | |
    | Actions minutes this month (billing API, else "unavailable") | |
 
    Flag anomalies, for example:

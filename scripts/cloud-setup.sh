@@ -13,6 +13,7 @@ rustup toolchain install 1.100.0 --profile minimal -c rustfmt -c clippy || true
 cargo install --locked cargo-nextest || true
 
 npm i -g @fission-ai/openspec || true
+[ -f package-lock.json ] && npm ci --no-audit --no-fund || true
 
 # Pre-pull the F0 stack images so sessions start fast (images are cached; containers are not).
 if [ -f infra/compose/compose.yaml ]; then

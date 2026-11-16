@@ -1,5 +1,7 @@
 # Proposal: M15 Team Vaults
 
+> **Reframed by [s1-secrets-platform](../s1-secrets-platform/proposal.md) (D2, D10):** shared secrets use gateway-held keys so a proxy can inject them; the invite, safety-number and org-policy ideas below carry over to the console.
+
 ## Why
 
 Teams share credentials today through Slack, 1Password or `.env` files in private repos. Each agent

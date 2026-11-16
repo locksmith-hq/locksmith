@@ -111,3 +111,16 @@ The design follows Anthropic's long-running agent harness (https://www.anthropic
 - An attempt cap stops runaway runs, and a task stuck across three runs becomes a `needs-owner` issue.
 - `scripts/check-task-edits.sh` allows agents only to tick tasks, never to rewrite them, because the article found models edit Markdown task lists.
 - CI is the independent verifier the agent cannot fake.
+
+## Schedules (cloud routines, Israel time)
+
+All four avoid peak hours (weekdays about 15:00–21:00).
+
+| Routine | Model | Environment | When | Job |
+|---|---|---|---|---|
+| [Worker](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | daily 07:05, 13:05, 22:05 | one OpenSpec task per run on `claude/change-<id>`, draft PR |
+| [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Fri 10:35 (after the weekly limit resets) | re-verify finished work, quality review, write the next change |
+| [Daily health check](https://claude.ai/code/routines/trig_012bR8F2aWP91W3D9xGDpVUn) | Haiku 5.5 | Default | daily 08:30 | detects silent failures: worker silent for more than 24h, red CI on main, owner decisions waiting more than 3 days, finished PRs waiting more than 2 days; stays silent when healthy |
+| [Monthly research refresh](https://claude.ai/code/routines/trig_016jEjKwShdcdfhWKBcp8kHs) | Sonnet 5.5 | `locksmith-research` | 1st of month, 10:35 | re-checks OSS versions and licences, `cargo audit` and `npm audit`, new MCP servers, Infisical changes; draft PR only if something changed |
+
+Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.

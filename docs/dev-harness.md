@@ -36,3 +36,6 @@ The postgres DSN uses `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` fro
 - **grafana MCP hangs or prints an SSE banner:** the image defaults to SSE; `.mcp.json` passes `-t stdio`.
 - **Loki labels empty:** nothing has logged yet. Send an OTLP log to `127.0.0.1:4318`.
 - **`just ps` shows unhealthy:** `just logs <svc>`.
+
+## Troubleshooting: MCP servers on macOS
+`.mcp.json` runs the MCP containers with `--network host` so they can reach `127.0.0.1`. On Docker Desktop this needs host networking enabled (Settings, Resources, Network, 4.34 or later). Without it, point `DATABASE_URI` and `GRAFANA_URL` at `host.docker.internal` instead.

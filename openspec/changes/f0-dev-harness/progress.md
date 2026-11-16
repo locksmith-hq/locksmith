@@ -24,3 +24,9 @@ Format:
 - Task: 2.3, 3.1, 3.2, 3.3, 4.1 - done
 - Verified: `just reset && just up && just harness-check` -> 8 PASS; stopping lgtm -> exit 1; `just mcp-check` -> postgres and grafana PASS; `just ci` -> exit 0
 - Notes for next session: Loki is not published on the host, so harness-check queries it through Grafana's datasource proxy (:3000). MCP Inspector 0.17 takes `--config/--server`, not a command line, so mcp-check writes a temp config with ${VAR:-default} expanded. All F0 tasks ticked; no independent evaluator run on this branch (merge review covers it).
+
+## 2026-11-16 worker (merge-review fix)
+- Task: fix merge-review FAIL on b2e70d4 (no task text changed)
+- Fixed: mcp-check now requires exit 0, no `isError: true` and a real expected value; grafana call passes `datasourceUid=loki`; added a negative test that a write statement (`CREATE TABLE`) is rejected by postgres-mcp; macOS host-networking note added to docs/dev-harness.md.
+- Verified: reset+up, harness-check 8 PASS, mcp-check 3 PASS (the stricter check first exposed a missing datasourceUid and a quoting mismatch).
+- Notes: task 2.1 uses anonymous localhost Grafana instead of a token (documented); owner may accept.

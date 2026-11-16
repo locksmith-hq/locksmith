@@ -160,7 +160,8 @@ test("ended sessions appear only when the daemon returns them", async () => {
   expect(await screen.findByText("Recently ended")).toBeInTheDocument();
   const t = new Date(1700000000 * 1000);
   const hhmm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-  expect(screen.getByRole("listitem", { name: `claude session L0, revoked ${hhmm}` })).toHaveTextContent(`revoked ${hhmm}`);
+  // The audit ledger loads after status; wait for it instead of racing it.
+  expect(await screen.findByRole("listitem", { name: `claude session L0, revoked ${hhmm}` })).toHaveTextContent(`revoked ${hhmm}`);
   // No REVOKE event for L9 in the loaded ledger: plain "revoked".
   expect(screen.getByRole("listitem", { name: "claude session L9, revoked" }).querySelector(".end")).toHaveTextContent(/^revoked$/);
 });

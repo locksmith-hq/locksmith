@@ -7,10 +7,10 @@ description: The implement → independent evaluate → escalate-one-tier loop f
 
 ## Tiers (Agent tool `model`)
 - `haiku`: isolated, well-defined work and repetitive edits.
-- `sonnet`: the default for untagged tasks.
+- `sonnet`: default for untagged tasks.
 - `opus`: tasks tagged `[opus]`, and anything touching secrets, crypto, auth, RLS, the gateway or adversarial gates.
 
-You may implement small tasks yourself. List that as `self: true` in run-log.
+You may implement small tasks yourself (`self: true` in run-log); step 3 still applies.
 
 ## Loop
 1. **Implement.** Give the implementer:
@@ -23,11 +23,11 @@ You may implement small tasks yourself. List that as `self: true` in run-log.
    - no secret can leak;
    - no reinvented OSS;
    - the package versions are real.
-4. If verification and the evaluator both pass, tick the task. Change only the checkbox.
-5. Otherwise, make attempt 2 one tier up (haiku → sonnet → opus). Give the new implementer the evaluator's reasons, the failing output and the attempt-1 diff, then repeat steps 2–4.
+4. Tick only the checkbox, after verification and the evaluator pass. Never tick or mark ready with `evaluator: n/a`.
+5. Otherwise, make attempt 2 one tier up (haiku → sonnet → opus). Give the new implementer the evaluator's reasons, failing output and attempt-1 diff; repeat steps 2–4.
 6. If attempt 2 also fails:
    - commit with a `WIP:` message if the code builds, otherwise `git stash`;
    - write a progress entry;
    - open a `needs-rescue` issue titled `Rescue: <change> <task>`, or comment on an existing one. Include the branch, the tiers tried, the evaluator's reasons, up to 60 lines of failing output, and your diagnosis.
 
-   Don't notify the owner. The Opus rescue routine handles it. Then move on to an independent task, or stop.
+   Don't notify the owner; the Opus rescue routine handles it. Move on to an independent task, or stop.

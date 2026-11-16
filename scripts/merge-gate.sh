@@ -34,7 +34,8 @@ echo "ok 2 guard"
 git merge-base --is-ancestor origin/main HEAD || fail "3 behind main: merge origin/main into $head_ref, push, retry next run"
 echo "ok 3 up-to-date"
 # 4 CI green on the head SHA
-runs=$(gh api "repos/$repo/commits/$sha/check-runs" -q '[.check_runs[]|{n:.name,s:.status,c:.conclusion}]')
+# Latest run per check name; the claude-review jobs (review, mention) are judged by gate 6 instead.
+runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" -q '[.check_runs[]|select(.name!="review" and .name!="mention")|{n:.name,s:.status,c:.conclusion,t:(.started_at//"")}]|group_by(.n)|map(max_by(.t))')
 [ "$(jq length <<<"$runs")" -gt 0 ] || fail "4 ci: no check runs yet"
 jq -e 'all(.[]; .s=="completed")' <<<"$runs" >/dev/null || fail "4 ci: checks still running"
 jq -e 'all(.[]; .c=="success" or .c=="skipped" or .c=="neutral")' <<<"$runs" >/dev/null || fail "4 ci: $(jq -r '[.[]|select(.c!="success" and .c!="skipped" and .c!="neutral")|.n]|join(",")' <<<"$runs") not green"

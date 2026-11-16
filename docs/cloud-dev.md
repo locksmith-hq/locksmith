@@ -133,3 +133,8 @@ Only the `Claude_Code_Remote` connector is attached. The others were removed on 
 3. **Worker attempt 2,** one tier up (Haiku, then Sonnet, then Opus), given the evaluator's reasons.
 4. **`needs-rescue` issue.** The Opus rescue routine reproduces the failure, finds the root cause, fixes it and has the fix evaluated.
 5. **`needs-owner` and a push notification.** This happens only after 2 failed Opus attempts, or when the task itself is wrong. The daily health check reports rescue issues that sit unhandled for more than 24 hours.
+
+## How the owner is alerted
+Agents act as the owner's GitHub account, and GitHub never notifies anyone about their own activity. So:
+- **Claude app push:** the agent calls `PushNotification`. Whether that reaches the phone from a cloud run is still being tested on the first run.
+- **Email:** `.github/workflows/owner-alert.yml` runs when an issue gets the `needs-owner` label. `github-actions[bot]` then @mentions `vars.OWNER_LOGIN` (currently `tomer555`), and GitHub sends an email and a GitHub mobile notification. This needs "@mentions → Email" turned on in GitHub settings → Notifications (it is on by default).

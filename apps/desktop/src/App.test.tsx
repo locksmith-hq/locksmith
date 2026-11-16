@@ -275,3 +275,24 @@ test("sessions: empty state", async () => {
   await nav("Sessions");
   expect(await screen.findByText("No sessions yet.")).toBeInTheDocument();
 });
+
+test("overview and sessions: Claude mark, reported model chip, none for unreported human session", async () => {
+  const soon = Math.floor(Date.now() / 1000) + 3000;
+  const long = "claude-sonnet-5-5-with-a-very-long-suffix-for-ellipsis";
+  m.status.mockResolvedValue({ locked: false, leases: [
+    { ...lease, id: "A1", expires_at: soon, started_by: "agent", report: { agent: "claude-code", model: long, reported: true } },
+    { ...lease, id: "H1", expires_at: soon, command: "cursor-agent", source: { kind: "cursor", label: "Cursor" } },
+  ] });
+  render(<App />);
+  const a1 = await screen.findByRole("listitem", { name: "claude session A1" });
+  expect(within(a1).getByRole("img", { name: "Claude" })).toBeInTheDocument();
+  const chip = within(a1).getByText(`${long} (reported by agent)`);
+  expect(chip).toHaveAttribute("title", expect.stringMatching(/unverified/));
+  const h1 = screen.getByRole("listitem", { name: "cursor-agent session H1" });
+  expect(within(h1).queryByRole("img", { name: "Claude" })).toBeNull();
+  expect(h1).not.toHaveTextContent("reported");
+  await nav("Sessions");
+  const s1 = (await screen.findByRole("button", { name: "Claude Code session A1" })).closest("li")!;
+  expect(within(s1).getByRole("img", { name: "Claude" })).toBeInTheDocument();
+  expect(within(screen.getByRole("button", { name: "Cursor session H1" }).closest("li")!).queryByRole("img", { name: "Claude" })).toBeNull();
+});

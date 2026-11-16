@@ -356,3 +356,13 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .sess-det dt { color: var(--muted); }
 .sess-det dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 760px) { .sess-main { grid-template-columns: minmax(0, 1fr) auto; } .sess-main .scopes { display: none; } }
+
+/* Source marks and the reported-model chip (Overview rows and Sessions tab). */
+.src-claude { display: inline-flex; color: #D97757; align-self: center; }
+.av .src-claude svg, .who-1 .src-claude svg { stroke-width: 1.8; }
+.who-1 > svg.i { width: 14px; height: 14px; align-self: center; }
+.who-1 > .src-claude svg { width: 14px; height: 14px; }
+.who-2 .reported, .who-2 .muted { display: inline-block; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.tl-row .who > .who-3 { display: flex; gap: 4px; min-width: 0; }
+.who-3 > .reported, .who-3 > .muted { flex: 1 1 0; min-width: 0; max-width: none; }
+.who-3 > .src-lbl { flex: none; }

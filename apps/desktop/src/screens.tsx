@@ -224,8 +224,9 @@ const Who = ({ l, struck }: { l: LeaseInfo; struck?: boolean }) => {
   const name = agent(l.command);
   return (
     <span className="who" title={l.command}>
-      <span className="who-1">{struck ? <s className="who-name">{name}</s> : <b className="who-name">{name}</b>}<span className="mono id">{l.id}</span></span>
+      <span className="who-1"><SourceMark kind={l.source.kind} />{struck ? <s className="who-name">{name}</s> : <b className="who-name">{name}</b>}<span className="mono id">{l.id}</span></span>
       <span className="who-2">{l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span></span>
+      {(l.report?.model ?? l.report?.agent) || l.started_by === "agent" ? <span className="who-2 who-3"><span className="src-lbl">{l.source.label} ·</span> <ReportedModel l={l} /></span> : null}
     </span>
   );
 };
@@ -241,6 +242,17 @@ const SOURCE_GLYPH: Record<SourceKind, IconName> = {
   claude_desktop_app: "s_window",
   cursor: "s_code", windsurf: "s_code", vscode: "s_code", jetbrains: "s_code", copilot: "s_code",
   other: "s_spark", unknown: "s_unknown",
+};
+const isClaude = (k: SourceKind) => k === "claude_code_cli" || k === "claude_desktop_app";
+/** Source glyph; the two Claude kinds get the Claude mark, labelled so it is findable and announced. */
+const SourceMark = ({ kind }: { kind: SourceKind }) => isClaude(kind)
+  ? <span className="src-claude" role="img" aria-label="Claude" title="Claude"><Icon name="s_claude" /></span>
+  : <Icon name={SOURCE_GLYPH[kind] ?? "s_unknown"} />;
+/** The agent's own model claim with its 'unverified' tooltip; nothing for a human-started session that reported none. */
+const ReportedModel = ({ l }: { l: LeaseInfo }) => {
+  const claim = l.report?.model ?? l.report?.agent;
+  const text = claim ? `${claim} (reported by agent)` : l.started_by === "agent" ? "model not reported" : null;
+  return text && <span className={claim ? "reported" : "muted"} title={`${text}. ${SELF_REPORTED}`}>{text}</span>;
 };
 const SELF_REPORTED = "Self-reported by the agent and unverified. Locksmith never uses it to decide anything.";
 const useNow = () => {
@@ -258,7 +270,6 @@ export function Sessions({ st, act }: ScreenProps) {
   const row = (l: LeaseInfo) => {
     const active = l.state === "active";
     const r = l.report;
-    const claim = r?.model ?? r?.agent;
     const rest = l.expires_at - now;
     const name = l.source.label;
     return (
@@ -266,7 +277,7 @@ export function Sessions({ st, act }: ScreenProps) {
         <div className="sess-main">
           <button type="button" className="sess-toggle" aria-expanded={open === l.id} aria-label={`${name} session ${l.id}`}
             onClick={() => setOpen(open === l.id ? null : l.id)}>
-            <span className="av" data-kind={l.source.kind} aria-hidden="true"><Icon name={SOURCE_GLYPH[l.source.kind] ?? "s_unknown"} /></span>
+            <span className="av" data-kind={l.source.kind}><SourceMark kind={l.source.kind} /></span>
             <span className="who">
               <span className="who-1">
                 <b className="who-name">{name}</b>
@@ -275,9 +286,7 @@ export function Sessions({ st, act }: ScreenProps) {
               </span>
               <span className="who-2">
                 {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
-                {claim
-                  ? <> · <span className="reported" title={SELF_REPORTED}>{claim} (reported by agent)</span></>
-                  : l.started_by === "agent" && <> · <span className="muted" title={SELF_REPORTED}>model not reported</span></>}
+                {(l.report?.model ?? l.report?.agent) || l.started_by === "agent" ? <> · <ReportedModel l={l} /></> : null}
               </span>
             </span>
           </button>

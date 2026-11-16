@@ -2,7 +2,7 @@
 
 ## 1. Server
 
-- [ ] 1.1 `locksmith-mcp` with rmcp stdio, attestation as a daemon client, `list_keys`, `status`, `issue_token`, `explain_block`, and the binding resource. Verify: MCP Inspector session plus a JSON schema test asserting no value fields.
+- [ ] 1.1 `locksmith-mcp` with rmcp stdio, attestation as a daemon client, `list_keys`, `status`, `issue_token`, `explain_block`, and the binding resource. Verify: MCP Inspector session plus a JSON schema test asserting no value fields. Partial: `locksmith-mcp` (hand-rolled stdio JSON-RPC, not rmcp) serves `list_keys` (lease-scoped `LeaseKeys`), `status`, `issue_token`, `explain_block` and the binding resource; the daemon serves `Role::Mcp` only those requests; schema test passes. Not done: MCP Inspector session, live-daemon e2e, packaging `locksmith-mcp` beside `locksmithd` so it is pinned.
 - [ ] 1.2 Human prompt helper (design D1) with platform backends. Verify: manual checklist on macOS and Linux, plus a unit test of the TTY fallback.
 - [ ] 1.3 `request_secret` and `rotate_secret` with the untrusted-text rendering and rate limit (design D2). Verify: e2e with a scripted prompt backend for approve, decline and the fourth-request error.
 

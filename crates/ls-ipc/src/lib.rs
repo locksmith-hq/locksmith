@@ -156,6 +156,9 @@ pub enum Request {
         project: String,
         env: String,
     },
+    /// Key names for the caller's own lease project/env (never values, never another project's
+    /// keys). Served to `locksmith-mcp` (M10): the agent cannot pick the project.
+    LeaseKeys,
     /// `smith token issue`: mint an opaque `lsk_` token for vault key `key` under the caller's
     /// lease (scope `http`). Hosts and placement come from these fields, else the binding's
     /// `[http.keys]` entry, else the provider catalog. Never returns the value (M6 D1).

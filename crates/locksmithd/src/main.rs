@@ -269,7 +269,12 @@ fn allowed(role: Role, req: &Request) -> bool {
                 | Request::AwsInfo
                 | Request::SecretPut { .. }
         ),
-        Role::Mcp | Role::Unknown => matches!(req, Request::Ping),
+        // The agent-facing MCP server: discovery and opaque tokens under the caller's lease only.
+        Role::Mcp => matches!(
+            req,
+            Request::Ping | Request::Status | Request::LeaseKeys | Request::TokenIssue { .. }
+        ),
+        Role::Unknown => matches!(req, Request::Ping),
     }
 }
 
@@ -558,6 +563,25 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                 Err(e) => err(ErrorCode::Internal, e.to_string()),
             },
         },
+        Request::LeaseKeys => {
+            let st = d.state();
+            let Some((p, e)) = st
+                .leases
+                .find(peer.id, t)
+                .map(|l| (l.project.clone(), l.env.clone()))
+            else {
+                return err(ErrorCode::Locked, "no active session for this process");
+            };
+            match &st.vault {
+                None => err(ErrorCode::Locked, "vault is locked"),
+                Some(v) => match v.list_secrets(Some(&p), Some(&e)) {
+                    Ok(m) => Response::Keys {
+                        keys: m.into_iter().map(|m| m.name).collect(),
+                    },
+                    Err(e) => err(ErrorCode::Internal, e.to_string()),
+                },
+            }
+        }
         Request::SecretPut {
             project,
             env,
@@ -814,6 +838,7 @@ mod tests {
                 placement: None,
                 binding: None,
             },
+            Request::LeaseKeys,
             Request::TokenList,
             Request::TokenRevoke { token: None },
             Request::HttpInfo,
@@ -854,6 +879,7 @@ mod tests {
             Request::GitInfo => "GitInfo",
             Request::DbConnect { .. } => "DbConnect",
             Request::KeyNames { .. } => "KeyNames",
+            Request::LeaseKeys => "LeaseKeys",
             Request::TokenIssue { .. } => "TokenIssue",
             Request::TokenList => "TokenList",
             Request::TokenRevoke { .. } => "TokenRevoke",
@@ -890,7 +916,11 @@ mod tests {
                 "desktop {n}"
             );
             assert_eq!(allowed(Role::Smith, &r), n != "SecretPut", "smith {n}");
-            assert_eq!(allowed(Role::Mcp, &r), n == "Ping", "mcp {n}");
+            assert_eq!(
+                allowed(Role::Mcp, &r),
+                ["Ping", "Status", "LeaseKeys", "TokenIssue"].contains(&n),
+                "mcp {n}"
+            );
             assert_eq!(allowed(Role::Unknown, &r), n == "Ping", "unknown {n}");
         }
     }

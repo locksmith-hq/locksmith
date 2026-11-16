@@ -45,8 +45,16 @@ fn tools() -> Value {
 }
 
 fn explain(reason: &str) -> &'static str {
-    let r = reason.to_lowercase();
-    let table: [(&str, &str); 7] = [
+    let r = reason.to_lowercase().replace('-', "_");
+    let table: [(&str, &str); 9] = [
+        (
+            "relay_only",
+            "That key is relay-only for agent sessions: it is never injected into a command. Get an http token with locksmith_issue_token and send it through the relay. Only the human can add the key to `inject` in the agent policy.",
+        ),
+        (
+            "relay_host",
+            "For agent sessions a key goes only to hosts the human lists for it in the agent policy, not .locksmith.toml. Do not edit files to add hosts; ask the human.",
+        ),
         (
             "agent_policy",
             "The agent policy does not allow that session. Do not retry with other values; ask the human to start it or to change the policy.",
@@ -174,14 +182,7 @@ fn tool_call(name: &str, args: &Value) -> Value {
     match call_daemon(&req) {
         Ok(Response::Keys { keys }) => text(json!({"keys": keys}).to_string(), false),
         Ok(Response::Status { locked, leases }) => {
-            let l: Vec<Value> = leases
-                .iter()
-                .map(|l| {
-                    json!({"id": l.id, "project": l.project, "env": l.env,
-                           "scopes": l.scopes, "expires_at": l.expires_at, "state": l.state})
-                })
-                .collect();
-            text(json!({"locked": locked, "sessions": l}).to_string(), false)
+            text(status_json(locked, &leases).to_string(), false)
         }
         Ok(Response::HttpToken(t)) => text(
             json!({"token": t.token, "key": t.key, "hosts": t.hosts,
@@ -197,6 +198,24 @@ fn tool_call(name: &str, args: &Value) -> Value {
         Ok(_) => text("unexpected daemon response".into(), true),
         Err(e) => text(e, true),
     }
+}
+
+/// `locksmith_status`: lease metadata and key names only.
+fn status_json(locked: bool, leases: &[ls_ipc::LeaseInfo]) -> Value {
+    let l: Vec<Value> = leases
+        .iter()
+        .map(|l| {
+            let mut v = json!({"id": l.id, "project": l.project, "env": l.env,
+                   "scopes": l.scopes, "expires_at": l.expires_at, "state": l.state});
+            // Agent-started (M10e): key names it may inject; every other key is relay-only.
+            if let Some(i) = &l.inject {
+                v["inject"] = json!(i);
+                v["other_keys"] = json!("relay-only (use locksmith_issue_token)");
+            }
+            v
+        })
+        .collect();
+    json!({"locked": locked, "sessions": l})
 }
 
 /// One JSON-RPC message in, at most one out (notifications get none).
@@ -282,9 +301,44 @@ mod tests {
         assert!(handle(&json!({"jsonrpc":"2.0","method":"notifications/initialized"})).is_none());
     }
 
+    /// M10e 3.1: an agent lease shows the injectable key names and "relay-only" for the rest; a
+    /// human lease shows neither. No field can carry a value.
+    #[test]
+    fn status_shows_inject_names_for_agent_sessions_only() {
+        let lease = |inject: Option<Vec<String>>| ls_ipc::LeaseInfo {
+            id: "s".into(),
+            root_pid: 1,
+            command: "c".into(),
+            project: "p".into(),
+            env: "e".into(),
+            scopes: vec!["run".into()],
+            created_at: 0,
+            expires_at: 1,
+            state: "active".into(),
+            root_exe: String::new(),
+            started_by: Default::default(),
+            source: Default::default(),
+            host: None,
+            report: None,
+            inject,
+        };
+        let v = status_json(false, &[lease(Some(vec!["OK".into()])), lease(None)]);
+        let s = &v["sessions"];
+        assert_eq!(s[0]["inject"], json!(["OK"]));
+        assert!(s[0]["other_keys"].as_str().unwrap().contains("relay-only"));
+        assert!(s[1].get("inject").is_none() && s[1].get("other_keys").is_none());
+        let keys: Vec<&String> = s[0].as_object().unwrap().keys().collect();
+        for bad in ["value", "secret", "values"] {
+            assert!(!keys.iter().any(|k| k.as_str() == bad), "{keys:?}");
+        }
+    }
+
     #[test]
     fn explain_block_knows_the_host_rule_and_defaults_to_ask_human() {
         assert!(explain("http_host_not_bound:evil.com").contains("not approved"));
+        assert!(explain("relay_only: TEST is relay-only").contains("locksmith_issue_token"));
+        assert!(explain("relay-only").contains("locksmith_issue_token"));
+        assert!(explain("relay_host:evil.example").contains("agent policy"));
         assert!(explain("???").contains("ask the human"));
     }
 

@@ -235,6 +235,31 @@ fn upstream(seen: Arc<Seen>) -> SocketAddr {
                     s.write_all(b"\r\n0\r\n\r\n").unwrap();
                     return;
                 }
+                // The value split across many small upstream chunks, flushed apart, plain or
+                // gzip-coded (M10e D4): redaction must hold across chunk boundaries.
+                if let Some(inner) = enc.strip_prefix("split") {
+                    let inner = inner.trim_start_matches('-');
+                    let payload = compress(inner, text.as_bytes());
+                    let ce = if inner.is_empty() {
+                        String::new()
+                    } else {
+                        format!("Content-Encoding: {inner}\r\n")
+                    };
+                    write!(
+                        s,
+                        "HTTP/1.1 200 OK\r\n{ce}Transfer-Encoding: chunked\r\n\r\n"
+                    )
+                    .unwrap();
+                    for piece in payload.chunks(5) {
+                        write!(s, "{:x}\r\n", piece.len()).unwrap();
+                        s.write_all(piece).unwrap();
+                        s.write_all(b"\r\n").unwrap();
+                        s.flush().unwrap();
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                    s.write_all(b"0\r\n\r\n").unwrap();
+                    return;
+                }
                 let (payload, ce) = match enc.as_str() {
                     "" => (text.into_bytes(), String::new()),
                     "gzip,gzip" => (twice, "Content-Encoding: gzip, gzip\r\n".into()),
@@ -352,6 +377,28 @@ fn bearer_swap_and_every_coding_is_cleansed() {
         );
     }
     assert!(e.fake.blocked.lock().unwrap().is_empty());
+}
+
+/// M10e D4: an echo upstream that sends the reflected key split across tiny chunks (plain and
+/// gzip) still yields only the marker; the oracle is the exact value and its base64 form.
+#[test]
+fn echo_split_across_chunks_is_cleansed() {
+    let e = env(&["bearer"], false);
+    let auth = format!("Authorization: Bearer {}\r\n", token());
+    let b64 = base64::engine::general_purpose::STANDARD.encode(secret());
+    for enc in ["split", "split-gzip", "split-br"] {
+        let (status, head, body) = call(&e, &get(&format!("/h/{HOST}/v1/echo?enc={enc}"), &auth));
+        assert!(status.starts_with("HTTP/1.1 200"), "{enc}: {status}");
+        let all = format!("{head}\n{body}");
+        assert!(
+            !all.contains(&secret()) && !all.contains(&b64),
+            "{enc}: {all}"
+        );
+        assert!(
+            body.contains("auth=Bearer [REDACTED:API_KEY]"),
+            "{enc}: {body}"
+        );
+    }
 }
 
 /// Regression (gate A3b): a body still encoded after the relay's decoding would reach the client

@@ -132,6 +132,9 @@ pub struct Lease {
     pub host: Option<String>,
     /// The agent's own claim about its client and model. Never used for authorization.
     pub report: Option<SelfReport>,
+    /// Agent leases only (M10e D1): keys `smith run` may inject, from the agent policy at start.
+    /// `None` (human lease): no restriction.
+    pub inject: Option<Vec<String>>,
     pub created_at: i64,
     pub expires_at: i64,
     pub state: LeaseState,
@@ -170,6 +173,7 @@ impl Lease {
             source: self.source.clone(),
             host: self.host.clone(),
             report: self.report.clone(),
+            inject: self.inject.clone(),
         }
     }
 }
@@ -283,6 +287,7 @@ impl Leases {
             source: SessionSource::default(),
             host: None,
             report: None,
+            inject: None,
             created_at: now,
             expires_at: now.saturating_add(ttl_secs.min(i64::MAX as u64) as i64),
             state: LeaseState::Active,
@@ -369,9 +374,11 @@ impl Leases {
         }
     }
 
-    pub fn mark_agent(&mut self, id: &str) {
+    /// Mark an `AgentSessionStart` lease, with the keys the agent policy lets it inject.
+    pub fn mark_agent(&mut self, id: &str, inject: Vec<String>) {
         if let Some(l) = self.all.iter_mut().find(|l| l.id == id) {
             l.agent = true;
+            l.inject = Some(inject);
         }
     }
 

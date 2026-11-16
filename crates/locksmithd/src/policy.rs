@@ -3,8 +3,10 @@
 //! outside any repository; the daemon reads it only when the vault is unlocked (by the human),
 //! so an agent editing it mid-session changes nothing until the next unlock.
 
+use ls_proxy::http::valid_host_pattern;
 use serde::Deserialize;
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
@@ -13,8 +15,13 @@ pub const FILE: &str = "agent-policy.toml";
 /// ```toml
 /// max_ttl_secs = 3600
 /// scopes = ["run", "http"]
+/// [relay]
+/// allow_private = ["127.0.0.1:3000"]   # exact internal relay targets (M10e D3)
 /// [projects.myapp]
 /// envs = ["dev", "staging"]
+/// inject = ["DATABASE_URL"]            # keys `smith run` may inject (M10e D1); others are relay-only
+/// [projects.myapp.http.OPENAI_API_KEY]
+/// hosts = ["api.openai.com"]           # where the relay may send it (M10e D2)
 /// ```
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -22,13 +29,35 @@ pub struct Policy {
     pub max_ttl_secs: u64,
     pub scopes: Vec<String>,
     #[serde(default)]
+    pub relay: Relay,
+    #[serde(default)]
     pub projects: BTreeMap<String, Project>,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Relay {
+    /// `ip:port` upstreams the relay may reach although private or loopback (never metadata).
+    #[serde(default)]
+    pub allow_private: Vec<String>,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Project {
+    pub envs: Vec<String>,
+    /// Keys an agent session may have injected into a command; every other key is relay-only.
+    #[serde(default)]
+    pub inject: Vec<String>,
+    /// Per key, the only hosts the relay may send it to for agent sessions.
+    #[serde(default)]
+    pub http: BTreeMap<String, HttpKey>,
 }
 
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub struct Project {
-    pub envs: Vec<String>,
+pub struct HttpKey {
+    pub hosts: Vec<String>,
 }
 
 pub fn default_path() -> PathBuf {
@@ -91,10 +120,75 @@ pub fn load(path: &Path, uid: u32) -> Result<Policy, String> {
     {
         return Err(format!("{}: unknown scope '{s}'", path.display()));
     }
+    for (name, p) in &pol.projects {
+        for (key, h) in &p.http {
+            if let Some(bad) = h.hosts.iter().find(|h| !valid_host_pattern(h)) {
+                return Err(format!(
+                    "{}: [projects.{name}.http.{key}] invalid host {bad:?}",
+                    path.display()
+                ));
+            }
+        }
+    }
+    if let Some(bad) = pol
+        .relay
+        .allow_private
+        .iter()
+        .find(|a| a.parse::<SocketAddr>().is_err())
+    {
+        return Err(format!(
+            "{}: [relay] allow_private entry {bad:?} must be an ip:port such as \"127.0.0.1:3000\"",
+            path.display()
+        ));
+    }
     Ok(pol)
 }
 
+/// D2 matching: an exact host (`:443` is the default port) or a one-level `*.suffix` wildcard
+/// (`*.example.com` matches `api.example.com`, not `a.b.example.com` or `example.com`).
+pub fn host_matches(allow: &[String], host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    let bare = host.strip_suffix(":443").unwrap_or(&host);
+    allow.iter().any(|a| {
+        let a = a.to_ascii_lowercase();
+        let a = a.strip_suffix(":443").unwrap_or(&a);
+        match a.strip_prefix("*.") {
+            Some(sfx) => bare
+                .strip_suffix(sfx)
+                .and_then(|pre| pre.strip_suffix('.'))
+                .is_some_and(|label| !label.is_empty() && !label.contains('.')),
+            None => a == bare,
+        }
+    })
+}
+
 impl Policy {
+    /// Keys an agent session in `project` may inject (empty when the project is not listed).
+    pub fn inject(&self, project: &str) -> Vec<String> {
+        self.projects
+            .get(project)
+            .map(|p| p.inject.clone())
+            .unwrap_or_default()
+    }
+
+    /// Hosts the relay may send `key` to for an agent session in `project` (empty: none).
+    pub fn relay_hosts(&self, project: &str, key: &str) -> Vec<String> {
+        self.projects
+            .get(project)
+            .and_then(|p| p.http.get(key))
+            .map(|h| h.hosts.iter().map(|h| h.to_ascii_lowercase()).collect())
+            .unwrap_or_default()
+    }
+
+    /// `[relay] allow_private`, validated by [`load`].
+    pub fn allow_private(&self) -> Vec<SocketAddr> {
+        self.relay
+            .allow_private
+            .iter()
+            .filter_map(|a| a.parse().ok())
+            .collect()
+    }
+
     /// Does the request fit as asked? Never clamps: any excess is a refusal with the reason.
     pub fn check(
         &self,
@@ -197,6 +291,72 @@ mod tests {
         assert!(load(&f, uid()).is_err());
         write(&f, "max_ttl_secs = 1\nscopes = [\"*\"]\n", 0o600);
         assert!(load(&f, uid()).unwrap_err().contains("unknown scope"));
+    }
+
+    #[test]
+    fn inject_hosts_and_allow_private_parse_with_defaults() {
+        let t = tmp("m10e");
+        let f = t.0.join(FILE);
+        write(
+            &f,
+            "max_ttl_secs = 60\nscopes = [\"run\"]\n[relay]\nallow_private = [\"127.0.0.1:3000\", \"[::1]:8080\"]\n\
+             [projects.app]\nenvs = [\"dev\"]\ninject = [\"OK\"]\n\
+             [projects.app.http.TEST]\nhosts = [\"Api.Example.com\", \"*.svc.example.com\"]\n\
+             [projects.bare]\nenvs = [\"dev\"]\n",
+            0o600,
+        );
+        let p = load(&f, uid()).unwrap();
+        assert_eq!(p.inject("app"), ["OK"]);
+        assert!(p.inject("bare").is_empty() && p.inject("nope").is_empty());
+        assert_eq!(
+            p.relay_hosts("app", "TEST"),
+            ["api.example.com", "*.svc.example.com"]
+        );
+        assert!(p.relay_hosts("app", "OK").is_empty());
+        assert_eq!(p.allow_private().len(), 2);
+
+        // Defaults: no [relay], no inject, no http.
+        write(&f, GOOD, 0o600);
+        let p = load(&f, uid()).unwrap();
+        assert!(p.allow_private().is_empty() && p.inject("app").is_empty());
+
+        // Unknown keys at every new level, bad hosts and bad allowlist entries are refused.
+        for (body, needle) in [
+            ("[relay]\nallow_privat = []\n", "unknown field"),
+            ("[projects.a]\nenvs = []\ninjekt = []\n", "unknown field"),
+            (
+                "[projects.a]\nenvs = []\n[projects.a.http.K]\nhost = []\n",
+                "unknown field",
+            ),
+            (
+                "[projects.a]\nenvs = []\n[projects.a.http.K]\nhosts = [\"a b\"]\n",
+                "invalid host",
+            ),
+            ("[relay]\nallow_private = [\"localhost:3000\"]\n", "ip:port"),
+            ("[relay]\nallow_private = [\"10.0.0.0/8\"]\n", "ip:port"),
+        ] {
+            write(&f, &format!("max_ttl_secs = 1\nscopes = []\n{body}"), 0o600);
+            let e = load(&f, uid()).unwrap_err();
+            assert!(e.contains(needle), "{body}: {e}");
+        }
+    }
+
+    #[test]
+    fn host_matching_is_exact_or_one_level_wildcard() {
+        let a = [
+            "api.example.com".to_string(),
+            "*.svc.example.com".to_string(),
+        ];
+        assert!(host_matches(&a, "api.example.com"));
+        assert!(host_matches(&a, "API.example.com:443"));
+        assert!(!host_matches(&a, "api.example.com:8443"));
+        assert!(!host_matches(&a, "evilapi.example.com"));
+        assert!(!host_matches(&a, "api.example.com.evil.net"));
+        assert!(host_matches(&a, "x.svc.example.com"));
+        assert!(!host_matches(&a, "a.b.svc.example.com"), "one level only");
+        assert!(!host_matches(&a, "svc.example.com"), "not the apex");
+        assert!(!host_matches(&a, "xsvc.example.com"));
+        assert!(!host_matches(&[], "api.example.com"));
     }
 
     #[test]

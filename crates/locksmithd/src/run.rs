@@ -81,8 +81,8 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
     let mut st = d.state();
     st.last = Instant::now();
     let t = now();
-    let lease = match st.leases.authorize(peer.id, "run", &project, &env, t) {
-        Ok(l) => l.id.clone(),
+    let (lease, inject) = match st.leases.authorize(peer.id, "run", &project, &env, t) {
+        Ok(l) => (l.id.clone(), l.inject.clone()),
         Err(den) => {
             let r = rec(
                 actor,
@@ -107,26 +107,34 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
         );
         let _ = st.audit(r);
     };
-    // [http] keys: an opaque token and the relay base URL instead of the value (M6).
-    let (http_vars, http_keys) = match &binding {
-        Some(b) if st.vault.is_some() => crate::http::for_run(
-            d, &mut st, peer, actor, &lease, &project, &env, b, &spec.keys,
-        )?,
-        _ => (Vec::new(), Vec::new()),
+    let locked = |st: &mut crate::State| {
+        blocked(st, "vault_locked");
+        err(
+            ErrorCode::Locked,
+            "vault is locked; unlock with `smith session start`",
+        )
     };
+    // [http] keys get an opaque token and the relay base URL instead of the value (M6).
+    let http_names: Vec<String> = binding
+        .as_ref()
+        .map(|b| {
+            b.http
+                .keys
+                .keys()
+                .filter(|k| spec.keys.is_empty() || spec.keys.contains(k))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
     let Some(out) = st
         .vault
         .as_ref()
-        .map(|v| read_secrets(v, spec, binding.as_ref(), &project, &env, &http_keys))
+        .map(|v| run_keys(v, spec, binding.as_ref(), &project, &env, &http_names))
     else {
-        blocked(&mut st, "vault_locked");
-        return Err(err(
-            ErrorCode::Locked,
-            "vault is locked; unlock with `smith session start`",
-        ));
+        return Err(locked(&mut st));
     };
-    let (keys, mut vars) = match out {
-        Ok(x) => x,
+    let keys = match out {
+        Ok(k) => k,
         Err((code, msg)) => {
             if code == ErrorCode::Denied {
                 blocked(&mut st, "binding_holds_secret");
@@ -134,6 +142,30 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
             return Err(err(code, msg));
         }
     };
+    // M10e D1: checked on the final key set (binding, --only, --all), before anything is read
+    // or minted, so no flag combination skips it and a mixed request injects nothing.
+    if let Some(inj) = &inject {
+        let denied: Vec<&String> = keys.iter().filter(|k| !inj.contains(k)).collect();
+        if !denied.is_empty() {
+            return Err(crate::refuse_relay_only(
+                &mut st, actor, &lease, &project, &env, &denied,
+            ));
+        }
+    }
+    let (http_vars, http_keys) = match &binding {
+        Some(b) => crate::http::for_run(
+            d, &mut st, peer, actor, &lease, &project, &env, b, &spec.keys,
+        )?,
+        None => (Vec::new(), Vec::new()),
+    };
+    let Some(read) = st
+        .vault
+        .as_ref()
+        .map(|v| read_values(v, &project, &env, &keys))
+    else {
+        return Err(locked(&mut st));
+    };
+    let mut vars = read.map_err(|(code, msg)| err(code, msg))?;
     for k in &keys {
         let r = rec(
             actor,
@@ -185,20 +217,24 @@ fn prepare(d: &Daemon, peer: &Peer, actor: &Actor, spec: &RunSpec) -> Result<Pre
     })
 }
 
-type Fetched = (Vec<String>, Vec<(String, Vec<u8>)>);
+fn internal(e: VErr) -> (ErrorCode, String) {
+    match e {
+        VErr::NotFound(_) => (ErrorCode::NotFound, e.to_string()),
+        e => (ErrorCode::Internal, e.to_string()),
+    }
+}
 
-fn read_secrets(
+/// The keys a run injects: `--only`, else the binding's keys, else (`--yes`) all of the env,
+/// minus `skip` (keys relayed as opaque tokens). Reads no value except to refuse a binding that
+/// holds one.
+fn run_keys(
     v: &ls_vault::Vault,
     spec: &RunSpec,
     binding: Option<&Binding>,
     project: &str,
     env: &str,
     skip: &[String],
-) -> Result<Fetched, (ErrorCode, String)> {
-    let internal = |e: VErr| match e {
-        VErr::NotFound(_) => (ErrorCode::NotFound, e.to_string()),
-        e => (ErrorCode::Internal, e.to_string()),
-    };
+) -> Result<Vec<String>, (ErrorCode, String)> {
     if let Some(bytes) = spec.binding.as_deref() {
         // Bindings hold key names only; refuse one that contains a stored value.
         let mut all = Vec::new();
@@ -231,15 +267,25 @@ fn read_secrets(
     } else {
         return Err((ErrorCode::Denied, "no binding; use --only or --yes".into()));
     };
-    let keys: Vec<String> = keys.into_iter().filter(|k| !skip.contains(k)).collect();
+    Ok(keys.into_iter().filter(|k| !skip.contains(k)).collect())
+}
+
+type EnvVars = Vec<(String, Vec<u8>)>;
+
+fn read_values(
+    v: &ls_vault::Vault,
+    project: &str,
+    env: &str,
+    keys: &[String],
+) -> Result<EnvVars, (ErrorCode, String)> {
     let mut vars = Vec::new();
-    for k in &keys {
+    for k in keys {
         let val = v.get_secret(project, env, k).map_err(internal)?;
         vars.push((k.clone(), val.expose().to_vec()));
     }
     // shortcut: on an error above, values already copied are not zeroized; they are dropped
     // with this Vec. Prepared (the success path) zeroizes on drop.
-    Ok((keys, vars))
+    Ok(vars)
 }
 
 pub fn run(d: &Daemon, peer: &Peer, actor: &Actor, mut s: UnixStream, spec: RunSpec) {

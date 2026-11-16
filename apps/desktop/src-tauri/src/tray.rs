@@ -209,6 +209,7 @@ mod tests {
             source: Default::default(),
             host: None,
             report: None,
+            inject: None,
         }
     }
 

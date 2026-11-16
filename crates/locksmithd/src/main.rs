@@ -91,6 +91,24 @@ pub struct State {
 }
 
 impl State {
+    /// Read the agent policy (at unlock) and hand its `[relay] allow_private` to the relays.
+    fn load_policy(&mut self) {
+        let p = load_agent_policy();
+        ls_proxy::forward::set_allow_private(
+            p.as_ref().map(|p| p.allow_private()).unwrap_or_default(),
+        );
+        self.agent_policy = Some(p);
+    }
+
+    /// M10e D2: the hosts the agent policy lets the relay send `key` to for `project`. Empty
+    /// (nothing relayed) when the key is not listed or no policy is loaded.
+    pub fn policy_hosts(&self, project: &str, key: &str) -> Vec<String> {
+        match &self.agent_policy {
+            Some(Ok(p)) => p.relay_hosts(project, key),
+            _ => Vec::new(),
+        }
+    }
+
     /// Append now when unlocked; while locked, queue (flushed on the next unlock).
     pub fn audit(&mut self, r: AuditRecord) -> Result<(), String> {
         let Some(v) = &self.vault else {
@@ -329,6 +347,45 @@ fn load_agent_policy() -> Result<policy::Policy, String> {
     policy::load(&policy::default_path(), ls_platform::current_uid())
 }
 
+/// M10e D1: refuse a run (or `smith gh`) that would inject keys an agent lease may not have.
+/// Audits `BLOCKED relay_only` once per key, with the key name only.
+pub fn refuse_relay_only(
+    st: &mut State,
+    actor: &Actor,
+    lease: &str,
+    project: &str,
+    env: &str,
+    keys: &[&String],
+) -> Response {
+    for k in keys {
+        let _ = st.audit(rec(
+            actor,
+            "BLOCKED",
+            Some(format!("{project}/{env}/{k}")),
+            "relay_only",
+            "DENY",
+            Some(lease.to_string()),
+        ));
+    }
+    let names = keys
+        .iter()
+        .map(|k| k.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    err(
+        ErrorCode::Denied,
+        format!(
+            "relay_only: {names} {} relay-only for agent sessions; nothing was injected or run. \
+             Use an http token instead (locksmith_issue_token or `smith token issue {}`). To let \
+             agent sessions inject a key, the human adds it to `inject` under [projects.{project}] \
+             in {} and unlocks again",
+            if keys.len() == 1 { "is" } else { "are" },
+            keys[0],
+            policy::default_path().display()
+        ),
+    )
+}
+
 /// Self-reported `agent`/`model` (M10d): 1..=64 printable ASCII characters.
 fn valid_report(v: &str) -> bool {
     (1..=64).contains(&v.len()) && v.bytes().all(|b| (0x20..=0x7e).contains(&b))
@@ -414,6 +471,10 @@ fn agent_session_start(
             replaced = Some(l.id.clone());
         }
     }
+    let inject = match &st.agent_policy {
+        Some(Ok(p)) => p.inject(&project),
+        _ => Vec::new(),
+    };
     let fit = match &st.agent_policy {
         Some(Ok(p)) => p.check(&project, &env, &scopes, ttl_secs),
         Some(Err(e)) => Err(e.clone()),
@@ -455,7 +516,7 @@ fn agent_session_start(
         .start(root, ttl_secs, project, env, scopes, command, t);
     let (id, expires_at) = (l.id.clone(), l.expires_at);
     st.leases.pin(&id, binding);
-    st.leases.mark_agent(&id);
+    st.leases.mark_agent(&id, inject);
     st.leases.describe(&id, origin, report);
     if let Some(old) = replaced {
         let _ = st.audit(rec(
@@ -554,7 +615,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                     let mut st = d.state();
                     if st.vault.is_none() {
                         st.vault = Some(v);
-                        st.agent_policy = Some(load_agent_policy());
+                        st.load_policy();
                     }
                     let _ = st.audit(rec(actor, "UNLOCK", None, "passphrase", "ALLOW", None));
                     Response::Ok
@@ -594,7 +655,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                 Ok(v) => {
                     if st.vault.is_none() {
                         st.vault = Some(v);
-                        st.agent_policy = Some(load_agent_policy());
+                        st.load_policy();
                         let _ = st.audit(rec(actor, "UNLOCK", None, "passphrase", "ALLOW", None));
                     }
                 }
@@ -1359,7 +1420,16 @@ mod tests {
         st.agent_policy = Some(Ok(policy::Policy {
             max_ttl_secs: 600,
             scopes: s(&["http"]),
-            projects: [("app".to_string(), policy::Project { envs: s(&["dev"]) })].into(),
+            relay: Default::default(),
+            projects: [(
+                "app".to_string(),
+                policy::Project {
+                    envs: s(&["dev"]),
+                    inject: s(&["OK"]),
+                    ..Default::default()
+                },
+            )]
+            .into(),
         }));
         for (env, scopes, ttl) in [
             ("prod", &["http"][..], 60),
@@ -1399,6 +1469,10 @@ mod tests {
             );
         }
         assert!(st.leases.find(me, now()).is_none(), "the agent's parent");
+        // M10e D1: the lease carries the policy's inject list (names only) for run and status.
+        let l = st.leases.find(root, now()).unwrap();
+        assert_eq!(l.inject, Some(s(&["OK"])));
+        assert_eq!(l.info(now()).inject, Some(s(&["OK"])));
 
         // A second start from the same agent replaces the first; policy still applies to it.
         assert_eq!(

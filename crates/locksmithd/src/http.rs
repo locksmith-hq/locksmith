@@ -3,6 +3,7 @@
 //! CA leaves for explicit-proxy mode (D4). Tokens live in memory only and die with their lease.
 //! The credential is read from the vault per request and only goes to the relay's upstream leg.
 
+use crate::policy::host_matches;
 use crate::{Actor, Daemon, State, deny_response, deny_rule, err, now, rec};
 use ls_ipc::{ErrorCode, HttpTokenInfo, IssuedToken, Response};
 use ls_platform::proc::{Peer, ProcId};
@@ -137,12 +138,8 @@ pub fn issue(
         };
     let project = b.project.clone().unwrap_or("default".into());
     let env = b.env.clone().unwrap_or("development".into());
-    let r = match catalog::resolve(b.http.keys.get(key), provider, hosts, placement) {
-        Ok(r) => r,
-        Err(e) => return err(ErrorCode::BadRequest, e),
-    };
-    let lease = match st.leases.authorize(peer.id, "http", &project, &env, now()) {
-        Ok(l) => l.id.clone(),
+    let (lease, agent) = match st.leases.authorize(peer.id, "http", &project, &env, now()) {
+        Ok(l) => (l.id.clone(), l.agent),
         Err(den) => {
             let _ = st.audit(rec(
                 actor,
@@ -155,9 +152,31 @@ pub fn issue(
             return deny_response(&den);
         }
     };
+    // Agent leases: the hosts come from the agent policy, never the binding or the catalog.
+    let policy_hosts = if agent {
+        match agent_hosts(&mut st, actor, &lease, &project, &env, key, hosts) {
+            Ok(h) => Some(h),
+            Err(r) => return r,
+        }
+    } else {
+        None
+    };
+    let r = match catalog::resolve(
+        b.http.keys.get(key),
+        provider,
+        policy_hosts.as_deref().unwrap_or(hosts),
+        placement,
+    ) {
+        Ok(r) => r,
+        Err(e) => return err(ErrorCode::BadRequest, e),
+    };
     // `--host` / `--provider` may narrow or pick among approved destinations, never add one: a
     // token for an agent-chosen host would carry the real key to it (gate A3b).
-    if let Some(h) = r.hosts.iter().find(|h| !host_approved(&b, key, h)) {
+    if let Some(h) = r
+        .hosts
+        .iter()
+        .find(|h| !agent && !host_approved(&b, key, h))
+    {
         let _ = st.audit(rec(
             actor,
             "BLOCKED",
@@ -190,6 +209,51 @@ pub fn issue(
         })),
         Err(r) => r,
     }
+}
+
+/// M10e D2: the hosts an agent lease's token for `key` carries: those asked for if the agent
+/// policy lists every one, else all the policy's hosts for the key. A key with no policy hosts,
+/// or an asked host outside them, is refused and audited `BLOCKED relay_host`.
+#[allow(clippy::too_many_arguments)]
+fn agent_hosts(
+    st: &mut State,
+    actor: &Actor,
+    lease: &str,
+    project: &str,
+    env: &str,
+    key: &str,
+    asked: &[String],
+) -> Result<Vec<String>, Response> {
+    let allowed = st.policy_hosts(project, key);
+    let bad = match asked.iter().find(|h| !host_matches(&allowed, h)) {
+        _ if allowed.is_empty() => None,
+        Some(h) => Some(h.as_str()),
+        None if asked.is_empty() => return Ok(allowed),
+        None => return Ok(asked.to_vec()),
+    };
+    let _ = st.audit(rec(
+        actor,
+        "BLOCKED",
+        Some(format!("{project}/{env}/{key}")),
+        &format!("relay_host:{}", bad.unwrap_or("none")),
+        "DENY",
+        Some(lease.to_string()),
+    ));
+    Err(err(ErrorCode::Denied, relay_host_msg(project, key, bad)))
+}
+
+/// `host`: the refused host, or `None` when the policy lists no host for the key.
+fn relay_host_msg(project: &str, key: &str, host: Option<&str>) -> String {
+    let what = match host {
+        Some(h) => format!("{h} is not a relay host for {key} in the agent policy"),
+        None => format!("the agent policy lists no relay host for {key}"),
+    };
+    format!(
+        "relay_host: {what}; nothing was sent. For agent sessions the human lists hosts under \
+         [projects.{project}.http.{key}] hosts = [...] in {} and unlocks again \
+         (.locksmith.toml hosts do not count)",
+        crate::policy::default_path().display()
+    )
 }
 
 /// May a token for `key` name `host`? Yes for the hosts the (pinned) binding gives the key, and
@@ -236,26 +300,34 @@ pub fn for_run(
     if keys.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
-    if let Err(den) = st.leases.authorize(peer.id, "http", project, env, now()) {
-        let _ = st.audit(rec(
-            actor,
-            "BLOCKED",
-            Some(format!("{project}/{env}")),
-            &deny_rule(&den),
-            "DENY",
-            Some(lease.to_string()),
-        ));
-        return Err(err(
-            ErrorCode::Denied,
-            format!("keys under [http] need the session's `http` scope: {den}"),
-        ));
-    }
+    let agent = match st.leases.authorize(peer.id, "http", project, env, now()) {
+        Ok(l) => l.agent,
+        Err(den) => {
+            let _ = st.audit(rec(
+                actor,
+                "BLOCKED",
+                Some(format!("{project}/{env}")),
+                &deny_rule(&den),
+                "DENY",
+                Some(lease.to_string()),
+            ));
+            return Err(err(
+                ErrorCode::Denied,
+                format!("keys under [http] need the session's `http` scope: {den}"),
+            ));
+        }
+    };
     let Some(&port) = d.http.port.get() else {
         return Err(err(ErrorCode::Internal, "HTTP relay is not running"));
     };
     let (mut vars, mut names) = (Vec::new(), Vec::new());
     for k in keys {
-        let r = catalog::resolve(b.http.keys.get(k), None, &[], None)
+        let hosts = if agent {
+            agent_hosts(st, actor, lease, project, env, k, &[])?
+        } else {
+            Vec::new()
+        };
+        let r = catalog::resolve(b.http.keys.get(k), None, &hosts, None)
             .map_err(|e| err(ErrorCode::BadRequest, format!("[http.keys] {k}: {e}")))?;
         let token = mint(d, st, actor, lease, project, env, k, &r)?;
         vars.push((k.clone(), token.into_bytes()));
@@ -414,9 +486,10 @@ impl HttpAuthority for Relay {
         };
         let actor = tcp_actor(owners[0]);
         // Every process holding the client socket must be inside this token's live session.
+        let mut agent = false;
         for o in &owners {
             match st.leases.authorize(*o, "http", &project, &env, t) {
-                Ok(l) if l.id == lease => {}
+                Ok(l) if l.id == lease => agent = l.agent,
                 Ok(_) => {
                     block(&mut st, &tcp_actor(*o), "http_other_session");
                     return Err(deny(403, "Locksmith token belongs to another session"));
@@ -426,6 +499,12 @@ impl HttpAuthority for Relay {
                     return Err(deny(403, format!("Locksmith refused the request: {den}")));
                 }
             }
+        }
+        // M10e D2: an agent lease's key goes only to hosts the agent policy lists, whatever the
+        // token (minted from a binding the agent could edit) says.
+        if agent && !host_matches(&st.policy_hosts(&project, &key), a.host) {
+            block(&mut st, &actor, "relay_host");
+            return Err(deny(403, relay_host_msg(&project, &key, Some(a.host))));
         }
         if let Err((rule, message)) = relay::check(&hosts, &placements, a.host, a.found) {
             block(&mut st, &actor, rule);

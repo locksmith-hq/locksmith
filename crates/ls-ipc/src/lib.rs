@@ -385,6 +385,10 @@ pub struct LeaseInfo {
     /// What the agent said about itself in `locksmith_start_session`. Unverified.
     #[serde(default)]
     pub report: Option<SelfReport>,
+    /// Agent-started leases (M10e): the key names `smith run` may inject; every other key is
+    /// relay-only. `None` for human-started leases (no restriction). Names only, never values.
+    #[serde(default)]
+    pub inject: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -603,6 +607,7 @@ mod tests {
                         model: Some("claude-fable-5-2".into()),
                         reported: true,
                     }),
+                    inject: Some(vec!["OK".into()]),
                 }],
             },
             Response::Revoked { count: 1 },

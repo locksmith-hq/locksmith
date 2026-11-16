@@ -275,8 +275,8 @@ pub fn gh_token(
     let target = format!("{project}/{env}/{key}");
     let mut st = d.state();
     let t = now();
-    let lease = match st.leases.authorize(peer.id, "git", project, env, t) {
-        Ok(l) => l.id.clone(),
+    let (lease, inject) = match st.leases.authorize(peer.id, "git", project, env, t) {
+        Ok(l) => (l.id.clone(), l.inject.clone()),
         Err(den) => {
             let _ = st.audit(rec(
                 actor,
@@ -296,6 +296,21 @@ pub fn gh_token(
             Err(e) => return Err(err(ErrorCode::NotFound, e.to_string())),
         },
     };
+    let cred = github::parse_credential(&secret).map_err(|e| err(ErrorCode::BadRequest, e))?;
+    // M10e D1: a PAT would reach the child as GH_TOKEN verbatim, so an agent lease needs it in
+    // `inject`. App mode hands over a short-lived installation token, never the stored key.
+    if matches!(cred, github::Credential::Pat(_))
+        && inject.as_ref().is_some_and(|i| !i.contains(&key))
+    {
+        return Err(crate::refuse_relay_only(
+            &mut st,
+            actor,
+            &lease,
+            project,
+            env,
+            &[&key],
+        ));
+    }
     st.audit(rec(
         actor,
         "ACCESS",
@@ -306,7 +321,6 @@ pub fn gh_token(
     ))
     .map_err(|e| err(ErrorCode::Internal, e))?;
     drop(st);
-    let cred = github::parse_credential(&secret).map_err(|e| err(ErrorCode::BadRequest, e))?;
     if matches!(cred, github::Credential::App(_)) && repo.is_none() {
         return Err(err(
             ErrorCode::BadRequest,

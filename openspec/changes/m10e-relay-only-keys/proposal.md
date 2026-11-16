@@ -24,8 +24,9 @@ boundary for agent-started sessions today:
   with a clear message, and it is reachable only through the http relay, git, aws and db delegation.
   Default for a project with no `inject` list: nothing injectable.
 - **Policy-owned relay boundary.** For agent-started sessions the allowed upstream hosts per key come
-  from the policy (`[projects.<p>.http.<KEY>] hosts = [...]`), intersected with the binding. A host
-  the policy does not list is refused (audited `BLOCKED relay_host`), whatever the binding says.
+  only from the policy (`[projects.<p>.http.<KEY>] hosts = [...]`); the binding supplies placement
+  and provider details, never hosts, and the provider catalog adds none. A host the policy does not
+  list is refused (audited `BLOCKED relay_host`), whatever the binding says.
 - **Network guard in the relay.** Refuse upstream connections to loopback, private, link-local, CGN and
   cloud-metadata addresses, checked on the resolved IP right before connecting (DNS rebinding safe),
   with an explicit allowlist in the policy for intentional internal targets (local Langfuse, etc).
@@ -42,7 +43,10 @@ Sessions tab shows which keys that session may inject.
 
 ## Out of scope (follow-ups)
 
-Agent proposals with human approval (request a new key or host), forced routing / sandbox
+Policy-owned destinations for the Git forwarder and database relays (for agent sessions their
+hosts/targets still come from the pinned binding, which the agent can write before
+`AgentSessionStart`), the network guard behind `HTTPS_PROXY` (the proxy resolves the name) and for
+database relays, agent proposals with human approval (request a new key or host), forced routing / sandbox
 (HTTPS_PROXY container with a firewall), placeholder substitution in path/query/body, strict deny for
 unmatched hosts outside relay keys, rate limits, honeytoken auto-block (M10b 2.x), team roles.
 

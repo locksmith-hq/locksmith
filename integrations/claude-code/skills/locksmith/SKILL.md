@@ -11,6 +11,7 @@ Rules:
 - Never read `.env` files, shell history, keychains or config files to find a credential. Hooks block this; do not look for a way around them.
 - Never print, echo, log, commit or paste a secret value. You should not have one.
 - Run commands that need secrets as `smith run -- <command>`; add `--only KEY1,KEY2` to limit which keys are injected. `smith env-template` prints key names only.
+- In a session you started yourself (`locksmith_start_session`), `smith run` injects only the keys the human's agent policy lists under `inject` (`locksmith_status` shows them). Every other key is relay-only: use an `lsk_` token. A `relay_only` refusal is final; do not try `--yes`, `smith gh` or another route.
 - For HTTP APIs use an opaque `lsk_` token (skill `locksmith-http-api`). Git, AWS and databases have their own paths (`locksmith-git`, `locksmith-aws`, `locksmith-db`).
 - MCP tools (server `locksmith`): `locksmith_list_keys` (key names only), `locksmith_status`, `locksmith_start_session`, `locksmith_issue_token`, `locksmith_explain_block`.
 - Everything needs an active session (`locksmith-sessions`). If an action is blocked, follow `locksmith-blocked`.

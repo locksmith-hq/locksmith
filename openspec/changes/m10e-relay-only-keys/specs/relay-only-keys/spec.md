@@ -10,12 +10,16 @@ Makes the relay the only path by which an agent-started session can use a key it
 For a session started by an agent (`AgentSessionStart`), the daemon SHALL refuse to inject any key into a command environment unless the agent policy lists it in `inject` for the session's project.
 
 #### Scenario: Key not in the inject list
-- **WHEN** an agent session runs `smith run --only LANGFUSE_PI_SECRET_KEY` and the policy's `inject` list for the project does not contain it
+- **WHEN** an agent session runs `smith run --only LANGFUSE_PI_SECRET_KEY`, the policy's `inject` list for the project does not contain it, and the binding does not route it through `[http.keys]` (such keys get an opaque token, not the value)
 - **THEN** the run is refused with a message naming the key and saying it is relay-only, nothing is injected, and the audit records `BLOCKED relay_only` with the key name and no value
 
 #### Scenario: Mixed request
 - **WHEN** a run asks for one allowed and one relay-only key
 - **THEN** the whole run is refused and no key is injected
+
+#### Scenario: GitHub personal access token
+- **WHEN** an agent session runs `smith gh` and the github.com credential is a personal access token not in `inject`
+- **THEN** it is refused as relay-only, because the token would reach the child verbatim
 
 #### Scenario: Human-started session
 - **WHEN** a human starts a session with `smith session start`

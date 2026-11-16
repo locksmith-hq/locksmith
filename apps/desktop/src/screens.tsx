@@ -306,6 +306,7 @@ export function Sessions({ st, act }: ScreenProps) {
             <dt>Root</dt><dd className="mono">{l.root_exe || "unknown"} · pid {l.root_pid}</dd>
             <dt>Created</dt><dd className="mono">{stamp(l.created_at)}</dd>
             <dt>{active ? "Expires" : "Expired or ended"}</dt><dd className="mono">{stamp(l.expires_at)}</dd>
+            {l.inject && <><dt>Keys</dt><dd>{l.inject.length ? `${l.inject.join(", ")} (${l.inject.length} injectable)` : "none injectable"}; every other key is relay-only</dd></>}
             {r && (r.agent || r.model) && <><dt>Reported</dt><dd title={SELF_REPORTED}>{[r.agent, r.model].filter(Boolean).join(" · ")} (reported by agent, unverified)</dd></>}
           </dl>
         )}

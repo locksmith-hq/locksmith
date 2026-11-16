@@ -13,7 +13,8 @@ const m = 60;
 interface Who { exe: string; by: StartedBy; source: SessionSource; host: string | null; report: SelfReport | null }
 const lease = (id: string, command: string, project: string, env: string, scopes: string[], age: number, left: number, who: Who, state = "active"): LeaseInfo =>
   ({ id, root_pid: 4100, command, project, env, scopes, created_at: now - age, expires_at: now + left, state,
-    root_exe: who.exe, started_by: who.by, source: who.source, host: who.host, report: who.report });
+    root_exe: who.exe, started_by: who.by, source: who.source, host: who.host, report: who.report,
+    inject: who.by === "agent" ? ["DATABASE_URL"] : null });
 const CLAUDE: Who = { exe: "/opt/homebrew/bin/claude", by: "agent", source: { kind: "claude_code_cli", label: "Claude Code" }, host: "iTerm2",
   report: { agent: "claude-code", model: "claude-fable-5-2", reported: true } };
 const CURSOR: Who = { exe: "/Applications/Cursor.app/Contents/MacOS/cursor-agent", by: "human", source: { kind: "cursor", label: "Cursor" }, host: null, report: null };

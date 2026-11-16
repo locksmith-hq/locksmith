@@ -13,5 +13,8 @@ You never get the real key. You get an `lsk_` placeholder; the Locksmith HTTP re
 
 Notes:
 - The token works only for its approved hosts and only for the issuing session. A request to another host is refused (`http_host_not_bound`): the human must add the host under `[http.keys]` in `.locksmith.toml` and start a new session. Do not add it yourself.
+- In a session you started (`locksmith_start_session`) the approved hosts come only from the human's agent policy (`[projects.<p>.http.<KEY>] hosts`); `.locksmith.toml` and the provider catalog do not add any. Another host is refused (`relay_host`). This is also the way to use a relay-only key: `smith run` will not inject it.
+- The relay refuses private, loopback and cloud-metadata upstream addresses unless the human allowlists the exact `ip:port`.
+- Responses are cleaned: the real key is replaced by `[REDACTED:<KEY>]` in headers and bodies (also compressed or chunked ones). Only the exact value and its standard encodings are caught, so never call an endpoint to make it reflect the key in another form.
 - `smith token ls` lists live tokens; `smith http providers` lists the built-in provider catalog (hosts and placement presets).
 - Do not extract or "unwrap" the token, and do not try to read the real key from the vault or environment.

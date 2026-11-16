@@ -19,4 +19,9 @@ host: string | null,
 /**
  * What the agent said about itself in `locksmith_start_session`. Unverified.
  */
-report: SelfReport | null, };
+report: SelfReport | null, 
+/**
+ * Agent-started leases (M10e): the key names `smith run` may inject; every other key is
+ * relay-only. `None` for human-started leases (no restriction). Names only, never values.
+ */
+inject: Array<string> | null, };

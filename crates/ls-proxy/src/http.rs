@@ -688,8 +688,13 @@ fn relay(
     let Ok(used) = framer.feed(&pending) else {
         return reply(c, 400, "bad request body");
     };
-    let Ok(mut upstream) = connect_to(host, ctx.up.plain(host)) else {
-        return reply(c, 502, "upstream unavailable");
+    let mut upstream = match connect_to(host, ctx.up.plain(host)) {
+        Ok(u) => u,
+        // The network guard (M10e D3): its message names no secret, only the host.
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+            return reply(c, 403, &e.to_string());
+        }
+        Err(_) => return reply(c, 502, "upstream unavailable"),
     };
     let out = upstream_head(
         &head,

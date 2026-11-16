@@ -11,6 +11,7 @@ const lease = {
   id: "L1", root_pid: 1, command: "claude", project: "default", env: "development",
   scopes: ["git", "http"], created_at: 0, expires_at: Math.floor(Date.now() / 1000) + 600, state: "active",
   root_exe: "/bin/claude", started_by: "human" as const, source: { kind: "claude_code_cli" as const, label: "Claude Code" }, host: null, report: null,
+  inject: null as string[] | null,
 };
 const ev = (seq: number, action: string) => ({
   seq, ts: 1700000000, session_id: "L1", actor_pid: 2, actor_exe: "/bin/git",
@@ -243,7 +244,7 @@ test("appearance override sets the theme and is remembered", async () => {
 test("sessions: tab count, source, host, badges, reported model, unknown source, revoke", async () => {
   const soon = Math.floor(Date.now() / 1000) + 3000;
   m.status.mockResolvedValue({ locked: false, leases: [
-    { ...lease, id: "A1", expires_at: soon, started_by: "agent", host: "iTerm2", report: { agent: "claude-code", model: "claude-fable-5-2", reported: true } },
+    { ...lease, id: "A1", expires_at: soon, started_by: "agent", host: "iTerm2", report: { agent: "claude-code", model: "claude-fable-5-2", reported: true }, inject: ["DATABASE_URL"] },
     { ...lease, id: "A2", expires_at: soon, started_by: "agent", report: null },
     { ...lease, id: "H1", expires_at: soon, source: { kind: "unknown", label: "mystery-agent" } },
     { ...lease, id: "E1", state: "revoked", expires_at: soon },
@@ -265,6 +266,9 @@ test("sessions: tab count, source, host, badges, reported model, unknown source,
   expect(within(screen.getByRole("list", { name: "Ended sessions" })).getByText("revoked", { selector: ".left" })).toBeInTheDocument();
   await userEvent.click(within(a1).getByRole("button", { name: "Claude Code session A1" }));
   expect(within(a1).getByText("/bin/claude · pid 1")).toBeInTheDocument();
+  expect(within(a1).getByText("DATABASE_URL (1 injectable); every other key is relay-only")).toBeInTheDocument();
+  await userEvent.click(within(h1).getByRole("button", { name: "mystery-agent session H1" }));
+  expect(h1).not.toHaveTextContent("relay-only");
   await go("Revoke Claude Code session A1");
   expect(m.revoke).toHaveBeenCalledWith("A1");
 });

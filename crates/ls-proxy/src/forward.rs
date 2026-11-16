@@ -7,8 +7,8 @@
 use crate::{Authority, RefUpdate, Route, policy};
 use base64::Engine;
 use std::io::{self, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::{Arc, OnceLock};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
 const MAX_HEAD: usize = 64 * 1024;
@@ -562,8 +562,12 @@ fn other(msg: &str) -> io::Error {
 }
 
 fn dial(host: &str, port: u16) -> io::Result<TcpStream> {
+    connect_any((host, port).to_socket_addrs()?)
+}
+
+fn connect_any(addrs: impl IntoIterator<Item = SocketAddr>) -> io::Result<TcpStream> {
     let mut last = other("no address");
-    for a in (host, port).to_socket_addrs()? {
+    for a in addrs {
         match TcpStream::connect_timeout(&a, CONNECT_TIMEOUT) {
             Ok(s) => {
                 s.set_read_timeout(Some(IO_TIMEOUT))?;
@@ -576,6 +580,104 @@ fn dial(host: &str, port: u16) -> io::Result<TcpStream> {
     Err(last)
 }
 
+// ---- network guard (M10e D3) ----
+
+static ALLOW_PRIVATE: RwLock<Vec<SocketAddr>> = RwLock::new(Vec::new());
+
+/// Exact `ip:port` upstreams the relays may reach although private (the agent policy's
+/// `[relay] allow_private`, set by the daemon at unlock). Metadata addresses stay blocked.
+pub fn set_allow_private(v: Vec<SocketAddr>) {
+    *ALLOW_PRIVATE.write().unwrap_or_else(|e| e.into_inner()) = v;
+}
+
+fn allow_private() -> Vec<SocketAddr> {
+    ALLOW_PRIVATE
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
+/// Cloud instance metadata (AWS/GCP/Azure IPv4, AWS IPv6): never reachable, even if allowlisted.
+pub fn is_metadata(ip: IpAddr) -> bool {
+    match ip.to_canonical() {
+        IpAddr::V4(v) => v == Ipv4Addr::new(169, 254, 169, 254),
+        IpAddr::V6(v) => v == Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254),
+    }
+}
+
+/// Not a public internet address: loopback, RFC 1918, link-local, carrier-grade NAT,
+/// unspecified / "this network", broadcast, IPv6 ULA and link-local; IPv4-mapped IPv6 is judged
+/// as the IPv4 address it carries.
+pub fn is_private(ip: IpAddr) -> bool {
+    match ip.to_canonical() {
+        IpAddr::V4(v) => {
+            let [a, b, ..] = v.octets();
+            v.is_loopback()
+                || v.is_private()
+                || v.is_link_local()
+                || v.is_broadcast()
+                || a == 0
+                || (a == 100 && b & 0xc0 == 64)
+        }
+        IpAddr::V6(v) => {
+            v.is_loopback()
+                || v.is_unspecified()
+                || v.is_unique_local()
+                || v.is_unicast_link_local()
+        }
+    }
+}
+
+/// Name resolution, injectable for tests (a rebinding stub).
+pub type Resolve<'a> = &'a dyn Fn(&str, u16) -> io::Result<Vec<SocketAddr>>;
+
+fn system_resolve(host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+    Ok((host, port).to_socket_addrs()?.collect())
+}
+
+/// Resolve `host` once and keep the addresses the relays may reach: public ones, plus private
+/// ones listed exactly in `allow`; metadata never. Fails when nothing is left.
+pub fn checked_addrs(
+    host: &str,
+    port: u16,
+    allow: &[SocketAddr],
+    resolve: Resolve<'_>,
+) -> io::Result<Vec<SocketAddr>> {
+    let ok: Vec<SocketAddr> = resolve(host, port)?
+        .into_iter()
+        .filter(|a| {
+            let ip = a.ip().to_canonical();
+            !is_metadata(ip)
+                && (!is_private(ip)
+                    || allow
+                        .iter()
+                        .any(|x| x.ip().to_canonical() == ip && x.port() == a.port()))
+        })
+        .collect();
+    if ok.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "{host}:{port} resolves only to private, loopback or metadata addresses; the \
+                 relay refused it (the human can allow an exact ip:port with [relay] \
+                 allow_private in the agent policy)"
+            ),
+        ));
+    }
+    Ok(ok)
+}
+
+/// Connect to one of the addresses [`checked_addrs`] kept. The name is resolved exactly once,
+/// so a DNS answer that changes later (rebinding) cannot redirect the connection.
+pub fn dial_checked(
+    host: &str,
+    port: u16,
+    allow: &[SocketAddr],
+    resolve: Resolve<'_>,
+) -> io::Result<TcpStream> {
+    connect_any(checked_addrs(host, port, allow, resolve)?)
+}
+
 fn connect(up: &Upstream, host: &str) -> io::Result<Box<dyn Io>> {
     let plain = up
         .insecure_http
@@ -585,7 +687,10 @@ fn connect(up: &Upstream, host: &str) -> io::Result<Box<dyn Io>> {
     connect_to(host, plain)
 }
 
-/// TLS to `host` (`name[:port]`, default 443), or plain TCP to `plain` (test switch).
+/// TLS to `host` (`name[:port]`, default 443), or plain TCP to `plain` (test switch, debug
+/// builds only; it bypasses the network guard). Direct connections go through the network guard
+/// ([`dial_checked`]). shortcut: through `HTTPS_PROXY` the proxy resolves the name, so the guard
+/// does not apply there; add a check-then-CONNECT-by-IP if a proxied setup needs it.
 pub(crate) fn connect_to(host: &str, plain: Option<SocketAddr>) -> io::Result<Box<dyn Io>> {
     if let Some(addr) = plain {
         let s = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)?;
@@ -599,7 +704,7 @@ pub(crate) fn connect_to(host: &str, plain: Option<SocketAddr>) -> io::Result<Bo
     };
     let tcp = match proxy_for(name)? {
         Some(p) => tunnel(&p, name, port)?,
-        None => dial(name, port)?,
+        None => dial_checked(name, port, &allow_private(), &system_resolve)?,
     };
     let sn =
         rustls::pki_types::ServerName::try_from(name.to_string()).map_err(|_| other("bad host"))?;
@@ -712,6 +817,119 @@ fn tunnel(p: &Proxy, host: &str, port: u16) -> io::Result<TcpStream> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn guard_ranges() {
+        for p in [
+            "127.0.0.1",
+            "127.9.9.9",
+            "10.1.2.3",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.168.1.1",
+            "169.254.1.1",
+            "100.64.0.1",
+            "100.127.255.255",
+            "0.0.0.0",
+            "0.1.2.3",
+            "255.255.255.255",
+            "::1",
+            "::",
+            "fc00::1",
+            "fd12:3456::1",
+            "fe80::1",
+            "::ffff:127.0.0.1",
+            "::ffff:10.0.0.1",
+            "::ffff:169.254.169.254",
+        ] {
+            assert!(is_private(ip(p)), "{p} should be private");
+        }
+        for p in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "100.63.255.255",
+            "100.128.0.1",
+            "172.32.0.1",
+            "2606:4700::1111",
+            "::ffff:8.8.8.8",
+        ] {
+            assert!(!is_private(ip(p)), "{p} should be public");
+        }
+        for m in ["169.254.169.254", "::ffff:169.254.169.254", "fd00:ec2::254"] {
+            assert!(is_metadata(ip(m)), "{m}");
+        }
+        assert!(!is_metadata(ip("169.254.169.253")));
+    }
+
+    #[test]
+    fn guard_filters_resolved_addresses_and_honours_the_exact_allowlist() {
+        let sa = |s: &str| s.parse::<SocketAddr>().unwrap();
+        let fixed = |v: Vec<SocketAddr>| move |_: &str, _: u16| Ok(v.clone());
+        // Mixed answer: only the public address is kept.
+        let r = fixed(vec![sa("10.0.0.5:443"), sa("93.184.215.14:443")]);
+        assert_eq!(
+            checked_addrs("x.test", 443, &[], &r).unwrap(),
+            [sa("93.184.215.14:443")]
+        );
+        // Private only: refused with a message naming the policy knob.
+        let r = fixed(vec![sa("127.0.0.1:3000")]);
+        let e = checked_addrs("x.test", 3000, &[], &r).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
+        assert!(e.to_string().contains("allow_private"), "{e}");
+        // Exact ip:port only: another port, or another loopback address, stays blocked.
+        assert!(checked_addrs("x.test", 3000, &[sa("127.0.0.1:3000")], &r).is_ok());
+        assert!(checked_addrs("x.test", 3000, &[sa("127.0.0.1:3001")], &r).is_err());
+        assert!(checked_addrs("x.test", 3000, &[sa("127.0.0.2:3000")], &r).is_err());
+        // Mapped form of an allowlisted address is the same address.
+        let r = fixed(vec![sa("[::ffff:127.0.0.1]:3000")]);
+        assert!(checked_addrs("x.test", 3000, &[sa("127.0.0.1:3000")], &r).is_ok());
+        // Metadata: refused even when allowlisted, in either family.
+        for m in [
+            "169.254.169.254:80",
+            "[fd00:ec2::254]:80",
+            "[::ffff:169.254.169.254]:80",
+        ] {
+            let r = fixed(vec![sa(m)]);
+            assert!(checked_addrs("meta.test", 80, &[sa(m)], &r).is_err(), "{m}");
+        }
+    }
+
+    /// DNS rebinding: the first answer is checked and dialled; a later, different answer is never
+    /// asked for. Conversely a blocked first answer is refused without connecting anywhere.
+    #[test]
+    fn guard_resolves_once_and_dials_the_checked_address() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let good = l.local_addr().unwrap();
+        let calls = AtomicUsize::new(0);
+        let rebinding = |_: &str, _: u16| {
+            Ok(match calls.fetch_add(1, Ordering::SeqCst) {
+                0 => vec![good],
+                _ => vec!["10.9.9.9:1".parse().unwrap()],
+            })
+        };
+        let s = dial_checked("rebind.test", good.port(), &[good], &rebinding).unwrap();
+        assert_eq!(s.peer_addr().unwrap(), good);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "resolved exactly once");
+        let (accepted, _) = l.accept().unwrap();
+        drop(accepted);
+
+        // Public at check time is what an attacker hopes for; private first is refused outright.
+        let calls = AtomicUsize::new(0);
+        let private_first = |_: &str, _: u16| {
+            Ok(match calls.fetch_add(1, Ordering::SeqCst) {
+                0 => vec![good],
+                _ => vec!["93.184.215.14:443".parse().unwrap()],
+            })
+        };
+        let e = dial_checked("rebind.test", good.port(), &[], &private_first).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
 
     #[test]
     fn routes() {

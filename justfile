@@ -29,6 +29,6 @@ tree-check:
 dev app:
     npm run build -w apps/{{app}}
 
-# Build and install Locksmith.app (smith, locksmithd, desktop) locally on macOS.
+# Build and install Locksmith.app (smith, locksmithd, locksmith-mcp, desktop) locally on macOS.
 desktop-install:
     bash scripts/dev-install-desktop.sh

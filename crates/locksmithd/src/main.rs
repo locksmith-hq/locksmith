@@ -6,6 +6,7 @@ mod aws;
 mod db;
 mod git;
 mod http;
+mod policy;
 mod run;
 mod scan;
 
@@ -23,7 +24,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Lease operation scopes: `run` (M2), `git` (M5), `http` and `db` (M6).
-const SCOPES: [&str; 5] = ["run", "git", "http", "db", "aws"];
+pub const SCOPES: [&str; 5] = ["run", "git", "http", "db", "aws"];
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// sun_path is 104 bytes on macOS and 108 on Linux.
 const MAX_SOCKET_PATH: usize = 100;
@@ -82,6 +83,9 @@ pub struct State {
     pub leases: Leases,
     pub last: Instant,
     pending: Vec<AuditRecord>,
+    /// Agent policy read at the last unlock (`None` while locked). Not re-read per request: an
+    /// agent at the human's uid could edit the file; changes apply from the next unlock.
+    agent_policy: Option<Result<policy::Policy, String>>,
 }
 
 impl State {
@@ -129,6 +133,7 @@ impl Daemon {
         if st.vault.is_some() {
             let _ = st.audit(rec(a, "LOCK", None, reason, "ALLOW", None));
             st.vault = None;
+            st.agent_policy = None;
         }
     }
 }
@@ -248,10 +253,13 @@ fn event(e: StoredEvent) -> AuditEvent {
 
 /// What each caller role may ask. `smith` gets everything except `SecretPut` (an agent can
 /// reach an attested `smith`; writing vault values without the passphrase is the desktop
-/// app's job only). The desktop app gets an explicit allowlist (M14); everything else, `Ping`.
+/// app's job only) and `AgentSessionStart` (the passphrase-less grant is the MCP server's). The desktop app gets an explicit allowlist (M14); everything else, `Ping`.
 fn allowed(role: Role, req: &Request) -> bool {
     match role {
-        Role::Smith => !matches!(req, Request::SecretPut { .. }),
+        Role::Smith => !matches!(
+            req,
+            Request::SecretPut { .. } | Request::AgentSessionStart { .. }
+        ),
         Role::Desktop => matches!(
             req,
             Request::Ping
@@ -272,7 +280,11 @@ fn allowed(role: Role, req: &Request) -> bool {
         // The agent-facing MCP server: discovery and opaque tokens under the caller's lease only.
         Role::Mcp => matches!(
             req,
-            Request::Ping | Request::Status | Request::LeaseKeys | Request::TokenIssue { .. }
+            Request::Ping
+                | Request::Status
+                | Request::LeaseKeys
+                | Request::TokenIssue { .. }
+                | Request::AgentSessionStart { .. }
         ),
         Role::Unknown => matches!(req, Request::Ping),
     }
@@ -309,6 +321,87 @@ fn secret_put(
         Ok(()) => Response::Ok,
         Err(e) => err(ErrorCode::Internal, e),
     }
+}
+
+fn load_agent_policy() -> Result<policy::Policy, String> {
+    policy::load(&policy::default_path(), ls_platform::current_uid())
+}
+
+/// `AgentSessionStart` (M10b D1): a lease without the passphrase, only on an unlocked vault and
+/// only when the request fits the agent policy exactly. Grants and refusals are audited.
+#[allow(clippy::too_many_arguments)]
+fn agent_session_start(
+    st: &mut State,
+    caller: ProcId,
+    actor: &Actor,
+    project: String,
+    env: String,
+    scopes: Vec<String>,
+    ttl_secs: u64,
+    command: String,
+    binding: Option<Vec<u8>>,
+) -> Response {
+    let t = now();
+    if ttl_secs == 0 || scopes.is_empty() || scopes.iter().any(|s| !SCOPES.contains(&s.as_str())) {
+        return err(
+            ErrorCode::BadRequest,
+            "ttl must be > 0 and scopes a non-empty list of 'run', 'git', 'http', 'db', 'aws'",
+        );
+    }
+    if st.vault.is_none() {
+        return err(
+            ErrorCode::Locked,
+            "vault is locked; the human must unlock it before an agent can start a session",
+        );
+    }
+    if let Some(l) = st
+        .leases
+        .find(caller, t)
+        .filter(|l| l.info(t).state == "active")
+    {
+        return err(
+            ErrorCode::Denied,
+            format!("already inside session {}; sessions cannot be nested", l.id),
+        );
+    }
+    let target = format!("{project}/{env}");
+    let fit = match &st.agent_policy {
+        Some(Ok(p)) => p.check(&project, &env, &scopes, ttl_secs),
+        Some(Err(e)) => Err(e.clone()),
+        None => Err("no agent policy loaded".into()),
+    };
+    if let Err(why) = fit {
+        let _ = st.audit(rec(
+            actor,
+            "BLOCKED",
+            Some(target),
+            &format!("agent_policy: {why}"),
+            "DENY",
+            None,
+        ));
+        return err(
+            ErrorCode::Denied,
+            format!("agent_policy: {why}; ask the human to start this session"),
+        );
+    }
+    let rule = format!("agent_policy {}", scopes.join(","));
+    let l = st
+        .leases
+        .start(caller, ttl_secs, project, env, scopes, command, t);
+    let (id, expires_at) = (l.id.clone(), l.expires_at);
+    st.leases.pin(&id, binding);
+    if let Err(e) = st.audit(rec(
+        actor,
+        "SESSION_START",
+        Some(target),
+        &rule,
+        "ALLOW",
+        Some(id.clone()),
+    )) {
+        st.leases.revoke(Some(&id), t);
+        return err(ErrorCode::Internal, e);
+    }
+    Response::Session { id, expires_at }
 }
 
 fn serve(d: Arc<Daemon>, mut s: UnixStream) {
@@ -384,6 +477,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                     let mut st = d.state();
                     if st.vault.is_none() {
                         st.vault = Some(v);
+                        st.agent_policy = Some(load_agent_policy());
                     }
                     let _ = st.audit(rec(actor, "UNLOCK", None, "passphrase", "ALLOW", None));
                     Response::Ok
@@ -423,6 +517,7 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
                 Ok(v) => {
                     if st.vault.is_none() {
                         st.vault = Some(v);
+                        st.agent_policy = Some(load_agent_policy());
                         let _ = st.audit(rec(actor, "UNLOCK", None, "passphrase", "ALLOW", None));
                     }
                 }
@@ -462,6 +557,24 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
             }
             Response::Session { id, expires_at }
         }
+        Request::AgentSessionStart {
+            project,
+            env,
+            scopes,
+            ttl_secs,
+            command,
+            binding,
+        } => agent_session_start(
+            &mut d.state(),
+            peer.id,
+            actor,
+            project,
+            env,
+            scopes,
+            ttl_secs,
+            command,
+            binding,
+        ),
         Request::SessionEnd => {
             d.state().leases.end(peer.id);
             aws::prune(d, &d.state());
@@ -747,6 +860,7 @@ fn main() {
             leases: Leases::default(),
             last: Instant::now(),
             pending: Vec::new(),
+            agent_policy: None,
         }),
         manifest: Manifest::beside_current_exe(),
         idle: (idle > 0).then(|| Duration::from_secs(idle)),
@@ -792,6 +906,14 @@ mod tests {
                 project: s(),
                 env: s(),
                 scopes: vec![],
+                command: s(),
+                binding: None,
+            },
+            Request::AgentSessionStart {
+                project: s(),
+                env: s(),
+                scopes: vec![],
+                ttl_secs: 1,
                 command: s(),
                 binding: None,
             },
@@ -866,6 +988,7 @@ mod tests {
             Request::Unlock { .. } => "Unlock",
             Request::Lock => "Lock",
             Request::SessionStart { .. } => "SessionStart",
+            Request::AgentSessionStart { .. } => "AgentSessionStart",
             Request::SessionEnd => "SessionEnd",
             Request::Status => "Status",
             Request::Revoke { .. } => "Revoke",
@@ -915,10 +1038,21 @@ mod tests {
                 DESKTOP.contains(&n),
                 "desktop {n}"
             );
-            assert_eq!(allowed(Role::Smith, &r), n != "SecretPut", "smith {n}");
+            assert_eq!(
+                allowed(Role::Smith, &r),
+                n != "SecretPut" && n != "AgentSessionStart",
+                "smith {n}"
+            );
             assert_eq!(
                 allowed(Role::Mcp, &r),
-                ["Ping", "Status", "LeaseKeys", "TokenIssue"].contains(&n),
+                [
+                    "Ping",
+                    "Status",
+                    "LeaseKeys",
+                    "TokenIssue",
+                    "AgentSessionStart"
+                ]
+                .contains(&n),
                 "mcp {n}"
             );
             assert_eq!(allowed(Role::Unknown, &r), n == "Ping", "unknown {n}");
@@ -950,6 +1084,7 @@ mod tests {
             leases: Leases::default(),
             last: Instant::now(),
             pending: Vec::new(),
+            agent_policy: None,
         };
         let a = Actor {
             pid: 1,
@@ -1005,5 +1140,118 @@ mod tests {
         assert_eq!(puts[1].record.policy_rule, "desktop v2");
         let text = format!("{:?}", events.iter().map(|e| &e.record).collect::<Vec<_>>());
         assert!(!text.contains("sk_live_desktop_typed"));
+    }
+
+    #[test]
+    fn agent_session_start_grants_only_inside_policy() {
+        let tmp = Tmp(std::env::temp_dir().join(format!("lsd-agent-{}", std::process::id())));
+        let _ = std::fs::remove_dir_all(&tmp.0);
+        let weak = ls_crypto::kdf::KdfParams {
+            m_kib: 64,
+            t: 1,
+            p: 1,
+        };
+        let phrase = ls_crypto::recovery::RecoveryPhrase::generate().unwrap();
+        let v = Vault::create(&tmp.0.join("vault"), b"pw", weak, true, &phrase).unwrap();
+        let mut st = State {
+            vault: None,
+            leases: Leases::default(),
+            last: Instant::now(),
+            pending: Vec::new(),
+            agent_policy: None,
+        };
+        let a = Actor {
+            pid: 1,
+            start: 1,
+            exe: "locksmith-mcp".into(),
+            exe_hash: String::new(),
+        };
+        let me = id_of(std::process::id()).unwrap();
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let ask = |st: &mut State, env: &str, scopes: &[&str], ttl| {
+            agent_session_start(
+                st,
+                me,
+                &a,
+                "app".into(),
+                env.into(),
+                s(scopes),
+                ttl,
+                "agent".into(),
+                None,
+            )
+        };
+        let code = |r: &Response| match r {
+            Response::Error { code, .. } => Some(*code),
+            _ => None,
+        };
+
+        assert_eq!(
+            code(&ask(&mut st, "dev", &["http"], 60)),
+            Some(ErrorCode::Locked)
+        );
+        st.vault = Some(v);
+        assert_eq!(
+            code(&ask(&mut st, "dev", &[], 60)),
+            Some(ErrorCode::BadRequest)
+        );
+        assert_eq!(
+            code(&ask(&mut st, "dev", &["http"], 0)),
+            Some(ErrorCode::BadRequest)
+        );
+        // Unlocked but no policy file: refused.
+        st.agent_policy = Some(Err("no agent policy".into()));
+        assert_eq!(
+            code(&ask(&mut st, "dev", &["http"], 60)),
+            Some(ErrorCode::Denied)
+        );
+
+        st.agent_policy = Some(Ok(policy::Policy {
+            max_ttl_secs: 600,
+            scopes: s(&["http"]),
+            projects: [("app".to_string(), policy::Project { envs: s(&["dev"]) })].into(),
+        }));
+        for (env, scopes, ttl) in [
+            ("prod", &["http"][..], 60),
+            ("dev", &["run"], 60),
+            ("dev", &["http"], 601),
+        ] {
+            assert_eq!(
+                code(&ask(&mut st, env, scopes, ttl)),
+                Some(ErrorCode::Denied),
+                "{env} {scopes:?} {ttl}"
+            );
+        }
+        assert!(st.leases.active(now()).is_empty(), "no lease on denial");
+
+        let Response::Session { id, .. } = ask(&mut st, "dev", &["http"], 600) else {
+            panic!("in-policy request not granted")
+        };
+        let l = st.leases.find(me, now()).unwrap();
+        assert_eq!(
+            (l.id.as_str(), l.project.as_str(), l.env.as_str()),
+            (id.as_str(), "app", "dev")
+        );
+        assert_eq!(
+            code(&ask(&mut st, "dev", &["http"], 60)),
+            Some(ErrorCode::Denied),
+            "no nesting"
+        );
+
+        let ev = st.vault.as_ref().unwrap().audit_list(100).unwrap();
+        let rows: Vec<_> = ev
+            .iter()
+            .map(|e| (e.record.action.as_str(), e.record.decision.as_str()))
+            .collect();
+        assert_eq!(
+            rows.iter().filter(|r| **r == ("BLOCKED", "DENY")).count(),
+            4
+        );
+        assert_eq!(
+            rows.iter()
+                .filter(|r| **r == ("SESSION_START", "ALLOW"))
+                .count(),
+            1
+        );
     }
 }

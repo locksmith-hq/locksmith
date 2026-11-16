@@ -8,7 +8,7 @@
 
 ## 2. Integrations
 
-- [ ] 2.1 Add the MCP config to `integrations/claude-code`, and snippets for `cursor` and `codex`. `smith init` wires them. Verify: `claude mcp list` shows locksmith after `smith init`.
+- [ ] 2.1 Add the MCP config to `integrations/claude-code`, and snippets for `cursor` and `codex`. `smith init` wires them. Verify: `claude mcp list` shows locksmith after `smith init`. (progress: MCP wiring in agents.rs + init, integrations files, dev-install bundles locksmith-mcp; `claude mcp list` check pending)
 
 ## 3. Adversarial
 

@@ -230,6 +230,8 @@ fn init_yes_twice_changes_nothing_and_imports_env() {
     assert!(r.0.join(".locksmith.toml").exists());
     let cl = std::fs::read_to_string(r.0.join(".claude/settings.json")).unwrap();
     assert!(cl.contains("Bash(ls)") && cl.contains("smith hook claude-code PreToolUse"));
+    let mcp = std::fs::read_to_string(r.0.join(".mcp.json")).unwrap();
+    assert!(mcp.contains("\"locksmith-mcp\""), "{mcp}");
     let before = tree(&r.0);
     let second = init_yes(&h, &r);
     assert!(

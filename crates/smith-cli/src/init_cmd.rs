@@ -1,5 +1,5 @@
 //! `smith init` (M4 task 3.3): binding, `.env` import, .gitignore, pre-commit scanner and agent
-//! hooks, with a preview of every change, idempotent, `--yes` for CI.
+//! hooks and MCP server, with a preview of every change, idempotent, `--yes` for CI.
 
 use crate::input::{self, Opts};
 use crate::precommit::{self, Change};
@@ -158,20 +158,35 @@ fn build(root: &Path) -> Result<Plan, Fail> {
             .push(format!("pre-commit scanner not installed: {e}")),
     }
 
-    // 5. agent hooks
+    // 5. agent hooks and the MCP server. Codex keeps both in one file, so its text is chained.
     for a in agents::detect(root) {
         let f = agents::config_path(a, root);
         let before = read(&f);
-        let after = agents::merge_hooks(a, before.as_deref())
+        let mut after = agents::merge_hooks(a, before.as_deref())
             .map_err(|e| usage(format!("{}: {e}", f.display())))?;
-        if before.as_deref() != Some(after.as_str()) {
-            let path = f.strip_prefix(root).unwrap_or(&f).to_path_buf();
-            p.changes.push(Change {
-                path,
-                before,
-                after,
-                exec: false,
-            });
+        let mut files = vec![(f, before, None)];
+        let m = agents::mcp_path(a, root);
+        if a == agents::Agent::Codex {
+            after = agents::merge_mcp(a, Some(&after))
+                .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+        } else {
+            let mb = read(&m);
+            let ma = agents::merge_mcp(a, mb.as_deref())
+                .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+            files.push((m, mb, Some(ma)));
+        }
+        files[0].2 = Some(after);
+        for (f, before, after) in files {
+            let after = after.unwrap_or_default();
+            if before.as_deref() != Some(after.as_str()) {
+                let path = f.strip_prefix(root).unwrap_or(&f).to_path_buf();
+                p.changes.push(Change {
+                    path,
+                    before,
+                    after,
+                    exec: false,
+                });
+            }
         }
     }
     Ok(p)

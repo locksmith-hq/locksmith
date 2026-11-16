@@ -12,3 +12,6 @@ timeout = 10
 type = "command"
 command = "command -v smith >/dev/null 2>&1 || { echo 'Locksmith hook unavailable: run smith doctor' >&2; exit 2; }; smith hook codex UserPromptSubmit"
 timeout = 10
+
+[mcp_servers.locksmith]
+command = "locksmith-mcp"

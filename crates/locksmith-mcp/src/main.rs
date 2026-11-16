@@ -4,7 +4,7 @@
 //! opaque `lsk_` token; no tool input or output has a field that can carry a secret value (see the
 //! `schemas_carry_no_value_field` test). The agent's lease, not the agent, picks the project.
 // shortcut: hand-rolled JSON-RPC instead of `rmcp` (design D1 names it), to avoid a new
-// dependency for five tools; switch to rmcp when request_secret/rotate_secret (task 1.3) land.
+// dependency for a handful of tools; switch to rmcp when request_secret/rotate_secret (task 1.3) land.
 
 use ls_ipc::{Client, Request, Response};
 use serde_json::{Value, json};
@@ -28,6 +28,13 @@ fn tools() -> Value {
              "provider": {"type": "string"},
              "hosts": {"type": "array", "items": {"type": "string"}},
              "placement": {"type": "string"}}}},
+        {"name": "locksmith_start_session",
+         "description": "Start a session for this process within the human's agent policy. Out-of-policy requests are refused, never narrowed; the human must start those.",
+         "inputSchema": {"type": "object", "required": ["project", "env", "scopes", "ttl_secs"], "properties": {
+             "project": {"type": "string"},
+             "env": {"type": "string"},
+             "scopes": {"type": "array", "items": {"type": "string", "enum": ["run", "git", "http", "db", "aws"]}},
+             "ttl_secs": {"type": "integer", "minimum": 1}}}},
         {"name": "locksmith_explain_block",
          "description": "Explain why an action was blocked and what the supported path is.",
          "inputSchema": {"type": "object", "required": ["reason"], "properties": {
@@ -37,7 +44,11 @@ fn tools() -> Value {
 
 fn explain(reason: &str) -> &'static str {
     let r = reason.to_lowercase();
-    let table: [(&str, &str); 6] = [
+    let table: [(&str, &str); 7] = [
+        (
+            "agent_policy",
+            "The agent policy does not allow that session. Do not retry with other values; ask the human to start it or to change the policy.",
+        ),
         (
             "http_host_not_bound",
             "That host is not approved for the key. The human lists it under [http.keys] in .locksmith.toml and starts a new session.",
@@ -122,6 +133,27 @@ fn tool_call(name: &str, args: &Value) -> Value {
                 binding: binding_bytes(),
             }
         }
+        "locksmith_start_session" => {
+            let (Some(project), Some(env), Some(ttl_secs)) = (
+                args["project"].as_str(),
+                args["env"].as_str(),
+                args["ttl_secs"].as_u64(),
+            ) else {
+                return text("`project`, `env` and `ttl_secs` are required".into(), true);
+            };
+            let scopes = strs("scopes");
+            if scopes.is_empty() {
+                return text("`scopes` must list at least one scope".into(), true);
+            }
+            Request::AgentSessionStart {
+                project: project.into(),
+                env: env.into(),
+                scopes,
+                ttl_secs,
+                command: "agent via locksmith-mcp".into(),
+                binding: binding_bytes(),
+            }
+        }
         "locksmith_explain_block" => {
             let r = args["reason"].as_str().unwrap_or_default();
             return text(explain(r).into(), false);
@@ -144,6 +176,10 @@ fn tool_call(name: &str, args: &Value) -> Value {
             json!({"token": t.token, "key": t.key, "hosts": t.hosts,
                    "placement": t.placement, "base_url": t.base_url})
             .to_string(),
+            false,
+        ),
+        Ok(Response::Session { id, expires_at }) => text(
+            json!({"session": id, "expires_at": expires_at}).to_string(),
             false,
         ),
         Ok(Response::Error { message, .. }) => text(message, true),
@@ -229,9 +265,9 @@ mod tests {
     }
 
     #[test]
-    fn lists_four_tools_and_notifications_get_no_reply() {
+    fn lists_five_tools_and_notifications_get_no_reply() {
         let r = handle(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list"})).unwrap();
-        assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 4);
+        assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 5);
         assert!(handle(&json!({"jsonrpc":"2.0","method":"notifications/initialized"})).is_none());
     }
 
@@ -239,6 +275,26 @@ mod tests {
     fn explain_block_knows_the_host_rule_and_defaults_to_ask_human() {
         assert!(explain("http_host_not_bound:evil.com").contains("not approved"));
         assert!(explain("???").contains("ask the human"));
+    }
+
+    #[test]
+    fn start_session_validates_arguments_before_the_daemon() {
+        for args in [
+            json!({}),
+            json!({"project": "p", "env": "dev", "scopes": ["http"]}),
+            json!({"project": "p", "env": "dev", "scopes": [], "ttl_secs": 60}),
+            json!({"project": "p", "env": "dev", "scopes": ["http"], "ttl_secs": -1}),
+        ] {
+            assert_eq!(
+                tool_call("locksmith_start_session", &args)["isError"],
+                true,
+                "{args}"
+            );
+        }
+        assert!(
+            explain("agent_policy: env 'p/prod' is not in the agent policy")
+                .contains("ask the human")
+        );
     }
 
     #[test]

@@ -4,6 +4,8 @@
 pub mod net;
 #[cfg(unix)]
 pub mod proc;
+#[cfg(unix)]
+pub mod prompt;
 pub mod screen;
 
 use std::io;

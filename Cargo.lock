@@ -1337,6 +1337,7 @@ dependencies = [
  "security-framework",
  "sha2",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]

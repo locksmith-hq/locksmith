@@ -105,6 +105,18 @@ pub enum Request {
         #[serde(default)]
         binding: Option<Vec<u8>>,
     },
+    /// Agent-started session (M10b D1), served to `locksmith-mcp` only. Deliberately carries no
+    /// passphrase: the vault must already be unlocked by the human, and the daemon grants the
+    /// lease only when every field fits the human-owned agent policy (never clamped).
+    AgentSessionStart {
+        project: String,
+        env: String,
+        scopes: Vec<String>,
+        ttl_secs: u64,
+        command: String,
+        #[serde(default)]
+        binding: Option<Vec<u8>>,
+    },
     /// End the lease rooted at the calling process (agent exited).
     SessionEnd,
     Status,
@@ -683,6 +695,20 @@ mod tests {
         for v in views {
             audit(&v.unwrap(), "view");
         }
+    }
+
+    /// M10b 1.2: the agent's session request has no passphrase (or any byte-string) field.
+    #[test]
+    fn agent_session_start_has_no_passphrase() {
+        let r = Request::AgentSessionStart {
+            project: "p".into(),
+            env: "dev".into(),
+            scopes: vec!["http".into()],
+            ttl_secs: 60,
+            command: "agent".into(),
+            binding: Some(b"[http]".to_vec()),
+        };
+        audit(&Value::serialized(&r).unwrap(), "request");
     }
 
     #[test]

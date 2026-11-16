@@ -173,6 +173,65 @@ pub fn merge_hooks(a: Agent, existing: Option<&str>) -> Result<String, String> {
     }
 }
 
+const MCP_COMMAND: &str = "locksmith-mcp";
+
+/// Where the agent reads MCP servers from. Codex shares its hooks file.
+pub fn mcp_path(a: Agent, repo: &Path) -> PathBuf {
+    match a {
+        Agent::ClaudeCode => repo.join(".mcp.json"),
+        Agent::Cursor => repo.join(".cursor/mcp.json"),
+        Agent::Codex => config_path(a, repo),
+    }
+}
+
+/// Idempotent merge of the `locksmith` MCP server (runs the installed `locksmith-mcp`). Keeps
+/// other servers and settings; an existing `locksmith` entry is left as the user wrote it.
+pub fn merge_mcp(a: Agent, existing: Option<&str>) -> Result<String, String> {
+    if a == Agent::Codex {
+        let t = existing.unwrap_or("");
+        let table: toml::Table =
+            toml::from_str(t).map_err(|e| format!("existing config is not valid TOML: {e}"))?;
+        let have = table
+            .get("mcp_servers")
+            .and_then(|v| v.get("locksmith"))
+            .is_some();
+        if have {
+            return Ok(t.to_string());
+        }
+        let sep = if t.is_empty() || t.ends_with("\n\n") {
+            ""
+        } else if t.ends_with('\n') {
+            "\n"
+        } else {
+            "\n\n"
+        };
+        let out = format!("{t}{sep}[mcp_servers.locksmith]\ncommand = \"{MCP_COMMAND}\"\n");
+        return toml::from_str::<toml::Table>(&out)
+            .map(|_| out)
+            .map_err(|e| format!("cannot add the MCP server to this config: {e}"));
+    }
+    let mut root: Value = match existing.filter(|t| !t.trim().is_empty()) {
+        None => json!({}),
+        Some(t) => serde_json::from_str(t)
+            .map_err(|e| format!("existing config is not valid JSON: {e}"))?,
+    };
+    let servers = root
+        .as_object_mut()
+        .ok_or("existing config is not a JSON object")?
+        .entry("mcpServers")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .ok_or("`mcpServers` is not an object")?;
+    if servers.contains_key("locksmith") {
+        return Ok(existing.map_or_else(String::new, str::to_string));
+    }
+    servers.insert(
+        "locksmith".into(),
+        json!({"command": MCP_COMMAND, "args": []}),
+    );
+    Ok(serde_json::to_string_pretty(&root).map_err(|e| e.to_string())? + "\n")
+}
+
 fn merge_toml(existing: &str) -> Result<String, String> {
     toml::from_str::<toml::Table>(existing)
         .map_err(|e| format!("existing config is not valid TOML: {e}"))?;
@@ -264,6 +323,28 @@ mod tests {
         let _ = std::fs::remove_dir_all(&repo);
     }
 
+    #[test]
+    fn mcp_merge_is_idempotent_and_preserves() {
+        let user_json = r#"{"mcpServers":{"other":{"command":"x"}},"keep":1}"#;
+        for a in ALL {
+            let seed = if a == Agent::Codex {
+                "# keep me\n[mcp_servers.other]\ncommand = \"x\"\n"
+            } else {
+                user_json
+            };
+            for start in [None, Some(seed)] {
+                let once = merge_mcp(a, start).unwrap();
+                assert_eq!(merge_mcp(a, Some(&once)).unwrap(), once, "{a:?} idempotent");
+                assert_eq!(once.matches("locksmith-mcp").count(), 1, "{a:?} once");
+                if start.is_some() {
+                    assert!(once.contains("other") && !once.contains("\"other\":{}"));
+                }
+            }
+        }
+        assert!(merge_mcp(Agent::ClaudeCode, Some("{oops")).is_err());
+        assert!(merge_mcp(Agent::Codex, Some("= =")).is_err());
+    }
+
     fn check(path: &str, want: String) {
         let p = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../integrations")
@@ -286,7 +367,16 @@ mod tests {
         check("cursor/hooks.json", pretty(&hooks_json(Agent::Cursor)));
         check(
             "codex/config.toml",
-            merge_hooks(Agent::Codex, None).unwrap(),
+            merge_mcp(
+                Agent::Codex,
+                Some(&merge_hooks(Agent::Codex, None).unwrap()),
+            )
+            .unwrap(),
         );
+        check(
+            "claude-code/.mcp.json",
+            merge_mcp(Agent::ClaudeCode, None).unwrap(),
+        );
+        check("cursor/mcp.json", merge_mcp(Agent::Cursor, None).unwrap());
     }
 }

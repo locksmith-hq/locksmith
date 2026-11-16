@@ -9,12 +9,15 @@ set -euo pipefail
 branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 
 # Agents (claude/* branches) may never change their own rules, CI, or this guard.
-# Exception: claude/learning-* may propose edits to agent instructions and run-meta (owner merges);
-# workflows, this guard, CLAUDE.md, openspec/config.yaml and .claude/ stay owner-only for everyone.
+# Exception: claude/learning-* may edit skills (not merge-queue), role files and helper scripts;
+# gates, workflows, AGENTS.md/CLAUDE.md, config and .claude settings stay owner-only for everyone.
 protected_fail=0
 if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
-  paths=(.github/workflows 'scripts/check-task-edits*' CLAUDE.md openspec/config.yaml .claude docs/agents/merge.md docs/agents/common.md)
-  [[ "$branch" == claude/learning-* ]] || paths+=(docs/agents scripts/run-meta.sh)
+  paths=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh
+         AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents
+         .claude/skills/merge-queue docs/agents/merge.md docs/agents/common.md)
+  # Learning branches may improve other skills, role files, lessons and helper scripts.
+  [[ "$branch" == claude/learning-* ]] || paths+=(docs/agents .claude/skills scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
   changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- "${paths[@]}")
   if [ -n "$changed" ]; then
     echo "task-edit guard: agent branch '$branch' changed protected files (owner-only):"; echo "$changed"

@@ -31,6 +31,12 @@ expect 0 claude/learning-z "learning branch may edit agent rules"
 echo x > docs/agents/merge.md; git add -A
 expect 1 claude/learning-z "learning branch may not edit merge gates"
 git rm -q --cached docs/agents/merge.md; rm docs/agents/merge.md
+mkdir -p .claude/skills/run-start .claude/skills/merge-queue; echo x > .claude/skills/run-start/SKILL.md; git add -A
+expect 0 claude/learning-z "learning branch may edit a skill"
+expect 1 claude/change-c1b "worker branch may not edit a skill"
+echo x > .claude/skills/merge-queue/SKILL.md; git add -A
+expect 1 claude/learning-z "learning branch may not edit merge-queue skill"
+git rm -rq --cached .claude; rm -rf .claude
 mkdir -p .github/workflows; echo x > .github/workflows/ci.yml; git add -A
 expect 1 claude/learning-z "learning branch may not edit workflows"
 echo "check-task-edits: all tests passed"

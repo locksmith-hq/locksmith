@@ -2,6 +2,7 @@
 # Collects the deterministic part of a scheduled agent run's metadata (docs/agents/common.md).
 #   scripts/run-meta.sh start <kind>   record start time and HEAD (call first thing in a run)
 #   scripts/run-meta.sh report         print the YAML body (no fences) for the run so far
+#   scripts/run-meta.sh block < fields  print the complete ```yaml block: report + agent fields from stdin
 # The agent appends `subagents:` and outcome fields itself (it is the only one that knows them).
 # Never prints secret values: only allow-listed env var names that look like session ids.
 set -euo pipefail
@@ -17,9 +18,14 @@ case "${1:-}" in
     echo "run-meta: started ${2:-unknown}"
     ;;
   report)
-    [ -f "$state" ] || { echo "run-meta: call 'start' first" >&2; exit 1; }
-    # shellcheck disable=SC1090
-    . "$state"
+    if [ -f "$state" ]; then
+      # shellcheck disable=SC1090
+      . "$state"
+    else
+      # Never drop the block: a missing state file still yields session, branch and head.
+      echo "run-meta: 'start' was not called; started/duration_s are unknown" >&2
+      KIND=unknown; START_EPOCH=""; BASE_SHA=none
+    fi
     now=$(date -u +%s)
     head=$(git rev-parse --short HEAD 2>/dev/null || echo none)
     branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo none)
@@ -34,9 +40,9 @@ case "${1:-}" in
     cat <<EOF
 run-metadata:
   kind: $KIND
-  started: $(date -u -d "@$START_EPOCH" +%FT%TZ 2>/dev/null || date -u -r "$START_EPOCH" +%FT%TZ)
+  started: $( [ -n "$START_EPOCH" ] && { date -u -d "@$START_EPOCH" +%FT%TZ 2>/dev/null || date -u -r "$START_EPOCH" +%FT%TZ; } || echo unknown)
   finished: $(date -u +%FT%TZ)
-  duration_s: $((now - START_EPOCH))
+  duration_s: $( [ -n "$START_EPOCH" ] && echo $((now - START_EPOCH)) || echo unknown)
   session: ${session:-unknown}
   branch: $branch
   base_sha: $BASE_SHA
@@ -46,5 +52,12 @@ run-metadata:
   runner: "$(nproc 2>/dev/null || sysctl -n hw.ncpu) cpu, ${mem_gb} GB"
 EOF
     ;;
-  *) echo "usage: $0 start <kind> | report" >&2; exit 2 ;;
+  block)
+    # One fenced block, never nested: agent fields (2-space indented YAML) come on stdin.
+    echo '```yaml'
+    "$0" report
+    if [ ! -t 0 ]; then sed '/^```/d'; fi
+    echo '```'
+    ;;
+  *) echo "usage: $0 start <kind> | report | block < agent-fields" >&2; exit 2 ;;
 esac

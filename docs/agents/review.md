@@ -1,6 +1,6 @@
 # Weekly review (Sonnet + Opus reviewer, Saturday after the weekly reset)
 
-1. **Read the current state.** Run `bash scripts/run-meta.sh start review` and `git fetch -q origin`, then read:
+1. **State.** Use the `run-start` skill with `review`, then read:
    - the agent-log comments from the last 8 days, including their `run-metadata` blocks
    - open PRs and their check-runs
    - `docs/roadmap.md`
@@ -43,4 +43,4 @@
    - Research first, with searches delegated to haiku: maintained, free, licence-compatible OSS and existing MCP servers.
    - Record versions, release dates and URLs, and tag every task `[haiku]`, `[sonnet]` or `[opus]`.
    - Run `openspec validate --all`, commit, push once, open a PR, and mark it ready as described in `merge.md`.
-6. **Log.** Post the agent-log comment with the stats table and the metadata.
+6. **Log.** Use the `run-log` skill to post the agent-log comment with the stats table and the metadata.

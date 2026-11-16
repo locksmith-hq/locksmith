@@ -1,0 +1,33 @@
+---
+name: evaluate-escalate
+description: The implement → independent evaluate → escalate-one-tier loop for doing one OpenSpec task (or fixing CI / main). Use for every task a worker or rescue does; includes how to open a needs-rescue issue when both attempts fail.
+---
+
+# Evaluate, then escalate
+
+## Tiers (Agent tool `model`)
+- `haiku`: isolated, well-defined work and repetitive edits.
+- `sonnet`: the default for untagged tasks.
+- `opus`: tasks tagged `[opus]`, and anything touching secrets, crypto, auth, RLS, the gateway or adversarial gates.
+
+You may implement small tasks yourself. List that as `self: true` in run-log.
+
+## Loop
+1. **Implement.** Give the implementer:
+   - the exact task text, the design excerpt, the files and the verification command;
+   - the rules: reuse OSS from `docs/research/oss-building-blocks.md`, use real versions from crates.io or GitHub, and never print secrets.
+2. **Verify it yourself.** Run the task's verification command and `just ci`. Use the `long-commands` skill if either is slow.
+3. **Evaluate.** A separate subagent, never the implementer, runs on `sonnet`, or on `opus` for `[opus]` tasks. Give it the task, the spec excerpt, `git diff`, the verification output and the AGENTS.md security rules. It answers PASS or FAIL with reasons, checking:
+   - the task is really done, not stubbed;
+   - the tests exercise real behaviour;
+   - no secret can leak;
+   - no reinvented OSS;
+   - the package versions are real.
+4. If verification and the evaluator both pass, tick the task. Change only the checkbox.
+5. Otherwise, make attempt 2 one tier up (haiku → sonnet → opus). Give the new implementer the evaluator's reasons, the failing output and the attempt-1 diff, then repeat steps 2–4.
+6. If attempt 2 also fails:
+   - commit with a `WIP:` message if the code builds, otherwise `git stash`;
+   - write a progress entry;
+   - open a `needs-rescue` issue titled `Rescue: <change> <task>`, or comment on an existing one. Include the branch, the tiers tried, the evaluator's reasons, up to 60 lines of failing output, and your diagnosis.
+
+   Don't notify the owner. The Opus rescue routine handles it. Then move on to an independent task, or stop.

@@ -20,8 +20,8 @@ Each run merges finished work, then does tasks until the first failure or about 
      - Dependency's PR fully ticked and green: branch from that PR's branch, and use it as the PR base.
      - Anything else: raise an owner decision.
 4. **Baseline.** Run `just ci`. Once the stack exists, also run `just up && just harness-check`. If either is red, fixing it is the task.
-5. **Tasks.** Work through them in order with the `evaluate-escalate` skill. Stop at the first rescue, at an owner gate, or after about 40 minutes.
+5. **Tasks.** Work through them in order with the `evaluate-escalate` skill, committing locally after each one. Stop at the first rescue, at an owner gate, or after about 40 minutes. A finished task group is not a reason to stop.
 6. **Finish.**
    - Use the `run-log` skill.
-   - Commit and push once. Open a non-draft PR if none exists.
+   - Push only now, once, after you've stopped taking tasks. Never push earlier, not even to open the PR. Then open a non-draft PR if none exists.
    - If every task is ticked, mark the PR ready with the `merge-queue` skill.

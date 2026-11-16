@@ -8,3 +8,4 @@ dist/
 !.env.example
 .claude/settings.local.json
 .claude/worktrees/
+.agent-runs.md

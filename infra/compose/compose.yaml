@@ -1,0 +1,56 @@
+name: locksmith-dev
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-locksmith}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-locksmith-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-locksmith}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  lgtm:
+    image: grafana/otel-lgtm:0.41.0
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health && curl -sf http://localhost:3100/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  openbao:
+    image: ${OPENBAO_IMAGE:-openbao/openbao:2.7.2}
+    # Dev mode: in-memory and auto-unsealed. The healthcheck enables the transit engine (idempotent).
+    command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${OPENBAO_DEV_ROOT_TOKEN:-dev-only-root}"]
+    cap_add: [IPC_LOCK]
+    environment:
+      BAO_ADDR: http://127.0.0.1:8200
+      BAO_TOKEN: ${OPENBAO_DEV_ROOT_TOKEN:-dev-only-root}
+    ports: ["127.0.0.1:8200:8200"]
+    healthcheck:
+      test: ["CMD-SHELL", "bao secrets list | grep -q '^transit/' || bao secrets enable transit"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  upstream:
+    image: wiremock/wiremock:3.13.2
+    command: ["--verbose"]
+    ports: ["127.0.0.1:8089:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/__admin/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

@@ -699,12 +699,18 @@ host = "h"
 #[ignore = "needs live API keys; run by .github/workflows/http-live-smoke.yml"]
 fn live_stripe_and_openai_through_the_relay() {
     need_curl!();
-    let (Ok(stripe), Ok(openai)) = (
-        std::env::var("LIVE_STRIPE_TEST_KEY"),
-        std::env::var("LIVE_OPENAI_API_KEY"),
-    ) else {
-        panic!("set LIVE_STRIPE_TEST_KEY and LIVE_OPENAI_API_KEY");
-    };
+    // GitHub Actions passes a missing repository secret as an empty string, so treat unset and
+    // empty (after trim) the same way. Never print the values themselves.
+    let stripe = std::env::var("LIVE_STRIPE_TEST_KEY").unwrap_or_default();
+    let openai = std::env::var("LIVE_OPENAI_API_KEY").unwrap_or_default();
+    let mut missing = Vec::new();
+    if stripe.trim().is_empty() {
+        missing.push("LIVE_STRIPE_TEST_KEY is unset or empty: add it as a repository secret (an sk_test_ key)");
+    }
+    if openai.trim().is_empty() {
+        missing.push("LIVE_OPENAI_API_KEY is unset or empty: add it as a repository secret");
+    }
+    assert!(missing.is_empty(), "{}", missing.join("; "));
     assert!(stripe.starts_with("sk_test_"), "use a Stripe test-mode key");
     let e = Env::new(
         "UNUSED",

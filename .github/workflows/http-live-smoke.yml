@@ -14,6 +14,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Check live smoke secrets are set
+        env:
+          LIVE_STRIPE_TEST_KEY: ${{ secrets.LIVE_STRIPE_TEST_KEY }}
+          LIVE_OPENAI_API_KEY: ${{ secrets.LIVE_OPENAI_API_KEY }}
+        run: |
+          status=0
+          if [ -z "$LIVE_STRIPE_TEST_KEY" ]; then
+            echo "::error::LIVE_STRIPE_TEST_KEY is empty: add it as a repository secret (an sk_test_ key)"
+            status=1
+          fi
+          if [ -z "$LIVE_OPENAI_API_KEY" ]; then
+            echo "::error::LIVE_OPENAI_API_KEY is empty: add it as a repository secret"
+            status=1
+          fi
+          exit "$status"
       - name: Install SQLCipher build deps and curl
         run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev pkg-config curl
       - uses: dtolnay/rust-toolchain@stable

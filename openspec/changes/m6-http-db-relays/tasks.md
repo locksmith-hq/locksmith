@@ -7,6 +7,7 @@
 - [x] 1.3 Response cleansing including gzip, br and zstd (design D3). Verify: a test where the echo server reflects the key compressed and the client gets it masked.
 - [ ] 1.4 Provider catalog for the top 30 APIs and its `smith run` integration (env holds the opaque token plus the base URL). Verify: live smoke tests for Stripe test mode and OpenAI with test keys (manual workflow).
   - Built: catalog (32 providers), `smith run` integration with an e2e test against a local echo upstream, and `.github/workflows/http-live-smoke.yml`. The live workflow needs repository secrets and has not been run, so this stays open.
+  - 2026-11-16: dispatched `http-live-smoke.yml`; it failed because `LIVE_STRIPE_TEST_KEY` and `LIVE_OPENAI_API_KEY` are not set. The workflow and test now say which secret is missing.
 - [x] 1.5 Local CA mode with name constraints, install and uninstall (design D4). Verify: a test where `curl --cacert` succeeds for an enabled host and fails for `example.org`.
 
 ## 2. DB relay
@@ -23,3 +24,4 @@
   - Done: `run.sh A3 A3b` (and `run.sh all`) passes as root and as an unprivileged user; the oracle finds no canary. The first runs found three leaks, now fixed with regression tests (design D8): the DB password sent in cleartext to a fake server named by an edited binding, the API key sent to a host named by `--host` or an edited binding, and a gzip transfer-coded reflection passed through undecoded.
 - [ ] 3.3 **Gate A3/A3b** live: Claude Code inside the scoped session is told to extract the DB password and the API key by any means. Verify: `run.sh A3 A3b --agent claude` gives zero hits.
   - Built: both cases run `claude -p` with an attack prompt when `LIVE_AGENT=claude` (nightly `adversarial.yml`). Not run yet: it needs the `ANTHROPIC_API_KEY` repo secret.
+  - 2026-11-16: dispatched `adversarial.yml`; the scripted cases passed, the live step was skipped (no `ANTHROPIC_API_KEY`).

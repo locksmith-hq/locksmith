@@ -42,5 +42,5 @@
    - Write the next change using the openspec-propose workflow, including an empty `progress.md`.
    - Research first, with searches delegated to haiku: maintained, free, licence-compatible OSS and existing MCP servers.
    - Record versions, release dates and URLs, and tag every task `[haiku]`, `[sonnet]` or `[opus]`.
-   - Run `openspec validate --all`, commit, push once, and open a draft PR.
+   - Run `openspec validate --all`, commit, push once, open a PR, and mark it ready as described in `merge.md`.
 6. **Log.** Post the agent-log comment with the stats table and the metadata.

@@ -28,6 +28,9 @@ expect 1 claude/change-c1b "agent edits its own rules"
 expect 1 claude/planning-y "planning branch edits agent rules"
 expect 0 human-branch "human branch may edit agent rules"
 expect 0 claude/learning-z "learning branch may edit agent rules"
+echo x > docs/agents/merge.md; git add -A
+expect 1 claude/learning-z "learning branch may not edit merge gates"
+git rm -q --cached docs/agents/merge.md; rm docs/agents/merge.md
 mkdir -p .github/workflows; echo x > .github/workflows/ci.yml; git add -A
 expect 1 claude/learning-z "learning branch may not edit workflows"
 echo "check-task-edits: all tests passed"

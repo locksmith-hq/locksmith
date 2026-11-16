@@ -29,6 +29,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       web: ${{ steps.filter.outputs.web }}
       desktop: ${{ steps.filter.outputs.desktop }}
+      harness: ${{ steps.filter.outputs.harness }}
     permissions:
       contents: read
       pull-requests: read  # paths-filter lists changed files through the API
@@ -53,6 +54,9 @@ jobs:
               - 'integrations/**'
               - 'package*.json'
               - '.nvmrc'
+            harness:
+              - 'infra/compose/**'
+              - 'scripts/harness-check.sh'
             desktop:
               - 'apps/desktop/**'
               - 'crates/ls-ipc/**'
@@ -129,3 +133,20 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+
+  # F0 dev stack smoke test. Path-filtered so it runs only when the stack changes (Actions budget).
+  harness:
+    needs: hygiene
+    if: needs.hygiene.outputs.harness == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack and run harness check
+        run: |
+          if [ ! -f scripts/harness-check.sh ]; then echo "harness-check.sh not added yet; skipping"; exit 0; fi
+          cp -n infra/compose/.env.example infra/compose/.env || true
+          docker compose -f infra/compose/compose.yaml up -d --wait
+          bash scripts/harness-check.sh
+      - if: always()
+        run: docker compose -f infra/compose/compose.yaml down -v || true

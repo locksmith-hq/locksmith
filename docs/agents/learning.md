@@ -74,7 +74,7 @@ Keep each lesson short. Workers read the last 15.
 ## 7. Ship
 - Commit, push once, and open a DRAFT PR titled "Learning <date>: <top fix>".
 - The PR body has one section per fix: problem → evidence → root cause → change → how it will be measured. It ends with "Generated with Claude Code".
-- Open ONE `needs-owner` issue titled "Review learning PR #<n>" that links the PR, plus any proposals you couldn't apply (workflow, `CLAUDE.md` or settings changes, and task-spec rewrites). Send one push notification.
+- Label the PR `ready-to-merge`, add the merge summary, and open ONE `needs-owner` issue titled "Learning PR #<n> auto-merges after <time+24h> unless you comment hold". In that issue, also list any proposals you couldn't apply (workflow, `CLAUDE.md` or settings changes, and task-spec rewrites). Send one push notification.
 
 ## 8. Close the loop
 Check the lessons from 7 or more days ago against their `measure` using recent metadata. If a lesson didn't help, say so in this run's PR and propose reverting or replacing it.

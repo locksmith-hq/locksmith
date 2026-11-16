@@ -18,16 +18,11 @@ If the latest `ci` run on main failed, fixing it comes first. Open `claude/fix-m
 
 ## Merge
 Take candidates oldest first, at most 2 per run, and stop at the first failure.
-1. Run `bash scripts/merge-gate.sh <pr>`. It checks gates 1–5: the PR is complete, the guard passes, the branch is up to date, CI is green, and no protected files changed.
-   - If gate 3 fails, run `git merge --no-edit origin/main` on the branch, then `just ci`, then push once, and retry on the next run.
-   - Any other failure: comment the reason on the PR. For protected files, also open a `needs-owner` issue.
-2. **Review.** A fresh `opus` subagent that didn't write the code reviews `git diff origin/main...HEAD` against the change's proposal, design and specs, plus the AGENTS.md security rules. It checks:
-   - the specs are met, with no stubs or fake tests;
-   - nothing can leak a secret;
-   - no reinvented OSS;
-   - licences are compatible.
-
-   It answers PASS or FAIL. Comment `merge-review <sha>: PASS|FAIL` with its reasons, and reuse an existing PASS for the same SHA.
-3. On PASS, merge pinned to that SHA:
+1. Run `bash scripts/merge-gate.sh <pr>`. It checks six gates: the work is complete, the guard passes, the branch is up to date, CI is green, no protected files changed, and the latest Claude review verdict is PASS for the head SHA. That review comes from the `claude-review` workflow, which runs in GitHub Actions when the `ready-to-merge` label is added and on every push to a labelled PR.
+   - **Gate 3 fails:** merge `origin/main` into the branch, run `just ci`, push once, and retry next run. The push re-triggers the review.
+   - **Gate 6 has no verdict yet:** leave the PR for the next run.
+   - **Gate 6 FAIL:** fix the review's findings with the `evaluate-escalate` skill, then push once. The push triggers a new review.
+   - **Any other failure:** comment the reason on the PR. If the failure is about protected files, also open a `needs-owner` issue.
+2. **Merge on GATE PASS,** pinned to the reviewed SHA:
    `gh api -X PUT repos/locksmith-hq/locksmith/pulls/<pr>/merge -f merge_method=merge -f sha=<sha>`
-4. After the merge, if the PR finished an OpenSpec change, use the `archive-change` skill.
+3. **After merging,** if the PR finished an OpenSpec change, use the `archive-change` skill.

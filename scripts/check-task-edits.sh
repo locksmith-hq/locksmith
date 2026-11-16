@@ -9,9 +9,13 @@ set -euo pipefail
 branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 
 # Agents (claude/* branches) may never change their own rules, CI, or this guard.
+# Exception: claude/learning-* may propose edits to agent instructions and run-meta (owner merges);
+# workflows, this guard, CLAUDE.md, openspec/config.yaml and .claude/ stay owner-only for everyone.
 protected_fail=0
 if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
-  changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- docs/agents .github/workflows 'scripts/check-task-edits*' scripts/run-meta.sh CLAUDE.md openspec/config.yaml)
+  paths=(.github/workflows 'scripts/check-task-edits*' CLAUDE.md openspec/config.yaml .claude)
+  [[ "$branch" == claude/learning-* ]] || paths+=(docs/agents scripts/run-meta.sh)
+  changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- "${paths[@]}")
   if [ -n "$changed" ]; then
     echo "task-edit guard: agent branch '$branch' changed protected files (owner-only):"; echo "$changed"
     protected_fail=1

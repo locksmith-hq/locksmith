@@ -9,7 +9,8 @@ Run `bash scripts/run-meta.sh start health`, then check the following against th
 3. **Owner queue.** No open `needs-owner` issue is older than 3 days.
 4. **Merge queue.** No open PR has a "ready for review" comment older than 2 days. No PR has had failing CI for more than 24h.
 5. **Rescue health.** No open `needs-rescue` issue is older than 24h without a rescue comment, and none is older than 72h.
-6. **Run cost drift.** If the last 3 worker metadata blocks all show `duration_s` above 3600, report it as a warning.
+6. **Learning backlog.** No open PR from a `claude/learning-*` branch is older than 3 days. Unmerged lessons don't help the next runs.
+7. **Run cost drift.** If the last 3 worker metadata blocks all show `duration_s` above 3600, report it as a warning.
 
 If every check passes, end with "healthy" and post nothing.
 

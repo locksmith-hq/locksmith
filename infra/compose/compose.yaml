@@ -28,7 +28,7 @@ services:
       retries: 60
 
   openbao:
-    image: ${OPENBAO_IMAGE:-ghcr.io/openbao/openbao:2.7.2}
+    image: ${OPENBAO_IMAGE:-openbao/openbao:2.7.2}
     # Dev mode: in-memory and auto-unsealed. The healthcheck enables the transit engine (idempotent).
     command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${OPENBAO_DEV_ROOT_TOKEN:-dev-only-root}"]
     cap_add: [IPC_LOCK]

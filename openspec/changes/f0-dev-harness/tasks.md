@@ -7,8 +7,8 @@
 - [x] 1.4 Verify: `just up && just ps` shows all four healthy.
 
 ## 2. Agent visibility
-- [ ] 2.1 Add `.mcp.json` with the `postgres` MCP (restricted/read-only, DSN from `.env`) and the `grafana` MCP with `--disable-write` (pointing at http://127.0.0.1:3000, service-account token created by the compose init). If postgres-mcp fails, fall back to googleapis/mcp-toolbox with read-only tools. Run both via docker or `uvx`/binary. Pin versions.
-- [ ] 2.2 Add `docs/dev-harness.md`: what runs, ports, which MCP tool answers which question, and troubleshooting.
+- [x] 2.1 Add `.mcp.json` with the `postgres` MCP (restricted/read-only, DSN from `.env`) and the `grafana` MCP with `--disable-write` (pointing at http://127.0.0.1:3000, service-account token created by the compose init). If postgres-mcp fails, fall back to googleapis/mcp-toolbox with read-only tools. Run both via docker or `uvx`/binary. Pin versions.
+- [x] 2.2 Add `docs/dev-harness.md`: what runs, ports, which MCP tool answers which question, and troubleshooting.
 - [ ] 2.3 Verify: in Claude Code, `/mcp` lists both servers connected. The postgres MCP lists tables, and grafana MCP returns Loki labels.
 
 ## 3. Harness check

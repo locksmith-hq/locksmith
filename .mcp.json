@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network", "host",
+        "-e", "DATABASE_URI=postgresql://${POSTGRES_USER:-locksmith}:${POSTGRES_PASSWORD:-locksmith-dev-only}@127.0.0.1:5432/${POSTGRES_DB:-locksmith}",
+        "crystaldba/postgres-mcp:0.3.0",
+        "--access-mode=restricted"
+      ]
+    },
+    "grafana": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network", "host",
+        "-e", "GRAFANA_URL=http://127.0.0.1:3000",
+        "grafana/mcp-grafana:2.3.0",
+        "-t", "stdio", "--disable-write"
+      ]
+    }
+  }
+}

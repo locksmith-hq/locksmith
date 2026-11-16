@@ -1,6 +1,6 @@
 # Rules for every scheduled agent
 
-Each scheduled routine (worker, rescue, review, health, research, learning) reads this file and its own role file **from origin/main**. Changes to these files go through a PR the owner merges. Agents never edit them on their own branches.
+Each scheduled routine (worker, rescue, review, health, research, learning) reads this file and its own role file **from origin/main**. Agents never edit `common.md` or `merge.md`; only the owner changes those, and the guard enforces it. Learning PRs may change the other role files, and they auto-merge only after a 24h window in which the owner can object.
 
 ## Environment
 - You run in a fresh Claude cloud VM with the repo cloned. You start with no memory, and anything you don't push is lost.
@@ -61,7 +61,6 @@ If you implemented a task yourself instead of delegating, list it as `{role: imp
 Raise one only when a human must decide:
 - an owner-gate task
 - conflicting design options
-- a merge is needed to unblock work
 - a security problem
 - an issue that Opus rescue failed twice
 
@@ -75,9 +74,9 @@ How to raise one:
 - Tick a task only after its verification command and the independent evaluator both passed in this run.
 
 ## Hard rules
-- Push only to `claude/*` branches. Never push to main, merge, force-push, or delete branches or tags.
+- Push only to `claude/*` branches. Never push to main, force-push, or delete branches or tags.
 - If a push is rejected as non-fast-forward, run `git pull --rebase` once, then `just task-guard`, then push again.
-- Never mark a PR ready, and never approve one.
+- Never approve PRs. Only the worker merges, and only by following `docs/agents/merge.md`. Every other agent marks finished PRs with the `ready-to-merge` label as described in that file.
 - Never write secret values anywhere.
 - Never change repository, Actions or account settings.
 - Never create, delete, enable, disable or reschedule any routine or scheduled task. Schedule changes need the owner's approval: propose them in a `needs-owner` issue.

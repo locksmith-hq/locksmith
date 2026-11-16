@@ -13,7 +13,7 @@ branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 # workflows, this guard, CLAUDE.md, openspec/config.yaml and .claude/ stay owner-only for everyone.
 protected_fail=0
 if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
-  paths=(.github/workflows 'scripts/check-task-edits*' CLAUDE.md openspec/config.yaml .claude)
+  paths=(.github/workflows 'scripts/check-task-edits*' CLAUDE.md openspec/config.yaml .claude docs/agents/merge.md docs/agents/common.md)
   [[ "$branch" == claude/learning-* ]] || paths+=(docs/agents scripts/run-meta.sh)
   changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- "${paths[@]}")
   if [ -n "$changed" ]; then

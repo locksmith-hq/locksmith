@@ -55,7 +55,7 @@ Prefer root-cause fixes over workarounds. Prefer reusing an existing tool or OSS
 - Never create, change or delete routines or schedules. Propose schedule changes in the owner issue; the owner approves every schedule change.
 - Never touch `.github/workflows`, the guard scripts, `CLAUDE.md`, `openspec/config.yaml` or `.claude/`. Propose those in the owner issue instead.
 - `task-spec` problems are never edited directly. Write them up as proposed corrected task text in the owner issue.
-- Cloud-environment settings (allowlist, the claude.ai setup script) can't be changed from here. Make the change in `scripts/cloud-setup.sh` and ask the owner to re-paste it.
+- The claude.ai setup script is a bootstrap that runs the repo's `scripts/cloud-setup.sh`, so merged changes to that file take effect on the next session; nothing needs re-pasting. The network allowlist and environment variables can't be changed from here: propose those in the owner issue.
 - Delegate mechanical edits to `sonnet` or `haiku`. Do the diagnosis yourself.
 - Verify with `just ci` and `bash scripts/check-task-edits.test.sh`. For setup changes, also run `bash scripts/cloud-setup.sh` in this VM.
 

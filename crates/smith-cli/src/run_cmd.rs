@@ -130,7 +130,7 @@ pub fn run(o: &Opts, a: RunArgs) -> Result<ExitCode, Fail> {
         print!("{EXPLAIN}");
         return Ok(ExitCode::Ok);
     }
-    if std::env::var_os("LOCKSMITH_SESSION").is_some() {
+    if crate::session::in_session() {
         let keys = a.only;
         return crate::session::run_via_daemon(
             a.project,

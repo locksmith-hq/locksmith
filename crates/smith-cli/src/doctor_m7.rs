@@ -222,7 +222,7 @@ fn upstream_identity() -> Outcome {
     let Some(profile) = b.as_ref().and_then(|b| b.aws.profiles.keys().next()) else {
         return Outcome::skip("AWS delegation not configured");
     };
-    let in_session = std::env::var_os("LOCKSMITH_SESSION").is_some();
+    let in_session = crate::session::in_session();
     let aws_present = aws_on_path();
     let run = (in_session && aws_present).then(|| spawn_identity(profile));
     identity_outcome(profile, in_session, aws_present, run)

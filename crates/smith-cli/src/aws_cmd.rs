@@ -41,7 +41,7 @@ pub fn run(o: &crate::input::Opts, c: AwsCmd) -> Result<ExitCode, Fail> {
     };
     eprintln!("{}", ls_proxy::aws::sts::CONTAINED_NOTICE);
     let aws = Some((profile, true));
-    if std::env::var_os("LOCKSMITH_SESSION").is_some() {
+    if crate::session::in_session() {
         return crate::session::run_via_daemon(None, None, vec![], false, a.cmd, aws);
     }
     crate::session::run_leased(o, None, None, vec![], false, a.cmd, aws)

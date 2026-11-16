@@ -415,3 +415,43 @@ fn same_user_cannot_read_daemon_memory() {
     let _ = d.kill();
     let _ = d.wait();
 }
+
+/// An agent-started lease sets no env var in the agent's shell: `smith run` must still take the
+/// daemon path, by ancestry. (A human session stands in: same lease, env var stripped.)
+#[test]
+fn leased_by_ancestry_without_env_var_uses_daemon() {
+    let e = Env::new();
+    e.setup();
+    let script =
+        r#"env -u LOCKSMITH_SESSION smith run --only K -- sh -c 'test -n "$K" && echo injected'"#;
+    let o = e.session(&[], script).wait_with_output().unwrap();
+    assert!(o.status.success(), "{}", s(&o.stderr));
+    assert_eq!(s(&o.stdout).trim(), "injected");
+}
+
+/// No lease: behaviour is unchanged, smith takes the direct path (never the daemon-run path,
+/// whose refusal says "session start"), whether the daemon is down or up but unleased.
+#[test]
+fn without_lease_falls_back_to_direct_path() {
+    let e = Env::new();
+    e.setup();
+    let direct = |e: &Env| {
+        let o = e
+            .smith(&["run", "--only", "K", "--", "true"])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!o.status.success());
+        assert!(
+            !s(&o.stderr).contains("session start"),
+            "took the daemon path: {}",
+            s(&o.stderr)
+        );
+    };
+    direct(&e); // daemon down
+    let mut d = e.daemon().spawn().unwrap();
+    wait_for(&e.run.join("locksmithd.sock"));
+    direct(&e); // daemon up, no lease
+    let _ = d.kill();
+    let _ = d.wait();
+}

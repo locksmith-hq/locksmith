@@ -274,6 +274,24 @@ pub fn lock() -> Result<ExitCode, Fail> {
     Ok(ExitCode::Ok)
 }
 
+/// Is this process inside a lease? The env var is set only in the child of `smith session start`;
+/// an agent-started session (M10b) is rooted at the already-running agent, so ask the daemon,
+/// which answers by kernel ancestry. Never starts the daemon; any error means "no". Cached.
+pub fn in_session() -> bool {
+    static IN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *IN.get_or_init(|| {
+        if std::env::var_os("LOCKSMITH_SESSION").is_some() {
+            return true;
+        }
+        let Ok(mut c) = connect(false) else {
+            return false;
+        };
+        let _ = c.stream.set_read_timeout(Some(Duration::from_secs(2)));
+        let _ = c.stream.set_write_timeout(Some(Duration::from_secs(2)));
+        matches!(c.call(&Request::LeaseKeys), Ok(Response::Keys { .. }))
+    })
+}
+
 /// `smith run` inside a session: always through the daemon, never a prompt or direct vault open.
 pub fn run_via_daemon(
     project: Option<String>,

@@ -18,11 +18,19 @@ If the latest `ci` run on main failed, fixing it comes first. Open `claude/fix-m
 
 ## Merge
 Take candidates oldest first, at most 2 per run, and stop at the first failure.
-1. Run `bash scripts/merge-gate.sh <pr>`. It checks six gates: the work is complete, the guard passes, the branch is up to date, CI is green, no protected files changed, and the latest Claude review verdict is PASS for the head SHA. That review comes from the `claude-review` workflow, which runs in GitHub Actions when the `ready-to-merge` label is added and on every push to a labelled PR.
-   - **Gate 3 fails:** merge `origin/main` into the branch, run `just ci`, push once, and retry next run. The push re-triggers the review.
-   - **Gate 6 has no verdict yet:** leave the PR for the next run.
-   - **Gate 6 FAIL:** fix the review's findings with the `evaluate-escalate` skill, then push once. The push triggers a new review.
-   - **Any other failure:** comment the reason on the PR. If the failure is about protected files, also open a `needs-owner` issue.
+1. Run `bash scripts/merge-gate.sh <pr>`. It checks six gates:
+   - the change is complete;
+   - the task-edit guard passes;
+   - the PR is mergeable (GitHub reports no conflicts; being behind main is fine);
+   - CI is green;
+   - no protected files changed;
+   - Claude's review passed (from the `claude-review` workflow, which runs on the `ready-to-merge` label and on pushes). A PASS still counts when the PR's own diff is unchanged since the review, for example after merging main in.
+
+   If a gate fails:
+   - **Gate 6, review still running:** don't leave it for the next run. Poll with `until bash scripts/merge-gate.sh <pr>; do sleep 60; done` inside `timeout 900`. It merges the moment the verdict lands.
+   - **Gate 6 FAIL:** fix the findings with the `evaluate-escalate` skill, then push once. The push triggers a new review.
+   - **Gate 3 (conflicts):** merge `origin/main` into the branch, resolve the conflicts, run `just ci`, and push once.
+   - **Any other failure:** comment the reason on the PR. For protected files, also open a `needs-owner` issue.
 2. **Merge on GATE PASS,** pinned to the reviewed SHA:
    `gh api -X PUT repos/locksmith-hq/locksmith/pulls/<pr>/merge -f merge_method=merge -f sha=<sha>`
 3. **After merging,** if the PR finished an OpenSpec change, use the `archive-change` skill.

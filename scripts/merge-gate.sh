@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deterministic merge gates 1-5 for one PR (owner-only file; see .claude/skills/merge-queue).
 #   scripts/merge-gate.sh <pr-number>
+# Gates: complete, guard, mergeable, CI green, no protected files, Claude PASS (content-equivalent).
 # Prints one line per gate and a final "GATE PASS <head-sha>" or "GATE FAIL <reason>".
 # Gate 6: the latest verdict comment from the Claude GitHub App (claude-review workflow) must be
 # "merge-review <sha>: PASS" for the current head SHA.
@@ -30,9 +31,11 @@ echo "ok 1 complete"
 # 2 guard
 BRANCH="$head_ref" bash scripts/check-task-edits.sh >/dev/null || fail "2 guard: check-task-edits failed"
 echo "ok 2 guard"
-# 3 up to date
-git merge-base --is-ancestor origin/main HEAD || fail "3 behind main: merge origin/main into $head_ref, push, retry next run"
-echo "ok 3 up-to-date"
+# 3 mergeable: GitHub can merge it without conflicts (being behind main is fine; main CI catches breakage)
+m=$(gh api "repos/$repo/pulls/$n" -q .mergeable)
+for _ in 1 2 3; do [ "$m" != null ] && break; sleep 3; m=$(gh api "repos/$repo/pulls/$n" -q .mergeable); done
+[ "$m" = true ] || fail "3 not mergeable (conflicts: merge origin/main into $head_ref, resolve, push)"
+echo "ok 3 mergeable"
 # 4 CI green on the head SHA
 # Latest run per check name; the claude-review jobs (review, mention) are judged by gate 6 instead.
 runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" -q '[.check_runs[]|select(.name!="review" and .name!="mention")|{n:.name,s:.status,c:.conclusion,t:(.started_at//"")}]|group_by(.n)|map(max_by(.t))')
@@ -51,7 +54,18 @@ verdict=$(gh api "repos/$repo/issues/$n/comments?per_page=100" --paginate \
 [ -n "$verdict" ] || fail "6 review: no claude merge-review verdict yet (claude-review workflow runs on the ready-to-merge label)"
 vsha=$(sed -nE 's/^merge-review ([0-9a-f]{7,40}): (PASS|FAIL).*/\1/p' <<<"$verdict")
 vres=$(sed -nE 's/^merge-review ([0-9a-f]{7,40}): (PASS|FAIL).*/\2/p' <<<"$verdict")
-[ -n "$vsha" ] && [[ "$sha" == "$vsha"* ]] || fail "6 review: latest verdict is for ${vsha:-unknown}, not head $sha (wait for re-review)"
+[ -n "$vsha" ] || fail "6 review: unreadable verdict"
+if [[ "$sha" != "$vsha"* ]]; then
+  # A PASS still counts if the PR's own change is identical to what was reviewed (only main was
+  # merged in, or commits that net to nothing): compare patch-ids of the PR diffs against main.
+  git cat-file -e "$vsha^{commit}" 2>/dev/null || git fetch -q origin "$vsha" 2>/dev/null || true
+  pid() { git diff "$(git merge-base origin/main "$1")" "$1" | git patch-id --stable | cut -d' ' -f1; }
+  if git cat-file -e "$vsha^{commit}" 2>/dev/null && [ "$(pid "$vsha")" = "$(pid HEAD)" ]; then
+    echo "ok 6 verdict for $vsha still applies: PR content unchanged"
+  else
+    fail "6 review: verdict is for ${vsha}, PR content changed since (re-review runs on push)"
+  fi
+fi
 [ "$vres" = PASS ] || fail "6 review: claude verdict FAIL for $sha (fix findings, push, review reruns)"
 echo "ok 6 claude-review"
 echo "GATE PASS $sha"

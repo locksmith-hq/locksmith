@@ -13,3 +13,6 @@ crates/ls-proxy/tests/fixtures/sigv4/get-vanilla-with-session-token/header-canon
 430a6ddbafc6ab608731c03ed43f06a164d12b0c:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
 6cef78d1bf90f3aacd035702535250749555e11f:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
 6cef78d1bf90f3aacd035702535250749555e11f:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+# Made-up AWS access key IDs (AKIALOCKSMITH*) for the M7 mock relay test; no secret key, never real.
+b070db04c9543cee641bd6a8b031db1a98d88a4b:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+b070db04c9543cee641bd6a8b031db1a98d88a4b:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
@@ -32,21 +32,26 @@ beforeEach(() => {
   m.relayInfo.mockResolvedValue({ git_port: 9418, http_port: null, aws_port: 4566, ca_hosts: ["github.com"] });
   m.auditList.mockResolvedValue([ev(1, "git.fetch"), ev(2, "http.request")]);
   m.auditVerify.mockResolvedValue({ events: 2, broken_at: null, detail: "chain intact" });
+  localStorage.clear();
+  delete document.documentElement.dataset.theme;
 });
 
 const noPassword = (c: HTMLElement) => expect(c.querySelector("input[type=password]")).toBeNull();
 const go = (name: string) => userEvent.click(screen.getByRole("button", { name }));
+/** Sidebar items carry a count after the label, e.g. "Tokens 1". */
+const nav = (tab: string) =>
+  userEvent.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: new RegExp(`^${tab}\\b`) }));
 
 test("overview lists sessions, revoke and revoke all", async () => {
   const { container } = render(<App />);
-  expect(await screen.findByText("claude")).toBeInTheDocument();
-  expect(screen.getByText("Unlocked")).toBeInTheDocument();
-  await go("Revoke L1");
-  // The row is struck through first, then the revoke goes out.
+  expect(await screen.findByText("claude", { selector: ".who-name" })).toBeInTheDocument();
+  expect(screen.getByRole("banner", { name: "Vault" })).toHaveTextContent("Unlocked1 session");
+  await go("Revoke claude session L1");
+  // The card is struck through first, then the revoke goes out.
   await waitFor(() => expect(m.revoke).toHaveBeenCalledWith("L1"));
   await go("Revoke all sessions");
   expect(m.revoke).toHaveBeenCalledWith(null);
-  await go("Lock now");
+  await go("Lock vault");
   expect(m.lock).toHaveBeenCalled();
   noPassword(container);
 });
@@ -56,11 +61,11 @@ test("unlock calls unlock_secure and shows result, no password input anywhere", 
   m.unlockSecure.mockResolvedValue("cancelled");
   const { container } = render(<App />);
   expect(await screen.findByText("Locked")).toBeInTheDocument();
-  await go("Unlock");
+  await go("Unlock vault");
   expect(m.unlockSecure).toHaveBeenCalled();
   expect(await screen.findByText(/Unlock cancelled/)).toBeInTheDocument();
   for (const t of ["Overview", "Keys", "Tokens", "Relays", "Audit"]) {
-    await go(t);
+    await nav(t);
     noPassword(container);
   }
 });
@@ -68,16 +73,15 @@ test("unlock calls unlock_secure and shows result, no password input anywhere", 
 test("keys: defaults to the live session's project and names the sessions that can use the keys", async () => {
   m.status.mockResolvedValue({ locked: false, leases: [{ ...lease, project: "acme", env: "staging", scopes: ["run"] }] });
   render(<App />);
-  await screen.findByText("claude");
-  await go("Keys");
+  await screen.findByText("claude", { selector: ".who-name" });
+  await nav("Keys");
   await waitFor(() => expect(m.keyNames).toHaveBeenCalledWith("acme", "staging"));
   expect(await screen.findByText(/Usable now by/)).toHaveTextContent("L1 (claude)");
-  expect(screen.queryByRole("columnheader", { name: "Project / env" })).toBeNull();
 });
 
 test("keys: lists names and add or rotate calls put_secret_secure", async () => {
   render(<App />);
-  await go("Keys");
+  await nav("Keys");
   expect(await screen.findByText("GITHUB_TOKEN")).toBeInTheDocument();
   expect(m.keyNames).toHaveBeenCalledWith("default", "development");
   await userEvent.type(screen.getByLabelText("Key name"), "NPM_TOKEN");
@@ -88,7 +92,7 @@ test("keys: lists names and add or rotate calls put_secret_secure", async () => 
 
 test("tokens: list and revoke", async () => {
   render(<App />);
-  await go("Tokens");
+  await nav("Tokens");
   expect(await screen.findByText("lsk_ab12")).toBeInTheDocument();
   await go("Revoke token lsk_ab12");
   expect(m.tokenRevoke).toHaveBeenCalledWith("lsk_ab12");
@@ -96,10 +100,10 @@ test("tokens: list and revoke", async () => {
 
 test("relays: ports, instructions and CA hosts", async () => {
   render(<App />);
-  await go("Relays");
-  const git = (await screen.findByRole("rowheader", { name: "Git forwarder" })).closest("tr")!;
-  expect(git).toHaveTextContent("9418");
-  expect(screen.getByRole("rowheader", { name: "HTTP relay" }).closest("tr")).toHaveTextContent("not running");
+  await nav("Relays");
+  expect(await screen.findByRole("article", { name: "Git forwarder" })).toHaveTextContent("Port 9418");
+  expect(screen.getByRole("article", { name: "HTTP relay" })).toHaveTextContent("Not running");
+  expect(screen.getByRole("article", { name: "Database relay" })).toHaveTextContent("Per target");
   expect(screen.getByText("smith git setup")).toBeInTheDocument();
   expect(screen.getByText("smith token issue <KEY> --provider <name>")).toBeInTheDocument();
   expect(screen.getByText("github.com")).toBeInTheDocument();
@@ -107,7 +111,7 @@ test("relays: ports, instructions and CA hosts", async () => {
 
 test("audit: rows, filter, verify OK", async () => {
   render(<App />);
-  await go("Audit");
+  await nav("Audit");
   expect(await screen.findByText("git.fetch")).toBeInTheDocument();
   expect(m.auditList).toHaveBeenCalledWith(200);
   await userEvent.type(screen.getByLabelText("Filter"), "http.request");
@@ -120,7 +124,7 @@ test("audit: rows, filter, verify OK", async () => {
 test("audit: BROKEN shows seq", async () => {
   m.auditVerify.mockResolvedValue({ events: 2, broken_at: 7, detail: "hash mismatch" });
   render(<App />);
-  await go("Audit");
+  await nav("Audit");
   await go("Verify ledger");
   expect(await screen.findByText(/BROKEN at seq 7/)).toBeInTheDocument();
 });
@@ -128,42 +132,58 @@ test("audit: BROKEN shows seq", async () => {
 test("errors show the message", async () => {
   m.revoke.mockRejectedValue({ code: "Locked", message: "vault is locked" });
   render(<App />);
-  await screen.findByText("claude");
-  await go("Revoke L1");
+  await screen.findByText("claude", { selector: ".who-name" });
+  await go("Revoke claude session L1");
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("vault is locked"));
 });
 
-test("key cut names granted scopes for assistive tech", async () => {
+test("scope chips name granted scopes for assistive tech", async () => {
   render(<App />);
-  expect(await screen.findByRole("img", { name: "Scopes granted: git, http" })).toBeInTheDocument();
+  expect(await screen.findByRole("list", { name: "Scopes granted: git, http" })).toBeInTheDocument();
 });
 
-test("struck sessions appear only when the daemon returns them", async () => {
+test("the agent is the basename of the command's first word", async () => {
+  m.status.mockResolvedValue({ locked: false, leases: [{ ...lease, command: "/opt/homebrew/bin/codex exec --full-auto" }] });
   render(<App />);
-  await screen.findByText("claude");
-  expect(screen.queryByText("Struck from the schedule")).toBeNull();
+  expect(await screen.findByRole("listitem", { name: "codex session L1" })).toBeInTheDocument();
+});
+
+test("ended sessions appear only when the daemon returns them", async () => {
+  render(<App />);
+  await screen.findByText("claude", { selector: ".who-name" });
+  expect(screen.queryByText("Recently ended")).toBeNull();
   m.status.mockResolvedValue({ locked: false, leases: [lease, { ...lease, id: "L0", state: "revoked" }, { ...lease, id: "L9", state: "revoked" }] });
   m.auditList.mockResolvedValue([{ ...ev(3, "REVOKE"), target: "L0" }]);
-  await go("Revoke L1");
-  expect(await screen.findByText("Struck from the schedule")).toBeInTheDocument();
+  await go("Revoke claude session L1");
+  expect(await screen.findByText("Recently ended")).toBeInTheDocument();
   const t = new Date(1700000000 * 1000);
   const hhmm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-  expect(screen.getByText("L0", { selector: "s" }).closest("tr")).toHaveTextContent(`revoked ${hhmm}`);
+  expect(screen.getByRole("listitem", { name: `claude session L0, revoked ${hhmm}` })).toHaveTextContent(`revoked ${hhmm}`);
   // No REVOKE event for L9 in the loaded ledger: plain "revoked".
-  expect(screen.getByText("L9", { selector: "s" }).closest("tr")!.lastElementChild).toHaveTextContent(/^revoked$/);
+  expect(screen.getByRole("listitem", { name: "claude session L9, revoked" }).querySelector(".end")).toHaveTextContent(/^revoked$/);
 });
 
-test("ledger targets break only after / and :", async () => {
-  m.auditList.mockResolvedValue([{ ...ev(1, "ACCESS"), target: "acme/dev/KEY http:api.x.com" }]);
-  const { container } = render(<App />);
-  await screen.findByText("ACCESS");
-  expect(container.querySelector(".ev-target")!.innerHTML).toBe("acme/<wbr>dev/<wbr>KEY http:<wbr>api.x.com");
+test("activity reads as a log: sentence-case labels, blocked rows marked, full target in a tooltip", async () => {
+  m.auditList.mockResolvedValue([
+    { ...ev(1, "ACCESS"), target: "acme/dev/KEY http:api.x.com" },
+    { ...ev(2, "HOOK_DENY"), decision: "DENY", target: "Bash: cat ~/.ssh/id_rsa" },
+    { ...ev(3, "REVOKE"), target: "L0" },
+    { ...ev(4, "SOME_NEW_THING") },
+  ]);
+  render(<App />);
+  const used = (await screen.findByText("Key used")).closest("li")!;
+  expect(used).toHaveAttribute("data-kind", "allowed");
+  expect(used.querySelector(".tgt")).toHaveAttribute("title", "acme/dev/KEY http:api.x.com");
+  expect(used).toHaveTextContent("claude L1");
+  expect(screen.getByText("Blocked hook").closest("li")).toHaveAttribute("data-kind", "blocked");
+  expect(screen.getByText("Revoked").closest("li")).toHaveAttribute("data-kind", "revoked");
+  expect(screen.getByText("Some new thing")).toBeInTheDocument();
 });
 
 test("empty schedule tells how to start a session", async () => {
   m.status.mockResolvedValue({ locked: false, leases: [] });
   render(<App />);
-  expect(await screen.findByText(/No keys cut right now/)).toBeInTheDocument();
+  expect(await screen.findByText(/No active sessions/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Revoke all sessions" })).toBeDisabled();
 });
 
@@ -173,4 +193,48 @@ test("daemon unavailable shows the start command", async () => {
   expect(await screen.findByRole("heading", { name: /daemon is not running/ })).toBeInTheDocument();
   expect(screen.getByText("locksmithd", { selector: "pre code" })).toBeInTheDocument();
   noPassword(container);
+});
+
+test("overview footer shows the verified ledger count, and BROKEN when the chain fails", async () => {
+  m.auditVerify.mockResolvedValue({ events: 1284, broken_at: null, detail: "" });
+  render(<App />);
+  expect(await screen.findByText("Ledger chain verified · 1,284 entries")).toBeInTheDocument();
+});
+
+test("vault header states the vault, offers one primary action and turns the sidebar dial", async () => {
+  const { container } = render(<App />);
+  const vault = await screen.findByRole("banner", { name: "Vault" });
+  await waitFor(() => expect(vault).toHaveTextContent("Unlocked"));
+  const dial = () => container.querySelector(".logo .vault-mark")!;
+  expect(dial()).toHaveAttribute("data-open", "true");
+  expect(screen.queryByRole("switch")).toBeNull();
+  await go("Lock vault");
+  expect(m.lock).toHaveBeenCalled();
+  m.status.mockResolvedValue({ locked: true, leases: [] });
+  await go("Revoke all sessions");
+  await waitFor(() => expect(vault).toHaveTextContent("LockedAgents cannot start sessions or use keys"));
+  expect(dial()).toHaveAttribute("data-open", "false");
+  expect(screen.getByRole("button", { name: "Revoke all sessions" })).toBeDisabled();
+  await go("Unlock vault");
+  expect(m.unlockSecure).toHaveBeenCalled();
+});
+
+test("vault header shows since when, from the ledger's last UNLOCK", async () => {
+  m.auditList.mockResolvedValue([{ ...ev(1, "UNLOCK"), ts: 1700000000 }]);
+  render(<App />);
+  const t = new Date(1700000000 * 1000);
+  const hhmm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+  await waitFor(() => expect(screen.getByRole("banner", { name: "Vault" })).toHaveTextContent(`since ${hhmm}`));
+});
+
+test("appearance override sets the theme and is remembered", async () => {
+  render(<App />);
+  expect(screen.getByRole("radio", { name: "System" })).toBeChecked();
+  await userEvent.click(screen.getByRole("radio", { name: "Dark" }));
+  expect(document.documentElement.dataset.theme).toBe("dark");
+  expect(localStorage.getItem("locksmith.appearance")).toBe("dark");
+  await userEvent.click(screen.getByRole("radio", { name: "Light" }));
+  expect(document.documentElement.dataset.theme).toBe("light");
+  await userEvent.click(screen.getByRole("radio", { name: "System" }));
+  expect(localStorage.getItem("locksmith.appearance")).toBeNull();
 });

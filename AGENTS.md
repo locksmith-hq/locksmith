@@ -21,6 +21,13 @@ Locksmith is an open-source secrets platform and credential gateway for AI codin
 
 `scripts/tree-check.sh` enforces this layout.
 
+## CI policy (GitHub Actions)
+GitHub Actions minutes are limited on a free private repo, so CI runs only two kinds of check:
+- lint and format: `cargo fmt --check`, `clippy`, `cargo-deny`, `npm run lint`;
+- seconds-long hygiene: tree-check, the task guard, agent-doc word budgets, and gitleaks.
+
+Tests, builds, the Docker stack and e2e tests run in the agent VM or locally through `just ci`, and the Claude review checks the result. Never add test, build, Docker, e2e or coverage jobs to `.github/workflows`. macOS and Windows checks run only through the manual `ci-platforms` workflow.
+
 ## Security rules
 - Never print, log or serialize a plaintext secret.
 - Secrets live only in `secrecy`/`zeroize` types, with no Debug, Display or Clone.

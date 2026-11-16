@@ -1,0 +1,25 @@
+name: owner-alert
+
+# Scheduled agents act as the owner's GitHub account, and GitHub never notifies you about your
+# own activity. When an issue gets the needs-owner label, github-actions[bot] @mentions the owner
+# so GitHub sends an email (and a GitHub mobile notification). Costs seconds of Actions time.
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  mention:
+    if: github.event.label.name == 'needs-owner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ vars.OWNER_LOGIN || github.repository_owner }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${NUMBER}/comments" \
+            -f body="@${OWNER} this needs your decision. The scheduled agents stopped here and will continue after you answer on this issue."

@@ -78,5 +78,35 @@ Rule: **build what defines the product and touches plaintext; reuse or rent ever
 | Observability, status, docs | dashboards | OpenTelemetry, Grafana stack, Instatus, Docusaurus/Mintlify |
 | Compliance | controls | Vanta/Drata for SOC2; external pen tests |
 
+## D13. Parity target and where we aim to be better
+Goal stated by the owner: have everything a production engineering org gets from Infisical, plus more where we can do better. The reference list below is Infisical's own marketing copy (figures such as stars and SDK counts are unverified); parity items are scheduled, not promised for GA.
+
+| Infisical capability | Our plan | Phase | Build or outsource |
+|---|---|---|---|
+| AES-256-GCM at rest, own-key option | Per-version DEKs wrapped to gateway keys (D2); customer KMS/HSM for gateway key custody | 1, 3 | build format, outsource KMS |
+| Open source (MIT, `ee/` for premium) | AGPL server + Apache SDKs, no `ee/` | 0 | licence files |
+| SDKs for 9 languages | Generated from OpenAPI: TS, Python, Go, Rust, Java, .NET, Ruby, PHP, C++ later | 3 | outsource (OpenAPI generators), hand-polish top 3 |
+| 100+ integrations, secret syncs | Connector SDK + community repo; first 10: GitHub Actions, GitLab, AWS, GCP, Azure, Vercel, Cloudflare, Kubernetes, Docker, Terraform | 3, 4 | build interface, community/outsourced connectors |
+| Terraform provider | Provider generated from OpenAPI + hand tuning; secrets kept out of state | 3 | outsource generator |
+| Kubernetes operator | Operator syncing grants and secrets, plus a gateway sidecar | 3 | build |
+| Automated rotation, dynamic secrets | Run in the gateway (D2); connector per upstream | 4 | build engine, upstream SDKs |
+| RBAC, approvals, temporary access | D4 policy, D5 proposals; time-boxed grants | 2 | build semantics, evaluator by spike |
+| Point-in-time recovery | Versioned secrets plus audit-chain checkpoints per environment | 2 | build |
+| Full audit logging | D7 hash-chained audit, streaming export | 1, 2 | build, outsource sinks |
+| Honey tokens | Open source, agent-aware (alert on any use, name the agent and source) | 2 | build |
+| SOC 2, HIPAA, FIPS 140-3 | Compliance programme; FIPS needs a validated crypto module (for Rust, evaluate aws-lc-rs FIPS builds) and auditors | 3 and later | outsource (Vanta/Drata, auditors, pen tests) |
+
+Where we aim to be better (each is a requirement for the competitive claim, not a given):
+1. **Agent-native from day one:** agent identities, relay-only by default, access proposals, session source and model, MCP-first connector. Infisical's equivalent (Agent Vault) is in `ee/`.
+2. **Zero-knowledge control plane:** it cannot decrypt, unlike server-side KMS designs (D2).
+3. **Response redaction and honest-limit docs** in the proxy.
+4. **No paywalled security:** honey tokens, approvals, SAML and SCIM, dynamic secrets all open (we sell hosting, support, SLA, compliance packs).
+5. **Pricing by human seat** with machine and agent identities under fair use (D8, hypothesis).
+6. **Simpler self-host:** one Rust binary per role and Postgres only; no Redis requirement.
+7. **Local-first mode:** the offline vault and daemon keep working for solo developers and air-gapped teams.
+8. **Developer experience for coding agents:** plugins (Claude Code, Cursor, Codex), hooks that stop `.env` reads, a Sessions view that shows who and what.
+
+Caveat recorded: parity with a product that has years of head start and a large team is a multi-year effort. The phases order work so each phase is shippable and sellable, and agent-secret-access leads because that is where we differ.
+
 ## D12. Risks
 Large scope: mitigate with thin vertical slices (tasks). Operating a hosted multi-tenant security product (SOC2, incident response, key custody) is a business risk, not only an engineering one. Replacing the exploit-resistance of "separate machine" with software controls on cloud gateways needs independent security review before GA. Pricing and licence choices have commercial consequences that need an owner decision.

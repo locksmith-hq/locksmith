@@ -27,3 +27,9 @@
 
 ## Phase 4 : Depth
 - [ ] 4.1 Secret rotation and dynamic secrets in the gateway, SIEM streaming, SAML/SCIM, audit retention tiers.
+
+## Phase 5 : Parity (see design D13)
+- [ ] 5.1 Parity backlog tracked per D13 row with an owner, a phase and a build-or-outsource decision.
+- [ ] 5.2 Compliance programme: SOC 2 readiness first; HIPAA and FIPS 140-3 scoped separately (validated crypto module, auditor engagement, budget).
+- [ ] 5.3 Integration/connector repo and contribution guide; first 10 connectors.
+- [ ] 5.4 SDKs from OpenAPI for the top 3 languages, then the rest; Terraform provider; Kubernetes operator.

@@ -137,6 +137,21 @@ pub fn info(pid: u32) -> io::Result<ProcInfo> {
     }
 }
 
+/// File name of the executable `pid` runs, for audit text only (never for trust). Reads the
+/// executable path only, never the command line or environment, which can hold secrets.
+pub fn exe_name(pid: u32) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    let p = std::fs::read_link(format!("/proc/{pid}/exe")).ok()?;
+    #[cfg(target_os = "macos")]
+    let p = macos::pid_path(pid).ok()?;
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let p: PathBuf = {
+        let _ = pid;
+        return None;
+    };
+    Some(p.file_name()?.to_string_lossy().into_owned())
+}
+
 /// Identity of a just-spawned child or of this process.
 pub fn id_of(pid: u32) -> io::Result<ProcId> {
     info(pid).map(|i| i.id)
@@ -523,7 +538,7 @@ mod macos {
         })
     }
 
-    fn pid_path(pid: u32) -> io::Result<PathBuf> {
+    pub fn pid_path(pid: u32) -> io::Result<PathBuf> {
         use std::os::unix::ffi::OsStringExt;
         let mut buf = vec![0u8; 4 * 1024]; // PROC_PIDPATHINFO_MAXSIZE
         // SAFETY: proc_pidpath writes at most buf.len() bytes into buf.

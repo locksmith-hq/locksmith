@@ -29,7 +29,7 @@ fn tools() -> Value {
              "hosts": {"type": "array", "items": {"type": "string"}},
              "placement": {"type": "string"}}}},
         {"name": "locksmith_start_session",
-         "description": "Start a session for this process within the human's agent policy. Out-of-policy requests are refused, never narrowed; the human must start those.",
+         "description": "Start a session for this agent (the process that launched this MCP server) and every command it runs, within the human's agent policy. Starting again replaces your earlier session. Out-of-policy requests are refused, never narrowed; the human must start those.",
          "inputSchema": {"type": "object", "required": ["project", "env", "scopes", "ttl_secs"], "properties": {
              "project": {"type": "string"},
              "env": {"type": "string"},

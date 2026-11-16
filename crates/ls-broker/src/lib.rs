@@ -7,7 +7,7 @@
 //! (3) the lease's project, environment and scopes cover the operation.
 
 use ls_ipc::LeaseInfo;
-use ls_platform::proc::{Digest, Peer, Pin, ProcId, descends_from, pin};
+use ls_platform::proc::{Digest, Peer, Pin, ProcId, descends_from, info, pin};
 use std::path::{Path, PathBuf};
 
 mod doctor;
@@ -122,6 +122,9 @@ pub struct Lease {
     pub env: String,
     pub scopes: Vec<String>,
     pub command: String,
+    /// Started by the agent through `AgentSessionStart` (only such a lease may be replaced by
+    /// another agent start from the same root).
+    pub agent: bool,
     pub created_at: i64,
     pub expires_at: i64,
     pub state: LeaseState,
@@ -201,13 +204,40 @@ fn new_id() -> String {
     )
 }
 
+/// Root for an agent-started lease (M10b D4): the kernel-identified parent of `caller` (the
+/// agent that launched the MCP server over stdio), so the lease covers the agent's own shell
+/// commands. Never taken from the request. Refused when the parent cannot be read, is pid <= 1
+/// (orphaned caller), belongs to another uid, or is younger than the caller (recycled pid), or
+/// when the caller is not the same live process or was reparented while we looked.
+pub fn agent_root(caller: ProcId, uid: u32) -> Result<ProcId, String> {
+    let me = info(caller.pid).map_err(|_| "calling process is gone".to_string())?;
+    if me.id != caller {
+        return Err("calling process changed".into());
+    }
+    if me.ppid <= 1 {
+        return Err("calling process has no parent agent".into());
+    }
+    let parent = info(me.ppid).map_err(|_| "parent process cannot be identified".to_string())?;
+    if parent.uid != uid {
+        return Err("parent process belongs to another user".into());
+    }
+    if parent.id.start > caller.start {
+        return Err("parent pid was recycled".into());
+    }
+    match info(caller.pid) {
+        Ok(again) if again.id == caller && again.ppid == parent.id.pid => Ok(parent.id),
+        _ => Err("calling process was reparented".into()),
+    }
+}
+
 /// `"run"` is the only M3 operation scope; `"*"` grants every scope.
 pub fn scope_allows(scopes: &[String], scope: &str) -> bool {
     scopes.iter().any(|s| s == "*" || s == scope)
 }
 
 impl Leases {
-    /// Create a lease rooted at `root` (the kernel-identified `smith session start` process).
+    /// Create a lease rooted at `root` (the kernel-identified `smith session start` process, or for
+    /// an agent start the agent that launched the MCP server, see [`agent_root`]).
     /// An existing lease with the same root is revoked first.
     #[allow(clippy::too_many_arguments)]
     pub fn start(
@@ -232,6 +262,7 @@ impl Leases {
             env,
             scopes,
             command,
+            agent: false,
             created_at: now,
             expires_at: now.saturating_add(ttl_secs.min(i64::MAX as u64) as i64),
             state: LeaseState::Active,
@@ -315,6 +346,12 @@ impl Leases {
     pub fn pin(&mut self, id: &str, binding: Option<Vec<u8>>) {
         if let Some(l) = self.all.iter_mut().find(|l| l.id == id) {
             l.binding = binding.map(PinnedBinding);
+        }
+    }
+
+    pub fn mark_agent(&mut self, id: &str) {
+        if let Some(l) = self.all.iter_mut().find(|l| l.id == id) {
+            l.agent = true;
         }
     }
 
@@ -514,5 +551,85 @@ mod tests {
         let m = Manifest::from_dir(&dir);
         assert_eq!(m.classify(&peer), Role::Unknown);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// `sh` standing in for the agent, with two `sleep` children: the MCP server and a shell
+    /// command the agent ran. Returns (agent, [mcp, shell]).
+    fn agent_tree() -> (std::process::Child, [ProcId; 2]) {
+        use std::io::BufRead;
+        let mut sh = std::process::Command::new("sh")
+            .args(["-c", "sleep 30 & echo $!; sleep 30 & echo $!; wait"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut out = std::io::BufReader::new(sh.stdout.take().unwrap()).lines();
+        let mut kid = || id_of(out.next().unwrap().unwrap().trim().parse().unwrap()).unwrap();
+        let kids = [kid(), kid()];
+        (sh, kids)
+    }
+
+    fn kill(p: u32) {
+        let _ = std::process::Command::new("kill")
+            .arg(p.to_string())
+            .status();
+    }
+
+    #[test]
+    fn agent_root_is_the_mcp_servers_parent_and_covers_its_shell() {
+        let uid = ls_platform::current_uid();
+        let (mut agent, [mcp, shell]) = agent_tree();
+        let root = agent_root(mcp, uid).unwrap();
+        assert_eq!(root, id_of(agent.id()).unwrap());
+        let mut ls = Leases::default();
+        start(&mut ls, root, 60, 0);
+        assert!(
+            ls.authorize(shell, "run", "p", "dev", 1).is_ok(),
+            "agent's shell"
+        );
+        assert!(
+            ls.authorize(mcp, "run", "p", "dev", 1).is_ok(),
+            "MCP server"
+        );
+        assert_eq!(
+            ls.authorize(me(), "run", "p", "dev", 1).unwrap_err(),
+            Denial::NoLease,
+            "the agent's parent (the terminal)"
+        );
+        for p in [mcp, shell] {
+            kill(p.pid);
+        }
+        agent.wait().unwrap();
+    }
+
+    #[test]
+    fn agent_root_refusals() {
+        let uid = ls_platform::current_uid();
+        assert!(agent_root(me(), uid).is_ok());
+        assert!(agent_root(me(), uid.wrapping_add(1)).is_err(), "other uid");
+        let reused = ProcId {
+            pid: me().pid,
+            start: me().start + 1,
+        };
+        assert!(agent_root(reused, uid).is_err(), "pid reuse");
+        let (mut c, gone) = child();
+        c.kill().unwrap();
+        c.wait().unwrap();
+        assert!(agent_root(gone, uid).is_err(), "exited caller");
+        // Not readable by a normal user on macOS; the orphan below covers pid 1 there.
+        if let Ok(init) = id_of(1) {
+            assert!(agent_root(init, uid).is_err(), "pid 1 has no parent agent");
+        }
+        // An orphan reparented to pid 1 has no agent to root at.
+        let (mut sh, [a, b]) = agent_tree();
+        kill(sh.id());
+        sh.wait().unwrap();
+        // macOS has no subreapers; Linux may reparent to one (pid > 1), so only check pid 1 there.
+        #[cfg(target_os = "macos")]
+        assert_eq!(info(a.pid).unwrap().ppid, 1, "orphan reparented to launchd");
+        if info(a.pid).is_ok_and(|i| i.ppid == 1) {
+            assert!(agent_root(a, uid).is_err(), "orphan");
+        }
+        kill(a.pid);
+        kill(b.pid);
     }
 }

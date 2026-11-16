@@ -327,8 +327,9 @@ fn load_agent_policy() -> Result<policy::Policy, String> {
     policy::load(&policy::default_path(), ls_platform::current_uid())
 }
 
-/// `AgentSessionStart` (M10b D1): a lease without the passphrase, only on an unlocked vault and
-/// only when the request fits the agent policy exactly. Grants and refusals are audited.
+/// `AgentSessionStart` (M10b D1, D4): a lease without the passphrase, only on an unlocked vault
+/// and only when the request fits the agent policy exactly, rooted at the agent process that
+/// launched the MCP server (`caller`). Grants, replacements and refusals are audited.
 #[allow(clippy::too_many_arguments)]
 fn agent_session_start(
     st: &mut State,
@@ -354,17 +355,38 @@ fn agent_session_start(
             "vault is locked; the human must unlock it before an agent can start a session",
         );
     }
-    if let Some(l) = st
-        .leases
-        .find(caller, t)
-        .filter(|l| l.info(t).state == "active")
-    {
-        return err(
-            ErrorCode::Denied,
-            format!("already inside session {}; sessions cannot be nested", l.id),
-        );
-    }
     let target = format!("{project}/{env}");
+    // D4: root at the agent that launched the MCP server, as the kernel reports it.
+    let root = match ls_broker::agent_root(caller, ls_platform::current_uid()) {
+        Ok(r) => r,
+        Err(why) => {
+            let _ = st.audit(rec(
+                actor,
+                "BLOCKED",
+                Some(target),
+                &format!("agent_root: {why}"),
+                "DENY",
+                None,
+            ));
+            return err(
+                ErrorCode::Denied,
+                format!("agent_root: {why}; ask the human to start this session"),
+            );
+        }
+    };
+    // No nesting. The one exception: this agent's own earlier agent-started lease is replaced.
+    let mut replaced = None;
+    for p in [root, caller] {
+        if let Some(l) = st.leases.find(p, t).filter(|l| l.info(t).state == "active") {
+            if !(l.root == root && l.agent) {
+                return err(
+                    ErrorCode::Denied,
+                    format!("already inside session {}; sessions cannot be nested", l.id),
+                );
+            }
+            replaced = Some(l.id.clone());
+        }
+    }
     let fit = match &st.agent_policy {
         Some(Ok(p)) => p.check(&project, &env, &scopes, ttl_secs),
         Some(Err(e)) => Err(e.clone()),
@@ -384,12 +406,29 @@ fn agent_session_start(
             format!("agent_policy: {why}; ask the human to start this session"),
         );
     }
-    let rule = format!("agent_policy {}", scopes.join(","));
+    let rule = format!(
+        "agent_policy {}; root pid {} ({})",
+        scopes.join(","),
+        root.pid,
+        ls_platform::proc::exe_name(root.pid).unwrap_or_else(|| "?".into())
+    );
+    // Revokes `replaced` (same root) before the new lease exists.
     let l = st
         .leases
-        .start(caller, ttl_secs, project, env, scopes, command, t);
+        .start(root, ttl_secs, project, env, scopes, command, t);
     let (id, expires_at) = (l.id.clone(), l.expires_at);
     st.leases.pin(&id, binding);
+    st.leases.mark_agent(&id);
+    if let Some(old) = replaced {
+        let _ = st.audit(rec(
+            actor,
+            "REVOKE",
+            Some(old.clone()),
+            &format!("replaced by agent session {id}"),
+            "ALLOW",
+            Some(old),
+        ));
+    }
     if let Err(e) = st.audit(rec(
         actor,
         "SESSION_START",
@@ -564,17 +603,28 @@ fn handle(d: &Arc<Daemon>, peer: &Peer, actor: &Actor, req: Request) -> Response
             ttl_secs,
             command,
             binding,
-        } => agent_session_start(
-            &mut d.state(),
-            peer.id,
-            actor,
-            project,
-            env,
-            scopes,
-            ttl_secs,
-            command,
-            binding,
-        ),
+        } => {
+            let mut st = d.state();
+            let before = st.leases.active(t);
+            let r = agent_session_start(
+                &mut st, peer.id, actor, project, env, scopes, ttl_secs, command, binding,
+            );
+            // A replaced lease's relays and tokens die with it, as on Revoke.
+            let live = st.leases.active(t);
+            let gone: Vec<String> = before
+                .into_iter()
+                .map(|l| l.id)
+                .filter(|i| !live.iter().any(|l| &l.id == i))
+                .collect();
+            if !gone.is_empty() {
+                http::prune(d, &st);
+                aws::prune(d, &st);
+                drop(st);
+                db::sweep(d);
+                aws::revoke_older(d, &gone);
+            }
+            r
+        }
         Request::SessionEnd => {
             d.state().leases.end(peer.id);
             aws::prune(d, &d.state());
@@ -1166,12 +1216,23 @@ mod tests {
             exe: "locksmith-mcp".into(),
             exe_hash: String::new(),
         };
+        // `sh` is the agent, with two children: the MCP server (the caller) and a shell command.
+        use std::io::BufRead;
+        let mut agent = std::process::Command::new("sh")
+            .args(["-c", "sleep 30 & echo $!; sleep 30 & echo $!; wait"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut out = std::io::BufReader::new(agent.stdout.take().unwrap()).lines();
+        let mut kid = || id_of(out.next().unwrap().unwrap().trim().parse().unwrap()).unwrap();
+        let (mcp, shell) = (kid(), kid());
+        let root = id_of(agent.id()).unwrap();
         let me = id_of(std::process::id()).unwrap();
         let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
-        let ask = |st: &mut State, env: &str, scopes: &[&str], ttl| {
+        let ask_as = |st: &mut State, caller, env: &str, scopes: &[&str], ttl| {
             agent_session_start(
                 st,
-                me,
+                caller,
                 &a,
                 "app".into(),
                 env.into(),
@@ -1181,6 +1242,8 @@ mod tests {
                 None,
             )
         };
+        let ask =
+            |st: &mut State, env: &str, scopes: &[&str], ttl| ask_as(st, mcp, env, scopes, ttl);
         let code = |r: &Response| match r {
             Response::Error { code, .. } => Some(*code),
             _ => None,
@@ -1224,18 +1287,75 @@ mod tests {
         }
         assert!(st.leases.active(now()).is_empty(), "no lease on denial");
 
+        // A caller whose parent cannot be identified (it has exited): refused and audited.
+        let (mut c, gone) = {
+            let c = std::process::Command::new("true").spawn().unwrap();
+            let id = id_of(c.id()).unwrap();
+            (c, id)
+        };
+        c.wait().unwrap();
+        assert_eq!(
+            code(&ask_as(&mut st, gone, "dev", &["http"], 60)),
+            Some(ErrorCode::Denied)
+        );
+        assert!(st.leases.active(now()).is_empty(), "no lease on denial");
+
         let Response::Session { id, .. } = ask(&mut st, "dev", &["http"], 600) else {
             panic!("in-policy request not granted")
         };
-        let l = st.leases.find(me, now()).unwrap();
+        // Rooted at the agent: its shell commands and the MCP server are in, the terminal is not.
+        for p in [shell, mcp, root] {
+            let l = st.leases.find(p, now()).unwrap();
+            assert_eq!(
+                (l.id.as_str(), l.root, l.project.as_str(), l.env.as_str()),
+                (id.as_str(), root, "app", "dev")
+            );
+        }
+        assert!(st.leases.find(me, now()).is_none(), "the agent's parent");
+
+        // A second start from the same agent replaces the first; policy still applies to it.
         assert_eq!(
-            (l.id.as_str(), l.project.as_str(), l.env.as_str()),
-            (id.as_str(), "app", "dev")
+            code(&ask(&mut st, "prod", &["http"], 60)),
+            Some(ErrorCode::Denied)
+        );
+        let Response::Session { id: id2, .. } = ask(&mut st, "dev", &["http"], 300) else {
+            panic!("replacement not granted")
+        };
+        assert_ne!(id, id2);
+        let active = st.leases.active(now());
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].id, id2);
+
+        // Nesting: the agent inside a human-started lease, or a same-root human lease, refuses.
+        st.leases.revoke(None, now());
+        st.leases.start(
+            me,
+            60,
+            "app".into(),
+            "dev".into(),
+            s(&["http"]),
+            "human".into(),
+            now(),
         );
         assert_eq!(
             code(&ask(&mut st, "dev", &["http"], 60)),
             Some(ErrorCode::Denied),
-            "no nesting"
+            "no nesting under a human lease"
+        );
+        st.leases.revoke(None, now());
+        st.leases.start(
+            root,
+            60,
+            "app".into(),
+            "dev".into(),
+            s(&["http"]),
+            "human".into(),
+            now(),
+        );
+        assert_eq!(
+            code(&ask(&mut st, "dev", &["http"], 60)),
+            Some(ErrorCode::Denied),
+            "a human lease is never replaced by the agent"
         );
 
         let ev = st.vault.as_ref().unwrap().audit_list(100).unwrap();
@@ -1243,15 +1363,36 @@ mod tests {
             .iter()
             .map(|e| (e.record.action.as_str(), e.record.decision.as_str()))
             .collect();
-        assert_eq!(
-            rows.iter().filter(|r| **r == ("BLOCKED", "DENY")).count(),
-            4
+        let n = |r: (&str, &str)| rows.iter().filter(|x| **x == r).count();
+        assert_eq!(n(("BLOCKED", "DENY")), 6, "4 policy, 1 agent_root, 1 prod");
+        assert_eq!(n(("SESSION_START", "ALLOW")), 2);
+        assert_eq!(n(("REVOKE", "ALLOW")), 1);
+        let rule = |a: &str| {
+            ev.iter()
+                .filter(|e| e.record.action == a)
+                .map(|e| e.record.policy_rule.clone())
+                .collect::<Vec<_>>()
+        };
+        assert!(rule("SESSION_START")[0].contains(&format!("root pid {} (", root.pid)));
+        assert!(
+            !rule("SESSION_START")[0].contains("(?)"),
+            "exe name resolved"
         );
         assert_eq!(
-            rows.iter()
-                .filter(|r| **r == ("SESSION_START", "ALLOW"))
-                .count(),
-            1
+            rule("REVOKE")[0],
+            format!("replaced by agent session {id2}")
         );
+        assert!(
+            rule("BLOCKED")
+                .iter()
+                .any(|r| r.starts_with("agent_root: "))
+        );
+
+        for p in [mcp, shell] {
+            let _ = std::process::Command::new("kill")
+                .arg(p.pid.to_string())
+                .status();
+        }
+        agent.wait().unwrap();
     }
 }

@@ -29,6 +29,15 @@ if cargo nextest --version >/dev/null 2>&1; then say OK nextest; else say WARN n
 if command -v node >/dev/null; then say OK node "$(node --version)"; else say FAIL node "missing"; fail=1; fi
 if command -v openspec >/dev/null; then say OK openspec; else say WARN openspec "missing: npm i -g @fission-ai/openspec"; fi
 
+# npm deps (test-web needs them; npm ci takes minutes, so run it in the background)
+if [ -d node_modules ]; then say OK node_modules; else say WARN node_modules "missing: run 'npm ci' in the background before just ci"; fi
+
+# container registries (ghcr.io returned 403 in the Claude cloud sandbox on 2026-11-16)
+for r in https://registry-1.docker.io/v2/ https://ghcr.io/v2/; do
+  code=$(curl -s -m 8 -o /dev/null -w '%{http_code}' "$r")
+  case "$code" in 200|401) say OK registry "$r" ;; *) say WARN registry "$r -> HTTP $code (use a Docker Hub image instead)" ;; esac
+done
+
 # disk (cargo target dirs fill 30 GB VMs fast)
 avail=$(df -Pk . | awk 'NR==2 {print int($4/1048576)}')
 if [ "${avail:-0}" -ge 5 ]; then say OK disk "${avail} GB free"; else say WARN disk "${avail} GB free: run cargo clean -p <crate> or remove target/debug/incremental"; fi

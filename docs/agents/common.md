@@ -29,7 +29,7 @@ The repo is private on GitHub Free: $12/month of Actions, and macOS minutes cost
 - When unsure, go one tier up.
 
 ## Run metadata (on every agent-log comment and every issue you open)
-End each comment or issue body with the output of `bash scripts/run-meta.sh report`. Inside that same yaml block, append the fields only you know:
+End each comment or issue body with ONE ```yaml fenced block. Inside it, put the output of `bash scripts/run-meta.sh report` (plain YAML with no fences), then append the fields only you know:
 
 ```yaml
   orchestrator: <model you run on>
@@ -48,7 +48,7 @@ End each comment or issue body with the output of `bash scripts/run-meta.sh repo
     - {what: "<short description>", lost_s: <seconds, estimate allowed>, fix_idea: "<one line>"}
 ```
 
-Take `duration_ms`, `tokens` and `tool_uses` from the usage each Agent result reports. Write `unknown` if it doesn't report them, and never estimate. Never put secrets in metadata.
+If you implemented a task yourself instead of delegating, list it as `{role: implementer, tier: <your model>, self: true}`. Take `duration_ms`, `tokens` and `tool_uses` from the usage each Agent result reports. Write `unknown` if it doesn't report them, and never estimate. Never put secrets in metadata.
 
 ## Logs
 - `openspec/changes/<id>/progress.md` on the change branch is append-only, and `scripts/check-task-edits.sh` enforces this.

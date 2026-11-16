@@ -1,11 +1,12 @@
 # Rules for every scheduled agent
 
-Each scheduled routine (worker, rescue, review, health, research) reads this file and its own role file **from origin/main**. Changes to these files go through a PR the owner merges. Agents never edit them on their own branches.
+Each scheduled routine (worker, rescue, review, health, research, learning) reads this file and its own role file **from origin/main**. Changes to these files go through a PR the owner merges. Agents never edit them on their own branches.
 
 ## Environment
 - You run in a fresh Claude cloud VM with the repo cloned. You start with no memory, and anything you don't push is lost.
 - GitHub works through REST only: `gh api repos/locksmith-hq/locksmith/...`. `gh pr` and `gh issue` (GraphQL) are blocked.
 - First command of every run: `bash scripts/run-meta.sh start <kind>`.
+- Then read the last 15 entries of `docs/agents/lessons.md` from origin/main (`git show origin/main:docs/agents/lessons.md`). Follow them unless your role file says otherwise.
 
 ## Actions budget
 The repo is private on GitHub Free: $12/month of Actions, and macOS minutes cost about 10x Linux. Every push triggers CI. So:
@@ -24,7 +25,7 @@ End each comment or issue body with the output of `bash scripts/run-meta.sh repo
 
 ```yaml
   orchestrator: <model you run on>
-  outcome: done | failed | rescue | blocked | idle | ci-fix | healthy | nothing-to-rescue
+  outcome: done | failed | rescue | blocked | idle | ci-fix | healthy | nothing-to-rescue | learned | no-fix
   change: <id or none>
   task: <id or none>
   attempts: <n>

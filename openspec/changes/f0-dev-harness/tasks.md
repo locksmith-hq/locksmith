@@ -13,7 +13,7 @@
 
 ## 3. Harness check
 - [ ] 3.1 `scripts/harness-check.sh`. It checks each healthcheck, that no port binds 0.0.0.0, that an OTLP log (via `curl` to 4318) can be found in Loki, that the OpenBao transit can encrypt and decrypt a test string, and that the WireMock journal records a request. It prints one PASS/FAIL line per check.
-- [ ] 3.2 Add the `just harness-check` recipe. The CI job already exists in `ci.yml` (job `harness`, owner-maintained because `.github/workflows` is protected). It runs only when `infra/compose/**` or `scripts/harness-check.sh` changes, and it runs `bash scripts/harness-check.sh` after `docker compose up -d --wait`.
+- [ ] 3.2 Add the `just harness-check` recipe. It runs in the agent VM (free compute), not in GitHub Actions: there is no harness CI job, because Actions minutes are reserved for build and test.
 - [ ] 3.3 Verify: `just reset && just up && just harness-check` exits 0, and stopping lgtm makes it exit non-zero.
 
 ## 4. Local verification

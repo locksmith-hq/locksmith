@@ -36,4 +36,4 @@ EOF
 The script prints one complete fenced block, so don't wrap it in another fence. Take subagent numbers from each Agent result's usage, and write `unknown` instead of guessing. Never put secrets in it.
 
 ## 3. agent-log comment
-Post one comment on the open issue labelled `agent-log`: 1–3 lines of summary, then the block. Use `gh api repos/locksmith-hq/locksmith/issues/<n>/comments -f body=...`, because `gh issue` is blocked in cloud runs.
+Post one comment on the open issue labelled `agent-log`: first the line `<!-- agent -->`, then 1–3 lines of summary, then the block. Every comment you post anywhere starts with `<!-- agent -->`. Use `gh api repos/locksmith-hq/locksmith/issues/<n>/comments -f body=...`, because `gh issue` is blocked in cloud runs.

@@ -9,7 +9,7 @@ description: Start of every scheduled Locksmith agent run. Runs preflight (docke
    - It prints one line per check: `OK`, `FIXED`, `WARN` or `FAIL`.
    - Fix every `FAIL` before doing real work.
    - Record each `FIXED`, `WARN` or `FAIL` line as a `friction` entry. The `run-log` skill has the format.
-2. Read the active lessons the script prints at the end, and follow them.
+2. Read the active lessons the script prints at the end, and follow them. Also read `docs/agents/owner.md`: those are the owner's standing decisions.
 3. If you work on an existing `claude/change-<id>` branch and `git rev-list --count HEAD..origin/main` is not 0, run `git merge --no-edit origin/main` before the baseline `just ci`. Never rebase a pushed branch. If the merge conflicts in a way you can't resolve cleanly, run `git merge --abort` and record it as friction.
 
 ## Gotchas (cloud VM, observed 2026-11-16)

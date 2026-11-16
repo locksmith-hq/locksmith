@@ -3,7 +3,7 @@
 The worker escalates here after two failed attempts.
 
 0. If `gh api 'repos/locksmith-hq/locksmith/issues?labels=needs-rescue&state=open' -q length` is 0, reply "nothing to rescue" and stop.
-1. Use the `run-start` skill with `rescue`. Take the **oldest** open rescue issue, one per run. Read the issue and its comments, the change docs, the last 5 progress entries, and the CI logs.
+1. Run `bash scripts/run-lock.sh acquire rescue-<session>` (stop if busy; release at the end). Then use the `run-start` skill with `rescue`. Take the **oldest** open rescue issue, one per run. Read the issue and its comments, the change docs, the last 5 progress entries, and the CI logs.
 2. **Diagnose before you fix.** Reproduce the failure. Confirm one root cause with evidence. Decide whether the problem is the code or the task itself.
 3. **Fix the root cause.** Use the `evaluate-escalate` skill with yourself as the implementer, and use an Opus evaluator. Mechanical parts can go to sonnet or haiku.
 4. **On PASS:**

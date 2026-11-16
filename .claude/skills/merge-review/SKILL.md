@@ -18,6 +18,7 @@ You are the independent reviewer. You did not write this code. You are judging i
    3. **Tests.** The tests exercise real behaviour, not mocks of the thing under test.
    4. **Reuse.** Nothing is hand-written that `docs/research/oss-building-blocks.md` or an existing crate already covers. New dependencies use real versions and compatible licences.
    5. **Task guard.** Task text is only ticked, never edited.
+   6. **Owner decisions.** Every line added to `docs/agents/owner.md` must link to a `needs-owner` issue with a matching reply from `tomer555` that has no `<!-- agent -->` marker. A line without that evidence is a FAIL.
 4. **Post findings.** Put each real problem on its line as an inline comment, one sentence plus the fix. Skip style nits.
 5. **Post exactly one verdict comment:**
    ```

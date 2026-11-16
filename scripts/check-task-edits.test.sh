@@ -39,4 +39,9 @@ expect 1 claude/learning-z "learning branch may not edit merge-queue skill"
 git rm -rq --cached .claude; rm -rf .claude
 mkdir -p .github/workflows; echo x > .github/workflows/ci.yml; git add -A
 expect 1 claude/learning-z "learning branch may not edit workflows"
+git checkout -q main; mkdir -p docs/agents; printf -- '- d1\n' > docs/agents/owner.md; git add -A; git commit -qm owner; git update-ref refs/remotes/origin/main HEAD
+git switch -qc claude/change-o1; printf -- '- d2\n' >> docs/agents/owner.md; git add -A
+expect 0 claude/change-o1 "agent may append to owner.md"
+printf -- '- changed\n- d2\n' > docs/agents/owner.md; git add -A
+expect 1 claude/change-o1 "agent may not rewrite owner.md"
 echo "check-task-edits: all tests passed"

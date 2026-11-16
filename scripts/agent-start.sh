@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# First command of every scheduled agent run (see .claude/skills/run-start).
+#   scripts/agent-start.sh <kind>
+# Starts run metadata, runs preflight, prints active lessons. Exit 1 if preflight has a FAIL.
+set -uo pipefail
+kind="${1:?usage: agent-start.sh <kind>}"
+bash scripts/run-meta.sh start "$kind"
+echo "== preflight"
+bash scripts/agent-preflight.sh; pf=$?
+echo "== active lessons (docs/agents/lessons.md on origin/main)"
+git show origin/main:docs/agents/lessons.md 2>/dev/null | awk '/^## L[0-9]+/{p=1} p' || echo "(none)"
+exit "$pf"

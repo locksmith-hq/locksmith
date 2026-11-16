@@ -30,6 +30,7 @@ tree-check:
 task-guard:
     scripts/check-task-edits.test.sh
     scripts/check-task-edits.sh
+    scripts/check-agent-docs.sh
 
 dev app:
     npm run build -w apps/{{app}}

@@ -1,51 +1,37 @@
 # Locksmith monorepo
 
-Credential broker for AI coding agents. Agents perform authenticated operations without holding the credential.
+Locksmith is an open-source secrets platform and credential gateway for AI coding agents. Agents perform authenticated operations without ever holding the credential.
 
 ## Build and test
-
-- `just ci`: fmt, lint, test-rust, test-web, tree-check (run before every push)
-- `just fmt` / `just lint` / `just test-rust` / `just test-web` / `just tree-check`
-- `just dev <app>`: build one app, e.g. `just dev web`
-- `npm run build`, `npm test`, `npm run lint`: run across all npm workspaces
-- `cargo test --workspace`: run one Rust crate with `cargo test -p <crate>`
+- `just ci` runs fmt, lint, test-rust, test-web, tree-check and task-guard. Run it before every push.
+- Other recipes: `just up` / `just down` (local stack), `just dev <app>`, and `cargo test -p <crate>` for a single crate.
+- npm workspaces only. Never use pnpm or yarn. After changing a `package.json`, run `npm i` in that package's directory.
 
 ## Layout
+| Path | Contents |
+|---|---|
+| `crates/` | Rust libraries and binaries |
+| `services/` | axum backends |
+| `apps/` | web, docs, desktop (Tauri) |
+| `packages/` | shared TypeScript |
+| `integrations/` | thin agent plugins |
+| `infra/` | compose, helm, OpenTofu |
+| `tests/` | e2e and adversarial tests |
+| `scripts/` | tooling |
 
-- `crates/`: Rust core libraries and binaries (smith-cli, locksmithd, locksmith-mcp)
-- `services/`: Rust axum backend services
-- `apps/`: web, docs, desktop (npm workspaces, except desktop which is Tauri/Rust)
-- `packages/`: shared TypeScript (tsconfig, eslint-config, ui)
-- `integrations/`: thin agent/IDE/CI plugins that call `smith hook` or `locksmith-mcp`
-- `infra/`: OpenTofu IaC
-- `tests/`: cross-component end-to-end tests (`tests/e2e/`)
-- `docs/`: product and planning docs
-- `scripts/tree-check.sh`: enforces where Rust and package.json may live
+`scripts/tree-check.sh` enforces this layout.
 
 ## Security rules
-
 - Never print, log or serialize a plaintext secret.
-- Secrets only in secrecy/zeroize types with no Debug/Display/Clone.
-- Never block unlock or export because of licensing or update failures.
-- Rust for anything touching secrets.
-- npm only. Never pnpm or yarn.
+- Secrets live only in `secrecy`/`zeroize` types, with no Debug, Display or Clone.
+- Agents never receive secret values. Use relay, delegation, or short-lived scoped credentials.
+- Never block unlock or export because of licensing, billing or update failures.
+- Use Rust for anything that touches secrets.
 
-## OpenSpec workflow
-
-- `openspec list`: see active changes
-- `/opsx:apply <id>`: implement a change
-- `/opsx:archive <id>`: archive a finished change
-
-## Delegating to subagents
-
-Pick the subagent model by how hard and how critical the task is:
-
-- **Opus 5.5** (`model: opus`): hard or critical work. Anything touching secrets, crypto, the vault,
-  the daemon's authorization or audit paths, relays and forwarders, adversarial gates, protocol
-  implementations, and cross-cutting design or merge decisions.
-- **Sonnet 5.5** (`model: sonnet`): medium-hard work. Feature code outside the secret paths, CLI
-  commands, doctor checks, integration tests, CI fixes, and non-trivial refactors.
-- **Haiku 5.5** (`model: haiku`): easy-medium work. Searches and code exploration, docs and
-  OpenSpec text edits, catalog/config data, formatting and lint fixes, and simple mechanical changes.
-
-When unsure, go one tier up. Split a mixed task so each part runs on the right tier.
+## How we work
+- **Plan:** `docs/roadmap.md` and `openspec/changes/<id>/`. The rules for every change are in `openspec/config.yaml`.
+- **Evidence and reuse:** base decisions on evidence, not guesses (`docs/research/`). Reuse a maintained OSS package before writing one.
+- **Local first:** `just up` plus the MCP servers in `.mcp.json` give agents access to the database, logs and traces.
+- **Progress:** each change has an append-only `progress.md`. Read it and `git log` before starting work.
+- **Tasks:** only tick tasks after they are verified. Never rewrite task text on an agent branch; `scripts/check-task-edits.sh` enforces this.
+- **Cloud and scheduled agents:** see `docs/cloud-dev.md` and `docs/agents/`.

@@ -52,5 +52,6 @@ rules:
     - "Size each task to one PR (half a day to two days of agent work); tag each task [haiku], [sonnet] or [opus] (untagged means sonnet)."
     - "Each task group ends with a verification task naming the exact local command (`just ...`, `cargo nextest ...`) that proves it."
     - "The last group is \"Local verification\" running `just up`, the change's smoke test, then `just ci`."
+    - "Each change has an append-only progress.md (session log). Every session reads its last entries and git log first, and appends one entry before its final commit."
   specs:
     - "Every requirement has at least one scenario that maps to an automated test."

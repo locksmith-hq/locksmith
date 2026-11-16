@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Collects the deterministic part of a scheduled agent run's metadata (docs/agents/common.md).
 #   scripts/run-meta.sh start <kind>   record start time and HEAD (call first thing in a run)
-#   scripts/run-meta.sh report         print the YAML block for the run so far
+#   scripts/run-meta.sh report         print the YAML body (no fences) for the run so far
 # The agent appends `subagents:` and outcome fields itself (it is the only one that knows them).
 # Never prints secret values: only allow-listed env var names that look like session ids.
 set -euo pipefail
@@ -32,7 +32,6 @@ case "${1:-}" in
     session=$(env | grep -E '^CLAUDE_CODE_[A-Z_]*SESSION[A-Z_]*_ID=' | head -1 | cut -d= -f2- || true)
     mem_gb=$(awk '/MemTotal/ {printf "%.0f", $2/1048576}' /proc/meminfo 2>/dev/null || echo "?")
     cat <<EOF
-\`\`\`yaml
 run-metadata:
   kind: $KIND
   started: $(date -u -d "@$START_EPOCH" +%FT%TZ 2>/dev/null || date -u -r "$START_EPOCH" +%FT%TZ)
@@ -45,7 +44,6 @@ run-metadata:
   commits: $commits
   diff: "$stat"
   runner: "$(nproc 2>/dev/null || sysctl -n hw.ncpu) cpu, ${mem_gb} GB"
-\`\`\`
 EOF
     ;;
   *) echo "usage: $0 start <kind> | report" >&2; exit 2 ;;

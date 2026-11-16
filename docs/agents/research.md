@@ -14,7 +14,7 @@ The project rule is to decide from evidence and to reuse maintained OSS. This ru
 6. If anything changed:
    - Create the branch `claude/research-<YYYY-MM>`.
    - Update the docs, keeping their format, with source URLs and the check date. Mark anything unverified.
-   - Push once and open a draft PR.
+   - Push once, open a PR, and mark it ready as described in `merge.md`.
 
    If nothing changed, don't create a branch.
 7. Raise an owner decision only for:

@@ -27,11 +27,11 @@ Create these at claude.ai/code → environment selector → New environment.
   - registry.npmjs.org
   - pypi.org, for `uvx postgres-mcp`
   - Docker Hub, which hosts postgres, grafana/otel-lgtm, wiremock and mcp-grafana
-  - ghcr.io, which hosts openbao (use `ghcr.io/openbao/openbao`, not quay.io, which is **not** on the list)
+  - ghcr.io is on the documented allowlist, but **it returned 403 in practice** (first worker run, 2026-11-16). Use Docker Hub images instead, for example `openbao/openbao:2.7.2`.
   - github.com, including release assets, and Ubuntu apt
 - **Extra allowed domains:** none for now.
 - **Environment variables:** `BASH_MAX_TIMEOUT_MS=600000`, `CARGO_TERM_COLOR=never`. **No secrets here.** Environment variables are readable by the model and by any command it runs.
-- **Setup script:** contents of [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh). It installs build dependencies, `just`, the pinned toolchain, `cargo-nextest` and `openspec`, and pre-pulls the compose images. The images are cached between sessions; containers are not.
+- **Setup script:** a short bootstrap (pasted 2026-11-16) that finds the cloned repo and runs [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh), falling back to a built-in copy if the repo isn't present yet. Changes merged to that file apply without re-pasting. It installs build dependencies, `just`, the pinned toolchain, `cargo-nextest` and `openspec`, and pre-pulls the compose images. The images are cached between sessions; containers are not.
 - **Starting the stack:** each session starts it with `just up`, which the F0 docs tell the agent to run. A SessionStart hook can automate this once F0 lands. **[test]** Whether Docker in the VM runs the full stack (lgtm needs about 1 to 2 GB RAM).
 
 ### 2. `locksmith-research`: used by the weekly review and planning runs
@@ -122,6 +122,7 @@ All four avoid peak hours (weekdays about 15:00–21:00).
 | [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Sat 10:35 (after the Saturday 10:00 weekly reset) | re-verify finished work, quality review, write the next change |
 | [Daily health check](https://claude.ai/code/routines/trig_012bR8F2aWP91W3D9xGDpVUn) | Haiku 5.5 | Default | daily 08:30 | detects silent failures: worker silent for more than 24h, red CI on main, owner decisions waiting more than 3 days, finished PRs waiting more than 2 days; stays silent when healthy |
 | [Rescue (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-dev` | daily 09:35, 23:35 (exits at once if idle) | fixes the oldest `needs-rescue` issue at its root cause and checks the fix with an independent Opus evaluator; after 2 failed attempts it hands the issue to the owner |
+| Learning loop | Opus 5.5 | `locksmith-dev` | daily 00:35 (exits at once when there was no friction) | reads the last 24h of run metadata, rescues and CI failures; fixes the top 1–3 causes in setup, scripts or agent instructions; appends a measurable lesson to `docs/agents/lessons.md`; opens a draft PR and one `needs-owner` review issue |
 | [Monthly research refresh](https://claude.ai/code/routines/trig_016jEjKwShdcdfhWKBcp8kHs) | Sonnet 5.5 | `locksmith-research` | 1st of month, 10:35 | re-checks OSS versions and licences, `cargo audit` and `npm audit`, new MCP servers, Infisical changes; draft PR only if something changed |
 
 Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.

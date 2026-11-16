@@ -23,7 +23,7 @@ The worker escalates a task to rescue after two failed attempts, even after an i
    - Tick the task.
    - Append a `rescue` progress entry: root cause, fix, how it was verified, and the lesson for future workers.
    - Commit and push once.
-   - Comment the root cause, fix and metadata on the issue, then close it.
+   - Comment the root cause, fix and metadata on the issue, then close it. If this tick completes the change, mark its PR ready as described in `merge.md`.
 8. **If the task itself is wrong:** don't rewrite the task text. Open a `needs-owner` issue that proposes corrected text with evidence, link it from the rescue issue, and send a push notification.
 9. **On FAIL:**
    - Append a progress entry with what you learned.

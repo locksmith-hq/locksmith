@@ -397,6 +397,16 @@ fn idle_timeout_locks_the_vault() {
 #[cfg(target_os = "linux")]
 #[test]
 fn same_user_cannot_read_daemon_memory() {
+    // Root has CAP_SYS_PTRACE, which bypasses non-dumpable, so the property is untestable as root
+    // (Claude cloud VMs run as root). GitHub CI runs as a normal user and still covers it.
+    let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+    if status
+        .lines()
+        .any(|l| l.starts_with("Uid:") && l.split_whitespace().nth(1) == Some("0"))
+    {
+        eprintln!("skipped: running as root, non-dumpable cannot be tested");
+        return;
+    }
     let e = Env::new();
     e.h.ready();
     let mut d = e.daemon().spawn().unwrap();

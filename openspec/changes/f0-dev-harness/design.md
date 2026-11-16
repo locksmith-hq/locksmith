@@ -5,7 +5,7 @@
 |---|---|---|---|
 | postgres | `postgres:18` | 5432 | the only datastore |
 | lgtm | `grafana/otel-lgtm` | 3000 Grafana, 4317/4318 OTLP | logs, traces, metrics in one container |
-| openbao | `openbao/openbao` (dev mode, transit enabled) | 8200 | stand-in KMS for gateway keys (S2) |
+| openbao | `ghcr.io/openbao/openbao` (dev mode, transit enabled) | 8200 | stand-in KMS for gateway keys (S2) |
 | upstream | `wiremock/wiremock` | 8089 | mock third-party API that records what it received |
 
 All ports bind `127.0.0.1`. Dev credentials live in `infra/compose/.env.example`. They are dev-only and never real.

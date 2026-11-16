@@ -15,3 +15,9 @@ Each entry has this format:
 - Lesson: if `just ci` fails once, rerun it once before treating the failure as real, and record both results in the metadata.
 - Change: a rerun-once rule in common.md and worker.md.
 - Measure: weekly `flaky` count from rerun-once events should reach 0 after the flaky test is found and fixed. A learning run should identify the test from CI logs.
+
+## L1 · 2026-11-16 · stuck-time
+- Evidence: owner report. Agents lose time when they don't notice the Docker daemon is down, run long commands in the foreground, or wait without polling.
+- Lesson: run `scripts/agent-preflight.sh` first, run commands over about 2 minutes in the background with a timeout and poll their log, and record every loss over about 2 minutes as `friction`.
+- Change: `scripts/agent-preflight.sh`; a "Don't get stuck" section in common.md; the `friction` metadata field; the `stuck-time` category in learning.md.
+- Measure: weekly summed `friction.lost_s` per worker run should stay below 300 (check on or after 2026-11-23).

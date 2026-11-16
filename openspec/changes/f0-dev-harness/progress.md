@@ -30,3 +30,8 @@ Format:
 - Fixed: mcp-check now requires exit 0, no `isError: true` and a real expected value; grafana call passes `datasourceUid=loki`; added a negative test that a write statement (`CREATE TABLE`) is rejected by postgres-mcp; macOS host-networking note added to docs/dev-harness.md.
 - Verified: reset+up, harness-check 8 PASS, mcp-check 3 PASS (the stricter check first exposed a missing datasourceUid and a quoting mismatch).
 - Notes: task 2.1 uses anonymous localhost Grafana instead of a token (documented); owner may accept.
+
+## 2026-11-16 21:27 worker
+- Task: merge-queue (PR 11) - ci-fix (branch behind main; merged origin/main)
+- Verified: just ci -> exit 0
+- Notes for next session: push re-triggers claude-review; once merge-review PASS for new head SHA, run scripts/merge-gate.sh 11 and merge.

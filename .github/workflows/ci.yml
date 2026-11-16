@@ -1,25 +1,41 @@
 name: ci
 
+# Budget: GitHub Free gives private repos $12/month of Actions compute
+# (Linux x64 $0.006/min, Windows $0.010/min, macOS $0.062/min;
+# https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+# PR CI therefore runs on Linux only, in as few jobs as possible, with timeouts, path filters and
+# cancellation of superseded runs. macOS/Windows checks live in ci-platforms.yml (manual + tags).
+
 on:
   pull_request:
+    paths-ignore: ['**/*.md', 'docs/**', '!openspec/**']
   push:
     branches: [main]
+    paths-ignore: ['**/*.md', 'docs/**']
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  changes:
+  # Cheap checks in one job: repo layout, OpenSpec task-edit guard, secret scan.
+  hygiene:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: read  # paths-filter lists changed files through the API
+    timeout-minutes: 5
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       web: ${{ steps.filter.outputs.web }}
       desktop: ${{ steps.filter.outputs.desktop }}
+    permissions:
+      contents: read
+      pull-requests: read  # paths-filter lists changed files through the API
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - id: filter
         uses: dorny/paths-filter@v3
         with:
@@ -27,6 +43,7 @@ jobs:
             rust:
               - 'crates/**'
               - 'services/**'
+              - 'tests/**'
               - 'Cargo.*'
               - 'rust-toolchain.toml'
               - 'deny.toml'
@@ -38,95 +55,70 @@ jobs:
               - '.nvmrc'
             desktop:
               - 'apps/desktop/**'
-              - 'package-lock.json'
               - 'crates/ls-ipc/**'
               - 'crates/ls-core/**'
               - 'packages/api-types/**'
-              - 'rust-toolchain.toml'
+      - run: bash scripts/tree-check.sh
+      - name: OpenSpec task-edit guard
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: bash scripts/check-task-edits.test.sh && bash scripts/check-task-edits.sh
+      - name: gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks git --no-banner --redact --exit-code 1 .
 
   rust:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-24.04, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.os }}
+    needs: hygiene
+    if: needs.hygiene.outputs.rust == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Install SQLCipher build deps (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev pkg-config
+      - run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}  # PRs read the cache; only main writes it
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - uses: EmbarkStudios/cargo-deny-action@v2
 
   desktop:
-    # Tauri app (own lockfile, outside the root workspace): Rust checks, the UI tests, then a
-    # real `tauri build` of UI and shell (task 1.1 verify).
-    needs: changes
-    if: needs.changes.outputs.desktop == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-24.04]
-    runs-on: ${{ matrix.os }}
+    needs: hygiene
+    if: needs.hygiene.outputs.desktop == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Install Tauri build deps (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev pkg-config
+      - run: sudo apt-get update -q && sudo apt-get install -y -q libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
       - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: api-types are up to date
-        if: runner.os == 'Linux'
         run: |
           cargo test -p ls-ipc --features ts export_bindings
           git diff --exit-code packages/api-types
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: npm
       - run: npm ci
       - run: npm test -w @locksmith/desktop
-      - name: tauri build (macOS app bundle)
-        if: runner.os == 'macOS'
-        working-directory: apps/desktop
-        run: npm exec -- tauri build --debug --bundles app --config '{"bundle":{"active":true}}'
-      - name: tauri build (Linux binary)
-        if: runner.os == 'Linux'
-        working-directory: apps/desktop
-        run: npm exec -- tauri build --debug --no-bundle
-
-  windows-check:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      # shortcut: SQLCipher needs OpenSSL on Windows; ls-vault and smith-cli rejoin this check in M16 (task 1.0).
-      - run: cargo check --workspace --exclude ls-vault --exclude smith-cli --exclude ls-ipc --exclude ls-broker --exclude locksmithd  # Unix-socket daemon; Windows named pipe lands in M16
-
-  deny:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
 
   web:
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
+    needs: hygiene
+    if: needs.hygiene.outputs.web == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -137,23 +129,3 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
-
-  tree-check:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash scripts/tree-check.sh
-
-  secret-scan:
-    # Free stand-in for GitHub secret scanning (not available on private repos without GHAS).
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: gitleaks
-        env:
-          GITLEAKS_VERSION: 8.30.1
-        run: |
-          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
-          ./gitleaks git --no-banner --redact --exit-code 1 .

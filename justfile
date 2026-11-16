@@ -1,4 +1,4 @@
-ci: fmt lint test-rust test-web tree-check
+ci: fmt lint test-rust test-web tree-check task-guard
 
 fmt:
     cargo fmt --all --check
@@ -25,6 +25,11 @@ api-types:
 
 tree-check:
     scripts/tree-check.sh
+
+# Agents on change branches may only tick OpenSpec tasks, not rewrite them.
+task-guard:
+    scripts/check-task-edits.test.sh
+    scripts/check-task-edits.sh
 
 dev app:
     npm run build -w apps/{{app}}

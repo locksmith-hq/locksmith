@@ -1,7 +1,7 @@
 # Tasks (phased; each phase ends in something usable)
 
 ## Phase 0 : Decisions and foundations
-- [ ] 0.1 Owner confirms D2 (key model), D8 (licence and pricing hypothesis), D9 (stack), product name and domain.
+- [ ] 0.1 D2, D8 licence and D9 confirmed. Still open: pricing validation, product name and domain, cloud vs self-host split.
 - [ ] 0.2 Threat model for the platform (gateway compromise, control-plane compromise, malicious agent, malicious member, tenant isolation) in docs/; independent review scheduled.
 - [ ] 0.3 Repo layout: `services/control-plane`, `services/gateway`, `apps/console`, `infra/compose`, `infra/helm`; licence files per D8; `scripts/tree-check.sh` updated.
 

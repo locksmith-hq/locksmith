@@ -1,6 +1,6 @@
 # Design: S1 Platform
 
-Decisions marked **(confirm)** are recommended defaults the owner should confirm before work depends on them.
+D2, D8 (licence) and D9 were **confirmed by the owner**: gateway-held keys with a zero-knowledge control plane; AGPL-3.0 server + Apache-2.0 SDKs/CLI/plugins, no `ee/` directory; Rust + Postgres + React. D8 pricing is still a hypothesis to validate. Product name, domain and the cloud/self-host split remain open.
 
 ## D1. Trust boundaries
 ```
@@ -13,7 +13,7 @@ Decisions marked **(confirm)** are recommended defaults the owner should confirm
 ```
 Agent host holds only a short-lived, scoped, revocable **agent token**. All secret use goes through a gateway.
 
-## D2. Key model: gateway-held keys, zero-knowledge control plane (confirm)
+## D2. Key model: gateway-held keys, zero-knowledge control plane
 Infisical decrypts server-side with a KMS. M15 proposed pure client E2EE. A proxy must decrypt, so pure E2EE cannot support gateway injection. Chosen hybrid:
 - Each **gateway** has an X25519 keypair (private key in the gateway's KMS/HSM/OS keystore, never in the control plane).
 - A secret version is encrypted (XChaCha20-Poly1305 / AES-256-GCM, per-version DEK) and the DEK is wrapped to each gateway (and each human recovery key) authorised for that project/env.
@@ -40,13 +40,13 @@ Rust, derived from `ls-proxy`: HTTP(S) credential proxy with network guard (no p
 ## D7. Audit and detection
 Append-only, hash-chained audit per org (reuse the audit-ledger design), exportable (S3, SIEM). Detections: **honey tokens** (canary secrets that alert on any use), anomaly flags (new host, burst, off-hours). These are open source, not enterprise-only.
 
-## D8. Licence and pricing (confirm)
+## D8. Licence and pricing
 - **Licence: AGPL-3.0 for the server components** (control plane, gateway, console) so competitors cannot offer it as a closed SaaS; **Apache-2.0 for SDKs, CLI connector, plugins and protocol schemas** so adoption is frictionless. One repo, no `ee/` directory. (Alternative: MIT everywhere, weaker protection against hosted clones.)
 - **Pricing hypothesis, to validate (the figures below are assumptions, not research):**
   Self-host: free, unlimited. Cloud Free: up to 5 humans, 3 projects. Cloud Team: per **human** seat (target well below Infisical's per-identity Pro at about $18 to $23), with machine and agent identities included under a fair-use cap, because per-identity billing punishes agent-heavy teams. Cloud Business/Enterprise: SSO (SAML/SCIM), audit retention, dedicated gateways, SLA, support. Revenue also from managed gateways (usage-based) and support contracts.
 - Never-hostage (M13) remains: exports and self-hosting are always possible.
 
-## D9. Stack (confirm)
+## D9. Stack
 Rust for control plane, gateway and anything touching plaintext (matches CLAUDE.md). Postgres (+ Redis optional for queues/cache; start with Postgres-only: `LISTEN/NOTIFY`, advisory locks, job table). Console: React + TypeScript (existing workspace), desktop: Tauri (existing). API: OpenAPI-first, generated TS/Python/Go SDKs. Deploy: Docker Compose, Helm, OpenTofu modules; OpenTelemetry built in.
 
 ## D10. What happens to existing work

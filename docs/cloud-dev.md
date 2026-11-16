@@ -165,3 +165,6 @@ Agent guidance lives in repo skills (`.claude/skills/`), so each run loads only 
 - active lessons: 5
 
 The learning loop must not increase the total. Learning PRs merge through the same gates as everything else, with no waiting window (owner decision, 2026-11-16).
+
+## Independent review in GitHub Actions
+`.github/workflows/claude-review.yml` runs `anthropics/claude-code-action@v1` with the `merge-review` skill whenever the `ready-to-merge` label is added and on every push to a labelled PR. It authenticates with the owner's Claude subscription through the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, which the owner creates with `claude setup-token` and stores with `gh secret set`. Gate 6 of `merge-gate.sh` requires its `merge-review <sha>: PASS` verdict for the head SHA. Each review costs one Linux runner for up to 20 minutes and uses the Max subscription, not API credits.

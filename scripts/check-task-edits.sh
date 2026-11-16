@@ -15,7 +15,7 @@ protected_fail=0
 if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
   paths=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh
          AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents
-         .claude/skills/merge-queue docs/agents/merge.md docs/agents/common.md)
+         .claude/skills/merge-queue .claude/skills/merge-review docs/agents/merge.md docs/agents/common.md)
   # Learning branches may improve other skills, role files, lessons and helper scripts.
   [[ "$branch" == claude/learning-* ]] || paths+=(docs/agents .claude/skills scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
   changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- "${paths[@]}")

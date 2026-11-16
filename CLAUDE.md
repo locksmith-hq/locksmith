@@ -16,9 +16,13 @@ Repeatable procedures live as skills in `.claude/skills/`, each with scripts. Us
 - `evaluate-escalate`
 - `run-log`
 - `merge-queue`
+- `merge-review` (runs in GitHub Actions)
 - `archive-change`
 
 ## OpenSpec
 - `openspec list` shows the changes.
 - `/opsx:apply <id>` implements a change.
 - `/opsx:archive <id>` archives one, or use the `archive-change` skill.
+
+## GitHub
+Write `@claude` in any PR or issue comment to get Claude to help through GitHub Actions. PRs labelled `ready-to-merge` get an automatic Opus merge review.

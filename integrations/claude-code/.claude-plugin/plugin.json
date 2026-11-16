@@ -1,0 +1,6 @@
+{
+  "name": "locksmith",
+  "version": "0.0.1-alpha.4",
+  "description": "Locksmith credential broker for Claude Code: use authenticated APIs, Git, AWS and databases without ever seeing the secret.",
+  "author": { "name": "Locksmith" }
+}

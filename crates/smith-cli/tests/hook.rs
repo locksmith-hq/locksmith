@@ -215,3 +215,46 @@ fn claude_p_cat_env_is_blocked() {
         .unwrap();
     assert!(!String::from_utf8_lossy(&o.stdout).contains("canary-value-123"));
 }
+
+/// The Claude Code plugin manifest, marketplace entry and skill frontmatter are well formed.
+#[test]
+fn claude_code_plugin_package_is_consistent() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let json = |p: &str| -> Value {
+        serde_json::from_str(&std::fs::read_to_string(root.join(p)).unwrap()).unwrap()
+    };
+    let plugin = json("integrations/claude-code/.claude-plugin/plugin.json");
+    assert_eq!(plugin["name"], "locksmith");
+    assert_eq!(plugin["version"], env!("CARGO_PKG_VERSION"));
+    assert!(!plugin["description"].as_str().unwrap().is_empty());
+    let market = json(".claude-plugin/marketplace.json");
+    assert!(
+        market["plugins"].as_array().unwrap().iter().any(|p| {
+            p["name"] == plugin["name"] && p["source"] == "./integrations/claude-code"
+        })
+    );
+
+    let mut names = std::collections::HashSet::new();
+    for e in std::fs::read_dir(root.join("integrations/claude-code/skills")).unwrap() {
+        let dir = e.unwrap().path();
+        let text = std::fs::read_to_string(dir.join("SKILL.md")).unwrap();
+        let fm = text
+            .strip_prefix("---\n")
+            .unwrap()
+            .split("\n---\n")
+            .next()
+            .unwrap();
+        let field = |k: &str| {
+            fm.lines()
+                .find_map(|l| l.strip_prefix(&format!("{k}: ")))
+                .unwrap_or_else(|| panic!("{} lacks {k}", dir.display()))
+                .trim()
+                .to_string()
+        };
+        let name = field("name");
+        assert_eq!(dir.file_name().unwrap().to_str().unwrap(), name);
+        assert!(!field("description").is_empty());
+        assert!(names.insert(name), "duplicate skill name");
+    }
+    assert!(names.len() >= 7);
+}

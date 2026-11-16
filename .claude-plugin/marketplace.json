@@ -1,0 +1,12 @@
+{
+  "name": "locksmith",
+  "description": "Locksmith plugins for AI coding agents.",
+  "owner": { "name": "Locksmith" },
+  "plugins": [
+    {
+      "name": "locksmith",
+      "source": "./integrations/claude-code",
+      "description": "Credential broker for AI coding agents: agents perform authenticated operations without holding the credential."
+    }
+  ]
+}

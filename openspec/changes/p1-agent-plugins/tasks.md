@@ -8,6 +8,7 @@
 ## 2. Wave 1 (after M4/M10)
 
 - [ ] 2.1 Claude Code plugin plus a marketplace repo, slash commands, the skill, SessionStart status. Verify: `claude plugin install` from the marketplace and an A6/A7 live run.
+  - Progress: Claude Code plugin manifest, root marketplace.json, 7 skills and /status, /keys commands added and `claude plugin validate --strict` passes. Still open: `claude plugin install` from a published marketplace, A6/A7 live run, SessionStart status.
 - [ ] 2.2 Cursor and Codex packages. Verify: A6 scripted runs per agent.
 - [ ] 2.3 VS Code extension (TS, npm) published to the Marketplace and Open VSX. Verify: `@vscode/test-electron` tests, plus a status bar e2e against the mock daemon.
 

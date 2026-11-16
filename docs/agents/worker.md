@@ -54,7 +54,7 @@ Each run first works the merge queue (`docs/agents/merge.md`). Then it takes tas
 6. **Record.** On a pass, tick the task, append the progress entry, and commit.
 7. **Push once.**
    - Run `git push -u origin claude/change-<id>`.
-   - If no PR exists, open a DRAFT PR via REST.
+   - If no PR exists, open a normal PR via REST (never a draft: `-F draft=false`). The `ready-to-merge` label, not draft status, signals that the work is finished.
    - Before pushing, check the PR state with `gh api repos/locksmith-hq/locksmith/pulls?head=locksmith-hq:claude/change-<id>&state=all`. Never push to a branch whose PR is merged or closed; start a new branch from origin/main instead.
    - When every task is ticked, mark the PR ready as described in `merge.md` (the `ready-to-merge` label plus a merge summary). Do not raise an owner decision for it: the merge queue handles it.
 8. **Log.** Post the agent-log comment with the metadata. Build the block with `bash scripts/run-meta.sh block <<'EOF' … EOF`, passing only your own fields (orchestrator, outcome, … friction) on stdin. It prints one complete ```yaml block that always includes `duration_s` and `session`; never wrap its output in another fence.

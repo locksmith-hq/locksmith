@@ -81,3 +81,4 @@ How to raise one:
 - Never change repository, Actions or account settings.
 - Never create, delete, enable, disable or reschedule any routine or scheduled task. Schedule changes need the owner's approval: propose them in a `needs-owner` issue.
 - Commit messages end with `Co-Authored-By: Claude <noreply@anthropic.com>`. PR bodies end with `Generated with Claude Code`.
+- Never open draft PRs (`gh api .../pulls -F draft=false`). Cloud runs can't un-draft a PR, and GitHub won't merge a draft.

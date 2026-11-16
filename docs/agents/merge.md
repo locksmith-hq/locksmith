@@ -2,6 +2,9 @@
 
 The owner asked on 2026-11-16 for PRs to merge autonomously. Only the **worker** merges, and only by following this file. No agent branch may change this file or `common.md`; the guard enforces that.
 
+## PRs are never drafts
+GitHub refuses to merge a draft PR, and turning a draft into a normal PR needs the GraphQL API, which cloud runs can't use. Every agent opens normal PRs (`-F draft=false`). Only the `ready-to-merge` label marks a PR as finished. If a candidate is still a draft, comment `draft: owner must mark ready` and open a `needs-owner` issue.
+
 ## Merge queue (worker step 0, every run)
 Candidates are open PRs whose head branch starts with `claude/` and that carry the label `ready-to-merge`. Process the oldest first, merge at most 2 per run, and stop at the first failure.
 

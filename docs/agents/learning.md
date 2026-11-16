@@ -72,7 +72,7 @@ Append to `docs/agents/lessons.md`, one entry per fix, in the file's format:
 Keep each lesson short. Workers read the last 15.
 
 ## 7. Ship
-- Commit, push once, and open a DRAFT PR titled "Learning <date>: <top fix>".
+- Commit, push once, and open a normal PR (never a draft; `-F draft=false`) titled "Learning <date>: <top fix>".
 - The PR body has one section per fix: problem → evidence → root cause → change → how it will be measured. It ends with "Generated with Claude Code".
 - Label the PR `ready-to-merge`, add the merge summary, and open ONE `needs-owner` issue titled "Learning PR #<n> auto-merges after <time+24h> unless you comment hold". In that issue, also list any proposals you couldn't apply (workflow, `CLAUDE.md` or settings changes, and task-spec rewrites). Send one push notification.
 

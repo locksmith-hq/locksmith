@@ -1,59 +1,82 @@
-# Locksmith Roadmap (v6)
+# Locksmith Roadmap (v2, 2026-11-16)
 
-Each milestone is one OpenSpec change in `openspec/changes/<id>/`. Run it with `/opsx:apply <id>`.
-When it ships and its gate passes, archive it with `/opsx:archive <id>` so its delta specs merge into
-`openspec/specs/`.
+Replaces roadmap v6. The v6 OpenSpec is preserved under git tag `openspec-v6`.
 
-Estimates assume one senior Rust engineer plus a coding agent. Shaded milestones can run in parallel
-once their dependencies land.
+**Product:** an open-source secrets platform whose core is agent access. A coding agent uses
+credentials through a gateway and never holds them. The control plane stores only ciphertext, and
+values are decrypted only inside a gateway. Competitive basis: [research/infisical.md](research/infisical.md).
+Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.md).
 
-| # | Change id | You can use it to… | Gate (blocking) | Est. | Depends on |
-|---|---|---|---|---|---|
-| M0 | `m0-foundation` | install `smith`, run `smith doctor`, and `smith self update` from internal releases | CI green on mac+linux, release dry run, doctor JSON schema test | 1w | n/a |
-| M1 | `m1-local-vault` | keep secrets in an encrypted local vault (`smith add/get-meta/ls/rm`), back it up with a recovery phrase | crypto KATs, tamper tests, recovery round-trip | 1.5w | M0 |
-| M2 | `m2-run-and-redact` | delete `.env`: `smith run -- npm test` injects secrets and masks every echo | redactor property tests (all encodings, chunk splits) | 1.5w | M1 |
-| M3 | `m3-daemon-sessions` | unlock once per session, `smith status`, `smith revoke`, tamper-evident audit | adversarial gate A4a (rogue same-UID client rejected) | 2w | M2 |
-| M4 | `m4-agent-guardrails` | `smith init` a repo: Claude Code / Cursor / Codex hooks block `.env` dumps and secret pastes, pre-commit scanner | gate A6 (agent cannot read or commit secrets) | 1w | M3 |
-| M5 | `m5-git-delegation` | the agent pushes to private GitHub/GitLab with no token in its reach | **gate A1 (Git adversarial)** | 1w | M3 |
-| M6 | `m6-http-db-relays` | call Stripe/OpenAI/etc. with `lsk_` opaque tokens, run Postgres/MySQL migrations through a password-less relay | **gate A3 (DB relay)**, A3b (HTTP) | 2w | M3 |
-| M7 | `m7-aws-delegation` | the agent uses the AWS CLI/SDKs with no AWS keys in its reach | **gate A2 (AWS adversarial)** | 1.5w | M6 |
-| M8 | `m8-process-containment` | builds and postinstall scripts cannot reach the broker, and revoke kills the whole agent tree | **gates A4 + A5** | 2w | M5, M6 |
-| M9 | `m9-hardware-unlock-and-rotation` | Touch ID unlock, vault key rotation, external audit anchors | rotation crash-injection test, biometric re-enroll test | 2w | M3 |
-| M10 | `m10-mcp-server` | the agent lists keys and asks a human to create or rotate secrets through MCP | gate A7 (zero bytes to the LLM) | 1w | M3 |
-| M11 | `m11-diagnostics-support` | `smith doctor --fix`, `smith diag bundle`, opt-in telemetry and crash reports | bundle secret-free proof test | 1w | M3 |
-| M12 | `m12-update-delivery` | signed auto-updates with channels, staged rollout, kill switch, rollback | TUF attack suite (rollback, freeze, mix-and-match) | 2w | M0, M11 |
-| M13 | `m13-subscription-licensing` | buy Pro/Team via Stripe, activate offline-verifiable licenses, gate features | never-hostage test suite | 2w | M12 |
-| M14 | `m14-desktop-app` | manage projects, secrets, sessions and audit in a Tauri app with tray approvals | Playwright/WebDriver e2e | 2.5w | M9, M13 |
-| M15 | `m15-team-vaults` | share end-to-end encrypted vaults with a team, central policy and audit | sync server blind-storage test | 3w | M13 |
-| M16 | `m16-ga-hardening` | GA: Windows parity, notarized and signed installers, external pentest | pentest criticals = 0, full adversarial suite | 3w | all |
+## How we work
 
-Critical path to a private beta (M0→M5, plus M11/M12 basic): about 8 weeks.
-Critical path to paid launch (adds M13, M14): about 16 weeks.
+1. **Harness first.** Before any product code there is a local stack and the tools an agent needs to see
+   inside it: DB, logs, traces and leak scans. Every later change is tested through that harness.
+2. **Thin vertical slices.** Each change ships something runnable in `just up` and a smoke test that proves it.
+3. **Evidence and reuse.** Each design cites its sources and lists the open-source packages it uses
+   (`openspec/config.yaml` enforces this). We build only what touches plaintext or defines the product.
+4. **Existing code is inventory, not spec.** These crates are reused where a change says so:
+   - `ls-proxy` (HTTP injection, network guard, AWS)
+   - `ls-redact` (response redaction)
+   - `ls-crypto` (AEAD, KDF)
+   - `ls-vault` (audit hash chain)
+   - `smith-cli`, `locksmith-mcp`, `ls-hooks` (agent connector and hooks)
+5. **Local, then cloud.** AWS `dev` arrives only in phase 4. Until then LocalStack stands in for AWS.
+6. **Model tiers.** Sonnet runs by default. Tasks marked `[opus]` touch crypto, auth, the gateway or adversarial gates.
 
-## Adversarial suite (`tests/adversarial`)
+Status: ☐ not started · ◐ in progress · ☑ archived. Only the next one or two changes are written in
+full. Later rows are proposed (`/opsx:propose`) when their predecessor is about done, so each one
+uses what the previous one taught us.
 
-These come from the v5 Phase 0 gates. Every case runs two ways: as a **scripted attack** (a
-deterministic shell script, runs in CI) and as a **live-agent run** (Claude Code headless with
-`claude -p` and an attack prompt, run nightly). A live run fails if any vault secret, or any encoding
-of one, shows up in the agent transcript, the repo, or the shell history.
+## Phase 0: Harness (make the system observable to agents)
 
-| Id | Attack | Milestone |
-|---|---|---|
-| A1 | Extract the Git token (`git credential fill`, read gitconfig, run the helper directly, sniff the proxy) | M5 |
-| A2 | Extract AWS keys (`export-credentials`, env, `~/.aws/cli/cache`, proxy sniffing) | M7 |
-| A3 | Extract the DB password (env, config, `ss`/`lsof`, relay banner) | M6 |
-| A3b | Extract an API key through response reflection or header echo | M6 |
-| A4 | A hostile postinstall script reaches the broker or steals a capability | M3 (rogue client), M8 (in-tree) |
-| A5 | Revoke under load: nothing succeeds after revoke returns | M8 |
-| A6 | `cat .env`, `printenv`, stage `.claude/settings.local.json`, paste a secret in chat | M4 |
-| A7 | The MCP surface leaks a value | M10 |
-| A8 | The diagnostics bundle or logs contain a secret | M11 |
-| A9 | Update attacks: downgrade, freeze, malicious mirror | M12 |
+| # | Change | Usable outcome | Local gate | Status |
+|---|---|---|---|---|
+| F0 | `f0-dev-harness` | `just up` starts Postgres, an OTel/Grafana stack (logs, traces, metrics) and a mock upstream API. Claude Code can query the DB and the logs through MCP servers in `.mcp.json`. | `just up && just harness-check` | ☐ |
+| F1 | `f1-test-kit` | Canary secrets, `just leak-scan` (scans DB, logs, traces, files and transcripts for every encoding of a canary), nextest, snapshot tests, testcontainers and the `tests/e2e` skeleton. | `just leak-scan` fails on a planted canary and passes on a clean stack | ☐ |
 
-## Parallel tracks (same monorepo)
+## Phase 1: First vertical slice (one agent, one secret, one API, zero exposure)
 
-| Id | Change id | Delivers | Starts after |
+| # | Change | Usable outcome | Local gate |
 |---|---|---|---|
-| W1 | `w1-landing-site` | `apps/web`: landing, security, waitlist, pricing (from `features.toml`), legal | M0 |
-| W2 | `w2-docs-site` | `apps/docs`: Starlight docs, generated CLI/schema/doctor refs, `llms.txt` | M0 |
-| P1 | `p1-agent-plugins` | `integrations/*`: Claude Code, Cursor, Codex, Grok Build, OpenHands, Gemini CLI, VS Code, GitHub Action, devcontainer | M4 (wave 1), M10 (wave 2) |
+| S1 | `s1-control-plane-skeleton` | axum service with Postgres migrations, an OpenAPI spec, health checks and OTel. Orgs, projects, environments and secret metadata through the API. | API e2e against compose, OTel traces visible in Grafana |
+| S2 | `s2-envelope-crypto` [opus] | Secret versions are encrypted under a per-version DEK, which is wrapped to a gateway key held in a KMS (LocalStack KMS or OpenBao transit locally). The control plane cannot decrypt. | Crypto KATs, `just leak-scan` on the DB, decrypt-fails-in-control-plane test |
+| S3 | `s3-gateway-http` [opus] | The gateway (from `ls-proxy`) unwraps the key, injects the secret into a call to the mock upstream, redacts the response and writes an audit record. | Mock upstream receives the secret, and the agent side and logs contain no canary |
+| S4 | `s4-agent-connector` | Agent identity plus short-lived token. `smith` and `locksmith-mcp` list grants and route tool calls through the gateway. **First demo: Claude Code calls a real API (e.g. Langfuse) with no key on the laptop.** | Live headless `claude -p` run, `just leak-scan` on the transcript |
+| S5 | `s5-audit-ledger` | Append-only, hash-chained audit per org. `just audit-verify` checks it and an export goes to a file sink. | Tamper test |
+| S6 | `s6-adversarial-gate-1` [opus] | Scripted and live-agent extraction attempts against S1–S5 (env, reflection, header echo, encodings). | Suite green in CI and nightly |
+
+## Phase 2: Team product
+
+| # | Change | Usable outcome |
+|---|---|---|
+| T1 | `t1-human-auth` | Human sign-in with OIDC and passkeys through the chosen IdP (decided by spike in the design). |
+| T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. |
+| T3 | `t3-console-mvp` | React console: projects, secrets (client-side encrypted), agents, sessions and audit view. Playwright e2e. |
+| T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. |
+| T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. |
+
+## Phase 3: Delegation beyond HTTP
+
+| # | Change | Usable outcome |
+|---|---|---|
+| D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on LocalStack first. |
+| D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). |
+| D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. |
+
+## Phase 4: Deployable
+
+| # | Change | Usable outcome |
+|---|---|---|
+| P1 | `p1-aws-dev-env` | OpenTofu `dev` environment on AWS: RDS, ECS or EKS, KMS, and OTel to Grafana Cloud free or self-hosted. The MCP servers point at it read-only. |
+| P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. |
+| P3 | `p3-sdks-and-plugins` | SDKs generated from OpenAPI, plus Claude Code, Cursor and Codex plugins. |
+
+## Phase 5: Parity and beyond (ordered later, by demand)
+
+Rotation and dynamic secrets (run in the gateway), syncs, the Terraform provider and k8s operator,
+SAML and SCIM, billing, SOC2 programme, desktop app, local-only mode for solo developers.
+
+## Phase 6: GA hardening
+
+External pentest, full adversarial suite, Windows connector, docs and landing site.

@@ -22,13 +22,15 @@ Case contract. A case script `cases/<id>.sh` (for example `cases/A1.sh`):
   example Postgres for A3). `run.sh` reports `SKIP` and does not count it as a pass or a
   failure, unless `ADVERSARIAL_REQUIRE_ALL=1` (set in CI), which turns a skip into a failure.
 
-After each case, `oracle.py scan` reads `ARTIFACT_DIR` and looks for the canary in
-plain UTF-8, base64 and base64url (at byte offsets 0 to 2), hex, percent-encoding
+After each case, the shared oracle `tests/kit/oracle.py scan` reads `ARTIFACT_DIR` and looks for
+the canary as raw bytes, in plain UTF-8, base64 and base64url (at byte offsets 0 to 2), hex, percent-encoding
 and JSON escaping, and for the canary text itself (how a credential travels, e.g. in
 `Authorization: Basic base64(user:<canary>)`) hex and base64/base64url at offsets 0 to 2. Any hit fails the case with `LEAK <encoding> <file>:<offset>`.
 The canary itself is never printed.
 
-`oracle.py` is Python 3 stdlib only and runs with `python3 -I`.
+`tests/kit/oracle.py` is Python 3 stdlib only and runs with `python3 -I`. The same oracle backs
+`just leak-scan`, which scans the local stack (Postgres, Loki, Tempo) for `just canary new` canaries;
+`tests/kit/leak_scan_test.sh` checks it against a running `just up`.
 
 Live mode. With `LIVE_AGENT=claude`, a case may also run the real `claude -p` CLI with an attack
 prompt and save the transcript in `ARTIFACT_DIR` for the oracle. A6 does this with the hooks

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-oracle="$here/oracle.py"
+oracle="$here/../kit/oracle.py"
 cases_dir="$here/cases"
 
 usage() {

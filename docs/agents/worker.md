@@ -19,7 +19,7 @@ Each run first works the merge queue (`docs/agents/merge.md`). Then it takes tas
    - Reproduce the failure locally.
    - Fix it through the loop below.
 3. **Branch.**
-   - If `origin/claude/change-<id>` exists, check it out.
+   - If `origin/claude/change-<id>` exists, check it out, then bring it up to date: if `git rev-list --count HEAD..origin/main` is not 0, run `git merge --no-edit origin/main` (never rebase a pushed branch). Fixes and lessons land on main first, and a stale branch re-hits them in the baseline. On a conflict you can't resolve cleanly, `git merge --abort` and note it in `friction`.
    - Otherwise, read the proposal's "Depends on":
      - If the dependency is merged, branch from `origin/main`.
      - If the dependency's PR has every task ticked and green checks, branch from `origin/claude/change-<dep>` and use that branch as the PR base.
@@ -57,4 +57,4 @@ Each run first works the merge queue (`docs/agents/merge.md`). Then it takes tas
    - If no PR exists, open a DRAFT PR via REST.
    - Before pushing, check the PR state with `gh api repos/locksmith-hq/locksmith/pulls?head=locksmith-hq:claude/change-<id>&state=all`. Never push to a branch whose PR is merged or closed; start a new branch from origin/main instead.
    - When every task is ticked, mark the PR ready as described in `merge.md` (the `ready-to-merge` label plus a merge summary). Do not raise an owner decision for it: the merge queue handles it.
-8. **Log.** Post the agent-log comment with the metadata.
+8. **Log.** Post the agent-log comment with the metadata. Build the block with `bash scripts/run-meta.sh block <<'EOF' … EOF`, passing only your own fields (orchestrator, outcome, … friction) on stdin. It prints one complete ```yaml block that always includes `duration_s` and `session`; never wrap its output in another fence.

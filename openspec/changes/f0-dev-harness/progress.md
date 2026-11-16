@@ -19,3 +19,8 @@ Format:
 - Task: 2.1, 2.2 - done; 2.3 left unticked
 - Verified: drove both MCP servers over stdio with JSON-RPC against `just up`: postgres `list_schemas` returned the schemas; grafana `list_loki_label_names` returned `[]` (no logs yet) from mcp-grafana 2.3.0. 2.3 needs `/mcp` in a live Claude Code session, which a headless run cannot do.
 - Notes for next session: mcp-grafana image defaults to SSE, so `.mcp.json` passes `-t stdio`. otel-lgtm allows anonymous Grafana access, so no service-account token is needed. Compose default OPENBAO_IMAGE moved to Docker Hub (L2). Next: 3.1 harness-check.sh, 3.2 CI job, 3.3.
+
+## 2026-11-16 20:54 worker
+- Task: 2.3, 3.1, 3.2, 3.3, 4.1 - done
+- Verified: `just reset && just up && just harness-check` -> 8 PASS; stopping lgtm -> exit 1; `just mcp-check` -> postgres and grafana PASS; `just ci` -> exit 0
+- Notes for next session: Loki is not published on the host, so harness-check queries it through Grafana's datasource proxy (:3000). MCP Inspector 0.17 takes `--config/--server`, not a command line, so mcp-check writes a temp config with ${VAR:-default} expanded. All F0 tasks ticked; no independent evaluator run on this branch (merge review covers it).

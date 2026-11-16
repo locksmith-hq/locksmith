@@ -60,3 +60,11 @@ psql *args:
 
 ps:
     {{compose}} ps
+
+# Verify the running stack (needs `just up`).
+harness-check:
+    bash scripts/harness-check.sh
+
+# Start each MCP server in .mcp.json and make one read call (needs `just up`).
+mcp-check:
+    bash scripts/mcp-check.sh

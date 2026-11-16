@@ -1,11 +1,11 @@
 # Weekly review (Sonnet + Opus reviewer, Saturday after the weekly reset)
 
-1. **State.** Use the `run-start` skill with `review`, then read:
-   - the agent-log comments from the last 8 days, including their `run-metadata` blocks
+1. **State.** Take the run lock (`scripts/run-lock.sh acquire review-<session>`; stop if busy, release at end), then use the `run-start` skill with `review`, then read:
+   - agent-log comments from the last 8 days
    - open PRs and their check-runs
    - `docs/roadmap.md`
    - each active change's `progress.md`
-2. **Report weekly stats.** Parse every `run-metadata` block from the last 7 days with a haiku subagent, then post this table in your log comment:
+2. **Weekly stats.** With a haiku subagent, parse the last 7 days of `run-metadata` blocks into this table:
 
    | metric | value |
    |---|---|
@@ -20,12 +20,12 @@
    | friction: total lost_s, top 3 causes | |
    | Actions minutes this month (billing API, else "unavailable") | |
 
-   Flag anomalies, for example:
+   Flag anomalies:
    - a run kind whose durations keep growing
    - Opus tokens above 40% of the total
    - a success rate below 60%
 
-   Propose cadence or tier changes as a `needs-owner` issue only when the numbers justify it.
+   If the numbers justify it, propose cadence or tier changes in a `needs-owner` issue.
 3. **Re-verify each open `claude/change-*` branch.**
    - With a haiku subagent, run `just ci` and the verification commands of the ticked tasks.
    - Untick anything that fails.

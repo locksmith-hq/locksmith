@@ -2,7 +2,12 @@
 
 Each run merges finished work, then does tasks until the first failure or about 40 minutes, then pushes once and logs.
 
-0. **Start.** Use the `run-start` skill with `worker`. Then use the `merge-queue` skill: fix main CI first, work the merge queue, archive merged changes.
+0. **Start.**
+   - Run `bash scripts/worker-has-work.sh`. If it prints `idle`, stop and post nothing.
+   - Run `bash scripts/run-lock.sh acquire worker-<session>`. If it reports busy, stop. Release the lock at the end of the run, even if the run failed.
+   - Use the `run-start` skill with `worker`.
+   - **Owner replies.** For each `needs-owner` issue the owner answered, apply the decision. Add the standing ones to `docs/agents/owner.md` in a small PR marked ready. Then close the issue with a comment.
+   - Use the `merge-queue` skill: fix main CI first, work the merge queue, then archive merged changes.
 1. **Pick the change.** Read `docs/roadmap.md` and run `openspec list`. The active change is the first one in roadmap order with unchecked tasks.
    - Read its `progress.md` (last 3 entries) and `git log --oneline -10` on `origin/claude/change-<id>`.
    - Skip any task that has an open `needs-rescue` issue.

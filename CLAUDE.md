@@ -36,6 +36,7 @@ Credential broker for AI coding agents. Agents perform authenticated operations 
 - Research before building: `docs/research/` (Infisical, OSS building blocks). Reuse a maintained OSS package before writing one.
 - Local first: `just up` stack + MCP servers in `.mcp.json` give agents the DB, logs and traces.
 - Progress: each change has `openspec/changes/<id>/progress.md` (append-only, read it and `git log` before starting, add one entry before your last commit). Scheduled runs also comment on the `agent-log` GitHub issue.
+- Scheduled agents follow `docs/agents/common.md` + their role file (read from origin/main). `scripts/run-meta.sh` produces the run-metadata block. Agent branches may not change docs/agents, workflows, the guard scripts, CLAUDE.md or openspec/config.yaml.
 - Cloud sessions: environments, network allowlist and secrets rules in `docs/cloud-dev.md`; setup script `scripts/cloud-setup.sh`.
 - Scheduled runs work in the `../locksmith-worker` worktree, log to `.agent-runs.md` (gitignored, repo root), commit only to `change/<id>` branches, never push.
 

@@ -22,4 +22,9 @@ git checkout -q main; printf '# log\n## e1\n' > openspec/changes/c1/progress.md;
 git update-ref refs/remotes/origin/main HEAD; git switch -qc claude/change-c1b
 printf '## e2\n' >> openspec/changes/c1/progress.md; expect 0 claude/change-c1b "progress append"
 printf '# log\n## edited\n## e2\n' > openspec/changes/c1/progress.md; expect 1 claude/change-c1b "progress rewrite"
+git checkout -q -- openspec/changes/c1/progress.md
+mkdir -p docs/agents; echo x > docs/agents/worker.md; git add -A
+expect 1 claude/change-c1b "agent edits its own rules"
+expect 1 claude/planning-y "planning branch edits agent rules"
+expect 0 human-branch "human branch may edit agent rules"
 echo "check-task-edits: all tests passed"

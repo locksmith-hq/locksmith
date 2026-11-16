@@ -7,9 +7,20 @@
 set -euo pipefail
 
 branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
+
+# Agents (claude/* branches) may never change their own rules, CI, or this guard.
+protected_fail=0
+if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
+  changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- docs/agents .github/workflows 'scripts/check-task-edits*' scripts/run-meta.sh CLAUDE.md openspec/config.yaml)
+  if [ -n "$changed" ]; then
+    echo "task-edit guard: agent branch '$branch' changed protected files (owner-only):"; echo "$changed"
+    protected_fail=1
+  fi
+fi
+
 case "$branch" in
   claude/change-*|change/*) ;;
-  *) echo "task-edit guard: skipped on branch '$branch'"; exit 0 ;;
+  *) echo "task-edit guard: task checks skipped on branch '$branch'"; exit "$protected_fail" ;;
 esac
 
 base_ref=origin/main
@@ -21,7 +32,7 @@ base=$(git merge-base HEAD "$base_ref")
 # Strip the checkbox state so only a tick/untick compares equal.
 norm() { sed -E 's/^([[:space:]]*- )\[[ xX]\]/\1[?]/'; }
 
-fail=0
+fail=$protected_fail
 while IFS= read -r f; do
   git cat-file -e "$base:$f" 2>/dev/null || continue   # a new tasks.md (new change) is allowed
   if [ ! -f "$f" ]; then echo "task-edit guard: $f was deleted"; fail=1; continue; fi

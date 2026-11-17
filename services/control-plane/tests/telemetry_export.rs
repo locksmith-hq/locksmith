@@ -3,14 +3,15 @@
 //! values or request bodies in spans, logs or the console. Runs in its own process because it
 //! installs the global tracing subscriber.
 
-use std::io;
+mod common;
+
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::Request;
 use ls_control_plane::app::{self, AppState};
-use ls_control_plane::db::{Database, PoolSettings, connect_options};
+use ls_control_plane::db::PoolSettings;
 use ls_control_plane::readiness::ReadyFlag;
 use ls_control_plane::telemetry::{self, Options, SERVICE_NAME};
 use opentelemetry::{Key, Value};
@@ -20,30 +21,7 @@ use opentelemetry_sdk::logs::InMemoryLogExporter;
 use opentelemetry_sdk::trace::{InMemorySpanExporter, SpanData, SpanExporter};
 use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
-use tracing_subscriber::fmt::MakeWriter;
 use uuid::Uuid;
-
-#[derive(Clone, Default)]
-struct Capture(Arc<Mutex<Vec<u8>>>);
-
-struct CaptureWriter(Arc<Mutex<Vec<u8>>>);
-
-impl io::Write for CaptureWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.lock().unwrap().extend_from_slice(buf);
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'a> MakeWriter<'a> for Capture {
-    type Writer = CaptureWriter;
-    fn make_writer(&'a self) -> CaptureWriter {
-        CaptureWriter(self.0.clone())
-    }
-}
 
 /// In-memory span exporter that also keeps the resource the provider hands it.
 #[derive(Debug, Clone, Default)]
@@ -72,7 +50,7 @@ fn attr<'a>(span: &'a SpanData, key: &str) -> Option<&'a Value> {
 async fn spans_carry_route_status_and_org_but_no_request_data() {
     let spans = SpanSpy::default();
     let logs = InMemoryLogExporter::default();
-    let capture = Capture::default();
+    let capture = common::Capture::default();
     let telemetry = telemetry::init_with_exporters(
         spans.clone(),
         logs.clone(),
@@ -83,14 +61,10 @@ async fn spans_carry_route_status_and_org_but_no_request_data() {
     .unwrap();
 
     // Postgres is unreachable, so the handler answers 503 after binding the org.
-    let url = "postgres://nobody@127.0.0.1:1/none".to_owned().into();
-    let db = Database::connect_lazy(
-        connect_options(&url).unwrap(),
-        PoolSettings {
-            acquire_timeout: Duration::from_millis(300),
-            ..PoolSettings::default()
-        },
-    );
+    let db = common::unreachable_db_with(PoolSettings {
+        acquire_timeout: Duration::from_millis(300),
+        ..PoolSettings::default()
+    });
     let app = app::build(AppState::new(true, Arc::new(ReadyFlag::new(true)), db));
 
     let org = Uuid::new_v4();
@@ -177,7 +151,7 @@ async fn spans_carry_route_status_and_org_but_no_request_data() {
 
     // The raw path, header values and body never appear anywhere we export or print.
     let exported = format!("{finished:?}\n{emitted:?}");
-    let console = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+    let console = capture.contents();
     for (what, text) in [("exported telemetry", &exported), ("console", &console)] {
         for marker in [&auth_marker, &header_marker, &body_marker] {
             assert!(!text.contains(marker.as_str()), "{marker} in {what}");

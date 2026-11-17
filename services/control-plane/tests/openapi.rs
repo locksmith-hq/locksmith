@@ -1,6 +1,8 @@
 //! OpenAPI contract: the committed `openapi.json` must match the spec generated from the router
 //! definitions. No database is needed. Run with `UPDATE_OPENAPI=1` to rewrite the file.
 
+mod common;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -8,7 +10,6 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use ls_control_plane::app::{self, AppState};
-use ls_control_plane::db::{Database, PoolSettings, connect_options};
 use ls_control_plane::readiness::ReadyFlag;
 use serde_json::{Map, Value};
 use similar::{ChangeTag, TextDiff};
@@ -93,9 +94,11 @@ fn openapi_is_3_1_and_has_no_secret_value_field() {
 #[tokio::test]
 async fn openapi_json_is_served_and_matches_generated_spec() {
     // A lazy pool that never connects: the spec needs no database.
-    let url = "postgres://nobody@127.0.0.1:1/none".to_owned().into();
-    let db = Database::connect_lazy(connect_options(&url).unwrap(), PoolSettings::default());
-    let state = AppState::new(false, Arc::new(ReadyFlag::new(false)), db);
+    let state = AppState::new(
+        false,
+        Arc::new(ReadyFlag::new(false)),
+        common::unreachable_db(),
+    );
     let response = app::build(state)
         .oneshot(
             Request::builder()

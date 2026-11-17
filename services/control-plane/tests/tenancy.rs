@@ -1,100 +1,21 @@
 //! Tasks 2.1-2.4: schema, roles and tenant isolation on a throwaway `postgres:18` container
 //! (testcontainers; needs a Docker daemon). Each test starts its own container.
 
+mod common;
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use common::{OWNER_PASSWORD, Pg};
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::db::{Database, DbReadiness, PoolSettings, sql};
 use ls_control_plane::migrate;
 use ls_control_plane::readiness::Readiness;
 use sqlx_core::connection::Connection;
-use sqlx_postgres::{PgConnectOptions, PgConnection};
-use testcontainers::core::{IntoContainerPort, WaitFor};
-use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tower::ServiceExt;
 use uuid::Uuid;
-
-// Test-only values; the container is local and discarded after the test.
-const BOOTSTRAP_USER: &str = "postgres";
-const BOOTSTRAP_PASSWORD: &str = "bootstrap-test-only";
-// Dev-only role passwords from migrations/0001_roles.sql (listed in infra/compose/.env.example).
-const OWNER_PASSWORD: &str = "locksmith-owner-dev-only";
-const APP_PASSWORD: &str = "locksmith-app-dev-only";
-
-struct Pg {
-    container: ContainerAsync<GenericImage>,
-    port: u16,
-}
-
-impl Pg {
-    async fn start() -> Self {
-        let container = GenericImage::new("postgres", "18")
-            .with_exposed_port(5432.tcp())
-            .with_wait_for(WaitFor::message_on_stderr(
-                "database system is ready to accept connections",
-            ))
-            .with_env_var("POSTGRES_PASSWORD", BOOTSTRAP_PASSWORD)
-            .with_startup_timeout(Duration::from_secs(120))
-            .start()
-            .await
-            .expect("start postgres:18 (is Docker running?)");
-        let port = container.get_host_port_ipv4(5432.tcp()).await.unwrap();
-        let pg = Self { container, port };
-        // The image restarts the server once after init; wait until TCP logins work.
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-        loop {
-            match PgConnection::connect_with(&pg.bootstrap()).await {
-                Ok(c) => {
-                    c.close().await.unwrap();
-                    break;
-                }
-                Err(e) if tokio::time::Instant::now() > deadline => panic!("postgres: {e}"),
-                Err(_) => tokio::time::sleep(Duration::from_millis(200)).await,
-            }
-        }
-        pg
-    }
-
-    fn options(&self, user: &str, password: &str) -> PgConnectOptions {
-        PgConnectOptions::new()
-            .host("127.0.0.1")
-            .port(self.port)
-            .database("postgres")
-            .username(user)
-            .password(password)
-    }
-
-    fn bootstrap(&self) -> PgConnectOptions {
-        self.options(BOOTSTRAP_USER, BOOTSTRAP_PASSWORD)
-    }
-
-    async fn admin(&self) -> PgConnection {
-        PgConnection::connect_with(&self.bootstrap()).await.unwrap()
-    }
-
-    /// Fresh database: migrate as the bootstrap superuser, as on a first `just up`.
-    async fn migrated() -> Self {
-        let pg = Self::start().await;
-        migrate::run(pg.bootstrap())
-            .await
-            .expect("migrations apply");
-        pg
-    }
-
-    fn app_db(&self, max_connections: u32) -> Database {
-        Database::connect_lazy(
-            self.options("locksmith_app", APP_PASSWORD),
-            PoolSettings {
-                max_connections,
-                ..PoolSettings::default()
-            },
-        )
-    }
-}
 
 /// Design decision 7: generate a v7 id, bind it as the org, and insert through RLS.
 async fn create_org(db: &Database, name: &str) -> Uuid {
@@ -258,7 +179,10 @@ async fn app_role_is_not_superuser_not_bypassrls_and_owns_nothing() {
     admin.close().await.unwrap();
 
     // The request pool really logs in as locksmith_app.
-    let db = pg.app_db(1);
+    let db = pg.app_db(PoolSettings {
+        max_connections: 1,
+        ..PoolSettings::default()
+    });
     let who: String = db
         .without_org(|c| {
             Box::pin(async move {
@@ -277,7 +201,10 @@ async fn app_role_is_not_superuser_not_bypassrls_and_owns_nothing() {
 #[tokio::test]
 async fn cross_org_read_and_list_return_nothing() {
     let pg = Pg::migrated().await;
-    let db = pg.app_db(4);
+    let db = pg.app_db(PoolSettings {
+        max_connections: 4,
+        ..PoolSettings::default()
+    });
     let a = create_org(&db, "org-a").await;
     let b = create_org(&db, "org-b").await;
     let pa = create_project(&db, a, "shared-name").await;
@@ -362,7 +289,10 @@ async fn cross_org_read_and_list_return_nothing() {
 #[tokio::test]
 async fn cross_org_parent_fk_fails() {
     let pg = Pg::migrated().await;
-    let db = pg.app_db(2);
+    let db = pg.app_db(PoolSettings {
+        max_connections: 2,
+        ..PoolSettings::default()
+    });
     let a = create_org(&db, "org-a").await;
     let b = create_org(&db, "org-b").await;
     let pa = create_project(&db, a, "a-proj").await;
@@ -428,7 +358,10 @@ async fn cross_org_parent_fk_fails() {
 #[tokio::test]
 async fn pooled_connection_reuse_with_pool_size_1_sees_no_org() {
     let pg = Pg::migrated().await;
-    let db = pg.app_db(1);
+    let db = pg.app_db(PoolSettings {
+        max_connections: 1,
+        ..PoolSettings::default()
+    });
     let a = create_org(&db, "org-a").await;
     let pid_1: i32 = db
         .with_org(a, move |c| {
@@ -492,7 +425,10 @@ async fn pooled_connection_reuse_with_pool_size_1_sees_no_org() {
 #[tokio::test]
 async fn closure_error_rolls_back() {
     let pg = Pg::migrated().await;
-    let db = pg.app_db(1);
+    let db = pg.app_db(PoolSettings {
+        max_connections: 1,
+        ..PoolSettings::default()
+    });
     let a = create_org(&db, "org-a").await;
     let err = db
         .with_org(a, move |c| {
@@ -549,7 +485,10 @@ async fn wait_for(cond: impl Fn() -> bool, within: Duration) -> bool {
 async fn readyz_follows_migrations_and_database() {
     let pg = Pg::start().await;
     let readiness = Arc::new(DbReadiness::new());
-    let db = pg.app_db(2);
+    let db = pg.app_db(PoolSettings {
+        max_connections: 2,
+        ..PoolSettings::default()
+    });
     let probe = db.spawn_readiness_probe(readiness.clone(), Duration::from_millis(200));
     let state = AppState::new(false, readiness.clone(), db.clone());
 

@@ -4,7 +4,7 @@ Every proposal and design must follow these. To change one, raise a `needs-owner
 
 **Agents may only append.** Each new line links the `needs-owner` issue where the owner approved it. Never edit or delete existing lines; a reversal is a new line that names the one it replaces. `scripts/check-task-edits.sh` enforces this.
 
-## A0 data and cloud foundations (approved in #37, 2026-11-17; details and evidence in `openspec/changes/a0-data-and-cloud-foundations/design.md`)
+## A0 data and cloud foundations (approved in #37, 2026-11-17; details and evidence in `openspec/changes/archive/2026-11-17-a0-data-and-cloud-foundations/design.md`)
 - A0-1 · PostgreSQL 18 everywhere: `postgres:18` locally, RDS or Aurora in AWS, and for self-hosters.
 - A0-2 · Vanilla Postgres only; `pgcrypto` only if a spike needs it. No pgmq: jobs use a `FOR UPDATE SKIP LOCKED` table (later `apalis`).
 - A0-3 · Aurora DSQL is rejected.

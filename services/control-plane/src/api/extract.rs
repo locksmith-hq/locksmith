@@ -37,18 +37,7 @@ fn map_json_rejection(rejection: JsonRejection) -> ApiError {
             "expected content-type: application/json",
         ),
         _ => match rejection {
-            JsonRejection::JsonDataError(e) => {
-                // serde messages can quote request values (`invalid type: string "..."`), so
-                // only a field name is ever passed on.
-                let text = e.body_text();
-                if let Some(f) = quoted_after(&text, "unknown field `") {
-                    ApiError::validation(format!("unknown field `{f}`"))
-                } else if let Some(f) = quoted_after(&text, "missing field `") {
-                    ApiError::validation(format!("missing field `{f}`"))
-                } else {
-                    ApiError::validation("request body does not match the expected shape")
-                }
-            }
+            JsonRejection::JsonDataError(e) => shape_problem(&e.body_text()),
             _ => ApiError::validation("request body is not valid JSON"),
         },
     }
@@ -123,10 +112,15 @@ fn map_serde_error(e: &serde_json::Error) -> ApiError {
     if !e.is_data() {
         return ApiError::validation("request body is not valid JSON");
     }
-    let text = e.to_string();
-    if let Some(f) = quoted_after(&text, "unknown field `") {
+    shape_problem(&e.to_string())
+}
+
+/// A serde data error as a validation problem. serde messages can quote request values
+/// (`invalid type: string "..."`), so only a field name is ever passed on.
+fn shape_problem(text: &str) -> ApiError {
+    if let Some(f) = quoted_after(text, "unknown field `") {
         ApiError::validation(format!("unknown field `{f}`"))
-    } else if let Some(f) = quoted_after(&text, "missing field `") {
+    } else if let Some(f) = quoted_after(text, "missing field `") {
         ApiError::validation(format!("missing field `{f}`"))
     } else {
         ApiError::validation("request body does not match the expected shape")

@@ -24,3 +24,8 @@
 - Task: 2.2 - done (`infra/compose/openbao-init.sh` run as the openbao healthcheck: transit, `gateway` key, `control-plane` encrypt-only and `gateway` decrypt-only policies, fixed dev-only tokens; idempotent, re-applies after a restart)
 - Verified: live OpenBao: gateway token decrypts, control-plane token encrypt 200 / decrypt 403; re-run idempotent; `just up` + `just harness-check` 8/8; `just ci` green; independent Opus evaluator PASS
 - Notes for next session: tokens are `OPENBAO_CONTROL_PLANE_TOKEN` / `OPENBAO_GATEWAY_TOKEN` (defaults `dev-only-control-plane` / `dev-only-gateway`). Next: 2.3 live tests (wrap/unwrap with gateway token; control-plane unwrap denied), 2.4.
+
+## 2026-11-17 15:16 worker
+- Task: 2.3, 2.4 - done (`crates/ls-envelope/tests/kms_live.rs`: live OpenBao tests; control-plane token wraps, gateway token unwraps, reverse directions denied, wrong binding rejected)
+- Verified: `LS_REQUIRE_KMS=1 cargo nextest run -p ls-envelope -E 'test(kms)'` -> 7/7 pass; `just ci` green; independent Opus evaluator PASS
+- Notes for next session: tests skip when OpenBao is unreachable unless `LS_REQUIRE_KMS=1` (use it when verifying). Next: section 3 (secret_versions migration, versions API in ls-control-plane).

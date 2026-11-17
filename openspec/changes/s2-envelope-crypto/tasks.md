@@ -8,8 +8,8 @@
 ## 2. KMS wrapping [opus]
 - [x] 2.1 `KeyWrapper` trait and an OpenBao transit implementation (`wrap`, `unwrap`), storing the wrapped DEK in the `dek-wrap` header format.
 - [x] 2.2 Compose: enable transit and create the `gateway` key idempotently; policies and tokens for the control plane (encrypt only) and a gateway test token (decrypt).
-- [ ] 2.3 Tests against OpenBao: wrap/unwrap with the gateway token; unwrap with the control-plane token is denied.
-- [ ] 2.4 Verify: `just up && cargo nextest run -p ls-envelope -E 'test(kms)'`.
+- [x] 2.3 Tests against OpenBao: wrap/unwrap with the gateway token; unwrap with the control-plane token is denied.
+- [x] 2.4 Verify: `just up && cargo nextest run -p ls-envelope -E 'test(kms)'`.
 
 ## 3. Versions API [opus]
 - [ ] 3.1 Migration `secret_versions` (design decision 6): composite FK, RLS, append-only grants.

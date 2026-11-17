@@ -16,3 +16,6 @@ crates/ls-proxy/tests/fixtures/sigv4/get-vanilla-with-session-token/header-canon
 # Made-up AWS access key IDs (AKIALOCKSMITH*) for the M7 mock relay test; no secret key, never real.
 b070db04c9543cee641bd6a8b031db1a98d88a4b:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
 b070db04c9543cee641bd6a8b031db1a98d88a4b:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+# Fixed known-answer test vector for ls-envelope (not credentials); replaced with low-entropy values in a later commit, history cannot be rewritten.
+e0315fbfb5026a49d5a273535608c45dc82b6b4b:crates/ls-envelope/vectors/v1.json:generic-api-key:46
+e0315fbfb5026a49d5a273535608c45dc82b6b4b:crates/ls-envelope/vectors/v1.json:generic-api-key:47

@@ -5,7 +5,7 @@ description: Start of every scheduled Locksmith agent run. Runs preflight (docke
 
 # Run start
 
-1. Run `bash scripts/agent-start.sh <kind>`, where `<kind>` is one of worker, rescue, learning, review, health or research.
+1. Run `bash scripts/agent-start.sh <kind>`, where `<kind>` is one of worker, lead, review, health or research.
    - It prints one line per check: `OK`, `FIXED`, `WARN` or `FAIL`.
    - Fix every `FAIL` before doing real work.
    - Record each `FIXED`, `WARN` or `FAIL` line as a `friction` entry. The `run-log` skill has the format.

@@ -44,6 +44,7 @@ impl FromRequestParts<AppState> for OrgBinding {
             .ok()
             .and_then(|s| Uuid::parse_str(s.trim()).ok())
             .ok_or(Unauthenticated)?;
+        tracing::Span::current().record("org.id", tracing::field::display(org_id));
         Ok(Self { org_id })
     }
 }

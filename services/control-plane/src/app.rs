@@ -3,8 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::State;
+use axum::extract::{MatchedPath, Request, State};
 use axum::http::{HeaderName, StatusCode};
+use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
 use tower::ServiceBuilder;
@@ -111,7 +112,11 @@ pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
     router.with_state(state).layer(
         ServiceBuilder::new()
             .layer(SetRequestIdLayer::new(id_header.clone(), MakeRequestUuid))
-            .layer(TraceLayer::new_for_http())
+            .layer(
+                TraceLayer::new_for_http()
+                    .make_span_with(request_span)
+                    .on_response(record_response),
+            )
             .layer(PropagateRequestIdLayer::new(id_header))
             .layer(TimeoutLayer::with_status_code(
                 StatusCode::REQUEST_TIMEOUT,
@@ -146,4 +151,34 @@ async fn readyz(State(state): State<AppState>) -> StatusCode {
     } else {
         StatusCode::SERVICE_UNAVAILABLE
     }
+}
+
+/// Server span named by route template (`GET /v1/projects/{id}`), never by the raw path.
+/// Records only method and route; status and org id are filled in later. No headers, no bodies.
+fn request_span(req: &Request) -> tracing::Span {
+    let method = req.method().as_str();
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or("unmatched", MatchedPath::as_str);
+    tracing::info_span!(
+        "http.request",
+        otel.name = %format_args!("{method} {route}"),
+        otel.kind = "server",
+        http.request.method = method,
+        http.route = route,
+        http.response.status_code = tracing::field::Empty,
+        org.id = tracing::field::Empty,
+    )
+}
+
+fn record_response<B>(res: &Response<B>, latency: Duration, span: &tracing::Span) {
+    let status = res.status().as_u16();
+    // As i64: tracing-opentelemetry exports u64 fields as strings, OTel wants an int.
+    span.record("http.response.status_code", i64::from(status));
+    tracing::info!(
+        status,
+        latency_ms = latency.as_millis() as u64,
+        "request finished"
+    );
 }

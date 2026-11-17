@@ -36,8 +36,14 @@ sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-toki
 sqlx-postgres = { version = "0.9.0", default-features = false, features = ["migrate", "uuid"] }
 utoipa = { version = "6.0.0", features = ["uuid"] }
 utoipa-axum = "0.3.0"
+opentelemetry = "0.33.1"
+opentelemetry_sdk = "0.33.1"
+tracing-opentelemetry = "0.34.0"
+opentelemetry-appender-tracing = "0.33.1"
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace", "logs"] }
 
 [dev-dependencies]
+opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }
 http-body-util = "0.1"
 ls-tenant-lint = { path = "../../crates/ls-tenant-lint" }
 similar = "3.2.1"

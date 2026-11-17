@@ -5,21 +5,38 @@ use ls_control_plane::app::{self, AppState};
 use ls_control_plane::config::{self, Config};
 use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
 use ls_control_plane::migrate;
+use ls_control_plane::telemetry;
 use tracing_subscriber::EnvFilter;
+
+fn env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())
+}
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
-
     let config = match Config::from_env() {
         Ok(c) => c,
         Err(e) => {
+            tracing_subscriber::fmt()
+                .with_env_filter(env_filter())
+                .init();
             tracing::error!(error = %e, "invalid configuration");
             return ExitCode::FAILURE;
         }
     };
+
+    let telemetry = match telemetry::init(
+        config.otlp_endpoint.as_deref(),
+        env_filter(),
+        std::io::stdout,
+        &telemetry::Options::default(),
+    ) {
+        Ok(t) => t,
+        Err(_) => return ExitCode::FAILURE,
+    };
+    if telemetry.exporting() {
+        tracing::info!("OTLP telemetry export enabled");
+    }
 
     if config.dev_auth {
         tracing::warn!(
@@ -70,6 +87,7 @@ async fn main() -> ExitCode {
     migrations.abort();
     probe.abort();
     database.close().await;
+    let _ = tokio::task::spawn_blocking(move || telemetry.shutdown()).await;
     match served {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

@@ -18,7 +18,7 @@ Never mark a PR ready while a `needs-rescue` issue is open for that change.
 If the latest `ci` run on main failed, fixing it comes first. Open `claude/fix-main-<date>`, use the `evaluate-escalate` skill, and mark the PR ready.
 
 ## Merge
-Take candidates oldest first, at most 2 per run, and stop at the first failure.
+Take candidates oldest first, at most 4 per run. A failed candidate does not stop the others.
 1. Run `bash scripts/merge-gate.sh <pr>`. It checks six gates:
    - the change is complete;
    - the task-edit guard passes;
@@ -30,7 +30,11 @@ Take candidates oldest first, at most 2 per run, and stop at the first failure.
    If a gate fails:
    - **Gate 6, review still running:** don't leave it for the next run. Poll with `until bash scripts/merge-gate.sh <pr>; do sleep 60; done` inside `timeout 900`. It merges the moment the verdict lands.
    - **Gate 6 FAIL:** fix the findings with the `evaluate-escalate` skill, then push once. The push triggers a new review.
-   - **Gate 3 (conflicts):** merge `origin/main` into the branch, resolve the conflicts, run `just ci`, and push once.
+   - **Gate 3 (conflicts):** several PRs are open at once, so this is routine. Lock the change (`run-lock.sh acquire <you> <id>`), merge `origin/main` into the branch, and resolve:
+     - `Cargo.lock`, `package-lock.json`: take main's, then rerun `cargo check` / `npm i`.
+     - Workspace member lists, `justfile` recipes, roadmap rows: keep both sides.
+     - Code: keep both behaviours; if they truly conflict, the later PR adapts.
+     Then run `just ci`, push once and release the lock.
    - **Any other failure:** comment the reason on the PR. For protected files, also open a `needs-owner` issue.
 2. **Merge on GATE PASS,** pinned to the reviewed SHA:
    `gh api -X PUT repos/locksmith-hq/locksmith/pulls/<pr>/merge -f merge_method=merge -f sha=<sha>`

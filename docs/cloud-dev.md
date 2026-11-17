@@ -109,7 +109,7 @@ How we stay inside it:
 
 ## Scheduler design (why it looks like this)
 The design follows Anthropic's long-running agent harness (https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents):
-- One task per run.
+- Small steps per run; since 2026-11-17 several workers run at once, each on a different change (`scripts/change-status.sh`, per-change locks in `scripts/run-lock.sh`). Each change has a tracking issue kept current by the `change-sync` workflow.
 - State lives in git and the `agent-log` issue, not in model memory.
 - Each run starts by checking CI and running a baseline `just ci`.
 - A task is ticked only after its verification command passes.
@@ -123,7 +123,7 @@ All four avoid peak hours (weekdays about 15:00–21:00).
 
 | Routine | Model | Environment | When | Job |
 |---|---|---|---|---|
-| [Worker](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | every 2h off-peak: 22:05, 00:05, 02:05 … 14:05 (9/day; skips weekday 15:00–21:00) | one OpenSpec task per run on `claude/change-<id>`, draft PR |
+| [Worker](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | every 2h off-peak: 22:05, 00:05, 02:05 … 14:05 (9/day; skips weekday 15:00–21:00) | claims one ready change at a time (per-change lock on its tracking issue), parks blocked ones and takes the next; non-draft PR per change. Several workers may run at once |
 | [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Sat 10:35 (after the Saturday 10:00 weekly reset) | re-verify finished work, quality review, write the next change |
 | [Daily health check](https://claude.ai/code/routines/trig_012bR8F2aWP91W3D9xGDpVUn) | Haiku 5.5 | Default | daily 08:30 | detects silent failures: worker silent for more than 24h, red CI on main, owner decisions waiting more than 3 days, finished PRs waiting more than 2 days; stays silent when healthy |
 | [Rescue (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-dev` | daily 09:35, 23:35 (exits at once if idle) | fixes the oldest `needs-rescue` issue at its root cause and checks the fix with an independent Opus evaluator; after 2 failed attempts it hands the issue to the owner |

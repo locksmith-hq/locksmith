@@ -15,7 +15,7 @@ protected_fail=0
 if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
   paths=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh
          AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents
-         .claude/skills/merge-queue .claude/skills/merge-review docs/agents/merge.md docs/agents/common.md scripts/run-lock.sh scripts/worker-has-work.sh)
+         .claude/skills/merge-queue .claude/skills/merge-review docs/agents/merge.md docs/agents/common.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh)
   # Learning branches may improve other skills, role files, lessons and helper scripts.
   [[ "$branch" == claude/learning-* ]] || paths+=(docs/agents .claude/skills scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
   # owner.md and openspec/decisions.md: agents may only append (new owner decisions), never edit existing lines.

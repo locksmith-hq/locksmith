@@ -13,7 +13,7 @@ workspace = true
 ls-crypto = { path = "../ls-crypto" }
 # Same AEAD crate and version as ls-crypto; used directly only for the fixed-nonce KAT path.
 aes-gcm = "0.10"
-regex = "1.13"
+ls-tenant-lint = { path = "../ls-tenant-lint" }
 # sqlx's facade crate cannot be used here: it pulls sqlx-sqlite (libsqlite3-sys <0.38) into
 # resolution even when the feature is off, which conflicts with ls-vault's rusqlite 0.42
 # (libsqlite3-sys 0.40, `links = "sqlite3"`). So depend on sqlx-core + sqlx-postgres directly;

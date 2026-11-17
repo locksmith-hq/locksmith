@@ -1,14 +1,16 @@
 //! A0 spikes (openspec/changes/a0-data-and-cloud-foundations, tasks 2.2-2.4).
 //!
 //! - [`tenant`]: per-transaction tenant context (`set_config('app.org_id', $1, true)`).
-//! - [`tenant_lint`]: rejects session-level tenant settings in non-test Rust code.
+//! - [`tenant_lint`]: rejects session-level tenant settings in non-test Rust code
+//!   (moved to the shared `ls-tenant-lint` crate; re-exported here).
 //! - [`header`]: the versioned ciphertext header (design decision 7).
 //!
 //! The RLS tests in `tests/rls.rs` need the local stack (`just up`).
 
 pub mod header;
 pub mod tenant;
-pub mod tenant_lint;
+/// The tenant-context lint, now shared in `ls-tenant-lint` (re-exported for the A0 test).
+pub use ls_tenant_lint as tenant_lint;
 
 /// The sqlx API this crate uses, from `sqlx-core` + `sqlx-postgres` (see Cargo.toml for why
 /// not the `sqlx` facade).

@@ -1,8 +1,8 @@
 # Tasks: S3 gateway HTTP relay
 
 ## 1. Control-plane material endpoint [opus]
-- [ ] 1.1 Add `GET /internal/v1/secrets/{id}/versions/{n}/material` returning ciphertext, wrapped DEK and key id only, behind a service token (constant-time compare); org-scoped through the S1 tenant helper. Update `openapi.json` (internal tag).
-- [ ] 1.2 Verify: `cargo nextest run -p ls-control-plane` covers no token → 401, cross-org → 404, and no plaintext field in the schema.
+- [x] 1.1 Add `GET /internal/v1/secrets/{id}/versions/{n}/material` returning ciphertext, wrapped DEK and key id only, behind a service token (constant-time compare); org-scoped through the S1 tenant helper. Update `openapi.json` (internal tag).
+- [x] 1.2 Verify: `cargo nextest run -p ls-control-plane` covers no token → 401, cross-org → 404, and no plaintext field in the schema.
 
 ## 2. Gateway service skeleton [sonnet]
 - [ ] 2.1 Create `services/gateway` (axum, OTel, health), config with bindings TOML, caller token, OpenBao gateway token; migration `gateway_audit` (append-only, RLS).

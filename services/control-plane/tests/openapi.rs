@@ -111,6 +111,57 @@ fn openapi_is_3_1_and_has_no_secret_value_field() {
     }
 }
 
+/// S3 task 1.2: the internal material response carries ciphertext, the wrapped DEK and ids
+/// only (no plaintext field), and the route is tagged `internal` and needs the service token.
+#[test]
+fn internal_material_schema_has_no_plaintext_field() {
+    let spec: Value = serde_json::from_str(&generated()).unwrap();
+    let schema = &spec["components"]["schemas"]["SecretVersionMaterial"];
+    let mut props: Vec<&str> = schema["properties"]
+        .as_object()
+        .expect("SecretVersionMaterial.properties")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    props.sort_unstable();
+    assert_eq!(
+        props,
+        [
+            "ciphertext",
+            "key_id",
+            "secret_id",
+            "version",
+            "wrapped_dek"
+        ]
+    );
+    assert_eq!(schema["additionalProperties"], Value::Null);
+    // The blobs are base64 strings; nothing is a (write-only) password-style value field.
+    for blob in ["ciphertext", "wrapped_dek"] {
+        let p = &schema["properties"][blob];
+        assert_eq!(p["type"], "string");
+        assert_eq!(p["contentEncoding"], "base64");
+    }
+    for (name, p) in schema["properties"].as_object().unwrap() {
+        assert_ne!(p["format"], "password", "{name}");
+        assert_ne!(p["writeOnly"], true, "{name}");
+    }
+
+    let op = &spec["paths"]["/internal/v1/secrets/{secret_id}/versions/{version}/material"]["get"];
+    assert_eq!(op["tags"], serde_json::json!(["internal"]));
+    assert_eq!(op["security"], serde_json::json!([{ "service_token": [] }]));
+    assert_eq!(
+        op["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/SecretVersionMaterial"
+    );
+    for status in ["401", "404"] {
+        assert!(op["responses"].get(status).is_some(), "missing {status}");
+    }
+    assert_eq!(
+        spec["components"]["securitySchemes"]["service_token"]["scheme"],
+        "bearer"
+    );
+}
+
 #[tokio::test]
 async fn openapi_json_is_served_and_matches_generated_spec() {
     // A lazy pool that never connects: the spec needs no database.

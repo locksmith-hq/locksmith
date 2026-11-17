@@ -473,6 +473,42 @@
           "items"
         ],
         "type": "object"
+      },
+      "SecretVersionMaterial": {
+        "description": "The stored envelope of one secret version. Ciphertext and a wrapped data key only: never the\nvalue, and never an unwrapped key.",
+        "properties": {
+          "ciphertext": {
+            "contentEncoding": "base64",
+            "description": "A0-7 ciphertext blob (header, nonce, ciphertext, tag), standard base64 with padding.",
+            "type": "string"
+          },
+          "key_id": {
+            "description": "The KMS key the data key is wrapped under, e.g. `gateway:v1`.",
+            "type": "string"
+          },
+          "secret_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "wrapped_dek": {
+            "contentEncoding": "base64",
+            "description": "A0-7 `dek-wrap` blob (the KMS-wrapped data key), standard base64 with padding.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret_id",
+          "version",
+          "key_id",
+          "ciphertext",
+          "wrapped_dek"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -481,6 +517,11 @@
         "in": "header",
         "name": "x-locksmith-dev-org",
         "type": "apiKey"
+      },
+      "service_token": {
+        "description": "Gateway service token (LOCKSMITH_GATEWAY_SERVICE_TOKEN); the org is named in the X-Locksmith-Org header.",
+        "scheme": "bearer",
+        "type": "http"
       }
     }
   },
@@ -505,6 +546,95 @@
         "summary": "Liveness probe",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/internal/v1/secrets/{secret_id}/versions/{version}/material": {
+      "get": {
+        "operationId": "material",
+        "parameters": [
+          {
+            "description": "Secret id",
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Version number, starting at 1",
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The org the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretVersionMaterial"
+                }
+              }
+            },
+            "description": "Ciphertext, wrapped data key and key id"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found (including another org's secret)"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Fetch the encrypted material of a secret version (gateway only; no plaintext)",
+        "tags": [
+          "internal"
         ]
       }
     },
@@ -2284,6 +2414,10 @@
     },
     {
       "name": "secrets"
+    },
+    {
+      "description": "Service-to-service routes for the gateway; service token only, never exposed to users or agents",
+      "name": "internal"
     }
   ]
 }

@@ -224,3 +224,27 @@ pub enum VersionWriteErrors {
     )]
     Unavailable(Problem),
 }
+
+/// Internal (service-token) `GET` of one resource.
+#[derive(Debug, IntoResponses)]
+#[allow(dead_code)] // OpenAPI description only; never constructed.
+pub enum InternalReadErrors {
+    #[response(
+        status = 401,
+        description = "Missing or invalid service token or org header",
+        content_type = "application/problem+json"
+    )]
+    Unauthenticated(Problem),
+    #[response(
+        status = 404,
+        description = "Not found (including another org's secret)",
+        content_type = "application/problem+json"
+    )]
+    NotFound(Problem),
+    #[response(
+        status = 503,
+        description = "Service unavailable",
+        content_type = "application/problem+json"
+    )]
+    Unavailable(Problem),
+}

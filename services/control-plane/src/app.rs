@@ -13,11 +13,12 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::auth::ServiceToken;
 use crate::db::Database;
 use crate::kms::DekWrapper;
 use crate::problem::ApiError;
@@ -41,6 +42,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
     tags(
         (name = "health", description = "Liveness and readiness"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
+        (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
     )
 )]
 struct ApiDoc;
@@ -58,6 +60,17 @@ impl Modify for DevOrgSecurity {
                 "Dev-only org binding, honoured only with LOCKSMITH_DEV_AUTH=1.",
             ))),
         );
+        components.add_security_scheme(
+            "service_token",
+            SecurityScheme::Http(
+                Http::builder()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .description(Some(
+                        "Gateway service token (LOCKSMITH_GATEWAY_SERVICE_TOKEN); the org is named in the X-Locksmith-Org header.",
+                    ))
+                    .build(),
+            ),
+        );
     }
 }
 
@@ -68,6 +81,7 @@ pub struct AppState {
     readiness: Arc<dyn Readiness>,
     db: Database,
     kms: Option<Arc<dyn DekWrapper>>,
+    service_token: Option<Arc<ServiceToken>>,
 }
 
 impl AppState {
@@ -78,7 +92,19 @@ impl AppState {
             readiness,
             db,
             kms: None,
+            service_token: None,
         }
+    }
+
+    /// Accept `token` on the `/internal/v1` routes. Without one they answer `401` (fail closed).
+    pub fn with_service_token(mut self, token: ServiceToken) -> Self {
+        self.service_token = Some(Arc::new(token));
+        self
+    }
+
+    /// The gateway service token, if one is configured.
+    pub fn service_token(&self) -> Option<&ServiceToken> {
+        self.service_token.as_deref()
     }
 
     /// Wrap secret-version DEKs with `kms` (S2 design decision 3).

@@ -17,6 +17,11 @@ pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_CONTROL_PLANE_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
 pub const ENV_OPENBAO_KEY_VERSION: &str = "OPENBAO_TRANSIT_KEY_VERSION";
+pub const ENV_GATEWAY_SERVICE_TOKEN: &str = "LOCKSMITH_GATEWAY_SERVICE_TOKEN";
+
+/// Shortest accepted gateway service token, in bytes (a 256-bit random token in hex or base64
+/// is longer). Shorter values are rejected rather than accepted as a guessable credential.
+pub const MIN_SERVICE_TOKEN_BYTES: usize = 32;
 
 const DEFAULT_TRANSIT_KEY: &str = "gateway";
 
@@ -56,6 +61,9 @@ pub struct Config {
     /// The KMS that wraps secret-version DEKs (S2). `None` when `OPENBAO_ADDR` is unset; secret
     /// version writes then answer `503`.
     pub kms: Option<KmsConfig>,
+    /// The bearer token the gateway presents on `/internal/v1` (S3 design decision 2). `None`
+    /// when unset: every internal request is then refused (`401`, fail closed).
+    pub gateway_service_token: Option<SecretString>,
 }
 
 /// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
@@ -123,6 +131,15 @@ impl Config {
             }
         };
 
+        let gateway_service_token = match get(ENV_GATEWAY_SERVICE_TOKEN) {
+            None => None,
+            Some(v) if v.is_empty() => None,
+            Some(v) if v.trim() != v || v.len() < MIN_SERVICE_TOKEN_BYTES => {
+                return Err(ConfigError::Invalid(ENV_GATEWAY_SERVICE_TOKEN));
+            }
+            Some(v) => Some(SecretString::from(v)),
+        };
+
         Ok(Self {
             database_url,
             database_owner_url,
@@ -130,6 +147,7 @@ impl Config {
             otlp_endpoint,
             dev_auth,
             kms,
+            gateway_service_token,
         })
     }
 }
@@ -233,6 +251,30 @@ mod tests {
         .unwrap();
         assert_eq!(err, ConfigError::Invalid(ENV_OPENBAO_KEY_VERSION));
         assert!(!err.to_string().contains("hunter"));
+    }
+
+    #[test]
+    fn gateway_service_token_is_optional_and_must_be_long() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(c.gateway_service_token.is_none());
+        let c = Config::from_lookup(lookup(&with(&[(ENV_GATEWAY_SERVICE_TOKEN, "")])))
+            .ok()
+            .unwrap();
+        assert!(c.gateway_service_token.is_none());
+        for bad in ["short-hunter5", " hunter5-padded-to-be-long-enough-xx "] {
+            let err = Config::from_lookup(lookup(&with(&[(ENV_GATEWAY_SERVICE_TOKEN, bad)])))
+                .err()
+                .unwrap();
+            assert_eq!(err, ConfigError::Invalid(ENV_GATEWAY_SERVICE_TOKEN));
+            assert!(!err.to_string().contains("hunter"));
+        }
+        let c = Config::from_lookup(lookup(&with(&[(
+            ENV_GATEWAY_SERVICE_TOKEN,
+            "hunter5-0123456789abcdef0123456789abcdef",
+        )])))
+        .ok()
+        .unwrap();
+        assert!(c.gateway_service_token.is_some());
     }
 
     #[test]

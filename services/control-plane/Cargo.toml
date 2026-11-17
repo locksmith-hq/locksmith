@@ -47,6 +47,8 @@ rustls = { version = "0.23.46", default-features = false, features = ["ring", "s
 # S2: per-version envelope encryption and the OpenBao transit DEK wrapper.
 ls-envelope = { path = "../../crates/ls-envelope" }
 zeroize = "1.9.1"
+# S3: constant-time comparison of the gateway service token on the internal material endpoint.
+subtle = "2.6.1"
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }

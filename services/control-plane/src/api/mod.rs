@@ -8,6 +8,7 @@
 
 mod environments;
 mod extract;
+mod internal;
 mod orgs;
 mod projects;
 mod responses;
@@ -54,6 +55,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(secrets::create, secrets::list))
         .routes(routes!(secrets::get_one, secrets::patch, secrets::delete))
         .routes(routes!(versions::create, versions::list))
+        .routes(routes!(internal::material))
 }
 
 /// SQL column list shared by projects, environments and secrets.

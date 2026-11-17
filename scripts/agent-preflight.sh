@@ -11,6 +11,9 @@ sudo_() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo -n "$@"; fi; }
 if ! command -v docker >/dev/null; then say FAIL docker "not installed"; fail=1
 elif docker info >/dev/null 2>&1; then say OK docker
 else
+  # Docker Hub rate-limits anonymous pulls (429s on 2026-11-16 and -17), so pull through
+  # Google's public Docker Hub mirror; dockerd falls back to Docker Hub. Never overwrite a config.
+  [ -e /etc/docker/daemon.json ] || { sudo_ mkdir -p /etc/docker && echo '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo_ tee /etc/docker/daemon.json >/dev/null; }
   (sudo_ service docker start || (sudo_ dockerd >/tmp/dockerd.log 2>&1 &)) >/dev/null 2>&1
   for _ in $(seq 1 20); do docker info >/dev/null 2>&1 && break; sleep 1; done
   if docker info >/dev/null 2>&1; then say FIXED docker "daemon started"; else say FAIL docker "daemon down, see /tmp/dockerd.log"; fail=1; fi

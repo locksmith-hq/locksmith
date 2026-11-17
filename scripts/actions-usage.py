@@ -45,30 +45,46 @@ def run_minutes(r):
     return math.ceil((ts(r["updated_at"]) - ts(r["run_started_at"])).total_seconds() / 60)
 
 
-def billed_minutes(org, now):
+def billed_by_day(org, now):
+    """{date: quota minutes} from the billing API, or None if the token can't read billing."""
     d = gh(f"organizations/{org}/settings/billing/usage?year={now.year}&month={now.month}")
     if not d or "usageItems" not in d:
         return None
-    total = 0
+    days = defaultdict(float)
     for it in d["usageItems"]:
         if it.get("product") == "actions" and it.get("unitType") == "Minutes":
             sku = it.get("sku", "").lower()
-            total += it["quantity"] * next((m for k, m in MULT.items() if k in sku), 1)
-    return round(total)
+            days[it["date"][:10]] += it["quantity"] * next((m for k, m in MULT.items() if k in sku), 1)
+    return days
 
 
 def main():
     now = dt.datetime.now(dt.timezone.utc)
     month_start = now.date().replace(day=1)
     month = runs_since(month_start.isoformat())
-    used, src = billed_minutes(REPO.split("/")[0], now), "billing API"
-    if used is None:
-        used, src = sum(run_minutes(r) for r in month), "estimate from run times"
-    days = calendar.monthrange(now.year, now.month)[1]
+    by_day, src = billed_by_day(REPO.split("/")[0], now), "billing API"
+    if by_day is None:
+        by_day, src = defaultdict(float), "estimate from run times"
+        for r in month:
+            by_day[r["created_at"][:10]] += run_minutes(r)
+    used = round(sum(by_day.values()))
+    # Included minutes reset on the 1st (UTC) on GitHub's calendar-month billing.
+    month_days = calendar.monthrange(now.year, now.month)[1]
     elapsed = max((now - dt.datetime.combine(month_start, dt.time(), dt.timezone.utc)).total_seconds() / 86400, 1)
-    projected = round(used * days / elapsed)
+    days_left = month_days - now.day + 1  # including today
+    week_start = (now - dt.timedelta(days=7)).date().isoformat()
+    avg_month = used / elapsed
+    avg_week = sum(v for k, v in by_day.items() if k >= week_start) / min(7, elapsed)
+    rate = max(avg_month, avg_week)  # the recent trend wins when usage is climbing
+    projected = round(used + rate * days_left)
     pct = round(100 * projected / QUOTA)
-    print(f"Actions {now:%Y-%m}: {used} min used ({src}), projected {projected} of {QUOTA} ({pct}%)")
+    left = QUOTA - used
+    print(f"Today {now:%Y-%m-%d} (UTC). Quota resets {month_start.replace(day=month_days) + dt.timedelta(days=1)}: {days_left} days left.")
+    print(f"Used {used} of {QUOTA} min ({src}); {left} left.")
+    print(f"Daily average: {avg_month:.0f} min this month, {avg_week:.0f} min last 7 days.")
+    print(f"Projected month end: {projected} min ({pct}% of quota). Safe daily budget: {left / days_left:.0f} min.")
+    if pct > 80:
+        print(f"ALERT: on track to use {pct}% of the quota. Cut CI time now: path filters, caching, concurrency cancel, fewer triggers on the top workflows below.")
 
     week = now - dt.timedelta(days=7)
     per = defaultdict(list)

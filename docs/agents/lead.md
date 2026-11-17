@@ -11,11 +11,11 @@ Skip if no `needs-rescue` issue is open. Take the oldest whose change you can lo
 - **FAIL:** comment `rescue-attempt`; after a second, add `needs-owner`.
 
 ## 2. Runs
-Parse the window's `run-metadata` blocks and failed CI runs. Flag runs that are **stuck** (over 2700 s with no task done, or one task across 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120) or **wasteful** (Opus over 40% of tokens, repeated reads or retries).
+Parse the window's `run-metadata` and failed CI runs. Flag runs that are **stuck** (over 2700 s with no task done, or one task across 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120) or **wasteful** (Opus over 40% of tokens, repeated reads or retries).
 
 Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > role-file edit > lesson (`lessons.md`, 5 at most). Total `docs/agents` + `.claude/skills` words must not grow. Revert fixes 7+ days old whose metric didn't move.
 
-**Actions minutes:** run `scripts/actions-usage.py`. Exit 1 or growing workflow minutes: open a `needs-owner` issue (workflows are owner-only) with numbers and a proposed diff (path filters, caching, concurrency).
+**Actions minutes:** run `scripts/actions-usage.py`; log its first four lines. On ALERT (exit 1) or growing workflow minutes, open a `needs-owner` issue (workflows are owner-only) with numbers and a diff.
 
 ## 3. Code
 Review diffs merged to main in the window; `merge-review` already covers security. Look for:

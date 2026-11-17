@@ -17,7 +17,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'ready-to-merge') &&
       (github.event.action == 'synchronize' || github.event.label.name == 'ready-to-merge')
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     # Job-level so bot comments on the PR (issue_comment events) can't cancel a running review.
     concurrency:
       group: claude-review-${{ github.event.pull_request.number }}
@@ -47,7 +47,7 @@ jobs:
       github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
       github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write

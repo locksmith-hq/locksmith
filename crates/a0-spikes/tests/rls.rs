@@ -347,7 +347,7 @@ fn canary() -> Option<SecretBytes> {
     let path = std::env::var("LOCKSMITH_CANARIES").unwrap_or_else(|_| {
         concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../../infra/compose/.canaries"
+            "/../../infra/compose/.canaries"
         )
         .into()
     });

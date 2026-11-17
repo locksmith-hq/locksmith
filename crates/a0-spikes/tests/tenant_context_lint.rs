@@ -5,7 +5,7 @@ use std::path::Path;
 
 #[test]
 fn no_session_level_tenant_settings_in_non_test_code() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let root = root.canonicalize().expect("repo root");
     assert!(
         root.join("AGENTS.md").is_file(),

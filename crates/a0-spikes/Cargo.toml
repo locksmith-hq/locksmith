@@ -10,7 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-ls-crypto = { path = "../../../crates/ls-crypto" }
+ls-crypto = { path = "../ls-crypto" }
 # Same AEAD crate and version as ls-crypto; used directly only for the fixed-nonce KAT path.
 aes-gcm = "0.10"
 regex = "1.13"

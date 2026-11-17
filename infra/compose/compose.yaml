@@ -2,7 +2,7 @@ name: locksmith-dev
 
 services:
   postgres:
-    image: postgres:18
+    image: postgres:18.7
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-locksmith}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-locksmith-dev-only}

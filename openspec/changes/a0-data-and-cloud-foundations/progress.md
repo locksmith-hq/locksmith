@@ -29,3 +29,17 @@ Format:
 - Task: 1.1 - done (owner replied "approved" on #37)
 - Verified: scripts/check-agent-docs.sh, scripts/check-task-edits.sh -> OK
 - Notes for next session: A0 decisions 1–18 approved, and EU residency is confirmed not needed at launch. Folded in the PR #35 review fixes: a separate Object Lock checkpoint bucket in dev, and `iam:PassRole` allowed through MCP for the session-stack roles only. Next: task group 2 (spikes).
+
+## 2026-11-17 03:58 worker
+- Task: 2.1-2.5 - done (Opus implementer, independent Opus evaluator PASS)
+- Verified: just ci -> green; cargo nextest run -p a0-spikes -> 31 passed; just leak-scan -> clean; just psql -c 'select uuidv7()' -> v7 UUID on PostgreSQL 18.7
+- Notes for next session: crate is at crates/a0-spikes, not tests/spikes/a0 (tree-check.sh forbids Rust there; guard scripts are protected). Findings for 3.1: pin is postgres:18.7; sqlx umbrella crate conflicts with rusqlite (libsqlite3-sys), so use sqlx-core + sqlx-postgres 0.9.0; the RLS policy needs NULLIF(current_setting('app.org_id', true), '') because the setting stays '' after a local set_config commits. just psql was fixed to pass quoted args. Task 3.2 edits openspec/config.yaml, which is protected on agent branches: needs an owner session. rls tests are excluded from just ci (need just up); run them via cargo nextest run -p a0-spikes. Docker Hub returned 429; images came from mirror.gcr.io.
+
+## 2026-11-17 worker
+- Task: 3.1, 4.1 - done
+- Verified: just up && just harness-check && cargo nextest run -p a0-spikes && just ci -> exit 0
+- Notes for next session: 3.2 edits openspec/config.yaml (protected on agent branches); needs an owner session, so the change cannot finish on this branch. Remaining [verify] tags in design.md are P1 checks, not spike-resolved.
+
+## 2026-11-17 owner session
+- Task: 3.2 - done in PR #43 (merged): the decisions live in append-only `openspec/decisions.md`, and `openspec/config.yaml` points to it, so later decisions don't need a protected-file edit.
+- Verified: guard tests in a scratch clone (append passes, edits fail), tree-check, task-guard, agent-docs OK.

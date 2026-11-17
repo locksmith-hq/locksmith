@@ -1,0 +1,28 @@
+[package]
+name = "a0-spikes"
+description = "A0 spikes: Postgres 18 RLS tenancy, tenant-context lint, versioned ciphertext header."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ls-crypto = { path = "../ls-crypto" }
+# Same AEAD crate and version as ls-crypto; used directly only for the fixed-nonce KAT path.
+aes-gcm = "0.10"
+regex = "1.13"
+# sqlx's facade crate cannot be used here: it pulls sqlx-sqlite (libsqlite3-sys <0.38) into
+# resolution even when the feature is off, which conflicts with ls-vault's rusqlite 0.42
+# (libsqlite3-sys 0.40, `links = "sqlite3"`). So depend on sqlx-core + sqlx-postgres directly;
+# `_rt-tokio` is what the facade's `runtime-tokio` feature enables.
+sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "migrate", "uuid"] }
+sqlx-postgres = { version = "0.9.0", default-features = false, features = ["migrate", "uuid"] }
+uuid = { version = "1.29", features = ["v4", "v7"] }
+
+[dev-dependencies]
+tokio = { version = "1.54", features = ["rt", "macros"] }
+proptest = { workspace = true }
+hex = "0.4"

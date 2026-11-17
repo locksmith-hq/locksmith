@@ -9,8 +9,9 @@ lint:
     cargo clippy --workspace --all-targets -- -D warnings
     npm run lint
 
+# a0-spikes' rls tests need `just up` (like ls-e2e); its header and lint tests run here.
 test-rust:
-    cargo nextest run --workspace --exclude ls-e2e
+    cargo nextest run --workspace --exclude ls-e2e -E 'not (package(a0-spikes) & binary(rls))'
     cargo test --workspace --exclude ls-e2e --doc
 
 test-web:
@@ -59,7 +60,7 @@ logs svc:
     {{compose}} logs --tail=200 {{svc}}
 
 psql *args:
-    {{compose}} exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' -- {{args}}
+    {{compose}} exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' -- "$@"
 
 ps:
     {{compose}} ps

@@ -11,6 +11,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
+use super::responses::{DeleteErrors, ListErrors, ReadErrors, WriteErrors};
 use super::{
     Page, PageParams, Paged, Patch, all, common_cols, created, deleted_or_404, exists_or_404, one,
     validate_description, validate_name,
@@ -18,7 +19,7 @@ use super::{
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
-use crate::problem::{ApiError, Problem};
+use crate::problem::ApiError;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Secret {
@@ -71,11 +72,7 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Secret> {
     request_body = NewSecret,
     responses(
         (status = 201, description = "Created", body = Secret, headers(("Location" = String, description = "URL of the new resource"))),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        WriteErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -134,9 +131,7 @@ pub async fn create(
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
     responses(
         (status = 200, description = "OK", body = Secret),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ReadErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -175,10 +170,7 @@ pub async fn get_one(
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), PageParams),
     responses(
         (status = 200, description = "A page of secrets", body = Paged<Secret>),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ListErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -231,11 +223,7 @@ pub async fn list(
     request_body = Patch,
     responses(
         (status = 200, description = "OK", body = Secret),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        WriteErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -280,10 +268,7 @@ pub async fn patch(
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
     responses(
         (status = 204, description = "Deleted"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        DeleteErrors,
     ),
     security(("dev_org" = []))
 )]

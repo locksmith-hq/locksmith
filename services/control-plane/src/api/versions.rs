@@ -16,12 +16,13 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiPath, SecretJson};
+use super::responses::{ReadErrors, VersionWriteErrors};
 use super::{created, exists_or_404};
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, PgConnection, Row};
 use crate::kms::DekWrapper;
-use crate::problem::{ApiError, Kind, Problem};
+use crate::problem::{ApiError, Kind};
 
 /// Metadata of one stored version. Never carries the value or any key material.
 #[derive(Debug, Serialize, ToSchema)]
@@ -176,12 +177,7 @@ fn kms_error(e: WrapError) -> ApiError {
     request_body = NewSecretVersion,
     responses(
         (status = 201, description = "Created; version metadata only", body = SecretVersion, headers(("Location" = String, description = "URL of the secret's versions"))),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 413, description = "Request body too large", body = Problem, content_type = "application/problem+json"),
-        (status = 415, description = "Unsupported media type", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service or key service unavailable", body = Problem, content_type = "application/problem+json"),
+        VersionWriteErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -258,9 +254,7 @@ pub async fn create(
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
     responses(
         (status = 200, description = "Every version, oldest first", body = SecretVersionList),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ReadErrors,
     ),
     security(("dev_org" = []))
 )]

@@ -8,11 +8,12 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath};
+use super::responses::{DevCreateErrors, ReadErrors};
 use super::{created, one, validate_name};
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
-use crate::problem::{ApiError, Problem};
+use crate::problem::ApiError;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Org {
@@ -58,9 +59,7 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Org> {
     request_body = NewOrg,
     responses(
         (status = 201, description = "Created", body = Org, headers(("Location" = String, description = "URL of the new resource"))),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        DevCreateErrors,
     ),
 )]
 pub async fn create(
@@ -100,9 +99,7 @@ pub async fn create(
     params(("org_id" = Uuid, Path, description = "Org id")),
     responses(
         (status = 200, description = "OK", body = Org),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ReadErrors,
     ),
     security(("dev_org" = []))
 )]

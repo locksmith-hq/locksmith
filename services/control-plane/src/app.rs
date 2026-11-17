@@ -35,6 +35,8 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
         description = "Orgs, projects, environments, secret metadata and write-only secret versions. A secret value can be written to a new version; no endpoint ever returns a value.",
         license(name = "see repository"),
     ),
+    // The shared error sets in `api::responses` reference `Problem` by `$ref`.
+    components(schemas(crate::problem::Problem)),
     modifiers(&DevOrgSecurity),
     tags(
         (name = "health", description = "Liveness and readiness"),

@@ -9,6 +9,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
+use super::responses::{CreateErrors, DeleteErrors, ListErrors, ReadErrors, WriteErrors};
 use super::{
     Page, PageParams, Paged, Patch, all, common_cols, created, deleted_or_404, one,
     validate_description, validate_name,
@@ -16,7 +17,7 @@ use super::{
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
-use crate::problem::{ApiError, Problem};
+use crate::problem::ApiError;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Project {
@@ -53,10 +54,7 @@ pub(super) fn from_row(r: &sql::PgRow) -> sql::Result<Project> {
     request_body = NewProject,
     responses(
         (status = 201, description = "Created", body = Project, headers(("Location" = String, description = "URL of the new resource"))),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        CreateErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -95,9 +93,7 @@ pub async fn create(
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
         (status = 200, description = "OK", body = Project),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ReadErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -133,10 +129,7 @@ pub async fn get_one(
     params(PageParams),
     responses(
         (status = 200, description = "A page of projects", body = Paged<Project>),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ListErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -175,11 +168,7 @@ pub async fn list(
     request_body = Patch,
     responses(
         (status = 200, description = "OK", body = Project),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        WriteErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -221,10 +210,7 @@ pub async fn patch(
     params(("project_id" = Uuid, Path, description = "Project id")),
     responses(
         (status = 204, description = "Deleted"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        DeleteErrors,
     ),
     security(("dev_org" = []))
 )]

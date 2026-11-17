@@ -34,6 +34,8 @@ To raise one:
 1. Open a `needs-owner` issue, unless an open issue with the same title exists. Its first line is a one-sentence summary; then name the change id, link any Artifact brief, and give the options and your recommendation. The `owner-alert` workflow @mentions the owner with these, which reaches email and the GitHub mobile app.
 2. Load `PushNotification` via ToolSearch and send one line of 200 characters or less. If it's unavailable, write "push: unavailable".
 
+When the owner approves a project decision, append one line to `openspec/decisions.md` linking the issue.
+
 Never raise one for routine progress or for failures you can retry.
 
 ## Hard rules

@@ -18,12 +18,14 @@ if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/nu
          .claude/skills/merge-queue .claude/skills/merge-review docs/agents/merge.md docs/agents/common.md scripts/run-lock.sh scripts/worker-has-work.sh)
   # Learning branches may improve other skills, role files, lessons and helper scripts.
   [[ "$branch" == claude/learning-* ]] || paths+=(docs/agents .claude/skills scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
-  # owner.md: agents may only append (new owner decisions), never edit existing lines.
+  # owner.md and openspec/decisions.md: agents may only append (new owner decisions), never edit existing lines.
   ob=$(git merge-base HEAD origin/main)
-  if git cat-file -e "$ob:docs/agents/owner.md" 2>/dev/null && [ -f docs/agents/owner.md ]; then
-    old=$(git show "$ob:docs/agents/owner.md" | wc -c)
-    cmp -s -n "$old" <(git show "$ob:docs/agents/owner.md") docs/agents/owner.md || { echo "task-edit guard: docs/agents/owner.md is append-only for agents"; protected_fail=1; }
-  fi
+  for f in docs/agents/owner.md openspec/decisions.md; do
+    if git cat-file -e "$ob:$f" 2>/dev/null; then
+      old=$(git show "$ob:$f" | wc -c)
+      { [ -f "$f" ] && cmp -s -n "$old" <(git show "$ob:$f") "$f"; } || { echo "task-edit guard: $f is append-only for agents"; protected_fail=1; }
+    fi
+  done
   changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- "${paths[@]}" | grep -v '^docs/agents/owner.md$' || true)
   if [ -n "$changed" ]; then
     echo "task-edit guard: agent branch '$branch' changed protected files (owner-only):"; echo "$changed"

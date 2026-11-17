@@ -23,3 +23,8 @@ Format:
 - Task: 3.1-3.5 - done (sonnet impl + sonnet eval PASS)
 - Verified: cargo nextest run -p ls-control-plane -> 30 pass; clippy -D warnings, fmt, just ci -> green
 - Notes for next session: start at 4.1 (utoipa OpenAPI). Routes live in src/api/*; RFC 9457 type is in-house (src/problem.rs, design decision 9); restrict-delete -> 409 (decision 15); pagination uses `cursor` param and `{items,next}`. Test Pg setup is duplicated between tests/tenancy.rs and tests/api.rs; could move to tests/common. Org PATCH/DELETE not implemented (not in task 3.1).
+
+## 2026-11-17 worker
+- Task: 4.1-4.3 - done (sonnet impl + sonnet eval PASS); ci-fix: rust-lint failed on RUSTSEC-2026-0440 (astral-tokio-tar unmaintained, dev-only via testcontainers) -> ignore with justification in deny.toml
+- Verified: cargo nextest run -p ls-control-plane -> 33 pass; clippy -D warnings, fmt clean; rename experiment makes the openapi snapshot test fail
+- Notes for next session: start at 5.1 (OTLP telemetry). utoipa 6.0.0, utoipa-axum 0.3.0, similar 3.2.1 (dev) added; record in design.md OSS table in 7.1. openapi.json info.license is the placeholder "see repository". Dev auth header scheme `dev_org` is in the spec. cargo-deny is not installed in the VM, so advisories for new crates were not checked locally; watch rust-lint on this push.

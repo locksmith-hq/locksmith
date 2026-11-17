@@ -21,9 +21,9 @@
 - [x] 3.5 Verify: `cargo nextest run -p ls-control-plane` passes, covering every `control-plane-api` scenario except the e2e ones.
 
 ## 4. OpenAPI contract
-- [ ] 4.1 Annotate routes and schemas with utoipa and utoipa-axum, and serve `/openapi.json` (OpenAPI 3.1).
-- [ ] 4.2 Commit `services/control-plane/openapi.json`. Add a snapshot test that fails on drift and prints the difference, and that rewrites the file when `UPDATE_OPENAPI=1` is set. Sorted keys, deterministic output.
-- [ ] 4.3 Verify: `cargo nextest run -p ls-control-plane -E 'test(openapi)'` passes. After a deliberate route rename, the test fails; revert the rename.
+- [x] 4.1 Annotate routes and schemas with utoipa and utoipa-axum, and serve `/openapi.json` (OpenAPI 3.1).
+- [x] 4.2 Commit `services/control-plane/openapi.json`. Add a snapshot test that fails on drift and prints the difference, and that rewrites the file when `UPDATE_OPENAPI=1` is set. Sorted keys, deterministic output.
+- [x] 4.3 Verify: `cargo nextest run -p ls-control-plane -E 'test(openapi)'` passes. After a deliberate route rename, the test fails; revert the rename.
 
 ## 5. Telemetry
 - [ ] 5.1 OTLP HTTP export of traces and logs (design decision 12) with `service.name=locksmith-api`. Server spans are named by route template and carry method, status and org id; no headers or bodies are recorded.

@@ -6,7 +6,7 @@ description: Autonomously merge finished Locksmith PRs (label ready-to-merge) th
 # Merge queue (only the worker merges)
 
 ## Mark a PR ready (any agent)
-When the last task is ticked and verified, or an archive, learning or research PR is complete:
+When the last task is ticked and verified, or an archive, lead or research PR is complete:
 0. If this PR ticks a change's last task, archive the change in this same PR first: `archive-change` steps 2–4 on this branch.
 1. Make sure the PR is not a draft. Always create PRs with `-F draft=false`.
 2. Add the `ready-to-merge` label.

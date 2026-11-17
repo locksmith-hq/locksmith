@@ -1,6 +1,6 @@
 ---
 name: evaluate-escalate
-description: The implement → independent evaluate → escalate-one-tier loop for doing one OpenSpec task (or fixing CI / main). Use for every task a worker or rescue does; includes how to open a needs-rescue issue when both attempts fail.
+description: The implement → independent evaluate → escalate-one-tier loop for doing one OpenSpec task (or fixing CI / main). Use for every task a worker or lead rescue does; includes how to open a needs-rescue issue when both attempts fail.
 ---
 
 # Evaluate, then escalate
@@ -30,4 +30,4 @@ You may implement small tasks yourself (`self: true` in run-log); step 3 still a
    - write a progress entry;
    - open a `needs-rescue` issue titled `Rescue: <change> <task>`, or comment on an existing one. Include the branch, the tiers tried, the evaluator's reasons, up to 60 lines of failing output, and your diagnosis.
 
-   Don't notify the owner; the Opus rescue routine handles it. Move on to an independent task, or stop.
+   Don't notify the owner; the lead routine rescues it. Move on to an independent task, or stop.

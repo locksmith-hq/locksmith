@@ -15,4 +15,4 @@
 - [ ] 3.2 Add the decisions to the `openspec/config.yaml` context as "Decided foundations" so later changes inherit them.
 
 ## 4. Local verification
-- [ ] 4.1 `just up && just harness-check && cargo nextest run -p a0-spikes && just ci`
+- [x] 4.1 `just up && just harness-check && cargo nextest run -p a0-spikes && just ci`

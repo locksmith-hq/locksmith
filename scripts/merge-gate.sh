@@ -45,7 +45,7 @@ jq -e 'all(.[]; .c=="success" or .c=="skipped" or .c=="neutral")' <<<"$runs" >/d
 jq -e 'any(.[]; .n=="hygiene" and .c=="success")' <<<"$runs" >/dev/null || fail "4 ci: hygiene did not succeed"
 echo "ok 4 ci-green"
 # 5 no protected files
-prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude/settings.json .claude/settings.local.json .claude/agents .claude/skills/merge-queue .claude/skills/merge-review 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh AGENTS.md CLAUDE.md openspec/config.yaml docs/agents/common.md docs/agents/merge.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh)
+prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude/settings.json .claude/settings.local.json .claude/agents .claude/skills/merge-queue .claude/skills/merge-review 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh AGENTS.md CLAUDE.md openspec/config.yaml docs/agents/common.md docs/agents/merge.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh)
 [ -z "$prot" ] || fail "5 protected files changed: ${prot//$'\n'/ }"
 echo "ok 5 no-protected-files"
 # 6 independent review by the claude-review workflow (Claude GitHub App), for this exact head SHA

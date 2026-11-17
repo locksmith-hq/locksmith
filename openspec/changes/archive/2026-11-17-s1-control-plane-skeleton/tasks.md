@@ -28,13 +28,13 @@
 ## 5. Telemetry
 - [x] 5.1 OTLP HTTP export of traces and logs (design decision 12) with `service.name=locksmith-api`. Server spans are named by route template and carry method, status and org id; no headers or bodies are recorded.
 - [x] 5.2 Exporter failure never fails a request. A test with an unreachable OTLP endpoint checks that requests succeed, and that the export error is logged at most once a minute.
-- [ ] 5.3 Verify: with `just up` and `just api`, one request appears in Tempo through the `grafana` MCP or Grafana's datasource proxy. Record the query used in progress.md.
+- [x] 5.3 Verify: with `just up` and `just api`, one request appears in Tempo through the `grafana` MCP or Grafana's datasource proxy. Record the query used in progress.md.
 
 ## 6. Recipes and end-to-end
-- [ ] 6.1 Add a `just api` recipe that runs `locksmith-api` against `just up`, with dev auth on and a loopback bind. Document it in `docs/dev-harness.md`, including the debug commands from design.md.
-- [ ] 6.2 Add `tests/e2e/tests/api.rs`, which drives the running service: project tree create and read, cross-org isolation, pagination, `/readyz`, and a trace for `POST /v1/projects` with a database child span found in Tempo (polled for up to 30 s).
-- [ ] 6.3 Leak check: use a canary as a secret description, run the e2e suite, then run `just leak-scan`. The canary may appear only in the database. Logs and traces must be clean.
-- [ ] 6.4 Verify: `just up && just api` (in the background), then `cargo nextest run -p ls-e2e --test api` and `just leak-scan` pass.
+- [x] 6.1 Add a `just api` recipe that runs `locksmith-api` against `just up`, with dev auth on and a loopback bind. Document it in `docs/dev-harness.md`, including the debug commands from design.md.
+- [x] 6.2 Add `tests/e2e/tests/api.rs`, which drives the running service: project tree create and read, cross-org isolation, pagination, `/readyz`, and a trace for `POST /v1/projects` with a database child span found in Tempo (polled for up to 30 s).
+- [x] 6.3 Leak check: use a canary as a secret description, run the e2e suite, then run `just leak-scan`. The canary may appear only in the database. Logs and traces must be clean.
+- [x] 6.4 Verify: `just up && just api` (in the background), then `cargo nextest run -p ls-e2e --test api` and `just leak-scan` pass.
 
 ## 7. Local verification
-- [ ] 7.1 `just reset && just up && just harness-check`, then `just api` in the background, `cargo nextest run -p ls-e2e --test api`, `just leak-scan`, and `just ci`. Fill in the exact resolved versions in the design.md "OSS used" table.
+- [x] 7.1 `just reset && just up && just harness-check`, then `just api` in the background, `cargo nextest run -p ls-e2e --test api`, `just leak-scan`, and `just ci`. Fill in the exact resolved versions in the design.md "OSS used" table.

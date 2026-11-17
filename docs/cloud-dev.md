@@ -69,7 +69,7 @@ These replace the desktop scheduled tasks once the first run is verified.
 
 ### Budget
 - `get_usage` exists only in the desktop app, so cloud runs **cannot check usage**. The budget is set by cadence instead:
-  - worker: 3 runs a day
+  - workers: A and B hourly, 48 runs a day (owner 2026-11-17: token limits lifted)
   - weekly review: 1 run a week
 - Every run counts against the plan limits. Adjust the cadence after a week of real numbers.
 
@@ -120,12 +120,12 @@ The design follows Anthropic's long-running agent harness (https://www.anthropic
 
 ## Schedules (cloud routines, Israel time)
 
-All four avoid peak hours (weekdays about 15:00–21:00).
+Except the workers (hourly, 24/7), routines avoid peak hours (weekdays about 15:00–21:00).
 
 | Routine | Model | Environment | When | Job |
 |---|---|---|---|---|
-| [Worker](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | every 2h off-peak: 22:05, 00:05, 02:05 … 14:05 (9/day; skips weekday 15:00–21:00) | claims one ready change at a time (per-change lock on its tracking issue), parks blocked ones and takes the next; non-draft PR per change. Several workers may run at once |
-| [Worker B](https://claude.ai/code/routines/trig_01FcnFP64Q1CJ8cFVEjprLAj) | Sonnet 5.5 (same prompt as Worker) | `locksmith-dev` | same hours as Worker at :35 (added 2026-11-17, owner-approved concurrency) | a second concurrent worker; per-change locks keep it on a different change |
+| [Worker](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | hourly at :05, 24/7 (owner 2026-11-17) | claims one ready change at a time (per-change lock on its tracking issue), parks blocked ones and takes the next; non-draft PR per change. Several workers may run at once |
+| [Worker B](https://claude.ai/code/routines/trig_01FcnFP64Q1CJ8cFVEjprLAj) | Sonnet 5.5 (same prompt as Worker) | `locksmith-dev` | hourly at :35, 24/7, offset 30 min from Worker (owner 2026-11-17) | a second concurrent worker; per-change locks keep it on a different change |
 | [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Sat 10:35 (after the Saturday 10:00 weekly reset) | re-verify finished work, quality review, write the next change |
 | [Daily health check](https://claude.ai/code/routines/trig_012bR8F2aWP91W3D9xGDpVUn) | Haiku 5.5 | Default | daily 08:30 | detects silent failures: worker silent for more than 24h, red CI on main, owner decisions waiting more than 3 days, finished PRs waiting more than 2 days; stays silent when healthy |
 | [Lead (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-research` | daily 09:35, 23:35 (passes with nothing to do are skipped) | tech lead (`docs/agents/lead.md`, replaced Rescue and the Learning loop 2026-11-17): rescues the oldest `needs-rescue` issue; reviews run metadata for stuck, slow or wasteful runs and fixes the causes in scripts or skills; reviews code merged since its last run for duplication, reinvented wheels, readability drift and over-specific solutions, and turns findings into fixes, unticked tasks or a `refactor-*` change |

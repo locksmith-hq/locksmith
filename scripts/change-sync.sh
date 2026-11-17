@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Rewrites each change's tracking issue as its status page: state, PR, dependencies, anything waiting
-# on the owner, the summary, every task with its tick, and the last progress entry. Sets one
-# `status:<state>` label (the Project board filters on it). Archived changes get status:done and close.
+# on the owner (a parked change opens with why and who moves next), the summary, every task with its
+# tick, and the last progress entry. Sets one `status:<state>` label (the Project board filters on it;
+# a parked change gets status:parked-owner or status:parked-stuck). Archived changes get status:done and close.
 # tasks.md stays the source of truth; agents never edit these issues by hand.
 #   scripts/change-sync.sh            all open changes, plus archived ones whose issue is still open
 #   DRY_RUN=1 scripts/change-sync.sh  print the bodies instead of writing them
@@ -11,6 +12,28 @@ here=$(dirname "$0")
 
 # shellcheck source=scripts/issue-lib.sh
 . "$here/issue-lib.sh"
+
+# The top of a parked change's page: why it waits and who moves next, in plain words.
+parked_block() { # <owner|rescue> <blocker-issue> <id>
+  local j title why
+  j=$(gh api "repos/$repo/issues/$2" 2>/dev/null) || j='{}'
+  title=$(jq -r '.title // ""' <<<"$j")
+  # First sentence of the blocker's first real line (skips the agent marker, blank and "Change:" lines).
+  why=$(jq -r '.body // ""' <<<"$j" | grep -vE '^\s*(<!--|$|Change:)' | head -1 | sed -E 's/([.!?]) .*/\1/' | cut -c1-240)
+  if [ "$1" = owner ]; then
+    echo "## ⏸ Parked: waiting for owner approval"; echo
+    echo "- **Why:** ${why:-$title}"
+    echo "- **You:** open #$2, pick an option or reply \`approved\`."
+    echo "- **Meanwhile:** workers continue on other changes."
+  else
+    echo "## ⏸ Parked: stuck, the lead is rescuing it"; echo
+    echo "- **Stuck on:** tasks ${title#Rescue: "$3" } (#$2)"
+    echo "- **Why:** ${why:-see #$2}"
+    echo "- **Next:** the lead retries at 09:35 and 23:35. After two failed rescues it comes to you as a \`needs-owner\` issue."
+    echo "- **You:** nothing yet."
+  fi
+  echo
+}
 
 render() { # <id> <state> <detail>
   local id=$1 state=$2 detail=$3 src pr owner rescue
@@ -23,7 +46,8 @@ render() { # <id> <state> <detail>
     -q ".[]|select((.title+\" \"+(.body // \"\"))|contains(\"$id\"))|\"- Rescue in progress: #\(.number) \(.title)\"" 2>/dev/null)
   echo "**Status:** \`$state\`${detail:+ ($detail)} · **PR:** ${pr:-none yet} · **Depends on:** $(sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\]/\1/p' "openspec/changes/$id/.openspec.yaml" 2>/dev/null || true)"
   echo
-  [ -n "$owner$rescue" ] && printf '%s\n%s\n\n' "$owner" "$rescue" | grep -v '^$' && echo
+  if [ "$state" = parked ]; then parked_block "${detail%% *}" "${detail##*#}" "$id"
+  elif [ -n "$owner$rescue" ]; then printf '%s\n%s\n\n' "$owner" "$rescue" | grep -v '^$'; echo; fi
   echo "## Summary"
   git show "$src:openspec/changes/$id/proposal.md" 2>/dev/null | awk '/^## Why/{f=1;next} /^## /{f=0} f' | sed '/^$/d' | head -8
   links=$(git show "$src:openspec/changes/$id/proposal.md" "$src:openspec/changes/$id/design.md" 2>/dev/null | grep -oE 'https://claude\.ai/(code/)?artifact/[A-Za-z0-9_-]+' | sort -u | paste -sd' ' - || true)
@@ -59,9 +83,11 @@ bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   body=$(render "$id" "$state" "$detail")
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '===== %s\n%s\n' "$id" "$body"; continue; fi
   n=$(bash "$here/change-issue.sh" "$id") || continue
+  # The label names why a change is parked: status:parked-owner or status:parked-stuck.
+  lstate=$state; [ "$state" = parked ] && { [ "${detail%% *}" = owner ] && lstate=parked-owner || lstate=parked-stuck; }
   # The title follows the proposal, so an issue opened by a planner's lock gets its real name.
   title=$(sed -nE '1s/^# *(Proposal: *)?//p' "openspec/changes/$id/proposal.md" 2>/dev/null)
-  gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$state" && board "$n" "$state"
+  gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$lstate" && board "$n" "$state"
   link_pr "$id" "$n"
 done
 

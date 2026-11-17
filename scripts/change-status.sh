@@ -30,8 +30,8 @@ blockers=""
 # One line per open blocker issue: "<number> <owner|rescue> <title and body on one line>", owner first.
 [ "${OFFLINE:-0}" = 1 ] || blockers=$(gh api "repos/$repo/issues?state=open&per_page=100" \
   -q '.[]|select(any(.labels[]; .name=="needs-owner" or .name=="needs-rescue"))
-    |"\(.number) \(if any(.labels[]; .name=="needs-owner") then "owner" else "rescue" end) \((.title+" "+(.body // ""))|gsub("\n";" "))"' 2>/dev/null | sort -k2,2)
-blockers=${BLOCKERS:-$blockers}
+    |"\(.number) \(if any(.labels[]; .name=="needs-owner") then "owner" else "rescue" end) \((.title+" "+(.body // ""))|gsub("\n";" "))"' 2>/dev/null)
+blockers=$(sort -s -k2,2 <<<"${BLOCKERS:-$blockers}")
 
 for id in $ids; do
   t=$(tasks_of "$id")

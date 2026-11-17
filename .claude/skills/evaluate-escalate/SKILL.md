@@ -28,6 +28,6 @@ You may implement small tasks yourself (`self: true` in run-log); step 3 still a
 6. If attempt 2 also fails:
    - commit with a `WIP:` message if the code builds, otherwise `git stash`;
    - write a progress entry;
-   - open a `needs-rescue` issue titled `Rescue: <change> <task>`, or comment on an existing one. Include the branch, the tiers tried, the evaluator's reasons, up to 60 lines of failing output, and your diagnosis.
+   - open a `needs-rescue` issue titled `Rescue: <change> <task>`, or comment on an existing one. Its first line is one plain sentence: what is stuck and why (the board shows it). Then include the branch, the tiers tried, the evaluator's reasons, up to 60 lines of failing output, and your diagnosis.
 
    Don't notify the owner; the lead routine rescues it. Move on to an independent task, or stop.

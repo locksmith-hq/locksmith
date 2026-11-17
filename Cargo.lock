@@ -2184,6 +2184,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ls-envelope"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "aes-gcm",
+ "getrandom 0.2.17",
+ "hex",
+ "ls-crypto",
+ "proptest",
+ "serde",
+ "serde_json",
+ "trybuild",
+]
+
+[[package]]
 name = "ls-hooks"
 version = "0.0.1-alpha.4"
 dependencies = [

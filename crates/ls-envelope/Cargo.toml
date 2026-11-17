@@ -1,0 +1,24 @@
+[package]
+name = "ls-envelope"
+description = "Per-version envelope encryption: A0-7 ciphertext header, AES-256-GCM under a fresh DEK."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ls-crypto = { path = "../ls-crypto" }
+# Same version ls-crypto uses; only for the random DEK id.
+getrandom = "0.2"
+
+[dev-dependencies]
+# Fixed-nonce known-answer path only. As a dev-dependency it cannot reach a production build.
+aes-gcm = "0.10"
+hex = "0.4"
+proptest = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+trybuild = "1"

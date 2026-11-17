@@ -25,11 +25,13 @@
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| aes-gcm (via ls-crypto) | MIT/Apache-2.0 | 0.10 | implementer records | AEAD | not AGPL |
-| zeroize, secrecy | MIT/Apache-2.0 | implementer records | | secret types | not AGPL |
+| aes-gcm (via ls-crypto; direct dev-dependency for the fixed-nonce KAT only) | MIT/Apache-2.0 | 0.10.3 | 2023-09-21 (0.11.1 exists; kept at ls-crypto's 0.10) | AEAD | not AGPL |
+| zeroize (via ls-crypto `SecretKey32`/`SecretBytes`); secrecy not needed | MIT/Apache-2.0 | 1.9.1 | 2026-10-06 | secret types | not AGPL |
 | reqwest (rustls) | MIT/Apache-2.0 | implementer records | | OpenBao HTTP client | not AGPL |
 | OpenBao (service) | MPL-2.0 | 2.7.2 | in compose | KMS stand-in | not AGPL |
-| proptest | MIT/Apache-2.0 | workspace | | header properties | not AGPL |
+| proptest | MIT/Apache-2.0 | 1.12.0 (workspace) | 2026-10-10 | header properties | not AGPL |
+| getrandom | MIT/Apache-2.0 | 0.2.17 | 2026-01-11 | random DEK id (same version as ls-crypto) | not AGPL |
+| hex, serde_json, trybuild (dev only) | MIT/Apache-2.0 | 0.4.3, 1.0.154, 1.0.122 | 2021-03-03, 2026-10-11, 2026-10-07 | KAT vector file, no-Debug/Clone compile-fail tests | not AGPL |
 
 The implementer records exact versions and release dates from `Cargo.lock` / crates.io here.
 

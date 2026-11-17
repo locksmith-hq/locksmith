@@ -11,7 +11,7 @@ permissions:
 jobs:
   adversarial:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       # A case that skips (exit 77, e.g. A3 without Postgres) fails the run instead of passing.

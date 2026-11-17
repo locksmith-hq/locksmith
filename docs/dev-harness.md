@@ -39,3 +39,11 @@ The postgres DSN uses `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` fro
 
 ## Troubleshooting: MCP servers on macOS
 `.mcp.json` runs the MCP containers with `--network host` so they can reach `127.0.0.1`. On Docker Desktop this needs host networking enabled (Settings, Resources, Network, 4.34 or later). Without it, point `DATABASE_URI` and `GRAFANA_URL` at `host.docker.internal` instead.
+
+## Control-plane API (`just api`)
+`just up` first, then `just api` (dev auth on, binds 127.0.0.1:8080, exports traces and logs to the LGTM container over OTLP HTTP).
+
+- Create a project: `curl -H 'X-Locksmith-Dev-Org: <uuid>' -H 'content-type: application/json' -d '{"name":"demo"}' localhost:8080/v1/projects`
+- List: `curl -H 'X-Locksmith-Dev-Org: <uuid>' localhost:8080/v1/projects`; contract: `curl localhost:8080/openapi.json`; readiness: `curl localhost:8080/readyz`.
+- Traces: Grafana datasource proxy, e.g. `curl -s 'localhost:3000/api/datasources/proxy/uid/tempo/api/search?tags=service.name%3Dlocksmith-api'` (or the `grafana` MCP). Logs: Loki `{service_name="locksmith-api"}`.
+- Leak check after tests that use a canary: `just leak-scan`.

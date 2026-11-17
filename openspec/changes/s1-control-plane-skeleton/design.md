@@ -42,16 +42,18 @@
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
 | axum | MIT | 0.8.9 | 2026-04-14 | HTTP framework | not AGPL |
-| tower-http | MIT | 0.7.1 | 2026-08-31 | trace, request-id, timeout and limit layers | not AGPL |
+| tower-http | MIT | 0.7.1 (0.6.11 also resolves, via another crate) | 2026-08-31 | trace, request-id, timeout and limit layers | not AGPL |
 | sqlx-core, sqlx-postgres | MIT/Apache-2.0 | 0.9.0 | 2026-05-21 | Postgres driver and migrations (already used) | not AGPL |
 | utoipa, utoipa-axum | MIT/Apache-2.0 | 6.0.0 / 0.3.0 | 2026-09-22 | OpenAPI from code | not AGPL |
 | tracing-subscriber | MIT | 0.3.23 | 2026-03-13 | subscriber | not AGPL |
 | opentelemetry, opentelemetry_sdk, opentelemetry-otlp | Apache-2.0 | 0.33.1 | 2026-10-09 | OTLP export | not AGPL |
 | tracing-opentelemetry | MIT | 0.34.0 | 2026-09-23 | tracing to OTel bridge | not AGPL |
-| uuid (`v7`) | MIT/Apache-2.0 | implementer records (1.29 in a0-spikes) | n/a | app-side v7 ids | not AGPL |
-| testcontainers (+ postgres module) | MIT/Apache-2.0 | workspace 0.28 / 0.15 | n/a | crate integration tests on `postgres:18` | not AGPL |
+| uuid (`v7`) | MIT/Apache-2.0 | 1.29.2 | n/a | app-side v7 ids | not AGPL |
+| testcontainers | MIT/Apache-2.0 | 0.28.0 | n/a | crate integration tests on `postgres:18` (`GenericImage`; the postgres module needs testcontainers 0.27, so it is not used) | not AGPL |
+| tracing-log | MIT | 0.2.0 | n/a | normalise `log`-bridged events so exporter diagnostics are redacted | not AGPL |
+| similar (dev) | Apache-2.0 | 3.2.1 | n/a | readable diff in the OpenAPI snapshot test | not AGPL |
 
-The implementer records exact resolved versions from `Cargo.lock` here and drops this note.
+Versions are the resolved ones from `Cargo.lock`.
 
 ## Built in-house
 - The tenant transaction helper and `OrgBinding` extractor (about 100 lines). No crate does RLS `set_config` per transaction with sqlx 0.9. Searched crates.io for "sqlx rls" and "postgres row level security axum": nothing maintained.
@@ -62,7 +64,7 @@ The implementer records exact resolved versions from `Cargo.lock` here and drops
 - [Running migrations at startup races when several replicas start] → sqlx's migrator takes a Postgres advisory lock, and P1 moves migrations to a one-shot task.
 - [The dev header ships to a real deployment] → the loopback check at startup, plus a startup log line at `WARN` whenever dev auth is on. T1 deletes the extractor variant.
 - [OpenAPI snapshot churn] → only generated output is committed, and `UPDATE_OPENAPI=1` regenerates it deterministically (sorted keys).
-- [A Grafana trace query is flaky right after a request] → the e2e test polls Tempo through Grafana's datasource proxy for up to 30 s.
+- [A Grafana trace query is flaky right after a request] → the e2e test polls Tempo through Grafana's datasource proxy for up to 60 s (Tempo takes about 30 s to index a trace).
 
 ## Migration Plan
 New service, nothing to migrate. Rollback means reverting the merge commit. The roles and schema live only in the dev database, and `just reset` clears them.

@@ -18,7 +18,8 @@ board_ids=""; board_items=""
 board() { # <issue> <state>
   [ -n "${GH_AUTOMATION_TOKEN:-}" ] && [ "${DRY_RUN:-0}" != 1 ] || return 0
   local name item opt
-  case "$2" in claimed) name="In progress" ;; review) name="In review" ;; *) name="$(tr '[:lower:]' '[:upper:]' <<<"${2:0:1}")${2:1}" ;; esac
+  case "$2" in claimed) name="In progress" ;; review) name="In review" ;;
+    parked-owner) name="Waiting on owner" ;; parked-stuck) name="Stuck" ;; *) name="$(tr '[:lower:]' '[:upper:]' <<<"${2:0:1}")${2:1}" ;; esac
   if [ -z "$board_ids" ]; then
     # One read of only what we need (not `gh project item-list`, which also reads linked PRs and fails
     # for a token without Pull requests access). Lines: "F<TAB>field<TAB>option<TAB>name" per Status
@@ -40,6 +41,8 @@ board() { # <issue> <state>
   [ "$board_ids" = failed ] && return 0
   [ "$(awk -F'\t' -v n="$1" '$1==n{print $2; exit}' <<<"$board_items")" = "$name" ] && return 0
   opt=$(awk -F'\t' -v n="$name" '$3==n{print $1"\t"$2}' <<<"$board_ids")
+  # Until the owner adds the "Waiting on owner" / "Stuck" options, a parked change shows as Parked.
+  [ -z "$opt" ] && [ "${2%%-*}" = parked ] && { name=Parked; opt=$(awk -F'\t' '$3=="Parked"{print $1"\t"$2}' <<<"$board_ids"); }
   [ -n "$opt" ] || { echo "board: no Status option named '$name'"; return 0; }
   item=$(awk -F'\t' -v n="$1" '$1==n{print $3; exit}' <<<"$board_items")
   [ -n "$item" ] || item=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-add "$project_number" --owner "$project_owner" \

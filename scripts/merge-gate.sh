@@ -22,8 +22,14 @@ jq -e '.labels[]|select(.name=="hold")' <<<"$pr" >/dev/null && fail "owner hold 
 
 if ! { git fetch -q origin main "$head_ref" && git checkout -q --detach "$sha"; }; then fail "cannot check out $sha"; fi
 
-# 1 complete: every tasks.md touched by this PR has no unchecked task
-for f in $(git diff --name-only origin/main...HEAD -- 'openspec/changes/*/tasks.md'); do
+# 1 complete: every tasks.md touched by this PR has no unchecked task.
+# Planning PRs (#112) add or fix a change's plan, so its tasks are open by design; exempt only
+# when the PR touches nothing outside openspec/changes/.
+planning_only=false
+if [[ "$head_ref" == claude/planning-* ]] && ! git diff --name-only origin/main...HEAD | grep -qv '^openspec/changes/'; then
+  planning_only=true
+fi
+$planning_only || for f in $(git diff --name-only origin/main...HEAD -- 'openspec/changes/*/tasks.md'); do
   [ -f "$f" ] || continue
   if grep -qE '^\s*- \[ \]' "$f"; then fail "1 complete: unchecked tasks in $f"; fi
 done

@@ -11,3 +11,4 @@ These are the standing instructions from the owner (`tomer555`). Follow them unl
 - 2026-11-16 · **Models:** Sonnet by default, Haiku for fast, isolated work, Opus for hard or critical work and for reviews.
 - 2026-11-16 · **Branch protection on main is off,** by the owner's decision.
 - 2026-11-17 · [#38](https://github.com/locksmith-hq/locksmith/issues/38) · **Approvals:** for anything needing owner approval, send a push notification with a short, clear summary; for important decisions also an Artifact brief and a `needs-owner` issue linking it. When the owner replies `approved`, do the rest (tick the gate, record it, unblock workers). If declined, discuss alternatives until settled. Never idle at an owner gate without such a request open.
+- 2026-11-17 · **Workers hourly, 24/7:** A at :05, B at :35; replaces the peak-hours line.

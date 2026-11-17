@@ -9,3 +9,6 @@ dist/
 .claude/settings.local.json
 .claude/worktrees/
 .agent-runs.md
+
+# Leak-test canaries (just canary new)
+infra/compose/.canaries

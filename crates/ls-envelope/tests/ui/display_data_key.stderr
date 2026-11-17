@@ -1,0 +1,11 @@
+error[E0277]: `DataKey` doesn't implement `std::fmt::Display`
+ --> tests/ui/display_data_key.rs:4:16
+  |
+4 |     requires::<ls_envelope::DataKey>();
+  |                ^^^^^^^^^^^^^^^^^^^^ the trait `std::fmt::Display` is not implemented for `DataKey`
+  |
+note: required by a bound in `requires`
+ --> tests/ui/display_data_key.rs:1:16
+  |
+1 | fn requires<T: std::fmt::Display>() {}
+  |                ^^^^^^^^^^^^^^^^^ required by this bound in `requires`

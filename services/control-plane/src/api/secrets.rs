@@ -1,5 +1,6 @@
-//! Secret metadata under a project and environment. There is no value field anywhere: input
-//! types reject unknown fields, so a `value` is a `400` and nothing is stored.
+//! Secret metadata under a project and environment. There is no value field here: input types
+//! reject unknown fields, so a `value` is a `400` and nothing is stored. Values are written as
+//! versions (`versions.rs`); `version_count` counts them.
 
 use axum::Json;
 use axum::extract::State;
@@ -25,7 +26,7 @@ pub struct Secret {
     pub environment_id: Uuid,
     pub name: String,
     pub description: String,
-    /// Always 0 in S1; S2 adds versions.
+    /// Number of stored versions (`POST .../versions` adds one).
     pub version_count: u32,
     pub created_at: String,
     pub updated_at: String,
@@ -39,6 +40,14 @@ pub struct NewSecret {
     pub description: String,
 }
 
+/// Versions of the row's secret (RLS limits it to the bound org). Ends with a comma.
+macro_rules! version_count_col {
+    () => {
+        "(SELECT count(*) FROM secret_versions v \
+          WHERE v.org_id = secrets.org_id AND v.secret_id = secrets.id) AS version_count, "
+    };
+}
+
 fn from_row(r: &sql::PgRow) -> sql::Result<Secret> {
     Ok(Secret {
         id: r.try_get("id")?,
@@ -46,7 +55,7 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Secret> {
         environment_id: r.try_get("environment_id")?,
         name: r.try_get("name")?,
         description: r.try_get("description")?,
-        version_count: 0,
+        version_count: u32::try_from(r.try_get::<i64, _>("version_count")?).unwrap_or(u32::MAX),
         created_at: r.try_get("created_at")?,
         updated_at: r.try_get("updated_at")?,
     })
@@ -100,6 +109,7 @@ pub async fn create(
                 let row = sql::query(concat!(
                     "INSERT INTO secrets (org_id, project_id, environment_id, name, description) \
                      VALUES ($1, $2, $3, $4, $5) RETURNING project_id, environment_id, ",
+                    version_count_col!(),
                     common_cols!()
                 ))
                 .bind(org.org_id)
@@ -147,6 +157,7 @@ pub async fn get_one(
             Box::pin(async move {
                 let row = sql::query(concat!(
                     "SELECT project_id, environment_id, ",
+                    version_count_col!(),
                     common_cols!(),
                     " FROM secrets WHERE id = $1 AND project_id = $2 AND environment_id = $3"
                 ))
@@ -194,6 +205,7 @@ pub async fn list(
                 require_environment(c, project_id, environment_id).await?;
                 let rows = sql::query(concat!(
                     "SELECT project_id, environment_id, ",
+                    version_count_col!(),
                     common_cols!(),
                     " FROM secrets WHERE project_id = $1 AND environment_id = $2 \
                      AND ($3::uuid IS NULL OR id > $3) ORDER BY id LIMIT $4"
@@ -247,6 +259,7 @@ pub async fn patch(
                      description = COALESCE($5, description), updated_at = now() \
                      WHERE id = $1 AND project_id = $2 AND environment_id = $3 \
                      RETURNING project_id, environment_id, ",
+                    version_count_col!(),
                     common_cols!()
                 ))
                 .bind(secret_id)

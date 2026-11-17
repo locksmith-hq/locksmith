@@ -1,0 +1,11 @@
+error[E0277]: `BaoToken` doesn't implement `Debug`
+ --> tests/ui/debug_bao_token.rs:4:16
+  |
+4 |     requires::<ls_envelope::BaoToken>();
+  |                ^^^^^^^^^^^^^^^^^^^^^ the trait `Debug` is not implemented for `BaoToken`
+  |
+note: required by a bound in `requires`
+ --> tests/ui/debug_bao_token.rs:1:16
+  |
+1 | fn requires<T: std::fmt::Debug>() {}
+  |                ^^^^^^^^^^^^^^^ required by this bound in `requires`

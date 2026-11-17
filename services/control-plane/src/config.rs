@@ -13,6 +13,12 @@ pub const ENV_DATABASE_OWNER_URL: &str = "DATABASE_OWNER_URL";
 pub const ENV_BIND: &str = "LOCKSMITH_BIND";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 pub const ENV_DEV_AUTH: &str = "LOCKSMITH_DEV_AUTH";
+pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
+pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_CONTROL_PLANE_TOKEN";
+pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
+pub const ENV_OPENBAO_KEY_VERSION: &str = "OPENBAO_TRANSIT_KEY_VERSION";
+
+const DEFAULT_TRANSIT_KEY: &str = "gateway";
 
 const DEFAULT_BIND: &str = "127.0.0.1:8080";
 
@@ -47,6 +53,18 @@ pub struct Config {
     pub bind: SocketAddr,
     pub otlp_endpoint: Option<String>,
     pub dev_auth: bool,
+    /// The KMS that wraps secret-version DEKs (S2). `None` when `OPENBAO_ADDR` is unset; secret
+    /// version writes then answer `503`.
+    pub kms: Option<KmsConfig>,
+}
+
+/// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
+/// plane's token (encrypt-only by policy, S2 design decision 4).
+pub struct KmsConfig {
+    pub addr: String,
+    pub token: SecretString,
+    pub key: String,
+    pub key_version: u32,
 }
 
 impl Config {
@@ -81,12 +99,37 @@ impl Config {
             return Err(ConfigError::DevAuthNonLoopback(ENV_BIND));
         }
 
+        let kms = match get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty()) {
+            None => None,
+            Some(addr) => {
+                let token = required(ENV_OPENBAO_TOKEN)?;
+                let key = get(ENV_OPENBAO_KEY)
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(|| DEFAULT_TRANSIT_KEY.to_owned());
+                let key_version = match get(ENV_OPENBAO_KEY_VERSION) {
+                    None => 1,
+                    Some(v) => v
+                        .parse::<u32>()
+                        .ok()
+                        .filter(|&v| v >= 1)
+                        .ok_or(ConfigError::Invalid(ENV_OPENBAO_KEY_VERSION))?,
+                };
+                Some(KmsConfig {
+                    addr,
+                    token,
+                    key,
+                    key_version,
+                })
+            }
+        };
+
         Ok(Self {
             database_url,
             database_owner_url,
             bind,
             otlp_endpoint,
             dev_auth,
+            kms,
         })
     }
 }
@@ -160,6 +203,36 @@ mod tests {
             .ok()
             .unwrap();
         assert!(!c.dev_auth);
+    }
+
+    #[test]
+    fn kms_is_optional_and_needs_a_token_when_set() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(c.kms.is_none());
+        let err = Config::from_lookup(lookup(&with(&[(
+            ENV_OPENBAO_ADDR,
+            "http://127.0.0.1:8200",
+        )])))
+        .err()
+        .unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OPENBAO_TOKEN));
+        let c = Config::from_lookup(lookup(&with(&[
+            (ENV_OPENBAO_ADDR, "http://127.0.0.1:8200"),
+            (ENV_OPENBAO_TOKEN, "tok-hunter4"),
+        ])))
+        .ok()
+        .unwrap();
+        let kms = c.kms.unwrap();
+        assert_eq!((kms.key.as_str(), kms.key_version), ("gateway", 1));
+        let err = Config::from_lookup(lookup(&with(&[
+            (ENV_OPENBAO_ADDR, "http://127.0.0.1:8200"),
+            (ENV_OPENBAO_TOKEN, "tok-hunter4"),
+            (ENV_OPENBAO_KEY_VERSION, "0"),
+        ])))
+        .err()
+        .unwrap();
+        assert_eq!(err, ConfigError::Invalid(ENV_OPENBAO_KEY_VERSION));
+        assert!(!err.to_string().contains("hunter"));
     }
 
     #[test]

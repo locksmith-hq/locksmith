@@ -1,14 +1,17 @@
-//! The `/v1` resource API: orgs, projects, environments and secret metadata.
+//! The `/v1` resource API: orgs, projects, environments, secret metadata and write-only secret
+//! versions.
 //!
 //! Handlers reach Postgres only through [`crate::db::Database::with_org`], bound to the org
 //! from [`crate::auth::OrgBinding`]. Closures never set another org. Input types are all
-//! `deny_unknown_fields`, and no type here has a secret value field.
+//! `deny_unknown_fields`. Only `versions::NewSecretVersion` has a value field: it deserializes
+//! straight into `SecretBytes` and has no `Debug`; no response type carries a value.
 
 mod environments;
 mod extract;
 mod orgs;
 mod projects;
 mod secrets;
+mod versions;
 
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -47,6 +50,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         ))
         .routes(routes!(secrets::create, secrets::list))
         .routes(routes!(secrets::get_one, secrets::patch, secrets::delete))
+        .routes(routes!(versions::create, versions::list))
 }
 
 /// SQL column list shared by projects, environments and secrets (timestamps as RFC 3339 UTC).

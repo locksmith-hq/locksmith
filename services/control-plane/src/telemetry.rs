@@ -316,6 +316,10 @@ pub fn init<W>(
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
+    // reqwest is built with `rustls-no-provider` workspace-wide (ls-envelope, via feature
+    // unification), so a process-wide provider must exist before any client is built.
+    // Err means one is already installed, which is fine.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let built = endpoint.map(|e| build_otlp_providers(e, opts));
     let (providers, build_failed) = match built {
         Some(Ok(p)) => (Some(p), false),

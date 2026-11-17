@@ -19,6 +19,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::db::Database;
+use crate::kms::DekWrapper;
 use crate::problem::ApiError;
 use crate::readiness::Readiness;
 
@@ -31,7 +32,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 #[openapi(
     info(
         title = "Locksmith control-plane API",
-        description = "Orgs, projects, environments and secret metadata. Secret values are never part of this API.",
+        description = "Orgs, projects, environments, secret metadata and write-only secret versions. A secret value can be written to a new version; no endpoint ever returns a value.",
         license(name = "see repository"),
     ),
     modifiers(&DevOrgSecurity),
@@ -64,15 +65,29 @@ pub struct AppState {
     dev_auth: bool,
     readiness: Arc<dyn Readiness>,
     db: Database,
+    kms: Option<Arc<dyn DekWrapper>>,
 }
 
 impl AppState {
+    /// State without a KMS: secret version writes answer `503` until [`Self::with_kms`].
     pub fn new(dev_auth: bool, readiness: Arc<dyn Readiness>, db: Database) -> Self {
         Self {
             dev_auth,
             readiness,
             db,
+            kms: None,
         }
+    }
+
+    /// Wrap secret-version DEKs with `kms` (S2 design decision 3).
+    pub fn with_kms(mut self, kms: Arc<dyn DekWrapper>) -> Self {
+        self.kms = Some(kms);
+        self
+    }
+
+    /// The DEK wrapper, if one is configured.
+    pub fn kms(&self) -> Option<&Arc<dyn DekWrapper>> {
+        self.kms.as_ref()
     }
 
     pub fn dev_auth(&self) -> bool {

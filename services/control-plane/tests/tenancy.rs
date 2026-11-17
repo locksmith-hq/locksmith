@@ -87,7 +87,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             .fetch_all(&mut admin)
             .await
             .unwrap();
-    assert_eq!(applied, [1, 2]);
+    assert_eq!(applied, [1, 2, 3]);
 
     // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
     migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
@@ -97,7 +97,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         .fetch_one(&mut admin)
         .await
         .unwrap();
-    assert_eq!(count, 2);
+    assert_eq!(count, 3);
 
     let tables: Vec<(String, String, bool, bool)> = sql::query_as(
         "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity
@@ -109,7 +109,16 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .await
     .unwrap();
     let names: Vec<&str> = tables.iter().map(|t| t.0.as_str()).collect();
-    assert_eq!(names, ["environments", "orgs", "projects", "secrets"]);
+    assert_eq!(
+        names,
+        [
+            "environments",
+            "orgs",
+            "projects",
+            "secret_versions",
+            "secrets"
+        ]
+    );
     for (name, owner, rls, force) in tables.iter().cloned() {
         assert_eq!(owner, "locksmith_owner", "{name}");
         assert!(rls && force, "{name} must FORCE ROW LEVEL SECURITY");
@@ -120,7 +129,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(policies, 4);
+    assert_eq!(policies, 5);
 
     let value_like: Vec<String> = sql::query_scalar(
         "SELECT table_name || '.' || column_name FROM information_schema.columns
@@ -130,7 +139,35 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_all(&mut admin)
     .await
     .unwrap();
-    assert!(value_like.is_empty(), "value-like columns: {value_like:?}");
+    // Only S2's envelope ciphertext (design decision 6) is allowed; never a plaintext column.
+    assert_eq!(
+        value_like,
+        ["secret_versions.ciphertext"],
+        "value-like columns: {value_like:?}"
+    );
+    let version_cols: Vec<(String, String)> = sql::query_as(
+        "SELECT column_name::text, data_type::text FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'secret_versions' ORDER BY ordinal_position",
+    )
+    .fetch_all(&mut admin)
+    .await
+    .unwrap();
+    let version_cols: Vec<(&str, &str)> = version_cols
+        .iter()
+        .map(|(c, t)| (c.as_str(), t.as_str()))
+        .collect();
+    assert_eq!(
+        version_cols,
+        [
+            ("org_id", "uuid"),
+            ("secret_id", "uuid"),
+            ("version", "integer"),
+            ("ciphertext", "bytea"),
+            ("wrapped_dek", "bytea"),
+            ("key_id", "text"),
+            ("created_at", "timestamp with time zone"),
+        ]
+    );
 
     let server: String = sql::query_scalar("SHOW server_version")
         .fetch_one(&mut admin)
@@ -508,4 +545,143 @@ async fn readyz_follows_migrations_and_database() {
     );
     assert_eq!(readyz(&state).await, StatusCode::SERVICE_UNAVAILABLE);
     probe.abort();
+}
+
+/// Task 3.1 (design decision 6): `secret_versions` is tenant-isolated, can only name a secret
+/// of its own org, and is append-only for the app role. Deleting the secret cascades.
+#[tokio::test]
+async fn secret_versions_are_isolated_append_only_and_cascade() {
+    let pg = Pg::migrated().await;
+    let db = pg.app_db(PoolSettings {
+        max_connections: 2,
+        ..PoolSettings::default()
+    });
+    let a = create_org(&db, "org-a").await;
+    let b = create_org(&db, "org-b").await;
+    let pa = create_project(&db, a, "p").await;
+    let pb = create_project(&db, b, "p").await;
+    let ea = create_env(&db, a, pa, "dev").await.unwrap();
+    let eb = create_env(&db, b, pb, "dev").await.unwrap();
+    let secret = |org: Uuid, project: Uuid, env: Uuid| {
+        let db = db.clone();
+        async move {
+            db.with_org(org, move |c| {
+                Box::pin(async move {
+                    sql::query_scalar::<_, Uuid>(
+                        "INSERT INTO secrets (org_id, project_id, environment_id, name)
+                         VALUES ($1, $2, $3, 'K') RETURNING id",
+                    )
+                    .bind(org)
+                    .bind(project)
+                    .bind(env)
+                    .fetch_one(c)
+                    .await
+                })
+            })
+            .await
+            .unwrap()
+        }
+    };
+    let sa = secret(a, pa, ea).await;
+    let sb = secret(b, pb, eb).await;
+
+    // Shaped like real blobs; contents are irrelevant to the schema.
+    let insert = |org: Uuid, secret_id: Uuid, version: i32| {
+        let db = db.clone();
+        async move {
+            db.with_org(org, move |c| {
+                Box::pin(async move {
+                    sql::query(
+                        "INSERT INTO secret_versions
+                         (org_id, secret_id, version, ciphertext, wrapped_dek, key_id)
+                         VALUES ($1, $2, $3, $4, $5, 'gateway:v1')",
+                    )
+                    .bind(org)
+                    .bind(secret_id)
+                    .bind(version)
+                    .bind(vec![0u8; 50])
+                    .bind(vec![0u8; 80])
+                    .execute(c)
+                    .await
+                    .map(|_| ())
+                })
+            })
+            .await
+        }
+    };
+    insert(a, sa, 1).await.unwrap();
+    insert(a, sa, 2).await.unwrap();
+    // Version unique per secret.
+    let err = insert(a, sa, 2).await.expect_err("duplicate version");
+    assert_eq!(sqlstate(&err).as_deref(), Some("23505"));
+    // A version in org A naming org B's secret: composite FK fails.
+    let err = insert(a, sb, 1)
+        .await
+        .expect_err("version under a foreign secret");
+    assert_eq!(sqlstate(&err).as_deref(), Some("23503"), "{err}");
+    // A row claiming org B while bound to org A: RLS WITH CHECK refuses.
+    let err = db
+        .with_org(a, move |c| {
+            Box::pin(async move {
+                sql::query(
+                    "INSERT INTO secret_versions
+                     (org_id, secret_id, version, ciphertext, wrapped_dek, key_id)
+                     VALUES ($1, $2, 1, $3, $4, 'gateway:v1')",
+                )
+                .bind(b)
+                .bind(sb)
+                .bind(vec![0u8; 50])
+                .bind(vec![0u8; 80])
+                .execute(c)
+                .await
+            })
+        })
+        .await
+        .expect_err("cross-org insert");
+    assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{err}");
+
+    // Org B sees none of org A's versions.
+    let seen_by_b: i64 = db
+        .with_org(b, |c| {
+            Box::pin(async move {
+                sql::query_scalar("SELECT count(*) FROM secret_versions")
+                    .fetch_one(c)
+                    .await
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(seen_by_b, 0);
+
+    // Append-only: the app role may not UPDATE or DELETE versions.
+    for stmt in [
+        "UPDATE secret_versions SET key_id = 'x' WHERE secret_id = $1",
+        "DELETE FROM secret_versions WHERE secret_id = $1",
+    ] {
+        let err = db
+            .with_org(a, move |c| {
+                Box::pin(async move { sql::query(stmt).bind(sa).execute(c).await })
+            })
+            .await
+            .expect_err(stmt);
+        assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{stmt}: {err}");
+    }
+
+    // Deleting the secret removes its versions (referential action, not an app-role DELETE).
+    let left: i64 = db
+        .with_org(a, move |c| {
+            Box::pin(async move {
+                sql::query("DELETE FROM secrets WHERE id = $1")
+                    .bind(sa)
+                    .execute(&mut *c)
+                    .await?;
+                sql::query_scalar("SELECT count(*) FROM secret_versions")
+                    .fetch_one(&mut *c)
+                    .await
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+    db.close().await;
 }

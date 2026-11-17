@@ -22,6 +22,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "tenancy schema",
         include_str!("../migrations/0002_tenancy_schema.sql"),
     ),
+    (
+        3,
+        "secret versions",
+        include_str!("../migrations/0003_secret_versions.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.
@@ -101,17 +106,22 @@ mod tests {
         }
     }
 
+    /// No plaintext column anywhere. Only `secret_versions` (S2, decision 6) may hold
+    /// ciphertext, and only as `ciphertext` / `wrapped_dek` bytea.
     #[test]
     fn no_value_column_anywhere() {
-        for &(_, _, sql) in MIGRATIONS {
+        for &(version, _, sql) in MIGRATIONS {
             let code: String = sql
                 .lines()
                 .filter(|l| !l.trim_start().starts_with("--"))
                 .collect::<Vec<_>>()
                 .join("\n")
                 .to_lowercase();
-            for banned in ["value ", "ciphertext", "plaintext"] {
+            for banned in ["value ", "plaintext"] {
                 assert!(!code.contains(banned), "migration defines `{banned}`");
+            }
+            if version != 3 {
+                assert!(!code.contains("ciphertext"), "migration {version}");
             }
         }
     }

@@ -1,0 +1,11 @@
+error[E0277]: `SealedVersion` doesn't implement `Debug`
+ --> tests/ui/debug_sealed_version.rs:4:16
+  |
+4 |     requires::<ls_envelope::SealedVersion>();
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Debug` is not implemented for `SealedVersion`
+  |
+note: required by a bound in `requires`
+ --> tests/ui/debug_sealed_version.rs:1:16
+  |
+1 | fn requires<T: std::fmt::Debug>() {}
+  |                ^^^^^^^^^^^^^^^ required by this bound in `requires`

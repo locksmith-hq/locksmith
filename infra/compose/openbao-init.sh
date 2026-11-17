@@ -1,0 +1,57 @@
+#!/bin/sh
+# Idempotent OpenBao dev setup, run as the `openbao` compose service's healthcheck (so it repeats
+# every few seconds and must stay cheap, quiet about values, and safe to re-run).
+# Enables transit, creates the `gateway` key and the permission split from
+# openspec/changes/s2-envelope-crypto design decision 4:
+#   control-plane token: update on transit/encrypt/gateway only (wrap, never unwrap)
+#   gateway test token:  update on transit/decrypt/gateway only (unwrap)
+# Token ids are fixed dev-only fixtures from .env.example, never real credentials.
+# Dev mode is in-memory; because this runs as the healthcheck, a restarted server is set up again.
+# Re-run by hand: docker compose -f infra/compose/compose.yaml exec openbao sh /openbao-init.sh
+set -eu
+
+: "${BAO_ADDR:?}" "${BAO_TOKEN:?}"
+CP_TOKEN="${OPENBAO_CONTROL_PLANE_TOKEN:-dev-only-control-plane}"
+GW_TOKEN="${OPENBAO_GATEWAY_TOKEN:-dev-only-gateway}"
+
+if bao secrets list -format=json | grep -q '"transit/"'; then
+  echo "transit: already enabled"
+else
+  bao secrets enable transit >/dev/null
+  echo "transit: enabled"
+fi
+
+if bao read -format=json transit/keys/gateway >/dev/null 2>&1; then
+  echo "key gateway: exists"
+else
+  bao write -f transit/keys/gateway type=aes256-gcm96 >/dev/null
+  echo "key gateway: created (aes256-gcm96)"
+fi
+
+# Policies are rewritten every run (same content, so idempotent).
+printf 'path "transit/encrypt/gateway" {\n  capabilities = ["update"]\n}\n' \
+  | bao policy write control-plane - >/dev/null
+printf 'path "transit/decrypt/gateway" {\n  capabilities = ["update"]\n}\n' \
+  | bao policy write gateway - >/dev/null
+echo "policies: control-plane, gateway written"
+
+# Tokens: created with fixed ids only if missing. Orphans without the default policy so each
+# holds exactly one transit capability. The values are never printed.
+ensure_token() {
+  name=$1 id=$2
+  if bao token lookup "$id" >/dev/null 2>&1; then
+    echo "token $name: exists"
+  else
+    # A custom id makes OpenBao warn about SHA1 token hashing; acceptable for dev fixtures, so the
+    # warning is dropped. On failure only the error is shown (stdout, which holds the token, never).
+    if ! err=$(bao token create -id="$id" -policy="$name" -no-default-policy -orphan \
+      -display-name="$name" -ttl=768h 2>&1 >/dev/null); then
+      echo "token $name: create failed: $err" >&2
+      exit 1
+    fi
+    echo "token $name: created"
+  fi
+}
+ensure_token control-plane "$CP_TOKEN"
+ensure_token gateway "$GW_TOKEN"
+echo "openbao-init: done"

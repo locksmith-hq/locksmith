@@ -27,7 +27,7 @@ Keep workers moving: the owner is needed only for
 - admin setup only the owner can do: secrets and tokens, GitHub settings, AWS accounts and guardrails, billing, routines;
 - a big, hard-to-reverse decision: a paid service, licence, security model, data format, or contradicting `openspec/decisions.md`;
 - a security problem with real exposure;
-- an issue Opus rescue failed twice, or an owner-gate task.
+- an issue the lead failed to rescue twice, or an owner-gate task.
 
 Decide the rest yourself, with evidence in design.md (design options; wrong task text via a `claude/planning-*` PR). Only the affected change waits: park it and take another.
 

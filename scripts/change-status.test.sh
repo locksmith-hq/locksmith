@@ -26,7 +26,9 @@ git switch -qc claude/change-s1-api; sed -i.bak 's/- \[ \] 1.2/- [x] 1.2/' opens
 git commit -qam tick; git update-ref refs/remotes/origin/claude/change-s1-api HEAD; git switch -q main
 expect s1-api "review"
 expect s2-crypto "stackable on s1-api"
-expect w1-site "parked #7" "7 Need a domain for w1-site landing"
-[ "$(OFFLINE=1 BLOCKERS='7 w1-site' bash "$script" --ready | tr '\n' ' ')" = "s2-crypto " ] || { echo "FAIL: --ready"; exit 1; }
+expect w1-site "parked owner #7" "7 owner Need a domain for w1-site landing"
+expect w1-site "parked rescue #8" "8 rescue Rescue: w1-site 1.1"
+expect w1-site "parked owner #7" "$(printf '8 rescue Rescue: w1-site 1.1\n7 owner Need a domain for w1-site')"
+[ "$(OFFLINE=1 BLOCKERS='7 owner w1-site' bash "$script" --ready | tr '\n' ' ')" = "s2-crypto " ] || { echo "FAIL: --ready"; exit 1; }
 echo "ok: --ready lists only takeable changes"
 echo "change-status: all tests passed"

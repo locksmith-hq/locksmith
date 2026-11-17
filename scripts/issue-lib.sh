@@ -20,19 +20,29 @@ board() { # <issue> <state>
   local name item opt
   case "$2" in claimed) name="In progress" ;; review) name="In review" ;; *) name="$(tr '[:lower:]' '[:upper:]' <<<"${2:0:1}")${2:1}" ;; esac
   if [ -z "$board_ids" ]; then
-    # shellcheck disable=SC2016 # jq variables
-    board_ids=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project field-list "$project_number" --owner "$project_owner" --format json \
-      -q '.fields[]|select(.name=="Status")|.id as $f|.options[]|"\($f)\t\(.id)\t\(.name)"') || { echo "board: cannot read the Project (check GH_AUTOMATION_TOKEN)"; return 0; }
-    project_id=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project view "$project_number" --owner "$project_owner" --format json -q .id)
-    # Current board in one read: "<issue number>\t<status>". Writes below happen only on a difference,
-    # because every write costs GraphQL quota shared with the workers' account.
-    board_items=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-list "$project_number" --owner "$project_owner" --limit 500 \
-      --format json -q '.items[]|select(.content.number!=null)|"\(.content.number)\t\(.status // "")"')
+    # One read of only what we need (not `gh project item-list`, which also reads linked PRs and fails
+    # for a token without Pull requests access). Lines: "F<TAB>field<TAB>option<TAB>name" per Status
+    # option, "I<TAB>issue<TAB>item<TAB>status" per item, "P<TAB>project-id".
+    # shellcheck disable=SC2016 # GraphQL variables
+    board_read=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh api graphql --paginate -F owner="$project_owner" -F num="$project_number" -f query='
+      query($owner:String!, $num:Int!, $endCursor:String) { organization(login:$owner) { projectV2(number:$num) {
+        id field(name:"Status") { ... on ProjectV2SingleSelectField { id options { id name } } }
+        items(first:100, after:$endCursor) { pageInfo { hasNextPage endCursor }
+          nodes { id content { ... on Issue { number } }
+            fieldValueByName(name:"Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } }' \
+      -q '.data.organization.projectV2 | ("P\t\(.id)"), (.field.id as $f | .field.options[] | "F\t\($f)\t\(.id)\t\(.name)"),
+          (.items.nodes[] | select(.content.number != null) | "I\t\(.content.number)\t\(.id)\t\(.fieldValueByName.name // "")")') ||
+      { echo "board: cannot read the Project (check GH_AUTOMATION_TOKEN)"; board_ids=failed; return 0; }
+    project_id=$(awk -F'\t' '$1=="P"{print $2; exit}' <<<"$board_read")
+    board_ids=$(awk -F'\t' '$1=="F"{print $2"\t"$3"\t"$4}' <<<"$board_read" | sort -u)
+    board_items=$(awk -F'\t' '$1=="I"{print $2"\t"$4"\t"$3}' <<<"$board_read")
   fi
+  [ "$board_ids" = failed ] && return 0
   [ "$(awk -F'\t' -v n="$1" '$1==n{print $2; exit}' <<<"$board_items")" = "$name" ] && return 0
   opt=$(awk -F'\t' -v n="$name" '$3==n{print $1"\t"$2}' <<<"$board_ids")
   [ -n "$opt" ] || { echo "board: no Status option named '$name'"; return 0; }
-  item=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-add "$project_number" --owner "$project_owner" \
+  item=$(awk -F'\t' -v n="$1" '$1==n{print $3; exit}' <<<"$board_items")
+  [ -n "$item" ] || item=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-add "$project_number" --owner "$project_owner" \
     --url "https://github.com/$repo/issues/$1" --format json -q .id) ||
     { echo "board: cannot add #$1 (GH_AUTOMATION_TOKEN needs Issues: Read on this repo and Projects: Read and write on the org)"; return 0; }
   GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-edit --project-id "$project_id" --id "$item" \

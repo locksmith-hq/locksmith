@@ -31,7 +31,7 @@ Create these at claude.ai/code → environment selector → New environment.
   - github.com, including release assets, and Ubuntu apt
 - **Extra allowed domains:** none for now.
 - **Environment variables:** `BASH_MAX_TIMEOUT_MS=600000`, `CARGO_TERM_COLOR=never`. **No secrets here.** Environment variables are readable by the model and by any command it runs.
-- **Setup script:** a short bootstrap (pasted 2026-11-16) that finds the cloned repo and runs [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh), falling back to a built-in copy if the repo isn't present yet. Changes merged to that file apply without re-pasting. It installs build dependencies, `just`, the pinned toolchain, `cargo-nextest` and `openspec`, and pre-pulls the compose images. The images are cached between sessions; containers are not.
+- **Setup script:** a short bootstrap (pasted 2026-11-16) that finds the cloned repo and runs [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh), falling back to a built-in copy if the repo isn't present yet. Changes merged to that file apply without re-pasting. It installs build dependencies, `just`, the pinned toolchain, a prebuilt `cargo-nextest` and `openspec`. It no longer pre-pulls compose images (that blew the 5-minute cache budget and hung the lead run on 2026-11-17); `just up` pulls them on demand.
 - **Starting the stack:** each session starts it with `just up`, which the F0 docs tell the agent to run. A SessionStart hook can automate this once F0 lands. **[test]** Whether Docker in the VM runs the full stack (lgtm needs about 1 to 2 GB RAM).
 
 ### 2. `locksmith-research`: used by the weekly review and planning runs
@@ -42,6 +42,7 @@ Create these at claude.ai/code → environment selector → New environment.
   - `*.github.io`
   - `code.claude.com`, `docs.claude.com`
   - `nexte.st`, `insta.rs`, `www.cedarpolicy.com`, `openbao.org`, `grafana.com`
+  - `reddit.com`, `www.reddit.com`, `old.reddit.com`, `medium.com`, `*.medium.com` (added 2026-11-17): user-written pages, so they are hints only. Act on a claim only after confirming it on the registry, the project's repo or its official docs, and cite that source.
 - **Why separate:** the worker never needs open web access, so a prompt-injected web page can't reach a session that runs code with a wider network. **[test]** Whether WebSearch and WebFetch obey the environment allowlist. If they do, add domains here as research needs them; never switch to Full.
 
 ### 3. Later: `locksmith-aws-dev`, from phase 4 (P1)
@@ -127,8 +128,7 @@ All four avoid peak hours (weekdays about 15:00–21:00).
 | [Worker B](https://claude.ai/code/routines/trig_01FcnFP64Q1CJ8cFVEjprLAj) | Sonnet 5.5 (same prompt as Worker) | `locksmith-dev` | same hours as Worker at :35 (added 2026-11-17, owner-approved concurrency) | a second concurrent worker; per-change locks keep it on a different change |
 | [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Sat 10:35 (after the Saturday 10:00 weekly reset) | re-verify finished work, quality review, write the next change |
 | [Daily health check](https://claude.ai/code/routines/trig_012bR8F2aWP91W3D9xGDpVUn) | Haiku 5.5 | Default | daily 08:30 | detects silent failures: worker silent for more than 24h, red CI on main, owner decisions waiting more than 3 days, finished PRs waiting more than 2 days; stays silent when healthy |
-| [Rescue (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-dev` | daily 09:35, 23:35 (exits at once if idle) | fixes the oldest `needs-rescue` issue at its root cause and checks the fix with an independent Opus evaluator; after 2 failed attempts it hands the issue to the owner |
-| Learning loop | Opus 5.5 | `locksmith-dev` | daily 00:35 (exits at once when there was no friction) | reads the last 24h of run metadata, rescues and CI failures; fixes the top 1–3 causes in setup, scripts or agent instructions; fixes them in scripts or skills, keeping the instruction word count flat; opens a PR that auto-merges through the gates |
+| [Lead (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-research` | daily 09:35, 23:35 (passes with nothing to do are skipped) | tech lead (`docs/agents/lead.md`, replaced Rescue and the Learning loop 2026-11-17): rescues the oldest `needs-rescue` issue; reviews run metadata for stuck, slow or wasteful runs and fixes the causes in scripts or skills; reviews code merged since its last run for duplication, reinvented wheels, readability drift and over-specific solutions, and turns findings into fixes, unticked tasks or a `refactor-*` change |
 | [Monthly research refresh](https://claude.ai/code/routines/trig_016jEjKwShdcdfhWKBcp8kHs) | Sonnet 5.5 | `locksmith-research` | 1st of month, 10:35 | re-checks OSS versions and licences, `cargo audit` and `npm audit`, new MCP servers, Infisical changes; draft PR only if something changed |
 
 Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.
@@ -138,7 +138,7 @@ Only the `Claude_Code_Remote` connector is attached. The others were removed on 
 1. **Worker attempt 1.** The task runs on its tagged tier, then the worker runs the verification command and `just ci`.
 2. **Independent evaluator.** A separate subagent (Sonnet, or Opus for `[opus]` tasks) checks the diff against the task, the spec and the security rules, and answers PASS or FAIL. This follows the evaluator-optimizer pattern.
 3. **Worker attempt 2,** one tier up (Haiku, then Sonnet, then Opus), given the evaluator's reasons.
-4. **`needs-rescue` issue.** The Opus rescue routine reproduces the failure, finds the root cause, fixes it and has the fix evaluated.
+4. **`needs-rescue` issue.** The Opus lead routine reproduces the failure, finds the root cause, fixes it and has the fix evaluated.
 5. **`needs-owner` and a push notification.** This happens only after 2 failed Opus attempts, or when the task itself is wrong. The daily health check reports rescue issues that sit unhandled for more than 24 hours.
 
 ## How the owner is alerted
@@ -170,7 +170,7 @@ Agent guidance lives in repo skills (`.claude/skills/`), so each run loads only 
 - each skill: 500 words
 - active lessons: 5
 
-The learning loop must not increase the total. Learning PRs merge through the same gates as everything else, with no waiting window (owner decision, 2026-11-16).
+The lead routine must not increase the total. Its PRs merge through the same gates as everything else, with no waiting window (owner decision, 2026-11-16).
 
 ## Independent review in GitHub Actions
 `.github/workflows/claude-review.yml` runs `anthropics/claude-code-action@v1` with the `merge-review` skill whenever the `ready-to-merge` label is added and on every push to a labelled PR. It authenticates with the owner's Claude subscription through the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, which the owner creates with `claude setup-token` and stores with `gh secret set`. Gate 6 of `merge-gate.sh` requires its `merge-review <sha>: PASS` verdict for the head SHA. Each review costs one Linux runner for up to 20 minutes and uses the Max subscription, not API credits.

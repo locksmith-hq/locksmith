@@ -22,3 +22,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none (code review of the merged S3 gateway, for S4 2.1)
 - Finding: bearer parsing exists twice. `services/gateway/src/relay.rs:146-158` uses a case-sensitive `strip_prefix(b"Bearer ")`; `services/control-plane/src/auth.rs:61-75,113-120` has the stricter `bearer()` and `ServiceToken::matches`. The minimum token length rule is also copied (`gateway/src/config.rs:27,176-182` and `control-plane/src/config.rs:24,134-141`).
 - Notes for next session: in 2.1, use one shared bearer extractor for the JWT path, and remove `caller_token`, `STATIC_CALLER` (`relay.rs:54`) and `ENV_CALLER_TOKEN` rather than keeping both paths. Optional while in `relay::run`: move response reading and redaction (`relay.rs:479-542`) into its own function before adding the grant check.
+
+## 2026-11-17 21:53 worker
+- Task: 2.1 - blocked (parked: task is [opus], gateway auth path; this worker run is on the Sonnet/Haiku tier and did not write auth code)
+- Verified: `scripts/worker-has-work.sh` -> s4-agent-connector ready; `scripts/run-lock.sh acquire` ok; PR #215 open, not draft, no ready-to-merge label; main CI latest run in progress (no failure seen)
+- Notes for next session: pick up at 2.1 on an Opus tier. Start from the lead notes (61190d3): one shared bearer extractor, remove `caller_token`, `STATIC_CALLER` (relay.rs:54) and `ENV_CALLER_TOKEN`, then JWKS via `Jwk::decoding_key()` with kid overlap. Re-check jsonwebtoken and signing-crate versions on crates.io first. Full `just ci` not run this session.

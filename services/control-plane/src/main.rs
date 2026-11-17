@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::config::{self, Config};
 use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
+use ls_control_plane::kms;
 use ls_control_plane::migrate;
 use ls_control_plane::telemetry;
 use tracing_subscriber::EnvFilter;
@@ -68,7 +69,22 @@ async fn main() -> ExitCode {
     let probe = database.spawn_readiness_probe(readiness.clone(), PROBE_INTERVAL);
     let migrations = tokio::spawn(migrate::run_until_done(owner_options, readiness.clone()));
 
-    let router = app::build(AppState::new(config.dev_auth, readiness, database.clone()));
+    let mut state = AppState::new(config.dev_auth, readiness, database.clone());
+    match config.kms.as_ref().map(kms::openbao) {
+        Some(Ok(wrapper)) => {
+            tracing::info!("OpenBao transit configured for secret version DEK wrapping");
+            state = state.with_kms(wrapper);
+        }
+        Some(Err(e)) => {
+            tracing::error!(error = %e, "invalid OpenBao transit configuration");
+            return ExitCode::FAILURE;
+        }
+        None => tracing::warn!(
+            "{} is not set: secret version writes are disabled (503)",
+            config::ENV_OPENBAO_ADDR
+        ),
+    }
+    let router = app::build(state);
 
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,

@@ -43,10 +43,14 @@ tracing-opentelemetry = "0.34.0"
 opentelemetry-appender-tracing = "0.33.1"
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace", "logs"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+# S2: per-version envelope encryption and the OpenBao transit DEK wrapper.
+ls-envelope = { path = "../../crates/ls-envelope" }
+zeroize = "1.9.1"
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }
 http-body-util = "0.1"
+hex = "0.4"
 ls-tenant-lint = { path = "../../crates/ls-tenant-lint" }
 similar = "3.2.1"
 testcontainers = { workspace = true }

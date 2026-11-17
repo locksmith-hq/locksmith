@@ -2203,8 +2203,10 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "hex",
  "http",
  "http-body-util",
+ "ls-envelope",
  "ls-tenant-lint",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -2228,6 +2230,7 @@ dependencies = [
  "utoipa",
  "utoipa-axum",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]

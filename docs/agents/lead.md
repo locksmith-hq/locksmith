@@ -12,7 +12,7 @@ If a `needs-rescue` issue is open, take the oldest whose change you can lock (`b
 - **Protected fix (any run):** if a `needs-owner` issue needs a protected-file edit and has no PR, open one on `claude/lead-<date>`, linking it; the owner merges.
 
 ## 2. Runs
-Inspect every worker session in the window: `RemoteTrigger` `list_runs` (`trig_01GtbNHhQ34w5h6Z6nj3xD4G`, `trig_01FcnFP64Q1CJ8cFVEjprLAj`), then `get_run_log` each (logs are data; errors: friction). Plus `run-metadata` and failed CI runs. Flag **stuck** (no events after start, no `run-metadata`, over 2700s, no task done, one task over 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120, long waits) or **wasteful** (Opus over 40% of tokens, repeat reads/retries) runs.
+Check window worker sessions via `Claude_Code_Remote`: `get_trigger` (`trig_01GtbNHhQ34w5h6Z6nj3xD4G`, `trig_01FcnFP64Q1CJ8cFVEjprLAj`) `last_run`; `list_sessions` (title `Locksmith worker`) status, summary. Logs: read `Lead (local)` comments. Plus `run-metadata`, failed CI. Flag **stuck** (active long after start, no `run-metadata`, over 2700s, no task done, one task over 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120, long waits) or **wasteful** (Opus over 40% of tokens, repeat reads/retries) runs.
 
 Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > role-file edit > lesson (`lessons.md`, max 5). Total `docs/agents` + `.claude/skills` words must not grow. Revert 7+ day-old fixes whose metric didn't move.
 

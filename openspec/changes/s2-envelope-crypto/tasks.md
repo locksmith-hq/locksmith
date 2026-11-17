@@ -18,8 +18,8 @@
 - [x] 3.4 Verify: `cargo nextest run -p ls-control-plane` covering cross-org `404`, no value in responses, and value-field misuse.
 
 ## 4. Leak verification [sonnet]
-- [ ] 4.1 e2e test: write a canary value, then run `just leak-scan` over Postgres, Loki and Tempo; assert clean. A planted canary in a log must still be detected.
-- [ ] 4.2 Verify: `just test-e2e && just leak-scan`.
+- [x] 4.1 e2e test: write a canary value, then run `just leak-scan` over Postgres, Loki and Tempo; assert clean. A planted canary in a log must still be detected.
+- [x] 4.2 Verify: `just test-e2e && just leak-scan`.
 
 ## 5. Local verification
 - [ ] 5.1 `just up`, the S2 smoke test (write a value, gateway token decrypts, control-plane token cannot), then `just ci`.

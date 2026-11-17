@@ -305,3 +305,95 @@ async fn canary_in_secret_description_only_reaches_the_database() {
     .await;
     assert_eq!(del.status, StatusCode::NO_CONTENT);
 }
+
+fn canary_file() -> String {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    env::var("LOCKSMITH_CANARIES").unwrap_or_else(|_| format!("{root}/infra/compose/.canaries"))
+}
+
+/// Runs `just leak-scan` (Postgres, Loki, Tempo) and returns (success, stdout). The oracle never
+/// prints a canary value, only encodings and locations.
+fn leak_scan(extra: &[&str]) -> (bool, String) {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    let out = std::process::Command::new("just")
+        .arg("leak-scan")
+        .args(extra)
+        .current_dir(root)
+        .env("LOCKSMITH_CANARIES", canary_file())
+        .output()
+        .expect("run just leak-scan");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+#[tokio::test]
+async fn canary_secret_value_never_reaches_postgres_logs_or_traces() {
+    let c = Client::new();
+    let canary = mint_canary();
+    let org = new_org(&c, &uniq("e2e-value")).await;
+    let p = call(
+        &c,
+        "POST",
+        "/v1/projects",
+        Some(&org),
+        Some(json!({ "name": "p" })),
+    )
+    .await;
+    let pid = p.body["id"].as_str().unwrap().to_owned();
+    let e = call(
+        &c,
+        "POST",
+        &format!("/v1/projects/{pid}/environments"),
+        Some(&org),
+        Some(json!({ "name": "e" })),
+    )
+    .await;
+    let eid = e.body["id"].as_str().unwrap().to_owned();
+    let base = format!("/v1/projects/{pid}/environments/{eid}/secrets");
+    let s = call(&c, "POST", &base, Some(&org), Some(json!({ "name": "S" }))).await;
+    assert_eq!(s.status, StatusCode::CREATED, "{:?}", s.body);
+    let sid = s.body["id"].as_str().unwrap().to_owned();
+    let v = call(
+        &c,
+        "POST",
+        &format!("{base}/{sid}/versions"),
+        Some(&org),
+        Some(json!({ "value": canary })),
+    )
+    .await;
+    assert_eq!(v.status, StatusCode::CREATED, "{:?}", v.body);
+    assert!(
+        !v.body.to_string().contains(&canary),
+        "value echoed in response"
+    );
+    let l = call(
+        &c,
+        "GET",
+        &format!("{base}/{sid}/versions"),
+        Some(&org),
+        None,
+    )
+    .await;
+    assert_eq!(l.status, StatusCode::OK);
+    assert!(!l.body.to_string().contains(&canary), "value listed");
+
+    // Let Loki ingest the request logs before scanning.
+    tokio::time::sleep(Duration::from_secs(10)).await;
+    let (clean, out) = leak_scan(&[]);
+    assert!(clean, "leak-scan found the canary:\n{out}");
+}
+
+#[test]
+fn leak_scan_detects_a_planted_canary() {
+    let canary = mint_canary();
+    let dir = std::env::temp_dir().join(uniq("e2e-plant"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("planted.log"), format!("token={canary}\n")).unwrap();
+    let (clean, out) = leak_scan(&["--dir", dir.to_str().unwrap()]);
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(!clean, "planted canary not detected");
+    assert!(out.contains("LEAK"), "no LEAK line: {out}");
+    assert!(!out.contains(&canary), "oracle printed the canary");
+}

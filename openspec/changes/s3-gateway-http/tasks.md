@@ -11,7 +11,7 @@
 ## 3. Decrypt, inject, redact [opus]
 - [x] 3.1 Fetch material, unwrap with `OpenBaoTransit`, `open_version`, DEK cache with TTL and zeroize on evict. No Debug/Display/Clone on secret types.
 - [x] 3.2 Egress rules: host allowlist, private/loopback/link-local refusal, pinned connection, no redirect following.
-- [ ] 3.3 `POST /v1/relay`: inject by template, call upstream, redact headers and body with `ls-redact` (fail closed on unscannable encodings), write the audit row.
+- [x] 3.3 `POST /v1/relay`: inject by template, call upstream, redact headers and body with `ls-redact` (fail closed on unscannable encodings), write the audit row.
 - [ ] 3.4 Verify: `cargo nextest run -p ls-gateway` including echoed secret in plain/base64/URL/hex, disallowed host makes no decrypt call, redirect not followed, failure paths leak nothing.
 
 ## 4. Compose and e2e [sonnet]

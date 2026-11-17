@@ -23,6 +23,7 @@ async fn debug_filter_still_redacts_and_limits_otel_diagnostics() {
         &Options {
             export_interval: Duration::from_millis(100),
             export_timeout: Duration::from_millis(500),
+            ..Options::default()
         },
     )
     .unwrap();

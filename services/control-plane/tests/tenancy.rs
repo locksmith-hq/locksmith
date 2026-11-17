@@ -87,7 +87,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             .fetch_all(&mut admin)
             .await
             .unwrap();
-    assert_eq!(applied, [1, 2, 3, 4]);
+    assert_eq!(applied, [1, 2, 3, 4, 5]);
 
     // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
     migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
@@ -97,7 +97,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         .fetch_one(&mut admin)
         .await
         .unwrap();
-    assert_eq!(count, 4);
+    assert_eq!(count, 5);
 
     let tables: Vec<(String, String, bool, bool)> = sql::query_as(
         "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity

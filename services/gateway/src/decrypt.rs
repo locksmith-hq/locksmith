@@ -451,8 +451,11 @@ pub(crate) mod testkit {
         let sealed = seal_version(&binding, &SecretBytes::new(value.to_vec())).unwrap();
         let (ciphertext, dek) = sealed.into_parts();
         // A structurally valid dek-wrap blob; its body is opaque to the gateway.
+        // Distinct per (secret, version), so a stub KMS can answer each one.
         let mut wrapped = Header::v1(key().to_key_id()).encode().to_vec();
-        wrapped.extend_from_slice(&[7u8; 60]);
+        wrapped.extend_from_slice(secret.as_bytes());
+        wrapped.extend_from_slice(&version.to_be_bytes());
+        wrapped.extend_from_slice(&[7u8; 40]);
         Sealed {
             ciphertext,
             wrapped,
@@ -469,6 +472,11 @@ pub(crate) mod testkit {
                 "ciphertext": B64.encode(&self.ciphertext),
                 "wrapped_dek": B64.encode(&self.wrapped),
             })
+        }
+
+        /// The transit ciphertext the gateway sends to OpenBao to unwrap this DEK (base64 part).
+        pub fn transit_ciphertext(&self) -> String {
+            B64.encode(&self.wrapped[ls_envelope::header::HEADER_LEN..])
         }
 
         pub fn material(&self) -> Material {

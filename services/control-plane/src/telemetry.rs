@@ -33,6 +33,7 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
 
+/// The control plane's OTel `service.name` (the default in [`Options`]).
 pub const SERVICE_NAME: &str = "locksmith-api";
 
 /// Minimum spacing between console lines about exporter-internal failures.
@@ -49,6 +50,8 @@ pub struct Options {
     pub export_interval: Duration,
     /// Per-export HTTP timeout, so a black-holed endpoint cannot stall the exporter thread.
     pub export_timeout: Duration,
+    /// OTel `service.name` and tracer name ([`SERVICE_NAME`] for the control plane).
+    pub service_name: &'static str,
 }
 
 impl Default for Options {
@@ -56,6 +59,7 @@ impl Default for Options {
         Self {
             export_interval: Duration::from_secs(5),
             export_timeout: Duration::from_secs(3),
+            service_name: SERVICE_NAME,
         }
     }
 }
@@ -156,7 +160,9 @@ where
     S: opentelemetry_sdk::trace::SpanExporter + 'static,
     L: opentelemetry_sdk::logs::LogExporter + 'static,
 {
-    let resource = Resource::builder().with_service_name(SERVICE_NAME).build();
+    let resource = Resource::builder()
+        .with_service_name(opts.service_name)
+        .build();
 
     let span_processor = BatchSpanProcessor::builder(span_exporter)
         .with_batch_config(
@@ -326,7 +332,13 @@ where
         Some(Err(_)) => (None, true),
         None => (None, false),
     };
-    install(providers, build_failed, env_filter, writer)
+    install(
+        providers,
+        build_failed,
+        env_filter,
+        writer,
+        opts.service_name,
+    )
 }
 
 /// Like [`init`], but exporting to the given exporters instead of OTLP HTTP (for tests). The
@@ -344,7 +356,13 @@ where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
     let providers = build_providers(span_exporter, log_exporter, opts);
-    install(Some(providers), false, env_filter, writer)
+    install(
+        Some(providers),
+        false,
+        env_filter,
+        writer,
+        opts.service_name,
+    )
 }
 
 fn install<W>(
@@ -352,13 +370,14 @@ fn install<W>(
     build_failed: bool,
     env_filter: EnvFilter,
     writer: W,
+    service_name: &'static str,
 ) -> Result<Telemetry, TelemetryError>
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
     let trace_layer = providers.as_ref().map(|p| {
         tracing_opentelemetry::layer()
-            .with_tracer(p.traces.tracer(SERVICE_NAME))
+            .with_tracer(p.traces.tracer(service_name))
             .with_filter(NotInternal)
     });
     let log_layer = providers

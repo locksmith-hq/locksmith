@@ -6,6 +6,7 @@ use axum::Json;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::db::sql;
 
@@ -73,7 +74,7 @@ impl Kind {
 }
 
 /// The JSON body of an error response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Problem {
     #[serde(rename = "type")]
     pub type_uri: String,

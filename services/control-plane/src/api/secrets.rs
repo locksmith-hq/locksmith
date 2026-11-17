@@ -6,6 +6,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
@@ -15,9 +16,9 @@ use super::{
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, PgConnection, Row};
-use crate::problem::ApiError;
+use crate::problem::{ApiError, Problem};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Secret {
     pub id: Uuid,
     pub project_id: Uuid,
@@ -30,7 +31,7 @@ pub struct Secret {
     pub updated_at: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NewSecret {
     pub name: String,
@@ -66,6 +67,23 @@ async fn require_environment(
     found.map(|_| ()).ok_or_else(ApiError::not_found)
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/projects/{project_id}/environments/{environment_id}/secrets",
+    tag = "secrets",
+    summary = "Create a secret (metadata only, never a value)",
+    params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id")),
+    request_body = NewSecret,
+    responses(
+        (status = 201, description = "Created", body = Secret, headers(("Location" = String, description = "URL of the new resource"))),
+        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn create(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -104,6 +122,20 @@ pub async fn create(
     ))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+    tag = "secrets",
+    summary = "Get secret metadata",
+    params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
+    responses(
+        (status = 200, description = "OK", body = Secret),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn get_one(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -133,6 +165,21 @@ pub async fn get_one(
     row.map(Json).ok_or_else(ApiError::not_found)
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/projects/{project_id}/environments/{environment_id}/secrets",
+    tag = "secrets",
+    summary = "List secrets",
+    params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), PageParams),
+    responses(
+        (status = 200, description = "A page of secrets", body = Paged<Secret>),
+        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn list(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -167,6 +214,23 @@ pub async fn list(
     Ok(Json(Paged::new(rows, page, |s| s.id)))
 }
 
+#[utoipa::path(
+    patch,
+    path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+    tag = "secrets",
+    summary = "Update secret metadata",
+    params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
+    request_body = Patch,
+    responses(
+        (status = 200, description = "OK", body = Secret),
+        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn patch(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -202,6 +266,21 @@ pub async fn patch(
     row.map(Json).ok_or_else(ApiError::not_found)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+    tag = "secrets",
+    summary = "Delete a secret",
+    params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
+    responses(
+        (status = 204, description = "Deleted"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn delete(
     State(state): State<AppState>,
     org: OrgBinding,

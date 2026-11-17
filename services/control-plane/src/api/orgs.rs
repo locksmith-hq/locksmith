@@ -4,6 +4,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath};
@@ -11,9 +12,9 @@ use super::{created, validate_name};
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
-use crate::problem::ApiError;
+use crate::problem::{ApiError, Problem};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Org {
     pub id: Uuid,
     pub name: String,
@@ -22,7 +23,7 @@ pub struct Org {
     pub updated_at: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NewOrg {
     pub name: String,
@@ -49,6 +50,19 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Org> {
 /// `POST /v1/orgs`: dev only (design decision 7). The app generates a UUIDv7, binds it as the
 /// org context, and inserts through row-level security. Without dev auth there is no way to
 /// name an org yet, so the request is `401` and no query runs.
+#[utoipa::path(
+    post,
+    path = "/v1/orgs",
+    tag = "orgs",
+    summary = "Create an org (dev only)",
+    request_body = NewOrg,
+    responses(
+        (status = 201, description = "Created", body = Org, headers(("Location" = String, description = "URL of the new resource"))),
+        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+)]
 pub async fn create(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<NewOrg>,
@@ -78,6 +92,20 @@ pub async fn create(
 }
 
 /// `GET /v1/orgs/{org_id}`: only the bound org exists as far as a request can tell.
+#[utoipa::path(
+    get,
+    path = "/v1/orgs/{org_id}",
+    tag = "orgs",
+    summary = "Get the bound org",
+    params(("org_id" = Uuid, Path, description = "Org id")),
+    responses(
+        (status = 200, description = "OK", body = Org),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn get_one(
     State(state): State<AppState>,
     org: OrgBinding,

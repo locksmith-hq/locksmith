@@ -10,13 +10,14 @@ mod orgs;
 mod projects;
 mod secrets;
 
-use axum::Router;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::app::AppState;
@@ -27,38 +28,25 @@ pub const MAX_DESCRIPTION_CHARS: usize = 4096;
 pub const DEFAULT_PAGE_LIMIT: u32 = 50;
 pub const MAX_PAGE_LIMIT: u32 = 100;
 
-/// The `/v1` routes (without layers or state).
-pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/v1/orgs", post(orgs::create))
-        .route("/v1/orgs/{org_id}", get(orgs::get_one))
-        .route("/v1/projects", post(projects::create).get(projects::list))
-        .route(
-            "/v1/projects/{project_id}",
-            get(projects::get_one)
-                .patch(projects::patch)
-                .delete(projects::delete),
-        )
-        .route(
-            "/v1/projects/{project_id}/environments",
-            post(environments::create).get(environments::list),
-        )
-        .route(
-            "/v1/projects/{project_id}/environments/{environment_id}",
-            get(environments::get_one)
-                .patch(environments::patch)
-                .delete(environments::delete),
-        )
-        .route(
-            "/v1/projects/{project_id}/environments/{environment_id}/secrets",
-            post(secrets::create).get(secrets::list),
-        )
-        .route(
-            "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
-            get(secrets::get_one)
-                .patch(secrets::patch)
-                .delete(secrets::delete),
-        )
+/// The `/v1` routes (without layers or state), with their OpenAPI path items.
+pub fn router() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(orgs::create))
+        .routes(routes!(orgs::get_one))
+        .routes(routes!(projects::create, projects::list))
+        .routes(routes!(
+            projects::get_one,
+            projects::patch,
+            projects::delete
+        ))
+        .routes(routes!(environments::create, environments::list))
+        .routes(routes!(
+            environments::get_one,
+            environments::patch,
+            environments::delete
+        ))
+        .routes(routes!(secrets::create, secrets::list))
+        .routes(routes!(secrets::get_one, secrets::patch, secrets::delete))
 }
 
 /// SQL column list shared by projects, environments and secrets (timestamps as RFC 3339 UTC).
@@ -94,7 +82,7 @@ pub(crate) fn validate_description(description: &str) -> Result<(), ApiError> {
 }
 
 /// `PATCH` body for projects, environments and secrets: name and description only.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Patch {
     pub name: Option<String>,
@@ -129,10 +117,13 @@ pub(crate) fn created<T: Serialize>(location: String, body: T) -> Response {
 }
 
 /// List query: `limit` (1 to 100, default 50) and the opaque `cursor` from a previous `next`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
+#[into_params(parameter_in = Query)]
 pub struct PageParams {
+    /// Page size, 1 to 100 (default 50).
     limit: Option<u32>,
+    /// Opaque cursor: the `next` value of the previous page.
     cursor: Option<String>,
 }
 
@@ -179,7 +170,7 @@ fn decode_cursor(cursor: &str) -> Result<Uuid, ()> {
 }
 
 /// One page of a list. `next` is absent on the last page.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Paged<T> {
     pub items: Vec<T>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -5,6 +5,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
@@ -14,9 +15,9 @@ use super::{
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
-use crate::problem::ApiError;
+use crate::problem::{ApiError, Problem};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Project {
     pub id: Uuid,
     pub name: String,
@@ -25,7 +26,7 @@ pub struct Project {
     pub updated_at: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NewProject {
     pub name: String,
@@ -43,6 +44,21 @@ pub(super) fn from_row(r: &sql::PgRow) -> sql::Result<Project> {
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/projects",
+    tag = "projects",
+    summary = "Create a project",
+    request_body = NewProject,
+    responses(
+        (status = 201, description = "Created", body = Project, headers(("Location" = String, description = "URL of the new resource"))),
+        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn create(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -70,6 +86,20 @@ pub async fn create(
     Ok(created(format!("/v1/projects/{}", project.id), project))
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/projects/{project_id}",
+    tag = "projects",
+    summary = "Get a project",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 200, description = "OK", body = Project),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn get_one(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -97,6 +127,21 @@ pub async fn get_one(
     row.map(Json).ok_or_else(ApiError::not_found)
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/projects",
+    tag = "projects",
+    summary = "List projects",
+    params(PageParams),
+    responses(
+        (status = 200, description = "A page of projects", body = Paged<Project>),
+        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn list(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -126,6 +171,23 @@ pub async fn list(
     Ok(Json(Paged::new(rows, page, |p| p.id)))
 }
 
+#[utoipa::path(
+    patch,
+    path = "/v1/projects/{project_id}",
+    tag = "projects",
+    summary = "Update a project",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    request_body = Patch,
+    responses(
+        (status = 200, description = "OK", body = Project),
+        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn patch(
     State(state): State<AppState>,
     org: OrgBinding,
@@ -159,6 +221,21 @@ pub async fn patch(
 }
 
 /// Deleting a project with environments (or secrets) is `409`: parents are RESTRICT-deleted.
+#[utoipa::path(
+    delete,
+    path = "/v1/projects/{project_id}",
+    tag = "projects",
+    summary = "Delete a project",
+    params(("project_id" = Uuid, Path, description = "Project id")),
+    responses(
+        (status = 204, description = "Deleted"),
+        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("dev_org" = []))
+)]
 pub async fn delete(
     State(state): State<AppState>,
     org: OrgBinding,

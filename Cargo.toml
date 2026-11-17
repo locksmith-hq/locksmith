@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "tests/e2e"]
+members = ["crates/*", "tests/e2e", "tests/spikes/a0"]
 # Tauri app: own lockfile, keeps webkit/gtk out of the core build.
 exclude = ["apps/desktop/src-tauri"]
 

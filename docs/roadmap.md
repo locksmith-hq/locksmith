@@ -69,7 +69,7 @@ uses what the previous one taught us.
 
 | # | Change | Usable outcome |
 |---|---|---|
-| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. The AWS MCP Server inspects it read-only (A0 decisions 16–18). |
+| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). |
 | P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. |
 | P3 | `p3-sdks-and-plugins` | SDKs generated from OpenAPI, plus Claude Code, Cursor and Codex plugins. |
 

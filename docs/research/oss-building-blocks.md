@@ -40,7 +40,7 @@ The rule throughout: build in-house only what touches plaintext. Everything else
 | Browser e2e | microsoft/playwright-mcp | Apache-2.0 | n/a |
 | GitHub | github/github-mcp-server | MIT | `--read-only` |
 | Kubernetes (phase 4) | containers/kubernetes-mcp-server | Apache-2.0 | `--read-only` |
-| AWS (phase 4) | managed AWS MCP Server (GA 2026-05), awslabs/mcp as fallback | AWS service / Apache-2.0 | read-only role, writes via MCP denied (A0 decision 18) |
+| AWS (phase 4) | managed AWS MCP Server (GA 2026-05), awslabs/mcp as fallback | AWS service / Apache-2.0 | reads free; writes need owner approval after a change brief, guardrail services denied (A0 decision 18) |
 
 Dogfooding: these MCP servers take DB URLs and tokens from env. Once S4 lands, route them through Locksmith.
 

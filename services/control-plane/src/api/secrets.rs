@@ -7,17 +7,20 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
+use super::responses::{DeleteErrors, ListErrors, ReadErrors, WriteErrors};
 use super::{
-    Page, PageParams, Paged, Patch, common_cols, created, validate_description, validate_name,
+    Page, PageParams, Paged, Patch, all, common_cols, created, deleted_or_404, exists_or_404, one,
+    utc, validate_description, validate_name,
 };
 use crate::app::AppState;
 use crate::auth::OrgBinding;
-use crate::db::sql::{self, PgConnection, Row};
-use crate::problem::{ApiError, Problem};
+use crate::db::sql::{self, Row};
+use crate::problem::ApiError;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Secret {
@@ -28,8 +31,12 @@ pub struct Secret {
     pub description: String,
     /// Number of stored versions (`POST .../versions` adds one).
     pub version_count: u32,
-    pub created_at: String,
-    pub updated_at: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub updated_at: OffsetDateTime,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -56,24 +63,9 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Secret> {
         name: r.try_get("name")?,
         description: r.try_get("description")?,
         version_count: u32::try_from(r.try_get::<i64, _>("version_count")?).unwrap_or(u32::MAX),
-        created_at: r.try_get("created_at")?,
-        updated_at: r.try_get("updated_at")?,
+        created_at: utc(r, "created_at")?,
+        updated_at: utc(r, "updated_at")?,
     })
-}
-
-/// `404` unless the environment exists in the project for the bound org.
-async fn require_environment(
-    c: &mut PgConnection,
-    project_id: Uuid,
-    environment_id: Uuid,
-) -> Result<(), ApiError> {
-    let found: Option<i32> =
-        sql::query_scalar("SELECT 1 FROM environments WHERE id = $1 AND project_id = $2")
-            .bind(environment_id)
-            .bind(project_id)
-            .fetch_optional(c)
-            .await?;
-    found.map(|_| ()).ok_or_else(ApiError::not_found)
 }
 
 #[utoipa::path(
@@ -85,11 +77,7 @@ async fn require_environment(
     request_body = NewSecret,
     responses(
         (status = 201, description = "Created", body = Secret, headers(("Location" = String, description = "URL of the new resource"))),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        WriteErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -105,7 +93,15 @@ pub async fn create(
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
-                require_environment(c, project_id, environment_id).await?;
+                exists_or_404(
+                    c,
+                    sql::query_scalar(
+                        "SELECT 1 FROM environments WHERE id = $1 AND project_id = $2",
+                    )
+                    .bind(environment_id)
+                    .bind(project_id),
+                )
+                .await?;
                 let row = sql::query(concat!(
                     "INSERT INTO secrets (org_id, project_id, environment_id, name, description) \
                      VALUES ($1, $2, $3, $4, $5) RETURNING project_id, environment_id, ",
@@ -140,9 +136,7 @@ pub async fn create(
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
     responses(
         (status = 200, description = "OK", body = Secret),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ReadErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -166,14 +160,11 @@ pub async fn get_one(
                 .bind(environment_id)
                 .fetch_optional(c)
                 .await?;
-                row.as_ref()
-                    .map(from_row)
-                    .transpose()
-                    .map_err(ApiError::from)
+                one(row, from_row)
             })
         })
         .await?;
-    row.map(Json).ok_or_else(ApiError::not_found)
+    Ok(Json(row))
 }
 
 #[utoipa::path(
@@ -184,10 +175,7 @@ pub async fn get_one(
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), PageParams),
     responses(
         (status = 200, description = "A page of secrets", body = Paged<Secret>),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        ListErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -202,7 +190,15 @@ pub async fn list(
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
-                require_environment(c, project_id, environment_id).await?;
+                exists_or_404(
+                    c,
+                    sql::query_scalar(
+                        "SELECT 1 FROM environments WHERE id = $1 AND project_id = $2",
+                    )
+                    .bind(environment_id)
+                    .bind(project_id),
+                )
+                .await?;
                 let rows = sql::query(concat!(
                     "SELECT project_id, environment_id, ",
                     version_count_col!(),
@@ -216,10 +212,7 @@ pub async fn list(
                 .bind(page.fetch())
                 .fetch_all(c)
                 .await?;
-                rows.iter()
-                    .map(from_row)
-                    .collect::<sql::Result<Vec<_>>>()
-                    .map_err(ApiError::from)
+                all(&rows, from_row)
             })
         })
         .await?;
@@ -235,11 +228,7 @@ pub async fn list(
     request_body = Patch,
     responses(
         (status = 200, description = "OK", body = Secret),
-        (status = 400, description = "Invalid request", body = Problem, content_type = "application/problem+json"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        WriteErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -269,14 +258,11 @@ pub async fn patch(
                 .bind(input.description)
                 .fetch_optional(c)
                 .await?;
-                row.as_ref()
-                    .map(from_row)
-                    .transpose()
-                    .map_err(ApiError::from)
+                one(row, from_row)
             })
         })
         .await?;
-    row.map(Json).ok_or_else(ApiError::not_found)
+    Ok(Json(row))
 }
 
 #[utoipa::path(
@@ -287,10 +273,7 @@ pub async fn patch(
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
     responses(
         (status = 204, description = "Deleted"),
-        (status = 401, description = "Missing or invalid org binding", body = Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Not found", body = Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Conflict", body = Problem, content_type = "application/problem+json"),
-        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+        DeleteErrors,
     ),
     security(("dev_org" = []))
 )]
@@ -299,7 +282,7 @@ pub async fn delete(
     org: OrgBinding,
     ApiPath((project_id, environment_id, secret_id)): ApiPath<(Uuid, Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
-    let deleted = state
+    let status = state
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
@@ -312,13 +295,9 @@ pub async fn delete(
                 .execute(c)
                 .await?
                 .rows_affected();
-                Ok::<_, ApiError>(n > 0)
+                deleted_or_404(n)
             })
         })
         .await?;
-    if deleted {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(ApiError::not_found())
-    }
+    Ok(status)
 }

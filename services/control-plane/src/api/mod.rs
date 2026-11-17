@@ -10,6 +10,7 @@ mod environments;
 mod extract;
 mod orgs;
 mod projects;
+mod responses;
 mod secrets;
 mod versions;
 
@@ -18,12 +19,14 @@ use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
+use time::{OffsetDateTime, UtcOffset};
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::db::sql::{self, PgArguments, PgConnection, PgRow, Postgres, Row};
 use crate::problem::ApiError;
 
 pub const MAX_NAME_CHARS: usize = 200;
@@ -53,15 +56,64 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(versions::create, versions::list))
 }
 
-/// SQL column list shared by projects, environments and secrets (timestamps as RFC 3339 UTC).
+/// SQL column list shared by projects, environments and secrets.
 macro_rules! common_cols {
     () => {
-        "id, name, description, \
-         to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at, \
-         to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS updated_at"
+        "id, name, description, created_at, updated_at"
     };
 }
 pub(crate) use common_cols;
+
+/// A `timestamptz` column as an [`OffsetDateTime`] in UTC (`timestamptz` decodes in the session
+/// offset, and the API promises RFC 3339 UTC).
+pub(crate) fn utc(row: &PgRow, column: &str) -> sql::Result<OffsetDateTime> {
+    Ok(row
+        .try_get::<OffsetDateTime, _>(column)?
+        .to_offset(UtcOffset::UTC))
+}
+
+/// A fetched optional row mapped through `map`: `404` when there is no row.
+pub(crate) fn one<T>(
+    row: Option<PgRow>,
+    map: impl FnOnce(&PgRow) -> sql::Result<T>,
+) -> Result<T, ApiError> {
+    row.as_ref()
+        .map(map)
+        .transpose()?
+        .ok_or_else(ApiError::not_found)
+}
+
+/// Every fetched row mapped through `map`.
+pub(crate) fn all<T>(
+    rows: &[PgRow],
+    map: impl FnMut(&PgRow) -> sql::Result<T>,
+) -> Result<Vec<T>, ApiError> {
+    rows.iter()
+        .map(map)
+        .collect::<sql::Result<Vec<_>>>()
+        .map_err(ApiError::from)
+}
+
+/// `204 No Content` when a `DELETE` removed a row, else `404`.
+pub(crate) fn deleted_or_404(rows_affected: u64) -> Result<StatusCode, ApiError> {
+    if rows_affected > 0 {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found())
+    }
+}
+
+/// `404` unless the `SELECT 1 ...` query finds a row (row-level security hides other orgs').
+pub(crate) async fn exists_or_404(
+    c: &mut PgConnection,
+    query: sql::QueryScalar<'_, Postgres, i32, PgArguments>,
+) -> Result<(), ApiError> {
+    query
+        .fetch_optional(c)
+        .await?
+        .map(|_| ())
+        .ok_or_else(ApiError::not_found)
+}
 
 /// Names must be non-blank and bounded; descriptions bounded.
 pub(crate) fn validate_name(name: &str) -> Result<(), ApiError> {

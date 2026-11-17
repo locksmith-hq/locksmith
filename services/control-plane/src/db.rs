@@ -29,9 +29,9 @@ pub mod sql {
     pub use sqlx_core::from_row::FromRow;
     pub use sqlx_core::query::query;
     pub use sqlx_core::query_as::query_as;
-    pub use sqlx_core::query_scalar::query_scalar;
+    pub use sqlx_core::query_scalar::{QueryScalar, query_scalar};
     pub use sqlx_core::row::Row;
-    pub use sqlx_postgres::{PgConnection, PgRow, Postgres};
+    pub use sqlx_postgres::{PgArguments, PgConnection, PgRow, Postgres};
 }
 
 /// The future a transaction closure returns. It borrows the connection for `'c`.

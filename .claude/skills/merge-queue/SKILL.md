@@ -35,7 +35,7 @@ Take candidates oldest first, at most 4 per run. A failed candidate does not sto
      - Workspace member lists, `justfile` recipes, roadmap rows: keep both sides.
      - Code: keep both behaviours; if they truly conflict, the later PR adapts.
      Then run `just ci`, push once and release the lock.
-   - **Any other failure:** comment the reason on the PR. For protected files, also open a `needs-owner` issue.
+   - **Any other failure:** comment the reason on the PR. For protected files, also open a `needs-owner` issue unless the PR links one.
 2. **Merge on GATE PASS,** pinned to the reviewed SHA:
    `gh api -X PUT repos/locksmith-hq/locksmith/pulls/<pr>/merge -f merge_method=merge -f sha=<sha>`
 3. **After merging,** if a finished change is still in `openspec/changes/` (its PR skipped step 0), use the `archive-change` skill.

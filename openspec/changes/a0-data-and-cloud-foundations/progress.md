@@ -39,3 +39,7 @@ Format:
 - Task: 3.1, 4.1 - done
 - Verified: just up && just harness-check && cargo nextest run -p a0-spikes && just ci -> exit 0
 - Notes for next session: 3.2 edits openspec/config.yaml (protected on agent branches); needs an owner session, so the change cannot finish on this branch. Remaining [verify] tags in design.md are P1 checks, not spike-resolved.
+
+## 2026-11-17 owner session
+- Task: 3.2 - done in PR #43 (merged): the decisions live in append-only `openspec/decisions.md`, and `openspec/config.yaml` points to it, so later decisions don't need a protected-file edit.
+- Verified: guard tests in a scratch clone (append passes, edits fail), tree-check, task-guard, agent-docs OK.

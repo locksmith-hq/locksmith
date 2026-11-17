@@ -12,7 +12,7 @@
 
 ## 3. Record
 - [x] 3.1 Copy each spike result (pass and versions) into the design.md evidence column and drop any **[verify]** tag that a spike resolved.
-- [ ] 3.2 Add the decisions to the `openspec/config.yaml` context as "Decided foundations" so later changes inherit them.
+- [x] 3.2 Add the decisions to the `openspec/config.yaml` context as "Decided foundations" so later changes inherit them.
 
 ## 4. Local verification
 - [x] 4.1 `just up && just harness-check && cargo nextest run -p a0-spikes && just ci`

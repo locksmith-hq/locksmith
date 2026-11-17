@@ -69,7 +69,7 @@ These replace the desktop scheduled tasks once the first run is verified.
 
 ### Budget
 - `get_usage` exists only in the desktop app, so cloud runs **cannot check usage**. The budget is set by cadence instead:
-  - workers: A and B hourly, 48 runs a day (owner 2026-11-17: token limits lifted)
+  - workers: event-driven (review verdicts, merges, owner replies, red main) plus Worker A every 4 hours as the safety net, about 6 scheduled runs a day; Worker B disabled (owner 2026-11-17)
   - weekly review: 1 run a week
 - Every run counts against the plan limits. Adjust the cadence after a week of real numbers.
 
@@ -120,12 +120,12 @@ The design follows Anthropic's long-running agent harness (https://www.anthropic
 
 ## Schedules (cloud routines, Israel time)
 
-Except the workers (hourly, 24/7), routines avoid peak hours (weekdays about 15:00–21:00).
+Except the workers (events, plus every 4 hours, 24/7), routines avoid peak hours (weekdays about 15:00–21:00).
 
 | Routine | Model | Environment | When | Job |
 |---|---|---|---|---|
-| [Worker](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | hourly at :05, 24/7 (owner 2026-11-17) | claims one ready change at a time (per-change lock on its tracking issue), parks blocked ones and takes the next; non-draft PR per change. Several workers may run at once |
-| [Worker B](https://claude.ai/code/routines/trig_01FcnFP64Q1CJ8cFVEjprLAj) | Sonnet 5.5 (same prompt as Worker) | `locksmith-dev` | hourly at :35, 24/7, offset 30 min from Worker (owner 2026-11-17) | a second concurrent worker; per-change locks keep it on a different change |
+| [Worker](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | every 4 hours at :05, 24/7: safety net for missed events (owner 2026-11-17) | claims one ready change at a time (per-change lock on its tracking issue), parks blocked ones and takes the next; non-draft PR per change. Several workers may run at once |
+| [Worker B](https://claude.ai/code/routines/trig_01FcnFP64Q1CJ8cFVEjprLAj) | Sonnet 5.5 (same prompt as Worker) | `locksmith-dev` | **disabled** (owner 2026-11-17: with about two changes ready it mostly found the lock taken) | a second concurrent worker; re-enable when the backlog grows |
 | [Worker (events)](https://claude.ai/code/routines/trig_01JUGABHdyZuNMJSYdEKSfJx) | Sonnet 5.5 (worker prompt, checks out `origin/main` first) | `locksmith-dev` | GitHub: PR labeled, labels `review-passed`/`review-failed` (set by `claude-review.yml` from the verdict), author `tomer555`, base `main`, not draft. API: `wake-agents.yml` fires it when the owner replies on a `needs-owner` issue or main CI fails (secret `ROUTINE_FIRE_TOKEN`) | merges or fixes a PR the moment its review verdict lands, applies owner replies and fixes red main within minutes. Events only wake it: `worker-has-work.sh` decides, so dropped or duplicate events are harmless |
 | [Worker (PR merged)](https://claude.ai/code/routines/trig_01EhiJrUX4Zbb6MBhgQ9uHBH) | Sonnet 5.5 (same prompt) | `locksmith-dev` | GitHub: PR closed and merged, author `tomer555`, base `main` (a routine takes one GitHub trigger, so this is its own routine) | starts the next change, archive or plan as soon as a PR lands |
 | [Daily summary](https://claude.ai/code/routines/trig_01E29QPqddtqyaTR1FUjLKxT) | Haiku 5.5 | Default | daily 17:30 | updates the one daily-summary Artifact and sends a push; read-only, REST API only (GraphQL is blocked in cloud sessions) |

@@ -6,12 +6,12 @@ description: Run anything that may take over 2 minutes (cold cargo build/test, j
 # Long commands
 
 1. Start the command in the background: `bash scripts/bg.sh start <name> <timeout-s> -- <command...>`.
-2. While it runs, do other useful work, such as reading code or preparing the next step.
+2. Meanwhile, do other work.
 3. To check on it, run `bash scripts/bg.sh wait <name> <max-s>`. It prints the tail of the log and the exit code. Exit code 137 means the timeout killed the command; exit code 124 means it is still running.
 
 ## Rules
-- **Wait for state, not time.** Poll the thing you need, for example `until docker info >/dev/null 2>&1; do sleep 2; done`, inside a timeout. Never use fixed long sleeps.
-- **No prompts.** Use `-y` or `--yes`, set `CI=1`, and use `--no-pager` and `GIT_EDITOR=true`.
+- **Wait for state, not time.** Foreground `sleep` is blocked: use `bg.sh wait`, or `until <check>; do sleep 2; done` inside a timeout. Never sleep for a subagent; its result wakes you.
+- **No prompts.** Use `-y`, `CI=1`, `--no-pager`, `GIT_EDITOR=true` and `</dev/null`.
 - **Stop retrying identical failures.** If the same command fails twice with the same error, stop and treat it as a task failure (see the `evaluate-escalate` skill).
 - **`just ci` gets one rerun.** If it fails once, rerun it once before treating the failure as real, and record both results. A known flaky test exists (lesson L0, not yet identified).
 

@@ -1,6 +1,6 @@
 ---
 name: run-log
-description: End-of-run logging for Locksmith scheduled agents — the run-metadata block, friction entries, the change's progress.md entry, and the agent-log issue comment. Use before your final commit and push.
+description: End-of-run logging for Locksmith scheduled agents — the run-metadata block, friction entries, the change's progress.md entry, and the agent-log issue comment. Use before the final push of every non-idle run, including parked, red-main and owner-blocked exits.
 ---
 
 # Run log

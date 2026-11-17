@@ -14,7 +14,7 @@ label() { # <issue> <state>: swap the status:* label
 # Board: with GH_AUTOMATION_TOKEN (the repo's automation PAT, which needs Projects read/write; the Actions token cannot write
 # Projects), each change issue is added to the org Project and its Status field follows the state.
 project_owner=${PROJECT_OWNER:-locksmith-hq}; project_number=${PROJECT_NUMBER:-1}
-board_ids=""
+board_ids=""; board_items=""
 board() { # <issue> <state>
   [ -n "${GH_AUTOMATION_TOKEN:-}" ] && [ "${DRY_RUN:-0}" != 1 ] || return 0
   local name item opt
@@ -24,7 +24,12 @@ board() { # <issue> <state>
     board_ids=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project field-list "$project_number" --owner "$project_owner" --format json \
       -q '.fields[]|select(.name=="Status")|.id as $f|.options[]|"\($f)\t\(.id)\t\(.name)"') || { echo "board: cannot read the Project (check GH_AUTOMATION_TOKEN)"; return 0; }
     project_id=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project view "$project_number" --owner "$project_owner" --format json -q .id)
+    # Current board in one read: "<issue number>\t<status>". Writes below happen only on a difference,
+    # because every write costs GraphQL quota shared with the workers' account.
+    board_items=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-list "$project_number" --owner "$project_owner" --limit 500 \
+      --format json -q '.items[]|select(.content.number!=null)|"\(.content.number)\t\(.status // "")"')
   fi
+  [ "$(awk -F'\t' -v n="$1" '$1==n{print $2; exit}' <<<"$board_items")" = "$name" ] && return 0
   opt=$(awk -F'\t' -v n="$name" '$3==n{print $1"\t"$2}' <<<"$board_ids")
   [ -n "$opt" ] || { echo "board: no Status option named '$name'"; return 0; }
   item=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-add "$project_number" --owner "$project_owner" \

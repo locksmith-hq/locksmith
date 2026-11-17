@@ -8,7 +8,7 @@
 #   scripts/run-lock.sh holder  <any> <change-id>      prints the current holder, if any
 set -uo pipefail
 repo=locksmith-hq/locksmith
-ttl="${RUN_LOCK_TTL:-3000}"
+ttl="${RUN_LOCK_TTL:-5400}"  # 90 min: a worker run (about 40 min of tasks plus just ci and evaluation) must not outlive its lock
 cmd="${1:-}"; me="${2:-}"; change="${3:-}"
 [ -n "$cmd" ] && [ -n "$me" ] && [ -n "$change" ] || { echo "usage: run-lock.sh acquire|release|holder <holder> <change-id>" >&2; exit 2; }
 

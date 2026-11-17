@@ -7,11 +7,11 @@
 - [x] 1.4 Verify: `cargo nextest run -p ls-control-plane` passes and `cargo clippy -p ls-control-plane --all-targets -- -D warnings` is clean.
 
 ## 2. Schema and tenancy [opus]
-- [ ] 2.1 Migrations: `locksmith_owner` and `locksmith_app` roles (idempotent, dev passwords from `infra/compose/.env.example`), and tables `orgs`, `projects`, `environments`, `secrets` with UUIDv7 ids, `org_id`, composite FKs `(org_id, parent_id)`, unique names per parent, `FORCE ROW LEVEL SECURITY` and policies (design decision 6). No value column anywhere.
-- [ ] 2.2 Startup runs migrations through the owner pool, then closes it; the request path only uses the app pool. Test: the app role is not superuser, not `BYPASSRLS` and owns no table.
-- [ ] 2.3 Tenant transaction helper (design decision 5) as the only way handlers reach the DB, with a child tracing span per transaction. Move the A0 tenant lint so it also scans `services/`, and keep the `a0-spikes` lint test green.
-- [ ] 2.4 Testcontainers tests on `postgres:18`: cross-org read and list return nothing, a cross-org parent FK fails, and pooled-connection reuse with pool size 1 sees no org.
-- [ ] 2.5 Verify: `cargo nextest run -p ls-control-plane -p a0-spikes` passes.
+- [x] 2.1 Migrations: `locksmith_owner` and `locksmith_app` roles (idempotent, dev passwords from `infra/compose/.env.example`), and tables `orgs`, `projects`, `environments`, `secrets` with UUIDv7 ids, `org_id`, composite FKs `(org_id, parent_id)`, unique names per parent, `FORCE ROW LEVEL SECURITY` and policies (design decision 6). No value column anywhere.
+- [x] 2.2 Startup runs migrations through the owner pool, then closes it; the request path only uses the app pool. Test: the app role is not superuser, not `BYPASSRLS` and owns no table.
+- [x] 2.3 Tenant transaction helper (design decision 5) as the only way handlers reach the DB, with a child tracing span per transaction. Move the A0 tenant lint so it also scans `services/`, and keep the `a0-spikes` lint test green.
+- [x] 2.4 Testcontainers tests on `postgres:18`: cross-org read and list return nothing, a cross-org parent FK fails, and pooled-connection reuse with pool size 1 sees no org.
+- [x] 2.5 Verify: `cargo nextest run -p ls-control-plane -p a0-spikes` passes.
 
 ## 3. Resource API
 - [ ] 3.1 Orgs (dev create, get) and projects (create, get, list, patch name and description, delete) under `/v1`, with `201` plus `Location`, `404` for other orgs' ids, and `409` on duplicate names.

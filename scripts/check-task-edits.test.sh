@@ -44,4 +44,13 @@ git switch -qc claude/change-o1; printf -- '- d2\n' >> docs/agents/owner.md; git
 expect 0 claude/change-o1 "agent may append to owner.md"
 printf -- '- changed\n- d2\n' > docs/agents/owner.md; git add -A
 expect 1 claude/change-o1 "agent may not rewrite owner.md"
+git checkout -q -f main; git update-ref refs/remotes/origin/main HEAD; git switch -qc claude/change-c1c
+mkdir -p openspec/changes/archive; git mv openspec/changes/c1 openspec/changes/archive/2026-01-01-c1
+sed -i.bak 's/- \[ \]/- [x]/' openspec/changes/archive/2026-01-01-c1/tasks.md; rm -f openspec/changes/archive/2026-01-01-c1/*.bak
+printf '## e3\n' >> openspec/changes/archive/2026-01-01-c1/progress.md; git add -A
+expect 0 claude/change-c1c "archive in the finishing PR (ticks and append only)"
+sed -i.bak 's/Do B/Do nothing/' openspec/changes/archive/2026-01-01-c1/tasks.md; git add -A
+expect 1 claude/change-c1c "archive copy with edited task text"
+git rm -rqf openspec/changes/archive
+expect 1 claude/change-c1c "change deleted without archive"
 echo "check-task-edits: all tests passed"

@@ -7,6 +7,7 @@ description: Autonomously merge finished Locksmith PRs (label ready-to-merge) th
 
 ## Mark a PR ready (any agent)
 When the last task is ticked and verified, or an archive, learning or research PR is complete:
+0. If this PR ticks a change's last task, archive the change in this same PR first: `archive-change` steps 2–4 on this branch.
 1. Make sure the PR is not a draft. Always create PRs with `-F draft=false`.
 2. Add the `ready-to-merge` label.
 3. Comment a summary: what changed (3 lines), how it was verified, and the risks. Every merge is a merge commit, so it can be undone with `git revert -m 1 <sha>`.
@@ -33,4 +34,4 @@ Take candidates oldest first, at most 2 per run, and stop at the first failure.
    - **Any other failure:** comment the reason on the PR. For protected files, also open a `needs-owner` issue.
 2. **Merge on GATE PASS,** pinned to the reviewed SHA:
    `gh api -X PUT repos/locksmith-hq/locksmith/pulls/<pr>/merge -f merge_method=merge -f sha=<sha>`
-3. **After merging,** if the PR finished an OpenSpec change, use the `archive-change` skill.
+3. **After merging,** if a finished change is still in `openspec/changes/` (its PR skipped step 0), use the `archive-change` skill.

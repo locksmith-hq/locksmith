@@ -47,13 +47,18 @@ base=$(git merge-base HEAD "$base_ref")
 # Strip the checkbox state so only a tick/untick compares equal.
 norm() { sed -E 's/^([[:space:]]*- )\[[ xX]\]/\1[?]/'; }
 
+# Where a change file lives now: in place, or moved by `openspec archive` into archive/<date>-<id>/.
+current() { [ -f "$1" ] && { echo "$1"; return; }
+  find openspec/changes/archive -path "*-$(basename "$(dirname "$1")")/$(basename "$1")" 2>/dev/null | sort | tail -1; }
+
 fail=$protected_fail
 while IFS= read -r f; do
-  git cat-file -e "$base:$f" 2>/dev/null || continue   # a new tasks.md (new change) is allowed
-  if [ ! -f "$f" ]; then echo "task-edit guard: $f was deleted"; fail=1; continue; fi
-  if ! diff -q <(git show "$base:$f" | norm) <(norm < "$f") >/dev/null; then
-    echo "task-edit guard: $f changed beyond ticking checkboxes:"
-    diff <(git show "$base:$f" | norm) <(norm < "$f") | head -20 || true
+  git cat-file -e "$base:$f" 2>/dev/null || continue   # a new tasks.md (new change or archive copy) is allowed
+  cur=$(current "$f")
+  if [ -z "$cur" ]; then echo "task-edit guard: $f was deleted"; fail=1; continue; fi
+  if ! diff -q <(git show "$base:$f" | norm) <(norm < "$cur") >/dev/null; then
+    echo "task-edit guard: $cur changed beyond ticking checkboxes:"
+    diff <(git show "$base:$f" | norm) <(norm < "$cur") | head -20 || true
     fail=1
   fi
 done < <(git diff --name-only "$base" -- 'openspec/changes/*/tasks.md')
@@ -61,8 +66,8 @@ done < <(git diff --name-only "$base" -- 'openspec/changes/*/tasks.md')
 # progress.md is append-only: the base version must remain an exact prefix.
 while IFS= read -r f; do
   git cat-file -e "$base:$f" 2>/dev/null || continue
-  old=$(git show "$base:$f" | wc -c)
-  if [ ! -f "$f" ] || ! cmp -s -n "$old" <(git show "$base:$f") "$f"; then
+  old=$(git show "$base:$f" | wc -c); cur=$(current "$f")
+  if [ -z "$cur" ] || ! cmp -s -n "$old" <(git show "$base:$f") "$cur"; then
     echo "task-edit guard: $f is append-only, but earlier entries changed"; fail=1
   fi
 done < <(git diff --name-only "$base" -- 'openspec/changes/*/progress.md')

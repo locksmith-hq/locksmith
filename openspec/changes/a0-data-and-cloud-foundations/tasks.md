@@ -11,7 +11,7 @@
 - [x] 2.5 Verify: `cargo nextest run -p a0-spikes` passes and `just leak-scan` is clean.
 
 ## 3. Record
-- [ ] 3.1 Copy each spike result (pass and versions) into the design.md evidence column and drop any **[verify]** tag that a spike resolved.
+- [x] 3.1 Copy each spike result (pass and versions) into the design.md evidence column and drop any **[verify]** tag that a spike resolved.
 - [ ] 3.2 Add the decisions to the `openspec/config.yaml` context as "Decided foundations" so later changes inherit them.
 
 ## 4. Local verification

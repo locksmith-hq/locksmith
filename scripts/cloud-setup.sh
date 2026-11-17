@@ -15,6 +15,9 @@ NEXTEST=cargo-nextest-0.9.152-x86_64-unknown-linux-gnu
 ( cd /tmp && curl -fsSL --remote-name-all "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.152/$NEXTEST".{tar.gz,sha256} \
   && sha256sum -c "$NEXTEST.sha256" && tar xzf "$NEXTEST.tar.gz" -C "$HOME/.cargo/bin" ) || true
 
+# gitleaks and cargo-deny: preflight installed them in every run (60-120 s of logged friction each).
+bash scripts/ci-tools.sh || true
+
 npm i -g @fission-ai/openspec || true
 [ -f package-lock.json ] && npm ci --no-audit --no-fund || true
 

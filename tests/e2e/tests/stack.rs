@@ -3,16 +3,14 @@
 
 use std::env;
 
+use ls_e2e::wiremock;
+
 fn pg_conn_str() -> String {
     let host = env::var("E2E_PG_HOST").unwrap_or_else(|_| "127.0.0.1".into());
     let user = env::var("E2E_PG_USER").unwrap_or_else(|_| "locksmith".into());
     let pass = env::var("E2E_PG_PASSWORD").unwrap_or_else(|_| "locksmith-dev-only".into());
     let db = env::var("E2E_PG_DB").unwrap_or_else(|_| "locksmith".into());
     format!("host={host} user={user} password={pass} dbname={db}")
-}
-
-fn wiremock_url() -> String {
-    env::var("E2E_WIREMOCK_URL").unwrap_or_else(|_| "http://127.0.0.1:8089".into())
 }
 
 #[tokio::test]
@@ -27,7 +25,7 @@ async fn postgres_is_reachable() {
 
 #[tokio::test]
 async fn wiremock_journal_records_request() {
-    let base = wiremock_url();
+    let base = wiremock();
     let http = reqwest::Client::new();
     let path = format!("/e2e-probe-{}", std::process::id());
 

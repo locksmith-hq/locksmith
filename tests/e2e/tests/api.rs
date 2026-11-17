@@ -5,12 +5,9 @@
 use std::env;
 use std::time::{Duration, Instant};
 
+use ls_e2e::{api, mint_canary, uniq};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-
-fn api() -> String {
-    env::var("E2E_API_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into())
-}
 
 fn grafana() -> String {
     env::var("E2E_GRAFANA_URL").unwrap_or_else(|_| "http://127.0.0.1:3000".into())
@@ -57,41 +54,6 @@ async fn new_org(c: &Client, name: &str) -> String {
     let r = call(c, "POST", "/v1/orgs", None, Some(json!({ "name": name }))).await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.body);
     r.body["id"].as_str().unwrap().to_owned()
-}
-
-fn uniq(prefix: &str) -> String {
-    let t = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    format!("{prefix}-{t}")
-}
-
-/// A fresh canary value, minted by the leak oracle into the gitignored canary file. The test never
-/// prints it; it is sent to the API once, as secret metadata, and must only land in the database.
-fn mint_canary() -> String {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    let file = env::var("LOCKSMITH_CANARIES")
-        .unwrap_or_else(|_| format!("{root}/infra/compose/.canaries"));
-    let out = std::process::Command::new("python3")
-        .args([
-            "-I",
-            &format!("{root}/tests/kit/oracle.py"),
-            "canary-new",
-            "--file",
-            &file,
-        ])
-        .output()
-        .expect("run oracle");
-    assert!(out.status.success(), "oracle canary-new failed");
-    let text = std::fs::read_to_string(&file).unwrap();
-    text.lines()
-        .last()
-        .unwrap()
-        .split_whitespace()
-        .nth(1)
-        .unwrap()
-        .to_owned()
 }
 
 #[tokio::test]

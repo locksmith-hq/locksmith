@@ -17,3 +17,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.1-1.3 - done
 - Verified: `cargo nextest run -p ls-control-plane` -> 74 passed; clippy, fmt, cargo-deny clean (implementer); Opus evaluator PASS
 - Notes for next session: next is task 2 (gateway JWT via JWKS, use `Jwk::decoding_key()`, kid overlap on rotation). "one-time" = shown once, reusable until rotated (design.md updated). Follow-ups: rate-limit POST /v1/agent-tokens (Argon2id DoS); set LOCKSMITH_AGENT_SIGNING_KEY in compose (task 5.1). Full `just ci` not run this session.
+
+## 2026-11-17 21:55 lead
+- Task: none (code review of the merged S3 gateway, for S4 2.1)
+- Finding: bearer parsing exists twice. `services/gateway/src/relay.rs:146-158` uses a case-sensitive `strip_prefix(b"Bearer ")`; `services/control-plane/src/auth.rs:61-75,113-120` has the stricter `bearer()` and `ServiceToken::matches`. The minimum token length rule is also copied (`gateway/src/config.rs:27,176-182` and `control-plane/src/config.rs:24,134-141`).
+- Notes for next session: in 2.1, use one shared bearer extractor for the JWT path, and remove `caller_token`, `STATIC_CALLER` (`relay.rs:54`) and `ENV_CALLER_TOKEN` rather than keeping both paths. Optional while in `relay::run`: move response reading and redaction (`relay.rs:479-542`) into its own function before adding the grant check.

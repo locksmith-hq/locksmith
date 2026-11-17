@@ -36,6 +36,25 @@ render() { # <id> <state> <detail>
   echo; echo "<!-- change-sync: generated from tasks.md and progress.md; edits here are overwritten -->"
 }
 
+# Linked pull requests: the change's PR gets a managed block of closing keywords for the change
+# issue and every task sub-issue, so each one lists the PR under Development and closes when it
+# merges (the finishing PR also archives the change, so closing then is correct).
+link_pr() { # <id> <change-issue>
+  local pr cur tasks block new
+  pr=$(gh api "repos/$repo/pulls?head=${repo%%/*}:claude/change-$1&state=open" -q '.[0].number // empty')
+  [ -n "$pr" ] || return 0
+  tasks=$(gh api --paginate "repos/$repo/issues?labels=task&state=all&per_page=100" \
+    -q ".[]|select(.title|startswith(\"$1 \"))|.number" | sort -n)
+  block=$(printf '<!-- issue-links:start -->\n---\nCloses #%s\n<details><summary>Task sub-issues</summary>\n\n' "$2"
+    for t in $tasks; do echo "Closes #$t"; done
+    printf '\n</details>\n<!-- issue-links:end -->')
+  cur=$(gh api "repos/$repo/pulls/$pr" -q '.body // ""')
+  new=$(awk '/<!-- issue-links:start -->/{skip=1} !skip{print} /<!-- issue-links:end -->/{skip=0}' <<<"$cur")
+  new=$(printf '%s\n\n%s' "$new" "$block")
+  [ "$(awk '/<!-- issue-links:start -->/,/<!-- issue-links:end -->/' <<<"$cur")" = "$block" ] && return 0
+  gh api -X PATCH "repos/$repo/pulls/$pr" -f body="$new" >/dev/null || echo "links: could not update PR #$pr"
+}
+
 bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   body=$(render "$id" "$state" "$detail")
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '===== %s\n%s\n' "$id" "$body"; continue; fi
@@ -43,6 +62,7 @@ bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   # The title follows the proposal, so an issue opened by a planner's lock gets its real name.
   title=$(sed -nE '1s/^# *(Proposal: *)?//p' "openspec/changes/$id/proposal.md" 2>/dev/null)
   gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$state" && board "$n" "$state"
+  link_pr "$id" "$n"
 done
 
 # Archived changes: mark done and close their issue.

@@ -10,7 +10,8 @@ use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
 use super::{
-    Page, PageParams, Paged, Patch, common_cols, created, validate_description, validate_name,
+    Page, PageParams, Paged, Patch, all, common_cols, created, deleted_or_404, one,
+    validate_description, validate_name,
 };
 use crate::app::AppState;
 use crate::auth::OrgBinding;
@@ -117,14 +118,11 @@ pub async fn get_one(
                 .bind(project_id)
                 .fetch_optional(c)
                 .await?;
-                row.as_ref()
-                    .map(from_row)
-                    .transpose()
-                    .map_err(ApiError::from)
+                one(row, from_row)
             })
         })
         .await?;
-    row.map(Json).ok_or_else(ApiError::not_found)
+    Ok(Json(row))
 }
 
 #[utoipa::path(
@@ -161,10 +159,7 @@ pub async fn list(
                 .bind(page.fetch())
                 .fetch_all(c)
                 .await?;
-                rows.iter()
-                    .map(from_row)
-                    .collect::<sql::Result<Vec<_>>>()
-                    .map_err(ApiError::from)
+                all(&rows, from_row)
             })
         })
         .await?;
@@ -210,14 +205,11 @@ pub async fn patch(
                 .bind(input.description)
                 .fetch_optional(c)
                 .await?;
-                row.as_ref()
-                    .map(from_row)
-                    .transpose()
-                    .map_err(ApiError::from)
+                one(row, from_row)
             })
         })
         .await?;
-    row.map(Json).ok_or_else(ApiError::not_found)
+    Ok(Json(row))
 }
 
 /// Deleting a project with environments (or secrets) is `409`: parents are RESTRICT-deleted.
@@ -241,7 +233,7 @@ pub async fn delete(
     org: OrgBinding,
     ApiPath(project_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    let deleted = state
+    let status = state
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
@@ -250,13 +242,9 @@ pub async fn delete(
                     .execute(c)
                     .await?
                     .rows_affected();
-                Ok::<_, ApiError>(n > 0)
+                deleted_or_404(n)
             })
         })
         .await?;
-    if deleted {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(ApiError::not_found())
-    }
+    Ok(status)
 }

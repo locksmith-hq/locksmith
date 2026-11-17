@@ -10,11 +10,12 @@ use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
 use super::{
-    Page, PageParams, Paged, Patch, common_cols, created, validate_description, validate_name,
+    Page, PageParams, Paged, Patch, all, common_cols, created, deleted_or_404, exists_or_404, one,
+    validate_description, validate_name,
 };
 use crate::app::AppState;
 use crate::auth::OrgBinding;
-use crate::db::sql::{self, PgConnection, Row};
+use crate::db::sql::{self, Row};
 use crate::problem::{ApiError, Problem};
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -46,18 +47,6 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Environment> {
     })
 }
 
-/// `404` unless the project exists for the bound org (row-level security hides other orgs').
-pub(super) async fn require_project(
-    c: &mut PgConnection,
-    project_id: Uuid,
-) -> Result<(), ApiError> {
-    let found: Option<i32> = sql::query_scalar("SELECT 1 FROM projects WHERE id = $1")
-        .bind(project_id)
-        .fetch_optional(c)
-        .await?;
-    found.map(|_| ()).ok_or_else(ApiError::not_found)
-}
-
 #[utoipa::path(
     post,
     path = "/v1/projects/{project_id}/environments",
@@ -87,7 +76,11 @@ pub async fn create(
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
-                require_project(c, project_id).await?;
+                exists_or_404(
+                    c,
+                    sql::query_scalar("SELECT 1 FROM projects WHERE id = $1").bind(project_id),
+                )
+                .await?;
                 let row = sql::query(concat!(
                     "INSERT INTO environments (org_id, project_id, name, description) \
                      VALUES ($1, $2, $3, $4) RETURNING project_id, ",
@@ -141,14 +134,11 @@ pub async fn get_one(
                 .bind(project_id)
                 .fetch_optional(c)
                 .await?;
-                row.as_ref()
-                    .map(from_row)
-                    .transpose()
-                    .map_err(ApiError::from)
+                one(row, from_row)
             })
         })
         .await?;
-    row.map(Json).ok_or_else(ApiError::not_found)
+    Ok(Json(row))
 }
 
 #[utoipa::path(
@@ -177,7 +167,11 @@ pub async fn list(
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
-                require_project(c, project_id).await?;
+                exists_or_404(
+                    c,
+                    sql::query_scalar("SELECT 1 FROM projects WHERE id = $1").bind(project_id),
+                )
+                .await?;
                 let rows = sql::query(concat!(
                     "SELECT project_id, ",
                     common_cols!(),
@@ -189,10 +183,7 @@ pub async fn list(
                 .bind(page.fetch())
                 .fetch_all(c)
                 .await?;
-                rows.iter()
-                    .map(from_row)
-                    .collect::<sql::Result<Vec<_>>>()
-                    .map_err(ApiError::from)
+                all(&rows, from_row)
             })
         })
         .await?;
@@ -239,14 +230,11 @@ pub async fn patch(
                 .bind(input.description)
                 .fetch_optional(c)
                 .await?;
-                row.as_ref()
-                    .map(from_row)
-                    .transpose()
-                    .map_err(ApiError::from)
+                one(row, from_row)
             })
         })
         .await?;
-    row.map(Json).ok_or_else(ApiError::not_found)
+    Ok(Json(row))
 }
 
 /// `409` while the environment still has secrets (RESTRICT).
@@ -270,7 +258,7 @@ pub async fn delete(
     org: OrgBinding,
     ApiPath((project_id, environment_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
-    let deleted = state
+    let status = state
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
@@ -280,13 +268,9 @@ pub async fn delete(
                     .execute(c)
                     .await?
                     .rows_affected();
-                Ok::<_, ApiError>(n > 0)
+                deleted_or_404(n)
             })
         })
         .await?;
-    if deleted {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(ApiError::not_found())
-    }
+    Ok(status)
 }

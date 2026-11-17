@@ -15,8 +15,8 @@ use serde::de::{self, Deserialize, Deserializer, Visitor};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::created;
 use super::extract::{ApiPath, SecretJson};
+use super::{created, exists_or_404};
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, PgConnection, Row};
@@ -112,13 +112,14 @@ async fn require_secret(
     } else {
         "SELECT 1 FROM secrets WHERE id = $1 AND project_id = $2 AND environment_id = $3"
     };
-    let found: Option<i32> = sql::query_scalar(q)
-        .bind(secret_id)
-        .bind(project_id)
-        .bind(environment_id)
-        .fetch_optional(c)
-        .await?;
-    found.map(|_| ()).ok_or_else(ApiError::not_found)
+    exists_or_404(
+        c,
+        sql::query_scalar(q)
+            .bind(secret_id)
+            .bind(project_id)
+            .bind(environment_id),
+    )
+    .await
 }
 
 /// Seal `value` for (org, secret, version) and wrap its DEK. The DEK is dropped (zeroized)

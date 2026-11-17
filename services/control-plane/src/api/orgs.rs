@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath};
-use super::{created, validate_name};
+use super::{created, one, validate_name};
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
@@ -122,12 +122,9 @@ pub async fn get_one(
                     .bind(org_id)
                     .fetch_optional(c)
                     .await?;
-                row.as_ref()
-                    .map(from_row)
-                    .transpose()
-                    .map_err(ApiError::from)
+                one(row, from_row)
             })
         })
         .await?;
-    row.map(Json).ok_or_else(ApiError::not_found)
+    Ok(Json(row))
 }

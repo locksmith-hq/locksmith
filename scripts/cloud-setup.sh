@@ -10,14 +10,14 @@ apt-get update -q && apt-get install -y -q libssl-dev pkg-config just || true
 command -v rustup >/dev/null || curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
 export PATH="$HOME/.cargo/bin:$PATH"
 rustup toolchain install 1.100.0 --profile minimal -c rustfmt -c clippy || true
-cargo install --locked cargo-nextest || true
+# Prebuilt nextest from GitHub releases (allowlisted): compiling it took minutes and broke the cache budget.
+NEXTEST=cargo-nextest-0.9.152-x86_64-unknown-linux-gnu
+( cd /tmp && curl -fsSL --remote-name-all "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.152/$NEXTEST".{tar.gz,sha256} \
+  && sha256sum -c "$NEXTEST.sha256" && tar xzf "$NEXTEST.tar.gz" -C "$HOME/.cargo/bin" ) || true
 
 npm i -g @fission-ai/openspec || true
 [ -f package-lock.json ] && npm ci --no-audit --no-fund || true
 
-# Pre-pull the F0 stack images so sessions start fast (images are cached; containers are not).
-if [ -f infra/compose/compose.yaml ]; then
-  (service docker start || dockerd >/dev/null 2>&1 &) ; sleep 3
-  docker compose -f infra/compose/compose.yaml pull || true
-fi
+# No Docker here: starting dockerd and pulling ~2 GB of images blew the 5-minute cache budget
+# (lead run 2026-11-17 hung in setup). `just up` pulls images on demand.
 exit 0

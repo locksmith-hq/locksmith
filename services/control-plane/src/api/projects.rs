@@ -5,13 +5,14 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath, ApiQuery};
 use super::responses::{CreateErrors, DeleteErrors, ListErrors, ReadErrors, WriteErrors};
 use super::{
-    Page, PageParams, Paged, Patch, all, common_cols, created, deleted_or_404, one,
+    Page, PageParams, Paged, Patch, all, common_cols, created, deleted_or_404, one, utc,
     validate_description, validate_name,
 };
 use crate::app::AppState;
@@ -24,8 +25,12 @@ pub struct Project {
     pub id: Uuid,
     pub name: String,
     pub description: String,
-    pub created_at: String,
-    pub updated_at: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub updated_at: OffsetDateTime,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -41,8 +46,8 @@ pub(super) fn from_row(r: &sql::PgRow) -> sql::Result<Project> {
         id: r.try_get("id")?,
         name: r.try_get("name")?,
         description: r.try_get("description")?,
-        created_at: r.try_get("created_at")?,
-        updated_at: r.try_get("updated_at")?,
+        created_at: utc(r, "created_at")?,
+        updated_at: utc(r, "updated_at")?,
     })
 }
 

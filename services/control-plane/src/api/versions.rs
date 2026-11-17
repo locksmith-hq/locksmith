@@ -12,12 +12,13 @@ use axum::response::Response;
 use ls_envelope::{Binding, Purpose, SecretBytes, WrapError, seal_version};
 use serde::Serialize;
 use serde::de::{self, Deserialize, Deserializer, Visitor};
+use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiPath, SecretJson};
 use super::responses::{ReadErrors, VersionWriteErrors};
-use super::{created, exists_or_404};
+use super::{created, exists_or_404, utc};
 use crate::app::AppState;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, PgConnection, Row};
@@ -32,7 +33,9 @@ pub struct SecretVersion {
     pub version: u32,
     /// The KMS key the version's data key is wrapped under, e.g. `gateway:v1`.
     pub key_id: String,
-    pub created_at: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
 }
 
 /// All versions of a secret, oldest first.
@@ -87,15 +90,8 @@ fn from_row(secret_id: Uuid, r: &sql::PgRow) -> sql::Result<SecretVersion> {
         secret_id,
         version: u32::try_from(version).unwrap_or_default(),
         key_id: r.try_get("key_id")?,
-        created_at: r.try_get("created_at")?,
+        created_at: utc(r, "created_at")?,
     })
-}
-
-/// `created_at` as RFC 3339 UTC, like every other resource.
-macro_rules! created_at_col {
-    () => {
-        "to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at"
-    };
 }
 
 /// `404` unless the secret exists under the project and environment for the bound org. With
@@ -215,12 +211,11 @@ pub async fn create(
                 let sealed = seal_and_wrap(kms.as_ref(), org_id, secret_id, number, &value).await;
                 drop(value);
                 let (ciphertext, wrapped_dek, key_id) = sealed?;
-                let row = sql::query(concat!(
+                let row = sql::query(
                     "INSERT INTO secret_versions \
                      (org_id, secret_id, version, ciphertext, wrapped_dek, key_id) \
-                     VALUES ($1, $2, $3, $4, $5, $6) RETURNING version, key_id, ",
-                    created_at_col!()
-                ))
+                     VALUES ($1, $2, $3, $4, $5, $6) RETURNING version, key_id, created_at",
+                )
                 .bind(org_id)
                 .bind(secret_id)
                 .bind(next)
@@ -268,11 +263,10 @@ pub async fn list(
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
                 require_secret(c, project_id, environment_id, secret_id, false).await?;
-                let rows = sql::query(concat!(
-                    "SELECT version, key_id, ",
-                    created_at_col!(),
-                    " FROM secret_versions WHERE secret_id = $1 ORDER BY version"
-                ))
+                let rows = sql::query(
+                    "SELECT version, key_id, created_at \
+                     FROM secret_versions WHERE secret_id = $1 ORDER BY version",
+                )
                 .bind(secret_id)
                 .fetch_all(c)
                 .await?;

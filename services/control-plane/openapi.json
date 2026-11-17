@@ -4,6 +4,7 @@
       "Environment": {
         "properties": {
           "created_at": {
+            "format": "date-time",
             "type": "string"
           },
           "description": {
@@ -21,6 +22,7 @@
             "type": "string"
           },
           "updated_at": {
+            "format": "date-time",
             "type": "string"
           }
         },
@@ -110,6 +112,7 @@
       "Org": {
         "properties": {
           "created_at": {
+            "format": "date-time",
             "type": "string"
           },
           "id": {
@@ -123,6 +126,7 @@
             "type": "string"
           },
           "updated_at": {
+            "format": "date-time",
             "type": "string"
           }
         },
@@ -142,6 +146,7 @@
             "items": {
               "properties": {
                 "created_at": {
+                  "format": "date-time",
                   "type": "string"
                 },
                 "description": {
@@ -159,6 +164,7 @@
                   "type": "string"
                 },
                 "updated_at": {
+                  "format": "date-time",
                   "type": "string"
                 }
               },
@@ -193,6 +199,7 @@
             "items": {
               "properties": {
                 "created_at": {
+                  "format": "date-time",
                   "type": "string"
                 },
                 "description": {
@@ -206,6 +213,7 @@
                   "type": "string"
                 },
                 "updated_at": {
+                  "format": "date-time",
                   "type": "string"
                 }
               },
@@ -239,6 +247,7 @@
             "items": {
               "properties": {
                 "created_at": {
+                  "format": "date-time",
                   "type": "string"
                 },
                 "description": {
@@ -260,6 +269,7 @@
                   "type": "string"
                 },
                 "updated_at": {
+                  "format": "date-time",
                   "type": "string"
                 },
                 "version_count": {
@@ -345,6 +355,7 @@
       "Project": {
         "properties": {
           "created_at": {
+            "format": "date-time",
             "type": "string"
           },
           "description": {
@@ -358,6 +369,7 @@
             "type": "string"
           },
           "updated_at": {
+            "format": "date-time",
             "type": "string"
           }
         },
@@ -373,6 +385,7 @@
       "Secret": {
         "properties": {
           "created_at": {
+            "format": "date-time",
             "type": "string"
           },
           "description": {
@@ -394,6 +407,7 @@
             "type": "string"
           },
           "updated_at": {
+            "format": "date-time",
             "type": "string"
           },
           "version_count": {
@@ -419,6 +433,7 @@
         "description": "Metadata of one stored version. Never carries the value or any key material.",
         "properties": {
           "created_at": {
+            "format": "date-time",
             "type": "string"
           },
           "key_id": {

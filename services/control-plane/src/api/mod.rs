@@ -19,13 +19,14 @@ use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
+use time::{OffsetDateTime, UtcOffset};
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::db::sql::{self, PgArguments, PgConnection, PgRow, Postgres};
+use crate::db::sql::{self, PgArguments, PgConnection, PgRow, Postgres, Row};
 use crate::problem::ApiError;
 
 pub const MAX_NAME_CHARS: usize = 200;
@@ -55,15 +56,21 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(versions::create, versions::list))
 }
 
-/// SQL column list shared by projects, environments and secrets (timestamps as RFC 3339 UTC).
+/// SQL column list shared by projects, environments and secrets.
 macro_rules! common_cols {
     () => {
-        "id, name, description, \
-         to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at, \
-         to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS updated_at"
+        "id, name, description, created_at, updated_at"
     };
 }
 pub(crate) use common_cols;
+
+/// A `timestamptz` column as an [`OffsetDateTime`] in UTC (`timestamptz` decodes in the session
+/// offset, and the API promises RFC 3339 UTC).
+pub(crate) fn utc(row: &PgRow, column: &str) -> sql::Result<OffsetDateTime> {
+    Ok(row
+        .try_get::<OffsetDateTime, _>(column)?
+        .to_offset(UtcOffset::UTC))
+}
 
 /// A fetched optional row mapped through `map`: `404` when there is no row.
 pub(crate) fn one<T>(

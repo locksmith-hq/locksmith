@@ -6,7 +6,7 @@ Each run merges finished work, then works on changes for about 40 minutes. A blo
    - Run `bash scripts/worker-has-work.sh`. If it prints `idle`, stop and post nothing.
    - Use the `run-start` skill with `worker`.
    - **Owner replies.** Apply each answered `needs-owner` decision; record standing ones in `owner.md` or `openspec/decisions.md` (small PR, marked ready); close the issue.
-   - Use the `merge-queue` skill: main CI first, then the merge queue.
+   - Use the `merge-queue` skill: mark planning PRs ready, then main CI, merge queue.
 1. **Claim a change.** For each id from `bash scripts/change-status.sh --ready`, in order, run `bash scripts/run-lock.sh acquire worker-<session> <id>`. Take the first one you get. If none, go to step 6.
    - Read its last 3 `progress.md` entries and `git log --oneline -10` on its branch.
 2. **CI first.** Failing checks or conflicts on the change's PR are the first task (logs: `gh api .../actions/jobs/<id>/logs | tail -200`).

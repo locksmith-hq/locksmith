@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "tests/e2e"]
 # Tauri app: own lockfile, keeps webkit/gtk out of the core build.
 exclude = ["apps/desktop/src-tauri"]
 
@@ -9,6 +9,14 @@ edition = "2024"
 version = "0.0.1-alpha.4"
 license = "UNLICENSED"
 publish = false
+
+# Test tooling (dev-dependencies only; crates opt in with `dep = { workspace = true }`).
+[workspace.dependencies]
+insta = { version = "1.49", features = ["json"] }
+wiremock = "0.6.5"
+testcontainers = "0.28"
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
+proptest = "1.12"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

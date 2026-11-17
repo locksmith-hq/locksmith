@@ -32,6 +32,17 @@ The implementer records the exact version and release date of each crate in the 
 | testcontainers | Apache-2.0/MIT | isolated Postgres |
 | proptest | Apache-2.0/MIT | property tests |
 
+## Versions (recorded 2026-11-17, crates.io)
+| Crate | Version | Released |
+|---|---|---|
+| insta | 1.49.0 | 2026-10-03 |
+| wiremock | 0.6.5 | 2025-08-24 |
+| testcontainers | 0.28.0 | 2026-08-06 |
+| testcontainers-modules (postgres) | 0.15.0 | 2026-02-21 |
+| proptest | 1.12.0 | 2026-10-10 |
+
+They are declared in `[workspace.dependencies]` in the root `Cargo.toml`; crates opt in as dev-dependencies.
+
 ## How an agent debugs this
 - `just leak-scan --explain` lists the sources it covered and the row and line counts for each, so a scan that covered nothing is obvious.
 - `just canary list` shows canary ids and never their values.

@@ -13,7 +13,7 @@ case "${1:-}" in
     {
       echo "KIND=${2:-unknown}"
       echo "START_EPOCH=$(date -u +%s)"
-      echo "BASE_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo none)"
+      echo "BASE_SHA=$(git rev-parse --short origin/main 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo none)"
     } > "$state"
     echo "run-meta: started ${2:-unknown}"
     ;;

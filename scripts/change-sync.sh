@@ -34,7 +34,8 @@ board() { # <issue> <state>
   opt=$(awk -F'\t' -v n="$name" '$3==n{print $1"\t"$2}' <<<"$board_ids")
   [ -n "$opt" ] || { echo "board: no Status option named '$name'"; return 0; }
   item=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-add "$project_number" --owner "$project_owner" \
-    --url "https://github.com/$repo/issues/$1" --format json -q .id) || return 0
+    --url "https://github.com/$repo/issues/$1" --format json -q .id) ||
+    { echo "board: cannot add #$1 (GH_AUTOMATION_TOKEN needs Issues: Read on this repo and Projects: Read and write on the org)"; return 0; }
   GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-edit --project-id "$project_id" --id "$item" \
     --field-id "${opt%%$'\t'*}" --single-select-option-id "${opt#*$'\t'}" >/dev/null || echo "board: could not set #$1 to $name"
 }

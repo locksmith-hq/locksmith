@@ -9,7 +9,6 @@ name: ci
 
 on:
   pull_request:
-    paths-ignore: ['**/*.md', 'docs/**', '!openspec/**']
   push:
     branches: [main]
     paths-ignore: ['**/*.md', 'docs/**']

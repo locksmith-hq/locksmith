@@ -248,3 +248,40 @@ pub enum InternalReadErrors {
     )]
     Unavailable(Problem),
 }
+
+/// `POST /v1/agent-tokens`: a credential in the body, so `401` for any bad, unknown or replaced
+/// enrollment secret, and `503` when no signing key is configured.
+#[derive(Debug, IntoResponses)]
+#[allow(dead_code)] // OpenAPI description only; never constructed.
+pub enum TokenErrors {
+    #[response(
+        status = 400,
+        description = "Invalid request",
+        content_type = "application/problem+json"
+    )]
+    Invalid(Problem),
+    #[response(
+        status = 401,
+        description = "Invalid, unknown or replaced enrollment secret",
+        content_type = "application/problem+json"
+    )]
+    Unauthenticated(Problem),
+    #[response(
+        status = 413,
+        description = "Request body too large",
+        content_type = "application/problem+json"
+    )]
+    TooLarge(Problem),
+    #[response(
+        status = 415,
+        description = "Unsupported media type",
+        content_type = "application/problem+json"
+    )]
+    UnsupportedMediaType(Problem),
+    #[response(
+        status = 503,
+        description = "Service unavailable or token signing not configured",
+        content_type = "application/problem+json"
+    )]
+    Unavailable(Problem),
+}

@@ -87,7 +87,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             .fetch_all(&mut admin)
             .await
             .unwrap();
-    assert_eq!(applied, [1, 2, 3, 4, 5]);
+    assert_eq!(applied, [1, 2, 3, 4, 5, 6]);
 
     // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
     migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
@@ -97,7 +97,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         .fetch_one(&mut admin)
         .await
         .unwrap();
-    assert_eq!(count, 5);
+    assert_eq!(count, 6);
 
     let tables: Vec<(String, String, bool, bool)> = sql::query_as(
         "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity
@@ -112,6 +112,8 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     assert_eq!(
         names,
         [
+            "agent_grants",
+            "agents",
             "environments",
             "gateway_audit",
             "orgs",
@@ -130,7 +132,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(policies, 6);
+    assert_eq!(policies, 8);
 
     let value_like: Vec<String> = sql::query_scalar(
         "SELECT table_name || '.' || column_name FROM information_schema.columns

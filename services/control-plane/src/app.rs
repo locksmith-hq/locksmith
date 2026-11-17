@@ -18,6 +18,7 @@ use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
 use crate::db::Database;
 use crate::kms::DekWrapper;
@@ -33,7 +34,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 #[openapi(
     info(
         title = "Locksmith control-plane API",
-        description = "Orgs, projects, environments, secret metadata and write-only secret versions. A secret value can be written to a new version; no endpoint ever returns a value.",
+        description = "Orgs, projects, environments, secret metadata, write-only secret versions, agents and their grants. A secret value can be written to a new version; no endpoint ever returns a value. An agent's enrollment secret is returned once, when it is created or rotated.",
         license(name = "see repository"),
     ),
     // The shared error sets in `api::responses` reference `Problem` by `$ref`.
@@ -42,6 +43,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
     tags(
         (name = "health", description = "Liveness and readiness"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
+        (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
     )
 )]
@@ -82,6 +84,7 @@ pub struct AppState {
     db: Database,
     kms: Option<Arc<dyn DekWrapper>>,
     service_token: Option<Arc<ServiceToken>>,
+    agent_signer: Option<Arc<AgentTokenSigner>>,
 }
 
 impl AppState {
@@ -93,7 +96,20 @@ impl AppState {
             db,
             kms: None,
             service_token: None,
+            agent_signer: None,
         }
+    }
+
+    /// Mint agent tokens with `signer` and publish its public key in the JWKS (S4). Without
+    /// one, token requests answer `503` and the JWKS is empty.
+    pub fn with_agent_signer(mut self, signer: AgentTokenSigner) -> Self {
+        self.agent_signer = Some(Arc::new(signer));
+        self
+    }
+
+    /// The agent-token signing key, if one is configured.
+    pub fn agent_signer(&self) -> Option<&AgentTokenSigner> {
+        self.agent_signer.as_deref()
     }
 
     /// Accept `token` on the `/internal/v1` routes. Without one they answer `401` (fail closed).

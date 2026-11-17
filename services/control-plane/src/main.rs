@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use ls_control_plane::agent_token::AgentTokenSigner;
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::auth::ServiceToken;
 use ls_control_plane::config::{self, Config};
@@ -8,6 +9,7 @@ use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSett
 use ls_control_plane::kms;
 use ls_control_plane::migrate;
 use ls_control_plane::telemetry;
+use secrecy::ExposeSecret;
 use tracing_subscriber::EnvFilter;
 
 fn env_filter() -> EnvFilter {
@@ -90,6 +92,36 @@ async fn main() -> ExitCode {
         None => tracing::warn!(
             "{} is not set: the internal gateway routes refuse every request (401)",
             config::ENV_GATEWAY_SERVICE_TOKEN
+        ),
+    }
+    match config.agent_signing_key.as_ref() {
+        Some(seed) => match AgentTokenSigner::from_base64_seed(seed.expose_secret()) {
+            Ok(signer) => {
+                tracing::info!(kid = %signer.jwk().kid, "agent token signing key configured");
+                state = state.with_agent_signer(signer);
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "invalid {}", config::ENV_AGENT_SIGNING_KEY);
+                return ExitCode::FAILURE;
+            }
+        },
+        None if config.dev_auth => match AgentTokenSigner::generate() {
+            Ok(signer) => {
+                tracing::warn!(
+                    kid = %signer.jwk().kid,
+                    "{} is not set: using an ephemeral dev signing key; agent tokens stop verifying on restart",
+                    config::ENV_AGENT_SIGNING_KEY
+                );
+                state = state.with_agent_signer(signer);
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "could not generate an agent signing key");
+                return ExitCode::FAILURE;
+            }
+        },
+        None => tracing::warn!(
+            "{} is not set: agent token requests are refused (503) and the JWKS is empty",
+            config::ENV_AGENT_SIGNING_KEY
         ),
     }
     let router = app::build(state);

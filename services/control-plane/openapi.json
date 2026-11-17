@@ -1,6 +1,200 @@
 {
   "components": {
     "schemas": {
+      "ActiveGrant": {
+        "description": "One unexpired grant, as the gateway needs it. Ids, a name and a mode: never a value.",
+        "properties": {
+          "expires_at": {
+            "description": "`null` when the grant does not expire. The gateway must still refuse it at or after this\ntime, even while cached.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grant_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/GrantMode"
+          },
+          "secret_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "secret_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_id",
+          "secret_id",
+          "secret_name",
+          "mode"
+        ],
+        "type": "object"
+      },
+      "Agent": {
+        "description": "A registered agent. Never carries its enrollment secret or the secret's hash.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "AgentEnrollment": {
+        "description": "The response that shows an enrollment secret, once. No `Debug`.",
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/Agent"
+          },
+          "enrollment_secret": {
+            "description": "Exchange at `POST /v1/agent-tokens`. Shown only in this response; only its Argon2id\nhash is stored, so it cannot be read back. Not a vault secret.",
+            "format": "password",
+            "readOnly": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "enrollment_secret"
+        ],
+        "type": "object"
+      },
+      "AgentGrant": {
+        "description": "A grant: the agent may use the named secret in `mode` until `expires_at`. Names and ids\nonly; never the value.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/GrantMode"
+          },
+          "secret_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "secret_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "secret_id",
+          "secret_name",
+          "mode",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "AgentGrantSet": {
+        "description": "An agent's unexpired grants at the time of the request.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ActiveGrant"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_id",
+          "items"
+        ],
+        "type": "object"
+      },
+      "AgentToken": {
+        "description": "A minted agent token (RFC 6749 section 5.1 shape). No `Debug`: the token is a bearer\ncredential for the gateway only.",
+        "properties": {
+          "access_token": {
+            "description": "EdDSA JWT; claims `sub` (agent id), `org`, `aud` (`gateway`), `iat`, `exp`.",
+            "readOnly": true,
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Seconds until expiry (900).",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "token_type": {
+            "description": "Always `Bearer`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "expires_at"
+        ],
+        "type": "object"
+      },
+      "AgentTokenRequest": {
+        "additionalProperties": false,
+        "description": "Request body of a token exchange. No `Debug`.",
+        "properties": {
+          "enrollment_secret": {
+            "description": "The enrollment secret from `POST /v1/agents`.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "enrollment_secret"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "created_at": {
@@ -33,6 +227,107 @@
           "description",
           "created_at",
           "updated_at"
+        ],
+        "type": "object"
+      },
+      "GrantMode": {
+        "description": "How a grant lets the agent use the secret. S4 has relay only.",
+        "enum": [
+          "relay"
+        ],
+        "type": "string"
+      },
+      "Jwk": {
+        "description": "One public key in the JWKS (RFC 7517, RFC 8037 `OKP`/`Ed25519`).",
+        "properties": {
+          "alg": {
+            "description": "Always `EdDSA`.",
+            "type": "string"
+          },
+          "crv": {
+            "description": "Always `Ed25519`.",
+            "type": "string"
+          },
+          "kid": {
+            "description": "Key id: the RFC 7638 SHA-256 thumbprint of this key.",
+            "type": "string"
+          },
+          "kty": {
+            "description": "Always `OKP`.",
+            "type": "string"
+          },
+          "use": {
+            "description": "Always `sig`.",
+            "type": "string"
+          },
+          "x": {
+            "description": "The public key, base64url without padding.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kty",
+          "crv",
+          "x",
+          "kid",
+          "alg",
+          "use"
+        ],
+        "type": "object"
+      },
+      "JwkSet": {
+        "description": "The JWK set published at `/.well-known/jwks.json`. Public keys only.",
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/Jwk"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
+      "NewAgent": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "NewAgentGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "description": "Optional expiry (RFC 3339, in the future). Omit for no expiry.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/GrantMode",
+            "description": "Defaults to `relay`."
+          },
+          "secret_id": {
+            "description": "The secret the agent may relay (same org).",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret_id"
         ],
         "type": "object"
       },
@@ -136,6 +431,116 @@
           "region",
           "created_at",
           "updated_at"
+        ],
+        "type": "object"
+      },
+      "Paged_Agent": {
+        "description": "One page of a list. `next` is absent on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "description": "A registered agent. Never carries its enrollment secret or the secret's hash.",
+              "properties": {
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "description",
+                "created_at",
+                "updated_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "Paged_AgentGrant": {
+        "description": "One page of a list. `next` is absent on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "description": "A grant: the agent may use the named secret in `mode` until `expires_at`. Names and ids\nonly; never the value.",
+              "properties": {
+                "agent_id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "expires_at": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "mode": {
+                  "$ref": "#/components/schemas/GrantMode"
+                },
+                "secret_id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "secret_name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "agent_id",
+                "secret_id",
+                "secret_name",
+                "mode",
+                "created_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -526,7 +931,7 @@
     }
   },
   "info": {
-    "description": "Orgs, projects, environments, secret metadata and write-only secret versions. A secret value can be written to a new version; no endpoint ever returns a value.",
+    "description": "Orgs, projects, environments, secret metadata, write-only secret versions, agents and their grants. A secret value can be written to a new version; no endpoint ever returns a value. An agent's enrollment secret is returned once, when it is created or rotated.",
     "license": {
       "name": "see repository"
     },
@@ -535,6 +940,36 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/.well-known/jwks.json": {
+      "get": {
+        "description": "Ed25519 public keys (RFC 8037). Verifiers select a key by the token's `kid`. Empty when token signing is not configured.",
+        "operationId": "jwks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JwkSet"
+                }
+              }
+            },
+            "description": "The JWK set",
+            "headers": {
+              "Cache-Control": {
+                "description": "`public, max-age=60`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Public keys that verify agent tokens (JWKS)",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "healthz",
@@ -546,6 +981,85 @@
         "summary": "Liveness probe",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/internal/v1/agents/{agent_id}/grants": {
+      "get": {
+        "description": "The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`.",
+        "operationId": "agent_grants",
+        "parameters": [
+          {
+            "description": "Agent id (the token's `sub`)",
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The agent's org (the token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentGrantSet"
+                }
+              }
+            },
+            "description": "Unexpired grants"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found (including another org's secret)"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "List an agent's unexpired grants (gateway only)",
+        "tags": [
+          "internal"
         ]
       }
     },
@@ -652,6 +1166,771 @@
         "summary": "Readiness probe",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/agent-tokens": {
+      "post": {
+        "description": "Returns an EdDSA JWT valid for 15 minutes with audience `gateway`, verifiable with the keys at `/.well-known/jwks.json`. Any invalid, unknown or replaced enrollment secret is the same `401`.",
+        "operationId": "mint_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToken"
+                }
+              }
+            },
+            "description": "A token",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid, unknown or replaced enrollment secret"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable or token signing not configured"
+          }
+        },
+        "summary": "Exchange an enrollment secret for a short-lived agent token",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents": {
+      "get": {
+        "operationId": "list",
+        "parameters": [
+          {
+            "description": "Page size, 1 to 100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: the `next` value of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paged_Agent"
+                }
+              }
+            },
+            "description": "A page of agents"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List agents",
+        "tags": [
+          "agents"
+        ]
+      },
+      "post": {
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentEnrollment"
+                }
+              }
+            },
+            "description": "Created. `enrollment_secret` is shown only here.",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "description": "URL of the new agent",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Register an agent; returns its enrollment secret once",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}": {
+      "delete": {
+        "description": "Tokens already minted stay valid until they expire (at most 15 minutes), but every relay is refused because the agent has no grants.",
+        "operationId": "delete",
+        "parameters": [
+          {
+            "description": "Agent id",
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Delete an agent and revoke all its grants",
+        "tags": [
+          "agents"
+        ]
+      },
+      "get": {
+        "operationId": "get_one",
+        "parameters": [
+          {
+            "description": "Agent id",
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Get an agent",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}/enrollment-secret": {
+      "post": {
+        "description": "The previous enrollment secret stops working immediately. Tokens already minted stay valid until they expire.",
+        "operationId": "rotate_enrollment",
+        "parameters": [
+          {
+            "description": "Agent id",
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentEnrollment"
+                }
+              }
+            },
+            "description": "The new enrollment secret, shown only here",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Replace an agent's enrollment secret; returns the new one once",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}/grants": {
+      "get": {
+        "operationId": "list_grants",
+        "parameters": [
+          {
+            "description": "Agent id",
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size, 1 to 100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: the `next` value of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paged_AgentGrant"
+                }
+              }
+            },
+            "description": "A page of grants"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List an agent's grants (including expired ones)",
+        "tags": [
+          "agents"
+        ]
+      },
+      "post": {
+        "operationId": "create_grant",
+        "parameters": [
+          {
+            "description": "Agent id",
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgentGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentGrant"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Location": {
+                "description": "URL of the new grant",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Grant an agent relay use of a secret",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}/grants/{grant_id}": {
+      "delete": {
+        "description": "The gateway caches grants for at most 10 seconds; the revocation takes effect within that window.",
+        "operationId": "delete_grant",
+        "parameters": [
+          {
+            "description": "Agent id",
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Grant id",
+            "in": "path",
+            "name": "grant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Revoke a grant",
+        "tags": [
+          "agents"
         ]
       }
     },
@@ -2414,6 +3693,10 @@
     },
     {
       "name": "secrets"
+    },
+    {
+      "description": "Agent identities, their relay grants, agent tokens and the token-signing JWKS",
+      "name": "agents"
     },
     {
       "description": "Service-to-service routes for the gateway; service token only, never exposed to users or agents",

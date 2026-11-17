@@ -14,7 +14,7 @@ The rule throughout: build in-house only what touches plaintext. Everything else
 | Secret memory | `zeroize` + `secrecy` | Apache/MIT | 1.9.1 / 0.10.3 (2024-10, stable) | n/a |
 | KMS (local) | OpenBao transit | MPL-2.0 | 2.7.2 (2026-10-26) | **LocalStack: public repo archived, EULA**. Rejected |
 | KMS (cloud) | `aws-sdk-kms` | Apache-2.0 | 1.131.0 (2026-11-10) | behind a `KeyProvider` trait |
-| Human auth | `openidconnect` + `webauthn-rs` | MIT / MPL-2.0 | 4.1.0 / 0.6.2 (2026-10-31) | Bundled IdP rejected. Speak generic OIDC and document Keycloak (Apache) and Zitadel (AGPL) |
+| Human auth | `openidconnect` + `webauthn-rs` | MIT / MPL-2.0 | 4.1.0 / 0.6.2 (2026-10-31) | Bundled IdP rejected. Speak generic OIDC: Cognito in our cloud, Keycloak (Apache) locally, document Keycloak and Zitadel (AGPL) for self-hosters. Supabase Auth considered and dropped on 2026-11-17 (owner chose AWS) |
 | Workload identity | GitHub/K8s OIDC JWT verification | n/a | n/a | SPIRE 1.16 (Apache) later |
 | Authz | `cedar-policy` in-process | Apache-2.0 | 4.14.1 (2026-11-02) | regorus (Rego is harder to author). OpenFGA, SpiceDB and OPA are out-of-process services |
 | DB + migrations | `sqlx` (repo moved to transact-rs) | Apache/MIT | 0.9.0 (2026-05-21) | SeaORM, Diesel (ORM not needed) |
@@ -40,7 +40,7 @@ The rule throughout: build in-house only what touches plaintext. Everything else
 | Browser e2e | microsoft/playwright-mcp | Apache-2.0 | n/a |
 | GitHub | github/github-mcp-server | MIT | `--read-only` |
 | Kubernetes (phase 4) | containers/kubernetes-mcp-server | Apache-2.0 | `--read-only` |
-| AWS (phase 4) | awslabs/mcp | Apache-2.0 | per-server |
+| AWS (phase 4) | managed AWS MCP Server (GA 2026-05), awslabs/mcp as fallback | AWS service / Apache-2.0 | reads free; writes need owner approval after a change brief, guardrail services denied (A0 decision 18) |
 
 Dogfooding: these MCP servers take DB URLs and tokens from env. Once S4 lands, route them through Locksmith.
 

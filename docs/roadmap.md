@@ -20,7 +20,7 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
    - `ls-crypto` (AEAD, KDF)
    - `ls-vault` (audit hash chain)
    - `smith-cli`, `locksmith-mcp`, `ls-hooks` (agent connector and hooks)
-5. **Local, then cloud.** AWS `dev` arrives only in phase 4. Until then LocalStack stands in for AWS.
+5. **Local, then cloud.** AWS `dev` arrives only in phase 4. Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
 6. **Model tiers.** Sonnet runs by default. Tasks marked `[opus]` touch crypto, auth, the gateway or adversarial gates.
 
 Status: ☐ not started · ◐ in progress · ☑ archived. Only the next one or two changes are written in
@@ -33,14 +33,14 @@ uses what the previous one taught us.
 |---|---|---|---|---|
 | F0 | `f0-dev-harness` | `just up` starts Postgres, an OTel/Grafana stack (logs, traces, metrics) and a mock upstream API. Claude Code can query the DB and the logs through MCP servers in `.mcp.json`. | `just up && just harness-check` | ☑ |
 | F1 | `f1-test-kit` | Canary secrets, `just leak-scan` (scans DB, logs, traces, files and transcripts for every encoding of a canary), nextest, snapshot tests, testcontainers and the `tests/e2e` skeleton. | `just leak-scan` fails on a planted canary and passes on a clean stack | ☑ |
-| A0 | `a0-data-and-cloud-foundations` [opus] | Hard-to-change DB and AWS choices are decided with sources and proven by spikes: Postgres 18, RLS tenancy, UUIDv7, the versioned ciphertext header, regions, KMS, account layout. **Owner approval required before S1.** | `cargo nextest run -p a0-spikes` | ☐ |
+| A0 | `a0-data-and-cloud-foundations` [opus] | Hard-to-change DB and AWS choices are decided with sources and proven by spikes: Postgres 18, RLS tenancy, UUIDv7, the versioned ciphertext header, regions, KMS, account layout, local parity for every AWS service, Cognito for users, and the $5/month `dev` budget. **Owner approval required before S1.** | `cargo nextest run -p a0-spikes` | ☐ |
 
 ## Phase 1: First vertical slice (one agent, one secret, one API, zero exposure)
 
 | # | Change | Usable outcome | Local gate |
 |---|---|---|---|
 | S1 | `s1-control-plane-skeleton` | axum service with Postgres migrations, an OpenAPI spec, health checks and OTel. Orgs, projects, environments and secret metadata through the API. | API e2e against compose, OTel traces visible in Grafana |
-| S2 | `s2-envelope-crypto` [opus] | Secret versions are encrypted under a per-version DEK, which is wrapped to a gateway key held in a KMS (LocalStack KMS or OpenBao transit locally). The control plane cannot decrypt. | Crypto KATs, `just leak-scan` on the DB, decrypt-fails-in-control-plane test |
+| S2 | `s2-envelope-crypto` [opus] | Secret versions are encrypted under a per-version DEK, which is wrapped to a gateway key held in a KMS (OpenBao transit locally). The control plane cannot decrypt. | Crypto KATs, `just leak-scan` on the DB, decrypt-fails-in-control-plane test |
 | S3 | `s3-gateway-http` [opus] | The gateway (from `ls-proxy`) unwraps the key, injects the secret into a call to the mock upstream, redacts the response and writes an audit record. | Mock upstream receives the secret, and the agent side and logs contain no canary |
 | S4 | `s4-agent-connector` | Agent identity plus short-lived token. `smith` and `locksmith-mcp` list grants and route tool calls through the gateway. **First demo: Claude Code calls a real API (e.g. Langfuse) with no key on the laptop.** | Live headless `claude -p` run, `just leak-scan` on the transcript |
 | S5 | `s5-audit-ledger` | Append-only, hash-chained audit per org. `just audit-verify` checks it and an export goes to a file sink. | Tamper test |
@@ -50,7 +50,7 @@ uses what the previous one taught us.
 
 | # | Change | Usable outcome |
 |---|---|---|
-| T1 | `t1-human-auth` | Human sign-in with OIDC and passkeys through the chosen IdP (decided by spike in the design). |
+| T1 | `t1-human-auth` | Human sign-in with OIDC and passkeys: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. Services only verify JWTs through JWKS (A0 decision 15). |
 | T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. |
 | T3 | `t3-console-mvp` | React console: projects, secrets (client-side encrypted), agents, sessions and audit view. Playwright e2e. |
 | T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. |
@@ -61,7 +61,7 @@ uses what the previous one taught us.
 | # | Change | Usable outcome |
 |---|---|---|
 | D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on LocalStack first. |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. |
 | D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). |
 | D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. |
 
@@ -69,7 +69,7 @@ uses what the previous one taught us.
 
 | # | Change | Usable outcome |
 |---|---|---|
-| P1 | `p1-aws-dev-env` | OpenTofu `dev` environment on AWS: RDS, ECS or EKS, KMS, and OTel to Grafana Cloud free or self-hosted. The MCP servers point at it read-only. |
+| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). |
 | P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. |
 | P3 | `p3-sdks-and-plugins` | SDKs generated from OpenAPI, plus Claude Code, Cursor and Codex plugins. |
 

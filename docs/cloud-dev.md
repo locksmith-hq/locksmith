@@ -45,9 +45,14 @@ Create these at claude.ai/code → environment selector → New environment.
 - **Why separate:** the worker never needs open web access, so a prompt-injected web page can't reach a session that runs code with a wider network. **[test]** Whether WebSearch and WebFetch obey the environment allowlist. If they do, add domains here as research needs them; never switch to Full.
 
 ### 3. Later: `locksmith-aws-dev`, from phase 4 (P1)
-- Deploys to AWS run from **GitHub Actions using OIDC**, not from Claude sessions.
+- **Baseline infrastructure and guardrails** (IAM, SCPs, budget) deploy from **GitHub Actions using OIDC**. Claude writes OpenTofu and opens a PR. `tofu plan` runs with a read-only role, and `tofu apply` runs on merge with a scoped deploy role.
 - The reason: AWS requests are signed with SigV4, so they can't use the cloud "network secrets" proxy, and putting AWS keys in environment variables would expose them to the model. That breaks the very rule this product exists to enforce.
-- Claude sessions get read-only AWS access only, through Locksmith itself once D2 (AWS STS) lands. This is dogfooding.
+- **The AWS MCP Server** (managed, by AWS) runs on the owner's laptop through Remote Control with IAM Identity Center short-lived credentials, so no key enters the cloud VM. After D2 (AWS STS), Claude sessions get it through Locksmith itself. This is dogfooding.
+  - **Reads** (logs, describe calls, cost) run freely.
+  - **Writes need the owner's approval, one change at a time.** Before each one, Claude posts a change brief: what changes, monthly cost and the effect on the $5 budget, blast radius, security effect, and how to roll back. A `PreToolUse` hook forces the approval prompt for every mutating AWS call, whatever the permission mode.
+  - Resources created this way are tagged `created-by=claude-mcp` and imported into OpenTofu or destroyed before the session ends.
+  - The MCP role can never change IAM, Organizations, SCPs, Budgets or Identity Center. Those change only through OpenTofu PRs.
+- **Budget: $5/month for the dev account.** About $1–2 idle: an always-on base stack with Aurora paused at 0 ACU, plus an on-demand session stack (`just aws-up` / `just aws-down`) that auto-destroys. A budget action in the management account attaches a deny-create SCP at $5. Standing SCPs block other regions, ALB, NAT gateways, interface endpoints and large instances. Details: A0 design decisions 16–18.
 
 ## Secrets
 - **None are needed through phase S3.** All local stack credentials are dummy values in `infra/compose/.env.example`.

@@ -96,7 +96,11 @@ link_pr() { # <id> <change-issue>
   new=$(awk '/<!-- issue-links:start -->/{skip=1} !skip{print} /<!-- issue-links:end -->/{skip=0}' <<<"$cur")
   new=$(printf '%s\n\n%s' "$new" "$block")
   [ "$(awk '/<!-- issue-links:start -->/,/<!-- issue-links:end -->/' <<<"$cur")" = "$block" ] && return 0
-  gh api -X PATCH "repos/$repo/pulls/$pr" -f body="$new" >/dev/null || echo "links: could not update PR #$pr"
+  # GitHub ignores closing keywords written by the Actions token, so write with the automation PAT
+  # (needs Pull requests: Read and write); fall back so the block is at least present.
+  { [ -n "${GH_AUTOMATION_TOKEN:-}" ] && GH_TOKEN=$GH_AUTOMATION_TOKEN gh api -X PATCH "repos/$repo/pulls/$pr" -f body="$new" >/dev/null 2>&1; } ||
+    { echo "links: PAT could not edit PR #$pr; links will not register (GH_AUTOMATION_TOKEN needs Pull requests: Read and write)"
+      gh api -X PATCH "repos/$repo/pulls/$pr" -f body="$new" >/dev/null; } || echo "links: could not update PR #$pr"
 }
 
 bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do

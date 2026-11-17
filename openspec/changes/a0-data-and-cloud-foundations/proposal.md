@@ -10,6 +10,7 @@ Some choices get expensive to change once real data exists:
 - the AWS account layout
 - KMS keys
 - where the audit log is stored
+- who manages users, how every AWS service is tested locally, and what `dev` may cost
 
 S1 creates the first schema and S2 the first ciphertext. So these are decided and proven here, before S1 starts, from sourced evidence rather than memory.
 
@@ -31,4 +32,5 @@ F0 (spikes run on its Postgres). Owner approval of design.md before S1 starts.
 - `openspec/specs/data-foundations` (after archive).
 - Spike tests in `tests/spikes/a0/`.
 - F0 compose bumped from `postgres:17` to `postgres:18`.
-- S1, S2, S5 and P1 must follow these decisions.
+- S1, S2, S5, T1 and P1 must follow these decisions.
+- T1 uses Cognito in our cloud and Keycloak locally, behind generic OIDC. P1 builds the $5/month `dev` account with its budget guardrails.

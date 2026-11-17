@@ -17,6 +17,28 @@ label() { # <issue> <state>: swap the status:* label
   gh api "repos/$repo/issues/$1/labels" -f "labels[]=status:$2" >/dev/null
 }
 
+# Board: with GH_AUTOMATION_TOKEN (the repo's automation PAT, which needs Projects read/write; the Actions token cannot write
+# Projects), each change issue is added to the org Project and its Status field follows the state.
+project_owner=${PROJECT_OWNER:-locksmith-hq}; project_number=${PROJECT_NUMBER:-1}
+board_ids=""
+board() { # <issue> <state>
+  [ -n "${GH_AUTOMATION_TOKEN:-}" ] && [ "${DRY_RUN:-0}" != 1 ] || return 0
+  local name item opt
+  case "$2" in claimed) name="In progress" ;; review) name="In review" ;; *) name="$(tr '[:lower:]' '[:upper:]' <<<"${2:0:1}")${2:1}" ;; esac
+  if [ -z "$board_ids" ]; then
+    # shellcheck disable=SC2016 # jq variables
+    board_ids=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project field-list "$project_number" --owner "$project_owner" --format json \
+      -q '.fields[]|select(.name=="Status")|.id as $f|.options[]|"\($f)\t\(.id)\t\(.name)"') || { echo "board: cannot read the Project (check GH_AUTOMATION_TOKEN)"; return 0; }
+    project_id=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project view "$project_number" --owner "$project_owner" --format json -q .id)
+  fi
+  opt=$(awk -F'\t' -v n="$name" '$3==n{print $1"\t"$2}' <<<"$board_ids")
+  [ -n "$opt" ] || { echo "board: no Status option named '$name'"; return 0; }
+  item=$(GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-add "$project_number" --owner "$project_owner" \
+    --url "https://github.com/$repo/issues/$1" --format json -q .id) || return 0
+  GH_TOKEN=$GH_AUTOMATION_TOKEN gh project item-edit --project-id "$project_id" --id "$item" \
+    --field-id "${opt%%$'\t'*}" --single-select-option-id "${opt#*$'\t'}" >/dev/null || echo "board: could not set #$1 to $name"
+}
+
 render() { # <id> <state> <detail>
   local id=$1 state=$2 detail=$3 src pr owner rescue
   src=$(git show "origin/claude/change-$id:openspec/changes/$id/tasks.md" >/dev/null 2>&1 && echo "origin/claude/change-$id" || echo HEAD)
@@ -45,7 +67,7 @@ bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   body=$(render "$id" "$state" "$detail")
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '===== %s\n%s\n' "$id" "$body"; continue; fi
   n=$(bash "$here/change-issue.sh" "$id") || continue
-  gh api -X PATCH "repos/$repo/issues/$n" -f body="$body" -f state=open >/dev/null && label "$n" "$state"
+  gh api -X PATCH "repos/$repo/issues/$n" -f body="$body" -f state=open >/dev/null && label "$n" "$state" && board "$n" "$state"
 done
 
 # Archived changes: mark done and close their issue.
@@ -54,5 +76,5 @@ for d in openspec/changes/archive/*/; do
   n=$(bash "$here/change-issue.sh" "$id" --find) || continue
   [ "$(gh api "repos/$repo/issues/$n" -q .state)" = open ] || continue
   [ "${DRY_RUN:-0}" = 1 ] && { echo "===== $id: would close #$n as done"; continue; }
-  label "$n" "done"; gh api -X PATCH "repos/$repo/issues/$n" -f state=closed -f state_reason=completed >/dev/null
+  label "$n" "done"; board "$n" "done"; gh api -X PATCH "repos/$repo/issues/$n" -f state=closed -f state_reason=completed >/dev/null
 done

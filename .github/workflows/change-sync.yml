@@ -40,6 +40,8 @@ jobs:
           ref: main
       - env:
           GH_TOKEN: ${{ github.token }}
+          # Automation PAT (owner-managed). Used only for the org Project; absent = labels only.
+          GH_AUTOMATION_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
         run: |
           git fetch -q --depth=1 origin '+refs/heads/claude/change-*:refs/remotes/origin/claude/change-*' || true
           bash scripts/change-sync.sh

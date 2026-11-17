@@ -1,5 +1,10 @@
 [advisories]
 yanked = "deny"
+# astral-tokio-tar is only reached through testcontainers (a dev-dependency of
+# ls-control-plane, used to start a throwaway Postgres in tests). It is flagged
+# unmaintained, not vulnerable, and never ships in a release binary.
+# Revisit when testcontainers moves off it.
+ignore = ["RUSTSEC-2026-0440"]
 
 [licenses]
 allow = [

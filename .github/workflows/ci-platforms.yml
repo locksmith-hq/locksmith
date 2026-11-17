@@ -17,7 +17,7 @@ permissions:
 jobs:
   macos:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 15  # macOS minutes count 10x against the quota
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -35,7 +35,7 @@ jobs:
 
   windows-check:
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 15  # Windows minutes count 2x
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

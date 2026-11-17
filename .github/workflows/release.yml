@@ -12,6 +12,7 @@ jobs:
   build:
     name: build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25  # macOS minutes count 10x against the quota
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +61,7 @@ jobs:
     name: publish release
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:

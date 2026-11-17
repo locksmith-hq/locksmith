@@ -3,12 +3,12 @@
 //! verification; handlers depend only on [`OrgBinding`].
 
 use axum::extract::FromRequestParts;
-use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::problem::ApiError;
 
 pub const DEV_ORG_HEADER: &str = "x-locksmith-dev-org";
 
@@ -18,13 +18,13 @@ pub struct OrgBinding {
     pub org_id: Uuid,
 }
 
-/// Rejection for a request with no valid org binding: `401`, no detail about why.
+/// Rejection for a request with no valid org binding: `401` problem details, no detail about why.
 #[derive(Debug)]
 pub struct Unauthenticated;
 
 impl IntoResponse for Unauthenticated {
     fn into_response(self) -> Response {
-        (StatusCode::UNAUTHORIZED, "unauthenticated").into_response()
+        ApiError::unauthenticated().into_response()
     }
 }
 
@@ -44,6 +44,7 @@ impl FromRequestParts<AppState> for OrgBinding {
             .ok()
             .and_then(|s| Uuid::parse_str(s.trim()).ok())
             .ok_or(Unauthenticated)?;
+        tracing::Span::current().record("org.id", tracing::field::display(org_id));
         Ok(Self { org_id })
     }
 }

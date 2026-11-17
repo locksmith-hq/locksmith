@@ -25,7 +25,7 @@ jobs:
   # Cheap checks in one job: repo layout, OpenSpec task-edit guard, secret scan.
   hygiene:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 3
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       web: ${{ steps.filter.outputs.web }}
@@ -77,7 +77,7 @@ jobs:
     needs: hygiene
     if: needs.hygiene.outputs.rust == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10  # 2.7 min warm; headroom for a cold cache
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev pkg-config
@@ -93,7 +93,7 @@ jobs:
     needs: hygiene
     if: needs.hygiene.outputs.desktop == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -103,7 +103,7 @@ jobs:
     needs: hygiene
     if: needs.hygiene.outputs.web == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

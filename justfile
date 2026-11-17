@@ -96,6 +96,15 @@ leak-scan *args:
     cd {{quote(invocation_directory())}}
     exec python3 -I "$root/tests/kit/oracle.py" scan --canary-file "$canaries" --stack "$@"
 
+# Run locksmith-api against `just up`: dev auth on, loopback bind, OTLP to the LGTM container.
+api:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    set -a; . "$root/infra/compose/.env.example"; set +a
+    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
+
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
     cargo nextest run -p ls-e2e

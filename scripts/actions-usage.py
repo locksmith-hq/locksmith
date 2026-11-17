@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 REPO = os.environ.get("REPO", "locksmith-hq/locksmith")
 QUOTA = int(os.environ.get("ACTIONS_QUOTA_MIN", "2000"))
@@ -38,11 +39,27 @@ def runs_since(day):
         page += 1
 
 
-def run_minutes(r):
-    # shortcut: run wall time rounded up, not billing; ~2x high on short runs (2026-11). Billing API is preferred.
-    if not r.get("run_started_at"):
+def _job_minutes(r):
+    # Billing counts each job that ran on a runner, rounded up to whole minutes. Skipped runs and jobs,
+    # and runs cancelled while queued, use no runner and cost nothing (most change-sync/owner-alert runs).
+    if r.get("conclusion") == "skipped" or not r.get("run_started_at"):
         return 0
-    return math.ceil((ts(r["updated_at"]) - ts(r["run_started_at"])).total_seconds() / 60)
+    d = gh(f"repos/{REPO}/actions/runs/{r['id']}/jobs?per_page=100") or {}
+    total = 0
+    for j in d.get("jobs", []):
+        if j.get("runner_name") and j.get("started_at") and j.get("completed_at") and j.get("conclusion") != "skipped":
+            total += math.ceil(max((ts(j["completed_at"]) - ts(j["started_at"])).total_seconds(), 1) / 60)
+    return total
+
+
+_MIN = {}
+
+
+def run_minutes(r):
+    """Estimated billed minutes for one run (per-job, rounded up); cached. Billing API is preferred."""
+    if r["id"] not in _MIN:
+        _MIN[r["id"]] = _job_minutes(r)
+    return _MIN[r["id"]]
 
 
 def billed_by_day(org, now):
@@ -64,13 +81,18 @@ def main():
     month = runs_since(month_start.isoformat())
     by_day, src = billed_by_day(REPO.split("/")[0], now), "billing API"
     if by_day is None:
-        by_day, src = defaultdict(float), "estimate from run times"
+        by_day, src = defaultdict(float), "estimate from job times"
+        with ThreadPoolExecutor(8) as ex:
+            list(ex.map(run_minutes, month))
         for r in month:
             by_day[r["created_at"][:10]] += run_minutes(r)
     used = round(sum(by_day.values()))
     # Included minutes reset on the 1st (UTC) on GitHub's calendar-month billing.
     month_days = calendar.monthrange(now.year, now.month)[1]
-    elapsed = max((now - dt.datetime.combine(month_start, dt.time(), dt.timezone.utc)).total_seconds() / 86400, 1)
+    # Average over days with Actions activity, not the whole month: a repo created mid-month would
+    # otherwise look several times cheaper than it is.
+    first = min((ts(r["created_at"]) for r in month), default=now)
+    elapsed = max((now - first).total_seconds() / 86400, 1)
     days_left = month_days - now.day + 1  # including today
     week_start = (now - dt.timedelta(days=7)).date().isoformat()
     avg_month = used / elapsed

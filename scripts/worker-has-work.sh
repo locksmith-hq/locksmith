@@ -36,8 +36,12 @@ done <<<"$status"
 
 # Plan ahead: with fewer than two takeable changes and no open planning PR, writing the next one is work.
 takeable=$(grep -cE $'\t(ready|stackable)\t' <<<"$status" || true)
-planning=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '[.[]|select(.head.ref|startswith("claude/planning-"))]|length')
-[ "${takeable:-0}" -lt 2 ] && [ "$planning" -eq 0 ] && work+=("fewer than 2 changes ready: plan the next one")
+plans=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[]|select(.head.ref|startswith("claude/planning-"))|[.number, any(.labels[]; .name=="ready-to-merge")]|@tsv')
+[ "${takeable:-0}" -lt 2 ] && [ -z "$plans" ] && work+=("fewer than 2 changes ready: plan the next one")
+# An unlabelled planning PR is invisible to the merge queue and also suppresses planning, so workers would idle forever.
+while IFS=$'\t' read -r pr labelled; do
+  [ "$labelled" = false ] && work+=("planning PR #$pr is not marked ready")
+done <<<"$plans"
 
 if [ "${#work[@]}" -gt 0 ]; then printf 'work: %s\n' "${work[@]}"; exit 0; fi
 echo idle; exit 1

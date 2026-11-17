@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'main' }}  # manual runs can test a branch
       - env:
           GH_TOKEN: ${{ github.token }}
           # Automation PAT (owner-managed). Used only for the org Project; absent = labels only.

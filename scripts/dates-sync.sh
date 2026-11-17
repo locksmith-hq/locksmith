@@ -17,7 +17,10 @@ est_tasks=${EST_TASKS:-20}   # task count assumed for a change whose tasks.md is
 today=$(date -u +%F)
 day() { date -u -d "$today $1 days" +%F 2>/dev/null || date -u -v"$( [ "$1" -lt 0 ] && echo "$1" || echo "+$1" )"d +%F; }   # GNU or BSD date
 
-fields=$(gh api "orgs/${repo%%/*}/issue-fields" -q '.[]|"\(.name)\t\(.id)"')
+# Field ids are stable; the Actions token cannot list org-level fields, so fall back to the known ids.
+# shortcut: if a field is ever recreated in org settings, update these ids (read them with a PAT).
+fields=$(gh api "orgs/${repo%%/*}/issue-fields" -q '.[]|"\(.name)\t\(.id)"' 2>/dev/null) ||
+  fields=$(printf 'Priority\t49990182\nStart date\t49990183\nTarget date\t49990184\n')
 fid() { awk -F'\t' -v n="$1" '$1==n{print $2}' <<<"$fields"; }
 F_PRI=$(fid Priority); F_START=$(fid "Start date"); F_TARGET=$(fid "Target date")
 [ -n "$F_PRI" ] && [ -n "$F_START" ] && [ -n "$F_TARGET" ] || { echo "dates: org issue fields missing"; exit 0; }

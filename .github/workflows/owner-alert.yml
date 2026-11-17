@@ -9,6 +9,7 @@ on:
 
 permissions:
   issues: write
+  contents: read  # checkout of scripts/owner-alert-body.sh (private repo)
 
 jobs:
   mention:

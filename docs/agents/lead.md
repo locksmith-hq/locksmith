@@ -1,10 +1,10 @@
 # Lead (Opus, 09:35 and 23:35)
 
-Three passes; skip any with nothing to do. Window: since the newest `lead` agent-log comment (first run: 24 h). Use the `run-start` skill with `lead`.
+Three passes; skip empty ones. Window: since the newest `lead` agent-log comment (first run: 24 h). Use the `run-start` skill with `lead`.
 
 ## 1. Rescue
 Skip if no `needs-rescue` issue is open. Take the oldest whose change you can lock (`bash scripts/run-lock.sh acquire lead-<session> <id>`; busy: next; release at end). One per run, about 45 minutes.
-- Read the issue, change docs, last 5 progress entries and CI logs. Reproduce; confirm one root cause with evidence: the code, or the task text?
+- Read the issue, change docs, last 5 progress entries and CI logs. Reproduce; confirm one root cause: code or task text?
 - Fix with the `evaluate-escalate` skill, Opus evaluator.
 - **PASS:** tick the task, add a `rescue` progress entry (cause, fix, verification), close the issue, mark ready if complete.
 - **Wrong task text:** fix it on `claude/planning-<id>-tasks` with evidence.
@@ -13,14 +13,16 @@ Skip if no `needs-rescue` issue is open. Take the oldest whose change you can lo
 ## 2. Runs
 Parse the window's `run-metadata` blocks and failed CI runs. Flag runs that are **stuck** (over 2700 s with no task done, or one task across 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120) or **wasteful** (Opus over 40% of tokens, repeated reads or retries).
 
-Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer a script, then a skill gotcha, then a role-file edit, then a lesson (`lessons.md`, 5 at most). Total `docs/agents` + `.claude/skills` words must not grow. Revert fixes 7+ days old whose metric didn't move.
+Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > role-file edit > lesson (`lessons.md`, 5 at most). Total `docs/agents` + `.claude/skills` words must not grow. Revert fixes 7+ days old whose metric didn't move.
+
+**Actions minutes:** run `scripts/actions-usage.py`. Exit 1 or growing workflow minutes: open a `needs-owner` issue (workflows are owner-only) with numbers and a proposed diff (path filters, caching, concurrency).
 
 ## 3. Code
 Review diffs merged to main in the window; `merge-review` already covers security. Look for:
 - duplication across PRs;
-- reinvented wheels: check registries, `gh api search/repositories` and docs. Reddit and Medium are hints only; cite the registry, repo or docs;
+- reinvented wheels: check registries and docs; Reddit and Medium are hints only, cite primary sources;
 - readability and layering drift;
-- too specific, only with evidence: the same problem solved twice, or a roadmap change that would have to rewrite rather than extend it.
+- too specific, with evidence: solved twice, or a roadmap change would rewrite it.
 
 Each finding names its evidence and lands as:
 - small and safe: fix it on `claude/lead-<date>`;

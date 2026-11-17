@@ -23,6 +23,11 @@ desktop-test:
     cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
     cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
+# Build every app for the host OS (web console + desktop binary); each change's Local verification runs it.
+apps-build: desktop-test
+    npm run build
+    cd apps/desktop && npm exec -- tauri build --debug --no-bundle
+
 # Regenerate packages/api-types from crates/ls-ipc (ts-rs).
 api-types:
     cargo test -p ls-ipc --features ts export_bindings

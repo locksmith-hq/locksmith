@@ -68,7 +68,9 @@ bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   body=$(render "$id" "$state" "$detail")
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '===== %s\n%s\n' "$id" "$body"; continue; fi
   n=$(bash "$here/change-issue.sh" "$id") || continue
-  gh api -X PATCH "repos/$repo/issues/$n" -f body="$body" -f state=open >/dev/null && label "$n" "$state" && board "$n" "$state"
+  # The title follows the proposal, so an issue opened by a planner's lock gets its real name.
+  title=$(sed -nE '1s/^# *(Proposal: *)?//p' "openspec/changes/$id/proposal.md" 2>/dev/null)
+  gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$state" && board "$n" "$state"
 done
 
 # Archived changes: mark done and close their issue.

@@ -17,7 +17,7 @@ Goal: make the next runs cheaper and more reliable. Fix things in scripts or ski
    3. a short edit to a role file;
    4. a lesson in `docs/agents/lessons.md` (5 active at most).
 
-   When a lesson becomes a script or a gotcha, move it to `lessons-archive.md`. Never touch protected files (see `common.md`). Task-spec problems and protected-file changes go in a `needs-owner` issue instead.
+   When a lesson becomes a script or a gotcha, move it to `lessons-archive.md`. Never touch protected files (see `common.md`). Wrong task text goes in a `claude/planning-*` PR; protected-file changes go in a `needs-owner` issue.
 4. **Verify.** Run `just ci`, `bash scripts/check-task-edits.test.sh` and `bash scripts/check-agent-docs.sh`. The total word count of `docs/agents` plus `.claude/skills` must not increase.
 5. **Ship.** Push once and open a non-draft PR with one section per fix: evidence, root cause, change, and the metric it should move. Mark it ready with the `merge-queue` skill; it auto-merges through the gates.
 6. **Close the loop.** Check fixes that are 7 or more days old against their metric, and revert any that didn't help.

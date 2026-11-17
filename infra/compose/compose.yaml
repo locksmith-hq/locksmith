@@ -29,17 +29,23 @@ services:
 
   openbao:
     image: ${OPENBAO_IMAGE:-openbao/openbao:2.7.2}
-    # Dev mode: in-memory and auto-unsealed. The healthcheck enables the transit engine (idempotent).
+    # Dev mode: in-memory and auto-unsealed. The healthcheck runs openbao-init.sh (idempotent): transit,
+    # the `gateway` key, and the encrypt-only / decrypt-only policies and fixed dev-only tokens
+    # (s2-envelope-crypto design decision 4). Healthy therefore means initialized, `up --wait` waits
+    # for it, and a restarted (emptied) server is set up again.
     command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${OPENBAO_DEV_ROOT_TOKEN:-dev-only-root}"]
     cap_add: [IPC_LOCK]
     environment:
       BAO_ADDR: http://127.0.0.1:8200
       BAO_TOKEN: ${OPENBAO_DEV_ROOT_TOKEN:-dev-only-root}
+      OPENBAO_CONTROL_PLANE_TOKEN: ${OPENBAO_CONTROL_PLANE_TOKEN:-dev-only-control-plane}
+      OPENBAO_GATEWAY_TOKEN: ${OPENBAO_GATEWAY_TOKEN:-dev-only-gateway}
+    volumes: ["./openbao-init.sh:/openbao-init.sh:ro"]
     ports: ["127.0.0.1:8200:8200"]
     healthcheck:
-      test: ["CMD-SHELL", "bao secrets list | grep -q '^transit/' || bao secrets enable transit"]
+      test: ["CMD", "/bin/sh", "/openbao-init.sh"]
       interval: 3s
-      timeout: 5s
+      timeout: 10s
       retries: 20
 
   upstream:

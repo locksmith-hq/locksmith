@@ -19,3 +19,8 @@
 - Task: 2.1 - done (`KeyWrapper` trait + OpenBao transit client in `crates/ls-envelope`; wrapped DEK is an 80-byte `dek-wrap` blob; key_id = name padded to 12 bytes + u32 version; AAD bound; `vaultrs` rejected, rationale in design.md)
 - Verified: `just ci` -> green; ls-envelope 34/34; independent Opus evaluator PASS
 - Notes for next session: reqwest `rustls-no-provider` in ls-envelope unifies workspace-wide, so any process building a reqwest client needs a rustls provider installed (control-plane telemetry init now installs ring). Per-request token HeaderValue copy is not zeroized (minor). `KeyWrapper` is not dyn-compatible; use generics. Next: 2.2 (compose transit key + policies/tokens), 2.3 live tests (needs `just up`).
+
+## 2026-11-17 worker
+- Task: 2.2 - done (`infra/compose/openbao-init.sh` run as the openbao healthcheck: transit, `gateway` key, `control-plane` encrypt-only and `gateway` decrypt-only policies, fixed dev-only tokens; idempotent, re-applies after a restart)
+- Verified: live OpenBao: gateway token decrypts, control-plane token encrypt 200 / decrypt 403; re-run idempotent; `just up` + `just harness-check` 8/8; `just ci` green; independent Opus evaluator PASS
+- Notes for next session: tokens are `OPENBAO_CONTROL_PLANE_TOKEN` / `OPENBAO_GATEWAY_TOKEN` (defaults `dev-only-control-plane` / `dev-only-gateway`). Next: 2.3 live tests (wrap/unwrap with gateway token; control-plane unwrap denied), 2.4.

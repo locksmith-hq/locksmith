@@ -8,13 +8,18 @@ name: ci
 # Tests/builds run in the agent VM (`just ci`). macOS/Windows: ci-platforms.yml (manual + tags).
 
 on:
+  # PRs run CI only once labelled ready-to-merge (label added, or a push to a labelled PR), like
+  # claude-review: agents run the same lint locally in `just ci` before every push, and
+  # merge-gate.sh only reads CI on the head SHA it merges. Main pushes still run (rust cache).
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
     paths-ignore: ['**/*.md', 'docs/**']
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # Runs for other labels get their own group, so they never cancel a real run.
+  group: ci-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'ready-to-merge' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -23,6 +28,10 @@ permissions:
 jobs:
   # Cheap checks in one job: repo layout, OpenSpec task-edit guard, secret scan.
   hygiene:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (contains(github.event.pull_request.labels.*.name, 'ready-to-merge') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'ready-to-merge'))
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     outputs:

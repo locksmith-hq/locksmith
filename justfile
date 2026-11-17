@@ -10,7 +10,8 @@ lint:
     npm run lint
 
 test-rust:
-    cargo test --workspace
+    cargo nextest run --workspace
+    cargo test --workspace --doc
 
 test-web:
     npm run build && npm test

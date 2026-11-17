@@ -21,7 +21,10 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
    - `ls-vault` (audit hash chain)
    - `smith-cli`, `locksmith-mcp`, `ls-hooks` (agent connector and hooks)
 5. **Local, then cloud.** AWS `dev` arrives only in phase 4. Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
-6. **Model tiers.** Sonnet runs by default. Tasks marked `[opus]` touch crypto, auth, the gateway or adversarial gates.
+6. **Apps are built every change.** The web console and the desktop app (Tauri) grow with each slice
+   instead of arriving at the end. Every change's Local verification runs `just apps-build`; the last
+   change of each phase also runs the manual `ci-platforms` workflow on macOS, Linux and Windows.
+7. **Model tiers.** Sonnet runs by default. Tasks marked `[opus]` touch crypto, auth, the gateway or adversarial gates.
 
 Status: ☐ not started · ◐ in progress · ☑ archived. Only the next one or two changes are written in
 full. Later rows are proposed (`/opsx:propose`) when their predecessor is about done, so each one
@@ -45,6 +48,7 @@ uses what the previous one taught us.
 | S4 | `s4-agent-connector` | Agent identity plus short-lived token. `smith` and `locksmith-mcp` list grants and route tool calls through the gateway. **First demo: Claude Code calls a real API (e.g. Langfuse) with no key on the laptop.** | Live headless `claude -p` run, `just leak-scan` on the transcript |
 | S5 | `s5-audit-ledger` | Append-only, hash-chained audit per org. `just audit-verify` checks it and an export goes to a file sink. | Tamper test |
 | S6 | `s6-adversarial-gate-1` [opus] | Scripted and live-agent extraction attempts against S1–S5 (env, reflection, header echo, encodings). | Suite green in CI and nightly |
+| X1 | `x1-apps-all-platforms` | The desktop app builds and launches on macOS, Linux and Windows (`ls-ipc` over a Windows named pipe), and the web console builds; `ci-platforms` builds the Tauri bundle on all three. From here every phase ends green on all three. | `just apps-build` locally, `ci-platforms` green on all three |
 
 ## Phase 2: Team product
 
@@ -76,7 +80,7 @@ uses what the previous one taught us.
 ## Phase 5: Parity and beyond (ordered later, by demand)
 
 Rotation and dynamic secrets (run in the gateway), syncs, the Terraform provider and k8s operator,
-SAML and SCIM, billing, SOC2 programme, desktop app, local-only mode for solo developers.
+SAML and SCIM, billing, SOC2 programme, local-only mode for solo developers.
 
 ## Phase 6: GA hardening
 

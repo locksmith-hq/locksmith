@@ -11,7 +11,8 @@ case "$cmd" in
   start)
     t="${3:?timeout seconds}"; shift 3; [ "${1:-}" = "--" ] && shift
     rm -f "$rc"
-    ( timeout -s KILL "$t" "$@" >"$log" 2>&1; echo $? >"$rc" ) &
+    # No stdin: a command that reads it (a stray `cat`) hung a worker run for 30 min.
+    ( timeout -s KILL "$t" "$@" </dev/null >"$log" 2>&1; echo $? >"$rc" ) &
     echo "bg: started $name (timeout ${t}s), log $log"
     ;;
   status)

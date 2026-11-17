@@ -10,3 +10,7 @@
 - Verified: `cargo nextest run -p ls-envelope` 20/20 pass; `cargo clippy -p ls-envelope --all-targets -- -D warnings` clean; `cargo fmt --check` clean; tree-check OK.
 - Not run: `cargo deny check` (not installed), gitleaks (not run locally; `vectors/v1.json` holds fixed hex test keys).
 - Notes for next session: `a0-spikes` still has its own copy of the header code; the payload header `key_id` is a random per-DEK id, and the `dek-wrap` key_id for task 2.1 is the transit key name plus version.
+
+## 2026-11-17 worker (tasks 1.1-1.3 ticked)
+- Verified: `just ci` green (exit 0); ls-envelope 20/20; independent Opus evaluator PASS. KAT key material for vector 4 changed to low-entropy values (avoids gitleaks generic-api-key); vectors regenerated with pyca/cryptography.
+- Next: task 2.1 (KeyWrapper + OpenBao transit; needs `just up`). Sections 2-5 untouched.

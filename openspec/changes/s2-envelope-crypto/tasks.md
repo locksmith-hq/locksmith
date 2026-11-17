@@ -1,9 +1,9 @@
 # Tasks: S2 envelope crypto
 
 ## 1. Envelope library [opus]
-- [ ] 1.1 Create `crates/ls-envelope`: promote the A0-7 header codec from `a0-spikes`, add `seal_version`/`open_version` over `ls-crypto` AEAD with AAD `org_id ‖ secret_id ‖ version ‖ purpose`. Secret types have no Debug, Display or Clone.
-- [ ] 1.2 Known-answer vectors (committed) and proptests for tamper, wrong binding and nonce uniqueness.
-- [ ] 1.3 Verify: `cargo nextest run -p ls-envelope` and `cargo clippy -p ls-envelope --all-targets -- -D warnings`.
+- [x] 1.1 Create `crates/ls-envelope`: promote the A0-7 header codec from `a0-spikes`, add `seal_version`/`open_version` over `ls-crypto` AEAD with AAD `org_id ‖ secret_id ‖ version ‖ purpose`. Secret types have no Debug, Display or Clone.
+- [x] 1.2 Known-answer vectors (committed) and proptests for tamper, wrong binding and nonce uniqueness.
+- [x] 1.3 Verify: `cargo nextest run -p ls-envelope` and `cargo clippy -p ls-envelope --all-targets -- -D warnings`.
 
 ## 2. KMS wrapping [opus]
 - [ ] 2.1 `KeyWrapper` trait and an OpenBao transit implementation (`wrap`, `unwrap`), storing the wrapped DEK in the `dek-wrap` header format.

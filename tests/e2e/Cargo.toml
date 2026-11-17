@@ -1,0 +1,16 @@
+[package]
+name = "ls-e2e"
+description = "Cross-component end-to-end tests against the local dev stack (`just up`)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.54", features = ["rt", "macros"] }
+tokio-postgres = "0.7.18"
+reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+serde_json = "1"

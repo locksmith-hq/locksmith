@@ -10,8 +10,8 @@ lint:
     npm run lint
 
 test-rust:
-    cargo nextest run --workspace
-    cargo test --workspace --doc
+    cargo nextest run --workspace --exclude ls-e2e
+    cargo test --workspace --exclude ls-e2e --doc
 
 test-web:
     npm run build && npm test
@@ -93,3 +93,7 @@ leak-scan *args:
     canaries="${LOCKSMITH_CANARIES:-$root/infra/compose/.canaries}"
     cd {{quote(invocation_directory())}}
     exec python3 -I "$root/tests/kit/oracle.py" scan --canary-file "$canaries" --stack "$@"
+
+# End-to-end tests against the local stack (needs `just up`).
+test-e2e:
+    cargo nextest run -p ls-e2e

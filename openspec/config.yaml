@@ -15,6 +15,9 @@ context: |
   Postgres as the only required datastore; React + TypeScript console; Tauri desktop; OpenTelemetry.
   npm workspaces only, never pnpm or yarn. One task runner: `just`.
 
+  Decided foundations: openspec/decisions.md (append-only, owner-approved). Read it before any proposal,
+  design or task; never contradict a line there without a new owner decision.
+
   Licence: AGPL-3.0 for server components, Apache-2.0 for SDKs, CLI, plugins and schemas. No `ee/`.
 
   Non-negotiable security rules:

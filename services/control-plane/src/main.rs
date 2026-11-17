@@ -2,8 +2,9 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use ls_control_plane::app::{self, AppState};
-use ls_control_plane::config::Config;
-use ls_control_plane::readiness::ReadyFlag;
+use ls_control_plane::config::{self, Config};
+use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
+use ls_control_plane::migrate;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -27,14 +28,35 @@ async fn main() -> ExitCode {
         );
     }
 
-    // Section 2 replaces this flag with a migration/database-backed readiness check.
-    let readiness = Arc::new(ReadyFlag::new(false));
-    let router = app::build(AppState::new(config.dev_auth, readiness));
+    let Ok(app_options) = db::connect_options(&config.database_url) else {
+        tracing::error!(
+            "environment variable {} has an invalid value",
+            config::ENV_DATABASE_URL
+        );
+        return ExitCode::FAILURE;
+    };
+    let Ok(owner_options) = db::connect_options(&config.database_owner_url) else {
+        tracing::error!(
+            "environment variable {} has an invalid value",
+            config::ENV_DATABASE_OWNER_URL
+        );
+        return ExitCode::FAILURE;
+    };
+
+    // Requests use only the app-role pool. Migrations run through a separate owner pool in the
+    // background (retrying until Postgres is up), which is closed once they are applied;
+    // /readyz stays 503 until then and whenever Postgres stops answering.
+    let database = Database::connect_lazy(app_options, PoolSettings::default());
+    let readiness = Arc::new(DbReadiness::new());
+    let probe = database.spawn_readiness_probe(readiness.clone(), PROBE_INTERVAL);
+    let migrations = tokio::spawn(migrate::run_until_done(owner_options, readiness.clone()));
+
+    let router = app::build(AppState::new(config.dev_auth, readiness, database.clone()));
 
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {
-            tracing::error!(error = %e, "failed to bind listen address ({})", ls_control_plane::config::ENV_BIND);
+            tracing::error!(error = %e, "failed to bind listen address ({})", config::ENV_BIND);
             return ExitCode::FAILURE;
         }
     };
@@ -45,6 +67,9 @@ async fn main() -> ExitCode {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await;
+    migrations.abort();
+    probe.abort();
+    database.close().await;
     match served {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

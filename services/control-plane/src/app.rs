@@ -13,6 +13,7 @@ use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetReques
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 
+use crate::db::Database;
 use crate::readiness::Readiness;
 
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -24,18 +25,25 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 pub struct AppState {
     dev_auth: bool,
     readiness: Arc<dyn Readiness>,
+    db: Database,
 }
 
 impl AppState {
-    pub fn new(dev_auth: bool, readiness: Arc<dyn Readiness>) -> Self {
+    pub fn new(dev_auth: bool, readiness: Arc<dyn Readiness>, db: Database) -> Self {
         Self {
             dev_auth,
             readiness,
+            db,
         }
     }
 
     pub fn dev_auth(&self) -> bool {
         self.dev_auth
+    }
+
+    /// The database, reachable only through tenant transactions ([`Database::with_org`]).
+    pub fn db(&self) -> &Database {
+        &self.db
     }
 }
 

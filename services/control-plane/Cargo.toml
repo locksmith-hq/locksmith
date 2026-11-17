@@ -21,12 +21,18 @@ path = "src/main.rs"
 axum = "0.8.9"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.7.1", features = ["request-id", "timeout", "limit", "trace"] }
-tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 secrecy = "0.10"
 uuid = { version = "1.29", features = ["v4", "v7"] }
 http = "1"
+# Not the sqlx facade: it pulls sqlx-sqlite into resolution, which conflicts with ls-vault's
+# rusqlite (see crates/a0-spikes/Cargo.toml). `_rt-tokio` is the facade's `runtime-tokio`.
+sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "migrate", "uuid"] }
+sqlx-postgres = { version = "0.9.0", default-features = false, features = ["migrate", "uuid"] }
 
 [dev-dependencies]
 http-body-util = "0.1"
+ls-tenant-lint = { path = "../../crates/ls-tenant-lint" }
+testcontainers = { workspace = true }

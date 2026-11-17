@@ -1,4 +1,5 @@
-//! Readiness reporting. Section 2 plugs in a database/migration-backed implementation.
+//! Readiness reporting. The service uses [`crate::db::DbReadiness`] (migrations applied and
+//! Postgres reachable); [`ReadyFlag`] is a fixed gate for tests.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

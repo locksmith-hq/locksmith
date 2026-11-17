@@ -1,4 +1,8 @@
-//! Lint for design decision 5: tenant context must be transaction-local.
+//! Lint for A0-5: tenant context must be transaction-local.
+//!
+//! Moved here from `a0-spikes` (S1 design decision 5) so every crate and service shares one
+//! copy: `a0-spikes` re-exports it, and its repository-wide test plus the control-plane's
+//! `services/` test both run it.
 //!
 //! Flags, in non-test Rust code, a session-level SQL `SET` of an `app.*` setting (plain or
 //! `SESSION`; `SET LOCAL` is allowed) and any `set_config(...)` call whose last argument is the
@@ -133,13 +137,19 @@ fn walk(dir: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Scan every non-test `.rs` file under `root`.
-pub fn scan_tree(root: &Path) -> std::io::Result<Vec<Finding>> {
+/// Every non-test `.rs` file under `root`, sorted.
+pub fn scanned_files(root: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     walk(root, &mut files)?;
     files.sort();
+    files.retain(|f| !is_test_file(f));
+    Ok(files)
+}
+
+/// Scan every non-test `.rs` file under `root`. Finding paths are relative to `root`.
+pub fn scan_tree(root: &Path) -> std::io::Result<Vec<Finding>> {
     let mut findings = Vec::new();
-    for file in files.into_iter().filter(|f| !is_test_file(f)) {
+    for file in scanned_files(root)? {
         let src = std::fs::read_to_string(&file)?;
         for (line, rule) in scan_source(&src) {
             findings.push(Finding {
@@ -185,7 +195,7 @@ mod tests {
     #[test]
     fn integration_test_dirs_are_test_code() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        assert!(is_test_file(&root.join("tests/rls.rs")));
-        assert!(!is_test_file(&root.join("src/tenant.rs")));
+        assert!(is_test_file(&root.join("tests/any.rs")));
+        assert!(!is_test_file(&root.join("src/lib.rs")));
     }
 }

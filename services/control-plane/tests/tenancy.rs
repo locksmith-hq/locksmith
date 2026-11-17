@@ -1,0 +1,572 @@
+//! Tasks 2.1-2.4: schema, roles and tenant isolation on a throwaway `postgres:18` container
+//! (testcontainers; needs a Docker daemon). Each test starts its own container.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use ls_control_plane::app::{self, AppState};
+use ls_control_plane::db::{Database, DbReadiness, PoolSettings, sql};
+use ls_control_plane::migrate;
+use ls_control_plane::readiness::Readiness;
+use sqlx_core::connection::Connection;
+use sqlx_postgres::{PgConnectOptions, PgConnection};
+use testcontainers::core::{IntoContainerPort, WaitFor};
+use testcontainers::runners::AsyncRunner;
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+use tower::ServiceExt;
+use uuid::Uuid;
+
+// Test-only values; the container is local and discarded after the test.
+const BOOTSTRAP_USER: &str = "postgres";
+const BOOTSTRAP_PASSWORD: &str = "bootstrap-test-only";
+// Dev-only role passwords from migrations/0001_roles.sql (listed in infra/compose/.env.example).
+const OWNER_PASSWORD: &str = "locksmith-owner-dev-only";
+const APP_PASSWORD: &str = "locksmith-app-dev-only";
+
+struct Pg {
+    container: ContainerAsync<GenericImage>,
+    port: u16,
+}
+
+impl Pg {
+    async fn start() -> Self {
+        let container = GenericImage::new("postgres", "18")
+            .with_exposed_port(5432.tcp())
+            .with_wait_for(WaitFor::message_on_stderr(
+                "database system is ready to accept connections",
+            ))
+            .with_env_var("POSTGRES_PASSWORD", BOOTSTRAP_PASSWORD)
+            .with_startup_timeout(Duration::from_secs(120))
+            .start()
+            .await
+            .expect("start postgres:18 (is Docker running?)");
+        let port = container.get_host_port_ipv4(5432.tcp()).await.unwrap();
+        let pg = Self { container, port };
+        // The image restarts the server once after init; wait until TCP logins work.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+        loop {
+            match PgConnection::connect_with(&pg.bootstrap()).await {
+                Ok(c) => {
+                    c.close().await.unwrap();
+                    break;
+                }
+                Err(e) if tokio::time::Instant::now() > deadline => panic!("postgres: {e}"),
+                Err(_) => tokio::time::sleep(Duration::from_millis(200)).await,
+            }
+        }
+        pg
+    }
+
+    fn options(&self, user: &str, password: &str) -> PgConnectOptions {
+        PgConnectOptions::new()
+            .host("127.0.0.1")
+            .port(self.port)
+            .database("postgres")
+            .username(user)
+            .password(password)
+    }
+
+    fn bootstrap(&self) -> PgConnectOptions {
+        self.options(BOOTSTRAP_USER, BOOTSTRAP_PASSWORD)
+    }
+
+    async fn admin(&self) -> PgConnection {
+        PgConnection::connect_with(&self.bootstrap()).await.unwrap()
+    }
+
+    /// Fresh database: migrate as the bootstrap superuser, as on a first `just up`.
+    async fn migrated() -> Self {
+        let pg = Self::start().await;
+        migrate::run(pg.bootstrap())
+            .await
+            .expect("migrations apply");
+        pg
+    }
+
+    fn app_db(&self, max_connections: u32) -> Database {
+        Database::connect_lazy(
+            self.options("locksmith_app", APP_PASSWORD),
+            PoolSettings {
+                max_connections,
+                ..PoolSettings::default()
+            },
+        )
+    }
+}
+
+/// Design decision 7: generate a v7 id, bind it as the org, and insert through RLS.
+async fn create_org(db: &Database, name: &str) -> Uuid {
+    let id = Uuid::now_v7();
+    let name = name.to_owned();
+    db.with_org(id, move |c| {
+        Box::pin(async move {
+            sql::query("INSERT INTO orgs (id, name) VALUES ($1, $2)")
+                .bind(id)
+                .bind(name)
+                .execute(c)
+                .await
+                .map(|_| ())
+        })
+    })
+    .await
+    .expect("create org");
+    id
+}
+
+async fn create_project(db: &Database, org: Uuid, name: &str) -> Uuid {
+    let name = name.to_owned();
+    db.with_org(org, move |c| {
+        Box::pin(async move {
+            sql::query_scalar::<_, Uuid>(
+                "INSERT INTO projects (org_id, name) VALUES ($1, $2) RETURNING id",
+            )
+            .bind(org)
+            .bind(name)
+            .fetch_one(c)
+            .await
+        })
+    })
+    .await
+    .expect("create project")
+}
+
+async fn create_env(db: &Database, org: Uuid, project: Uuid, name: &str) -> sql::Result<Uuid> {
+    let name = name.to_owned();
+    db.with_org(org, move |c| {
+        Box::pin(async move {
+            sql::query_scalar::<_, Uuid>(
+                "INSERT INTO environments (org_id, project_id, name) VALUES ($1, $2, $3) RETURNING id",
+            )
+            .bind(org)
+            .bind(project)
+            .bind(name)
+            .fetch_one(c)
+            .await
+        })
+    })
+    .await
+}
+
+fn sqlstate(e: &sql::Error) -> Option<String> {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .map(|c| c.into_owned())
+}
+
+/// Scenario: fresh database, then restart (applies nothing). Tables are owned by
+/// locksmith_owner with FORCE RLS, and there is no value column anywhere.
+#[tokio::test]
+async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
+    let pg = Pg::migrated().await;
+    let mut admin = pg.admin().await;
+    let applied: Vec<i64> =
+        sql::query_scalar("SELECT version FROM _sqlx_migrations WHERE success ORDER BY version")
+            .fetch_all(&mut admin)
+            .await
+            .unwrap();
+    assert_eq!(applied, [1, 2]);
+
+    // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
+    migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
+        .await
+        .expect("restart applies nothing");
+    let count: i64 = sql::query_scalar("SELECT count(*) FROM _sqlx_migrations")
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+    assert_eq!(count, 2);
+
+    let tables: Vec<(String, String, bool, bool)> = sql::query_as(
+        "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname <> '_sqlx_migrations'
+         ORDER BY 1",
+    )
+    .fetch_all(&mut admin)
+    .await
+    .unwrap();
+    let names: Vec<&str> = tables.iter().map(|t| t.0.as_str()).collect();
+    assert_eq!(names, ["environments", "orgs", "projects", "secrets"]);
+    for (name, owner, rls, force) in tables.iter().cloned() {
+        assert_eq!(owner, "locksmith_owner", "{name}");
+        assert!(rls && force, "{name} must FORCE ROW LEVEL SECURITY");
+    }
+    let policies: i64 = sql::query_scalar(
+        "SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND policyname = 'tenant_isolation'",
+    )
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    assert_eq!(policies, 4);
+
+    let value_like: Vec<String> = sql::query_scalar(
+        "SELECT table_name || '.' || column_name FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND (column_name ILIKE '%value%' OR column_name ILIKE '%cipher%' OR column_name ILIKE '%plain%')",
+    )
+    .fetch_all(&mut admin)
+    .await
+    .unwrap();
+    assert!(value_like.is_empty(), "value-like columns: {value_like:?}");
+
+    let server: String = sql::query_scalar("SHOW server_version")
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+    assert!(
+        server.starts_with("18."),
+        "expected Postgres 18, got {server}"
+    );
+    admin.close().await.unwrap();
+}
+
+/// Scenario: the app role cannot bypass isolation.
+#[tokio::test]
+async fn app_role_is_not_superuser_not_bypassrls_and_owns_nothing() {
+    let pg = Pg::migrated().await;
+    let mut admin = pg.admin().await;
+    let (sup, bypass, createrole, createdb): (bool, bool, bool, bool) = sql::query_as(
+        "SELECT rolsuper, rolbypassrls, rolcreaterole, rolcreatedb FROM pg_roles WHERE rolname = 'locksmith_app'",
+    )
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    assert!(!sup, "locksmith_app must not be superuser");
+    assert!(!bypass, "locksmith_app must not have BYPASSRLS");
+    assert!(!createrole && !createdb);
+
+    let owned: Vec<String> = sql::query_scalar(
+        "SELECT relname::text FROM pg_class WHERE relowner = 'locksmith_app'::regrole
+         UNION ALL SELECT nspname::text FROM pg_namespace WHERE nspowner = 'locksmith_app'::regrole
+         UNION ALL SELECT proname::text FROM pg_proc WHERE proowner = 'locksmith_app'::regrole",
+    )
+    .fetch_all(&mut admin)
+    .await
+    .unwrap();
+    assert!(owned.is_empty(), "locksmith_app owns {owned:?}");
+
+    // Not a member of any role that could lend it ownership or bypass.
+    let member_of: i64 = sql::query_scalar(
+        "SELECT count(*) FROM pg_auth_members WHERE member = 'locksmith_app'::regrole",
+    )
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    assert_eq!(member_of, 0);
+    admin.close().await.unwrap();
+
+    // The request pool really logs in as locksmith_app.
+    let db = pg.app_db(1);
+    let who: String = db
+        .without_org(|c| {
+            Box::pin(async move {
+                sql::query_scalar("SELECT current_user::text")
+                    .fetch_one(c)
+                    .await
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(who, "locksmith_app");
+    db.close().await;
+}
+
+/// Scenarios: cross-org read and cross-org list return nothing; cross-org writes touch nothing.
+#[tokio::test]
+async fn cross_org_read_and_list_return_nothing() {
+    let pg = Pg::migrated().await;
+    let db = pg.app_db(4);
+    let a = create_org(&db, "org-a").await;
+    let b = create_org(&db, "org-b").await;
+    let pa = create_project(&db, a, "shared-name").await;
+    let pb = create_project(&db, b, "shared-name").await;
+    create_env(&db, b, pb, "dev").await.unwrap();
+
+    let (by_id, listed, orgs, envs, updated, deleted) = db
+        .with_org(a, move |c| {
+            Box::pin(async move {
+                let by_id: Option<Uuid> =
+                    sql::query_scalar("SELECT id FROM projects WHERE id = $1")
+                        .bind(pb)
+                        .fetch_optional(&mut *c)
+                        .await?;
+                let listed: Vec<Uuid> = sql::query_scalar("SELECT id FROM projects ORDER BY id")
+                    .fetch_all(&mut *c)
+                    .await?;
+                let orgs: Vec<Uuid> = sql::query_scalar("SELECT id FROM orgs")
+                    .fetch_all(&mut *c)
+                    .await?;
+                let envs: i64 = sql::query_scalar("SELECT count(*) FROM environments")
+                    .fetch_one(&mut *c)
+                    .await?;
+                let updated = sql::query("UPDATE projects SET name = 'stolen' WHERE id = $1")
+                    .bind(pb)
+                    .execute(&mut *c)
+                    .await?
+                    .rows_affected();
+                let deleted = sql::query("DELETE FROM projects WHERE id = $1")
+                    .bind(pb)
+                    .execute(&mut *c)
+                    .await?
+                    .rows_affected();
+                Ok::<_, sql::Error>((by_id, listed, orgs, envs, updated, deleted))
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(by_id, None, "org A read org B's project");
+    assert_eq!(listed, [pa], "org A's list must hold only its own project");
+    assert_eq!(orgs, [a]);
+    assert_eq!(envs, 0);
+    assert_eq!((updated, deleted), (0, 0));
+
+    // Org B's data is intact.
+    let b_name: String = db
+        .with_org(b, move |c| {
+            Box::pin(async move {
+                sql::query_scalar("SELECT name FROM projects WHERE id = $1")
+                    .bind(pb)
+                    .fetch_one(c)
+                    .await
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(b_name, "shared-name");
+
+    // A child under another org's parent fails the composite FK; a row carrying another org's
+    // id fails RLS.
+    let err = create_env(&db, a, pb, "planted")
+        .await
+        .expect_err("org A attached a row to org B's project");
+    assert_eq!(sqlstate(&err).as_deref(), Some("23503"), "{err}");
+    let err = db
+        .with_org(a, move |c| {
+            Box::pin(async move {
+                sql::query("INSERT INTO projects (org_id, name) VALUES ($1, 'planted')")
+                    .bind(b)
+                    .execute(c)
+                    .await
+            })
+        })
+        .await
+        .expect_err("insert with another org's org_id");
+    assert_eq!(sqlstate(&err).as_deref(), Some("42501"));
+    db.close().await;
+}
+
+/// Scenario: a child cannot point at another org's parent (composite FK on org_id), even
+/// though foreign-key checks ignore RLS.
+#[tokio::test]
+async fn cross_org_parent_fk_fails() {
+    let pg = Pg::migrated().await;
+    let db = pg.app_db(2);
+    let a = create_org(&db, "org-a").await;
+    let b = create_org(&db, "org-b").await;
+    let pa = create_project(&db, a, "a-proj").await;
+    let pb = create_project(&db, b, "b-proj").await;
+    let ea = create_env(&db, a, pa, "dev").await.unwrap();
+    let eb = create_env(&db, b, pb, "dev").await.unwrap();
+
+    // Environment in org A under org B's project, reusing a name B already has there: the FK
+    // fails (not a duplicate key, which would reveal that B has that name).
+    let err = create_env(&db, a, pb, "dev")
+        .await
+        .expect_err("env under another org's project");
+    assert_eq!(sqlstate(&err).as_deref(), Some("23503"), "{err}");
+
+    // Secret in org A pointing at org B's environment, or at an environment of another project.
+    let pa2 = create_project(&db, a, "a-proj-2").await;
+    for (project, env) in [(pa, eb), (pb, eb), (pa2, ea)] {
+        let err = db
+            .with_org(a, move |c| {
+                Box::pin(async move {
+                    sql::query(
+                        "INSERT INTO secrets (org_id, project_id, environment_id, name)
+                         VALUES ($1, $2, $3, 'STRIPE_KEY')",
+                    )
+                    .bind(a)
+                    .bind(project)
+                    .bind(env)
+                    .execute(c)
+                    .await
+                })
+            })
+            .await
+            .expect_err("secret under a foreign parent");
+        assert_eq!(sqlstate(&err).as_deref(), Some("23503"), "{err}");
+    }
+
+    // The valid tree works, and names are unique per parent.
+    let ok = db
+        .with_org(a, move |c| {
+            Box::pin(async move {
+                sql::query(
+                    "INSERT INTO secrets (org_id, project_id, environment_id, name)
+                     VALUES ($1, $2, $3, 'STRIPE_KEY')",
+                )
+                .bind(a)
+                .bind(pa)
+                .bind(ea)
+                .execute(c)
+                .await
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(ok.rows_affected(), 1);
+    let dup = create_env(&db, a, pa, "dev")
+        .await
+        .expect_err("duplicate env name");
+    assert_eq!(sqlstate(&dup).as_deref(), Some("23505"));
+    db.close().await;
+}
+
+/// Scenario: pooled-connection reuse (pool size 1) sees no org.
+#[tokio::test]
+async fn pooled_connection_reuse_with_pool_size_1_sees_no_org() {
+    let pg = Pg::migrated().await;
+    let db = pg.app_db(1);
+    let a = create_org(&db, "org-a").await;
+    let pid_1: i32 = db
+        .with_org(a, move |c| {
+            Box::pin(async move {
+                sql::query("INSERT INTO projects (org_id, name) VALUES ($1, 'p')")
+                    .bind(a)
+                    .execute(&mut *c)
+                    .await?;
+                let seen: i64 = sql::query_scalar("SELECT count(*) FROM projects")
+                    .fetch_one(&mut *c)
+                    .await?;
+                assert_eq!(seen, 1);
+                sql::query_scalar("SELECT pg_backend_pid()")
+                    .fetch_one(&mut *c)
+                    .await
+            })
+        })
+        .await
+        .unwrap();
+
+    let (pid_2, setting, visible, insert_err) = db
+        .without_org(move |c| {
+            Box::pin(async move {
+                let pid: i32 = sql::query_scalar("SELECT pg_backend_pid()")
+                    .fetch_one(&mut *c)
+                    .await?;
+                let setting: Option<String> =
+                    sql::query_scalar("SELECT current_setting('app.org_id', true)")
+                        .fetch_one(&mut *c)
+                        .await?;
+                let visible: i64 = sql::query_scalar(
+                    "SELECT (SELECT count(*) FROM orgs) + (SELECT count(*) FROM projects)
+                          + (SELECT count(*) FROM environments) + (SELECT count(*) FROM secrets)",
+                )
+                .fetch_one(&mut *c)
+                .await?;
+                // Savepoint so the failed insert does not abort the transaction.
+                sql::query("SAVEPOINT s").execute(&mut *c).await?;
+                let insert_err = sql::query("INSERT INTO projects (org_id, name) VALUES ($1, 'x')")
+                    .bind(a)
+                    .execute(&mut *c)
+                    .await
+                    .err()
+                    .and_then(|e| sqlstate(&e));
+                sql::query("ROLLBACK TO SAVEPOINT s")
+                    .execute(&mut *c)
+                    .await?;
+                Ok::<_, sql::Error>((pid, setting, visible, insert_err))
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(pid_1, pid_2, "a pool of one must reuse the connection");
+    assert_eq!(setting.as_deref().unwrap_or(""), "", "org context leaked");
+    assert_eq!(visible, 0, "tenant rows visible without an org");
+    assert_eq!(insert_err.as_deref(), Some("42501"));
+    db.close().await;
+}
+
+/// A closure error rolls the whole transaction back.
+#[tokio::test]
+async fn closure_error_rolls_back() {
+    let pg = Pg::migrated().await;
+    let db = pg.app_db(1);
+    let a = create_org(&db, "org-a").await;
+    let err = db
+        .with_org(a, move |c| {
+            Box::pin(async move {
+                sql::query("INSERT INTO projects (org_id, name) VALUES ($1, 'rolled-back')")
+                    .bind(a)
+                    .execute(&mut *c)
+                    .await?;
+                Err::<(), _>(sql::Error::RowNotFound)
+            })
+        })
+        .await;
+    assert!(matches!(err, Err(sql::Error::RowNotFound)));
+    let n: i64 = db
+        .with_org(a, |c| {
+            Box::pin(async move {
+                sql::query_scalar("SELECT count(*) FROM projects")
+                    .fetch_one(c)
+                    .await
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
+    db.close().await;
+}
+
+async fn readyz(state: &AppState) -> StatusCode {
+    app::build(state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/readyz")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+        .status()
+}
+
+async fn wait_for(cond: impl Fn() -> bool, within: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + within;
+    while tokio::time::Instant::now() < deadline {
+        if cond() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    cond()
+}
+
+/// `/readyz` is 503 until migrated, 200 after, and 503 within 5 s of Postgres stopping.
+#[tokio::test]
+async fn readyz_follows_migrations_and_database() {
+    let pg = Pg::start().await;
+    let readiness = Arc::new(DbReadiness::new());
+    let db = pg.app_db(2);
+    let probe = db.spawn_readiness_probe(readiness.clone(), Duration::from_millis(200));
+    let state = AppState::new(false, readiness.clone(), db.clone());
+
+    // Not migrated: the app role does not even exist yet.
+    assert_eq!(readyz(&state).await, StatusCode::SERVICE_UNAVAILABLE);
+
+    migrate::run_until_done(pg.bootstrap(), readiness.clone()).await;
+    let r = readiness.clone();
+    assert!(wait_for(move || r.is_ready(), Duration::from_secs(10)).await);
+    assert_eq!(readyz(&state).await, StatusCode::OK);
+
+    pg.container.stop().await.unwrap();
+    let r = readiness.clone();
+    assert!(
+        wait_for(move || !r.is_ready(), Duration::from_secs(5)).await,
+        "readiness must drop within 5 s of Postgres stopping"
+    );
+    assert_eq!(readyz(&state).await, StatusCode::SERVICE_UNAVAILABLE);
+    probe.abort();
+}

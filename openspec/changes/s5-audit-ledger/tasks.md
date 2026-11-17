@@ -23,7 +23,7 @@
 ## 5. Verify and export CLI [opus]
 - [ ] 5.1 `locksmith-audit verify --db` (verifier role) and `--dir` (offline, public key only), with `--json` output; results are recorded in `audit_verify_runs`; it exits non-zero with the org and first broken seq.
 - [ ] 5.2 `locksmith-audit export` to the file sink (JSON Lines per org, checkpoints, cursor, temp file plus rename plus fsync) behind an `AuditSink` trait; incremental, never writes an event twice.
-- [ ] 5.3 `just audit-verify`, `just audit-export`, and `just audit-tamper-test` (as the owner role: edit a field, delete a row, swap two seqs, truncate past a checkpoint, edit an exported line; each must fail verify at the expected seq, and the untouched ledger must pass).
+- [ ] 5.3 `just audit-verify` (runs `verify --db --checkpoints-from` the export directory), `just audit-export`, and `just audit-tamper-test`; the tamper test also deletes checkpoint rows as the owner and must fail with the export present (as the owner role: edit a field, delete a row, swap two seqs, truncate past a checkpoint, edit an exported line; each must fail verify at the expected seq, and the untouched ledger must pass).
 - [ ] 5.4 Verify: `cargo nextest run -p ls-audit` and `just up && just audit-tamper-test`.
 
 ## 6. API, console and desktop [sonnet]

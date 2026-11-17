@@ -31,7 +31,7 @@ Create these at claude.ai/code → environment selector → New environment.
   - github.com, including release assets, and Ubuntu apt
 - **Extra allowed domains:** none for now.
 - **Environment variables:** `BASH_MAX_TIMEOUT_MS=600000`, `CARGO_TERM_COLOR=never`. **No secrets here.** Environment variables are readable by the model and by any command it runs.
-- **Setup script:** a short bootstrap (pasted 2026-11-16) that finds the cloned repo and runs [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh), falling back to a built-in copy if the repo isn't present yet. Changes merged to that file apply without re-pasting. It installs build dependencies, `just`, the pinned toolchain, a prebuilt `cargo-nextest` and `openspec`. It no longer pre-pulls compose images (that blew the 5-minute cache budget and hung the lead run on 2026-11-17); `just up` pulls them on demand.
+- **Setup script:** a short bootstrap (pasted 2026-11-16) that finds the cloned repo and runs [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh), falling back to a built-in copy if the repo isn't present yet. Changes merged to that file apply without re-pasting. It installs build dependencies, `just`, the pinned toolchain, a prebuilt `cargo-nextest`, `gitleaks` and `cargo-deny` (`scripts/ci-tools.sh`) and `openspec`. It no longer pre-pulls compose images (that blew the 5-minute cache budget and hung the lead run on 2026-11-17); `just up` pulls them on demand.
 - **Starting the stack:** each session starts it with `just up`, which the F0 docs tell the agent to run. A SessionStart hook can automate this once F0 lands. **[test]** Whether Docker in the VM runs the full stack (lgtm needs about 1 to 2 GB RAM).
 
 ### 2. `locksmith-research`: used by the weekly review and planning runs

@@ -132,10 +132,10 @@ class Matcher:
         return str(text)
 
 
-def iter_files(paths):
+def iter_files(paths, onerror=None):
     for p in paths:
         if os.path.isdir(p):
-            for dirpath, _dirnames, filenames in os.walk(p):
+            for dirpath, _dirnames, filenames in os.walk(p, onerror=onerror):
                 for f in filenames:
                     yield os.path.join(dirpath, f)
         elif os.path.isfile(p):
@@ -262,7 +262,10 @@ def scan_dir(rep, path):
         rep.unreach("dir", "no such file or directory: %s" % path)
         return
     files = total = 0
-    for fp in iter_files([path]):
+    def walk_error(e):
+        rep.error("cannot read %s: %s" % (e.filename, e.strerror))
+
+    for fp in iter_files([path], onerror=walk_error):
         data = read_capped(rep, fp)
         if data is None:
             continue

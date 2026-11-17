@@ -5,7 +5,7 @@
 
 #### Scenario: Planted leak in the database is found
 - **WHEN** a test inserts a canary's base64 form into a table and runs `just leak-scan`
-- **THEN** it exits non-zero and prints `LEAK base64 postgres:<table>.<column>`
+- **THEN** it exits non-zero and prints `LEAK <encoding> postgres:<table>.<column>`, where `<encoding>` is the oracle label of the matched encoding (for example `b64-offset0`)
 - **AND** the output does not contain the canary in any encoding
 
 #### Scenario: Planted leak in logs is found

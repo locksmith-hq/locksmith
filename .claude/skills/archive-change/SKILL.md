@@ -5,6 +5,8 @@ description: Archive a merged OpenSpec change so its delta specs fold into opens
 
 # Archive a change
 
+Normally the PR that ticks the change's last task archives it (merge-queue, "Mark a PR ready" step 0): skip step 1 and run steps 2–4 on that PR's branch. Use a separate PR only for a finished change that was merged without its archive.
+
 1. Run `git checkout -b claude/archive-<id> origin/main`.
 2. Run `openspec archive <id> --yes`. If the CLI is missing, install it first with `npm i -g @fission-ai/openspec`.
 3. In `docs/roadmap.md`, set the change's status to ☑.

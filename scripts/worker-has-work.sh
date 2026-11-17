@@ -31,7 +31,8 @@ for d in openspec/changes/*/; do
   f="$d/tasks.md"; [ -f "$f" ] || continue
   t=$(git show "origin/claude/change-$id:$f" 2>/dev/null || cat "$f")
   next=$(grep -m1 -E '^\s*- \[ \]' <<<"$t" || true)
-  [ -z "$next" ] && continue
+  # Finished on main but never archived (its PR skipped the archive step).
+  if [ -z "$next" ]; then grep -qE '^\s*- \[ \]' "$f" || work+=("$id is finished but not archived"); continue; fi
   if grep -qiE 'owner (reviews|gate|decision)' <<<"$next"; then continue; fi
   work+=("$id has open tasks")
 done

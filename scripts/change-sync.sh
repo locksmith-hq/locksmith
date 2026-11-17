@@ -83,11 +83,11 @@ bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   body=$(render "$id" "$state" "$detail")
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '===== %s\n%s\n' "$id" "$body"; continue; fi
   n=$(bash "$here/change-issue.sh" "$id") || continue
-  # Label and board Status name why a change is parked: parked-owner (Waiting on owner) or parked-stuck (Stuck).
+  # Label plus the board's Parked reason / Parked issue fields say why a change is parked (owner or stuck).
   lstate=$state; [ "$state" = parked ] && { [ "${detail%% *}" = owner ] && lstate=parked-owner || lstate=parked-stuck; }
   # The title follows the proposal, so an issue opened by a planner's lock gets its real name.
   title=$(sed -nE '1s/^# *(Proposal: *)?//p' "openspec/changes/$id/proposal.md" 2>/dev/null)
-  gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$lstate" && board "$n" "$lstate"
+  gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$lstate" && board "$n" "$lstate" "${detail##*#}"
   link_pr "$id" "$n"
 done
 

@@ -50,4 +50,4 @@ Evidence was gathered on 2026-11-16. Items marked **[verify]** were not confirme
 1. First region: us-east-1 (largest quotas) or eu-west-1?
 2. Is EU data residency needed at launch?
 
-Owner answers recorded 2026-11-17: user management on AWS (Cognito), not Supabase. Everything in AWS must be testable locally (row 14). The `dev` budget is $5/month (rows 16–17). Claude may create resources through the AWS MCP, but only with the owner's approval of each change after a change brief (row 18).
+Owner answers recorded 2026-11-17: user management on AWS (Cognito), not Supabase. Everything in AWS must be testable locally (row 14). The `dev` budget is $5/month (rows 16–17). Claude may create resources through the AWS MCP, but only with the owner's approval of each change after a change brief (row 18). **First region: us-east-1** (owner, 2026-11-17), so the dev region-lock SCP allows only us-east-1. **EU data residency is not needed at launch** (assumed from the owner's answer; correct this line if wrong). Per row 9, an EU cell is added when a customer needs it. GDPR still applies to EU users' personal data, such as Cognito emails, wherever it is stored.

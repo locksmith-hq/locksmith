@@ -19,3 +19,8 @@ Format:
 - Task: design revision - done
 - Verified: scripts/check-agent-docs.sh, scripts/tree-check.sh -> OK
 - Notes for next session: owner revised decision 18. Claude may create AWS resources through the MCP, but each mutating call needs owner approval after a change brief (what, cost, blast radius, security, rollback), enforced by a PreToolUse hook. Guardrail services (IAM, Organizations, SCPs, Budgets, Identity Center) stay OpenTofu-only. MCP-created resources are tagged and imported or destroyed. P1 must build the hook. `.claude/settings.json` is owner-only, so the owner wires it.
+
+## 2026-11-17 human (planning session)
+- Task: 1.1 open questions - answered (task not ticked: the owner has not yet signed off decisions 1–18)
+- Verified: scripts/check-agent-docs.sh -> OK
+- Notes for next session: first region us-east-1. EU residency not at launch (assumed); an EU cell is added on demand.

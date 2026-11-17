@@ -59,7 +59,7 @@ logs svc:
     {{compose}} logs --tail=200 {{svc}}
 
 psql *args:
-    {{compose}} exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' -- {{args}}
+    {{compose}} exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' -- "$@"
 
 ps:
     {{compose}} ps

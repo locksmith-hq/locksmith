@@ -24,3 +24,8 @@ Format:
 - Task: 1.1 open questions - answered (task not ticked: the owner has not yet signed off decisions 1–18)
 - Verified: scripts/check-agent-docs.sh -> OK
 - Notes for next session: first region us-east-1. EU residency not at launch (assumed); an EU cell is added on demand.
+
+## 2026-11-17 human (planning session)
+- Task: 1.1 - done (owner replied "approved" on #37)
+- Verified: scripts/check-agent-docs.sh, scripts/check-task-edits.sh -> OK
+- Notes for next session: A0 decisions 1–18 approved, and EU residency is confirmed not needed at launch. Folded in the PR #35 review fixes: a separate Object Lock checkpoint bucket in dev, and `iam:PassRole` allowed through MCP for the session-stack roles only. Next: task group 2 (spikes).

@@ -1,7 +1,7 @@
 # Tasks: A0 data and cloud foundations
 
 ## 1. Owner decisions
-- [ ] 1.1 Owner reviews design.md decisions 1–18 and answers the open questions (first region, EU at launch). Record the answers in design.md. The worker must stop here with "Needs owner" until this is ticked by the owner.
+- [x] 1.1 Owner reviews design.md decisions 1–18 and answers the open questions (first region, EU at launch). Record the answers in design.md. The worker must stop here with "Needs owner" until this is ticked by the owner.
 
 ## 2. Spikes on the F0 stack [opus]
 - [ ] 2.1 Pin compose to `postgres:18` (exact minor). Verify: `just reset && just up && just psql -c 'select uuidv7()'`.

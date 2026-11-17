@@ -1,2 +1,3 @@
 schema: spec-driven
 created: 2026-11-17
+x-depends_on: [a0-data-and-cloud-foundations]

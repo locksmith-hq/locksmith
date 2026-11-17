@@ -33,6 +33,7 @@ tree-check:
 # Agents on change branches may only tick OpenSpec tasks, not rewrite them.
 task-guard:
     scripts/check-task-edits.test.sh
+    scripts/change-status.test.sh
     scripts/check-task-edits.sh
     scripts/check-agent-docs.sh
 

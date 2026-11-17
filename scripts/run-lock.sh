@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
-# Single active writer for scheduled agents (worker, rescue, review): "one active worker per inbox".
-# The lock lives as comments on the open issue labelled run-lock; it expires after TTL seconds so a
-# crashed run never blocks the next one.
-#   scripts/run-lock.sh acquire <holder>   exit 0 = you hold it; exit 1 = busy (prints holder, age)
-#   scripts/run-lock.sh release <holder>
+# Locks for scheduled agents. With a change id, the lock is per change and lives on that change's
+# tracking issue (scripts/change-issue.sh), so several workers run at once on different changes.
+# Without one, it is the global lock on the issue labelled run-lock (rescue and review use it).
+# Locks are comments; they expire after TTL seconds so a crashed run never blocks the next one.
+#   scripts/run-lock.sh acquire <holder> [change-id]   exit 0 = you hold it; exit 1 = busy
+#   scripts/run-lock.sh release <holder> [change-id]
+#   scripts/run-lock.sh holder  <any> [change-id]       prints the current holder, if any
 set -uo pipefail
 repo=locksmith-hq/locksmith
 ttl="${RUN_LOCK_TTL:-3000}"
-cmd="${1:-}"; me="${2:-}"
-[ -n "$cmd" ] && [ -n "$me" ] || { echo "usage: run-lock.sh acquire|release <holder>" >&2; exit 2; }
+cmd="${1:-}"; me="${2:-}"; change="${3:-}"
+[ -n "$cmd" ] && [ -n "$me" ] || { echo "usage: run-lock.sh acquire|release|holder <holder> [change-id]" >&2; exit 2; }
 
-issue=$(gh api "repos/$repo/issues?labels=run-lock&state=open" -q '.[0].number // empty')
+if [ -n "$change" ]; then
+  if [ "$cmd" = acquire ]; then issue=$(bash "$(dirname "$0")/change-issue.sh" "$change") || exit 1
+  else issue=$(bash "$(dirname "$0")/change-issue.sh" "$change" --find) || exit 0; fi
+else
+  issue=$(gh api "repos/$repo/issues?labels=run-lock&state=open" -q '.[0].number // empty')
+fi
 if [ -z "$issue" ]; then
   issue=$(gh api "repos/$repo/issues" -f title="Agent run lock" -f 'labels[]=run-lock' \
     -f body="Single-writer lock for scheduled agents (scripts/run-lock.sh). Do not close." -q .number)
@@ -42,5 +49,6 @@ case "$cmd" in
     read -r cur _ < <(holder)
     if [ "${cur:-}" = "$me" ]; then gh api "repos/$repo/issues/$issue/comments" -f body="UNLOCK $me" -q .id >/dev/null; echo "run-lock: released"; fi
     ;;
-  *) echo "usage: run-lock.sh acquire|release <holder>" >&2; exit 2 ;;
+  holder) read -r cur _ < <(holder); [ -n "${cur:-}" ] && echo "$cur" ;;
+  *) echo "usage: run-lock.sh acquire|release|holder <holder> [change-id]" >&2; exit 2 ;;
 esac

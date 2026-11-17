@@ -23,20 +23,21 @@ Every routine reads this file and its role file from origin/main.
 - **Tokens.** Read only what the current step needs. Use the `long-commands` skill for anything slow or flaky.
 
 ## Owner decisions (human only)
-Raise one only for:
-- an owner-gate task
-- conflicting design options
-- a security problem
-- an issue that Opus rescue failed twice
-- task text that is wrong
+Keep workers moving: the owner is needed only for
+- admin setup only the owner can do: secrets and tokens, GitHub settings, AWS accounts and guardrails, billing, routines;
+- a big, hard-to-reverse decision: a paid service, licence, security model, data format, or contradicting `openspec/decisions.md`;
+- a security problem with real exposure;
+- an issue Opus rescue failed twice, or an owner-gate task.
+
+Decide the rest yourself, with evidence in design.md (design options; wrong task text via a `claude/planning-*` PR). Only the affected change waits: park it and take another.
 
 To raise one:
-1. Open a `needs-owner` issue, unless an open issue with the same title exists. Its first line is a one-sentence summary; then name the change id, link any Artifact brief, and give the options and your recommendation. The `owner-alert` workflow @mentions the owner with these, which reaches email and the GitHub mobile app.
+1. Open a `needs-owner` issue, unless an open issue with the same title exists. Its first line is a one-sentence summary; then write `Change: <id>` (the board shows it on that change), link any Artifact brief, and give the options and your recommendation. `owner-alert` @mentions the owner with these (email and GitHub mobile).
 2. Load `PushNotification` via ToolSearch and send one line of 200 characters or less. If it's unavailable, write "push: unavailable".
 
 When the owner approves a project decision, append one line to `openspec/decisions.md` linking the issue.
 
-Never raise one for routine progress or for failures you can retry.
+Never raise one for progress or retryable failures.
 
 ## Hard rules
 - **Branches.** Push only to `claude/*` branches. Never push to main, force-push, or delete branches or tags.
@@ -46,12 +47,11 @@ Never raise one for routine progress or for failures you can retry.
   - Never approve PRs.
 - **Before pushing,** confirm the branch's PR isn't merged or closed. If it is, start a new branch from origin/main.
 - **tasks.md.** Only flip checkboxes, and only after the task is verified. Never edit task text; `scripts/check-task-edits.sh` enforces this.
-- **Protected files.** Agent branches never change any of these:
+- **Protected files** (guard-enforced). Agent branches never change:
   - `common.md`, `merge.md`, `AGENTS.md`, `CLAUDE.md`, `openspec/config.yaml`
   - workflows, `.claude/settings*`, `.claude/skills/merge-queue`
   - the guard and gate scripts
 
-  The guard enforces this.
 - **Schedules.** Never create, change or delete routines or schedules. Propose schedule changes to the owner instead.
 - **Secrets and settings.** Never write secret values anywhere. Never change repository, Actions or account settings.
 - **Attribution.** Commits end with `Co-Authored-By: Claude <noreply@anthropic.com>`. PR bodies end with `Generated with Claude Code`.

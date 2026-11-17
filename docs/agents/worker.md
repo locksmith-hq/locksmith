@@ -1,27 +1,23 @@
-# Worker (Sonnet, every 2h off-peak)
+# Worker (Sonnet; several run at once, each on its own change)
 
-Each run merges finished work, then does tasks until the first failure or about 40 minutes, then pushes once and logs.
+Each run merges finished work, then works on changes until about 40 minutes have passed. A blocked change is parked, not a reason to stop.
 
 0. **Start.**
    - Run `bash scripts/worker-has-work.sh`. If it prints `idle`, stop and post nothing.
-   - Run `bash scripts/run-lock.sh acquire worker-<session>`. If it reports busy, stop. Release the lock at the end of the run, even if the run failed.
    - Use the `run-start` skill with `worker`.
-   - **Owner replies.** For each `needs-owner` issue the owner answered, apply the decision. Add the standing ones to `docs/agents/owner.md` in a small PR marked ready. Then close the issue with a comment.
-   - Use the `merge-queue` skill: fix main CI first, work the merge queue, then archive merged changes.
-1. **Pick the change.** Read `docs/roadmap.md` and run `openspec list`. The active change is the first one in roadmap order with unchecked tasks.
+   - **Owner replies.** Apply each answered `needs-owner` decision. Add the standing ones to `docs/agents/owner.md` (or `openspec/decisions.md`) in a small PR marked ready. Then close the issue.
+   - Use the `merge-queue` skill: main CI first, then the merge queue.
+1. **Claim a change.** For each id from `bash scripts/change-status.sh --ready`, in order, run `bash scripts/run-lock.sh acquire worker-<session> <id>`. Take the first one you get. If none, go to step 6.
    - Read its `progress.md` (last 3 entries) and `git log --oneline -10` on `origin/claude/change-<id>`.
-   - Skip any task that has an open `needs-rescue` issue.
-   - If the next task is an owner gate, raise an owner decision.
-2. **CI first.** If the change's PR has failing checks, fixing them is the first task. Get the logs with `gh api .../actions/jobs/<id>/logs | tail -200`.
-3. **Branch.**
-   - If `origin/claude/change-<id>` exists, use it. `run-start` brings it up to date.
-   - Otherwise, check the proposal's "Depends on":
-     - Dependency merged: branch from `origin/main`.
-     - Dependency's PR fully ticked and green: branch from that PR's branch, and use it as the PR base.
-     - Anything else: raise an owner decision.
-4. **Baseline.** Run `just ci`. Once the stack exists, also run `just up && just harness-check`. If either is red, fixing it is the task.
-5. **Tasks.** Work through them in order with the `evaluate-escalate` skill, committing locally after each one. Stop at the first rescue, at an owner gate, or after about 40 minutes. A finished task group is not a reason to stop.
-6. **Finish.**
+2. **CI first.** If the change's PR has failing checks or conflicts, fixing them is the first task. Logs: `gh api .../actions/jobs/<id>/logs | tail -200`.
+3. **Branch.** If `origin/claude/change-<id>` exists, use it and merge main in (`run-start` step 3). Otherwise branch from `origin/main`. If the status was `stackable on <dep>`, branch from `origin/claude/change-<dep>` and use that as the PR base.
+4. **Baseline.** Run `just ci`, plus `just up && just harness-check` when the stack is needed. If either is red, fixing it is the task.
+5. **Tasks.** Work in order with the `evaluate-escalate` skill, committing after each. **Park** the change when a task needs a rescue, needs the owner (see `common.md`), or fails twice: finish it (step 7), then go back to step 1 for the next change.
+6. **Plan ahead.** If `worker-has-work.sh` asked for planning and no `claude/planning-*` PR is open, write the next roadmap change whose prerequisites are archived or in review. Use the `openspec-propose` skill on `claude/planning-<id>`, set `x-depends_on: [..]` in its `.openspec.yaml`, then open a PR and mark it ready.
+7. **Finish each change** before leaving it:
    - Use the `run-log` skill.
-   - Push only now, once, after you've stopped taking tasks. Never push earlier, not even to open the PR. Then open a non-draft PR if none exists.
-   - If every task is ticked, mark the PR ready with the `merge-queue` skill.
+   - Push the branch once and open a non-draft PR if none exists.
+   - If every task is ticked, archive the change and mark the PR ready (the `merge-queue` skill).
+   - Release the lock: `bash scripts/run-lock.sh release worker-<session> <id>`. Always release it, even after a failure.
+
+Other workers may hold other changes and open PRs that touch the same files. Conflicts are normal; the merge queue resolves them.

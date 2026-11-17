@@ -25,17 +25,19 @@ for i in $(gh api "repos/$repo/issues?labels=needs-owner&state=open" -q '.[].num
   fi
 done
 
-# An open change whose next unchecked task is not an owner gate
-for d in openspec/changes/*/; do
-  id=$(basename "$d"); [ "$id" = archive ] && continue
-  f="$d/tasks.md"; [ -f "$f" ] || continue
-  t=$(git show "origin/claude/change-$id:$f" 2>/dev/null || cat "$f")
-  next=$(grep -m1 -E '^\s*- \[ \]' <<<"$t" || true)
-  # Finished on main but never archived (its PR skipped the archive step).
-  if [ -z "$next" ]; then grep -qE '^\s*- \[ \]' "$f" || work+=("$id is finished but not archived"); continue; fi
-  if grep -qiE 'owner (reviews|gate|decision)' <<<"$next"; then continue; fi
-  work+=("$id has open tasks")
-done
+# Changes a worker may take now (dependency-aware, not parked, not claimed), and finished ones to archive.
+status=$(bash "$(dirname "$0")/change-status.sh")
+while IFS=$'\t' read -r id state _; do
+  case "$state" in
+    ready|stackable) work+=("$id is $state") ;;
+    finished) work+=("$id is finished but not archived") ;;
+  esac
+done <<<"$status"
+
+# Plan ahead: with fewer than two takeable changes and no open planning PR, writing the next one is work.
+takeable=$(grep -cE $'\t(ready|stackable)\t' <<<"$status" || true)
+planning=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '[.[]|select(.head.ref|startswith("claude/planning-"))]|length')
+[ "${takeable:-0}" -lt 2 ] && [ "$planning" -eq 0 ] && work+=("fewer than 2 changes ready: plan the next one")
 
 if [ "${#work[@]}" -gt 0 ]; then printf 'work: %s\n' "${work[@]}"; exit 0; fi
 echo idle; exit 1

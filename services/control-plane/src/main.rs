@@ -2,6 +2,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use ls_control_plane::app::{self, AppState};
+use ls_control_plane::auth::ServiceToken;
 use ls_control_plane::config::{self, Config};
 use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
 use ls_control_plane::kms;
@@ -82,6 +83,13 @@ async fn main() -> ExitCode {
         None => tracing::warn!(
             "{} is not set: secret version writes are disabled (503)",
             config::ENV_OPENBAO_ADDR
+        ),
+    }
+    match config.gateway_service_token {
+        Some(token) => state = state.with_service_token(ServiceToken::new(token)),
+        None => tracing::warn!(
+            "{} is not set: the internal gateway routes refuse every request (401)",
+            config::ENV_GATEWAY_SERVICE_TOKEN
         ),
     }
     let router = app::build(state);

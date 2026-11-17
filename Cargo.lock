@@ -2219,6 +2219,7 @@ dependencies = [
  "similar",
  "sqlx-core",
  "sqlx-postgres",
+ "subtle",
  "testcontainers",
  "time",
  "tokio",
@@ -2293,6 +2294,38 @@ dependencies = [
  "serde_json",
  "tokio",
  "trybuild",
+ "wiremock",
+ "zeroize",
+]
+
+[[package]]
+name = "ls-gateway"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "http-body-util",
+ "ls-control-plane",
+ "ls-envelope",
+ "ls-proxy",
+ "ls-redact",
+ "reqwest",
+ "rustls",
+ "rustls-platform-verifier",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sqlx-postgres",
+ "subtle",
+ "testcontainers",
+ "tokio",
+ "toml",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
  "wiremock",
  "zeroize",
 ]

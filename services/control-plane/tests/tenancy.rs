@@ -87,7 +87,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             .fetch_all(&mut admin)
             .await
             .unwrap();
-    assert_eq!(applied, [1, 2, 3]);
+    assert_eq!(applied, [1, 2, 3, 4, 5]);
 
     // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
     migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
@@ -97,7 +97,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         .fetch_one(&mut admin)
         .await
         .unwrap();
-    assert_eq!(count, 3);
+    assert_eq!(count, 5);
 
     let tables: Vec<(String, String, bool, bool)> = sql::query_as(
         "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity
@@ -113,6 +113,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         names,
         [
             "environments",
+            "gateway_audit",
             "orgs",
             "projects",
             "secret_versions",
@@ -129,7 +130,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(policies, 5);
+    assert_eq!(policies, 6);
 
     let value_like: Vec<String> = sql::query_scalar(
         "SELECT table_name || '.' || column_name FROM information_schema.columns
@@ -683,5 +684,68 @@ async fn secret_versions_are_isolated_append_only_and_cascade() {
         .await
         .unwrap();
     assert_eq!(left, 0);
+    db.close().await;
+}
+
+/// S3 task 2.1 (design decision 8): `gateway_audit` is tenant-isolated and append-only for the
+/// app role.
+#[tokio::test]
+async fn gateway_audit_is_isolated_and_append_only() {
+    let pg = Pg::migrated().await;
+    let db = pg.app_db(PoolSettings {
+        max_connections: 2,
+        ..PoolSettings::default()
+    });
+    let a = create_org(&db, "org-a").await;
+    let b = create_org(&db, "org-b").await;
+    let secret = Uuid::now_v7();
+    let insert = |org: Uuid, row_org: Uuid| {
+        let db = db.clone();
+        async move {
+            db.with_org(org, move |c| {
+                Box::pin(async move {
+                    sql::query(
+                        "INSERT INTO gateway_audit (org_id, secret_id, method, scheme, host, path, outcome, status)
+                         VALUES ($1, $2, 'GET', 'https', 'api.example.com', '/v1/x', 'ok', 200)",
+                    )
+                    .bind(row_org)
+                    .bind(secret)
+                    .execute(c)
+                    .await
+                    .map(|_| ())
+                })
+            })
+            .await
+        }
+    };
+    insert(a, a).await.unwrap();
+    // A row claiming org B while bound to org A: RLS WITH CHECK refuses.
+    let err = insert(a, b).await.expect_err("cross-org insert");
+    assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{err}");
+
+    let seen_by_b: i64 = db
+        .with_org(b, |c| {
+            Box::pin(async move {
+                sql::query_scalar("SELECT count(*) FROM gateway_audit")
+                    .fetch_one(c)
+                    .await
+            })
+        })
+        .await
+        .unwrap();
+    assert_eq!(seen_by_b, 0);
+
+    for stmt in [
+        "UPDATE gateway_audit SET outcome = 'x'",
+        "DELETE FROM gateway_audit",
+    ] {
+        let err = db
+            .with_org(a, move |c| {
+                Box::pin(async move { sql::query(stmt).execute(c).await })
+            })
+            .await
+            .expect_err(stmt);
+        assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{stmt}: {err}");
+    }
     db.close().await;
 }

@@ -1,0 +1,136 @@
+use std::process::ExitCode;
+use std::sync::Arc;
+
+use std::time::Duration;
+
+use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
+use ls_control_plane::telemetry;
+use ls_envelope::{BaoToken, OpenBaoTransit, WrapKeyId};
+use ls_gateway::app::{self, AppState};
+use ls_gateway::audit::PgAudit;
+use ls_gateway::config::{self, Config};
+use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
+use ls_gateway::egress::SystemResolver;
+use ls_gateway::relay::{Relay, RelayOptions};
+use secrecy::ExposeSecret;
+use tracing_subscriber::EnvFilter;
+
+/// OTel `service.name` for the gateway's spans and logs.
+const SERVICE_NAME: &str = "locksmith-gateway";
+/// How often expired DEKs are purged from the cache (the TTL is 60 s).
+const CACHE_SWEEP: Duration = Duration::from_secs(10);
+
+fn env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())
+}
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    let config = match Config::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing_subscriber::fmt()
+                .with_env_filter(env_filter())
+                .init();
+            tracing::error!(error = %e, "invalid configuration");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let telemetry = match telemetry::init(
+        config.otlp_endpoint.as_deref(),
+        env_filter(),
+        std::io::stdout,
+        &telemetry::Options {
+            service_name: SERVICE_NAME,
+            ..telemetry::Options::default()
+        },
+    ) {
+        Ok(t) => t,
+        Err(_) => return ExitCode::FAILURE,
+    };
+
+    let Ok(options) = db::connect_options(&config.database_url) else {
+        tracing::error!(
+            "environment variable {} has an invalid value",
+            config::ENV_DATABASE_URL
+        );
+        return ExitCode::FAILURE;
+    };
+    // The gateway never migrates: the control plane owns the schema (it creates
+    // `gateway_audit`). It is ready while Postgres answers.
+    let database = Database::connect_lazy(options, PoolSettings::default());
+    let readiness = Arc::new(DbReadiness::new());
+    readiness.set_migrated();
+    let probe = database.spawn_readiness_probe(readiness.clone(), PROBE_INTERVAL);
+
+    // Decrypt path (S3 design decision 3): the gateway's OpenBao token may decrypt. Unwrap
+    // accepts any version of the configured key name, so the version here is only nominal.
+    let Ok(key) = WrapKeyId::new(&config.openbao.key, 1) else {
+        tracing::error!(
+            "environment variable {} has an invalid value",
+            config::ENV_OPENBAO_KEY
+        );
+        return ExitCode::FAILURE;
+    };
+    let token = BaoToken::new(config.openbao.token.expose_secret().to_owned());
+    let Ok(transit) = OpenBaoTransit::new(&config.openbao.addr, key, token) else {
+        tracing::error!(
+            "OpenBao client could not be configured ({})",
+            config::ENV_OPENBAO_ADDR
+        );
+        return ExitCode::FAILURE;
+    };
+    let Ok(control_plane) = ControlPlane::new(
+        config.control_plane_url.clone(),
+        config.bindings.org_id,
+        config.service_token,
+    ) else {
+        tracing::error!("control-plane client could not be configured");
+        return ExitCode::FAILURE;
+    };
+    let cache = Arc::new(DekCache::new(CacheSettings::default()));
+    let sweeper = cache.spawn_sweeper(CACHE_SWEEP);
+    let decryptor = Decryptor::new(
+        config.bindings.org_id,
+        Arc::new(control_plane),
+        Arc::new(transit),
+        cache,
+    );
+    let binding_count = config.bindings.bindings.len();
+    let relay = Relay::new(
+        config.caller_token,
+        config.bindings,
+        decryptor,
+        Arc::new(SystemResolver),
+        Arc::new(PgAudit::new(database.clone())),
+        RelayOptions::default(),
+    );
+
+    let router = app::build(AppState::new(readiness).with_relay(Arc::new(relay)));
+    let listener = match tokio::net::TcpListener::bind(config.bind).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to bind listen address ({})", config::ENV_BIND);
+            return ExitCode::FAILURE;
+        }
+    };
+    tracing::info!(addr = %config.bind, bindings = binding_count, "locksmith-gateway listening");
+
+    let served = axum::serve(listener, router)
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await;
+    probe.abort();
+    sweeper.abort();
+    database.close().await;
+    let _ = tokio::task::spawn_blocking(move || telemetry.shutdown()).await;
+    match served {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            tracing::error!(error = %e, "server error");
+            ExitCode::FAILURE
+        }
+    }
+}

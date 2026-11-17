@@ -27,6 +27,16 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "secret versions",
         include_str!("../migrations/0003_secret_versions.sql"),
     ),
+    (
+        4,
+        "gateway audit",
+        include_str!("../migrations/0004_gateway_audit.sql"),
+    ),
+    (
+        5,
+        "gateway audit version and caller",
+        include_str!("../migrations/0005_gateway_audit_version_caller.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

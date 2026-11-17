@@ -24,6 +24,7 @@ async fn unreachable_otlp_endpoint_never_fails_requests_and_logs_once_without_cr
         &Options {
             export_interval: Duration::from_millis(100),
             export_timeout: Duration::from_millis(500),
+            ..Options::default()
         },
     )
     .unwrap();

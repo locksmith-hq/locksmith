@@ -13,4 +13,4 @@
 - [x] 2.4 Verify: `just test-rust` and `just test-e2e` (requires `just up`) pass.
 
 ## 3. Local verification
-- [ ] 3.1 `just up && just harness-check && just test-e2e && just leak-scan && just ci`
+- [x] 3.1 `just up && just harness-check && just test-e2e && just leak-scan && just ci`

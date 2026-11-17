@@ -91,6 +91,22 @@
         ],
         "type": "object"
       },
+      "NewSecretVersion": {
+        "additionalProperties": false,
+        "description": "Request body of a version write.",
+        "properties": {
+          "value": {
+            "description": "The secret value (UTF-8). Write-only: no endpoint ever returns it.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
       "Org": {
         "properties": {
           "created_at": {
@@ -247,7 +263,7 @@
                   "type": "string"
                 },
                 "version_count": {
-                  "description": "Always 0 in S1; S2 adds versions.",
+                  "description": "Number of stored versions (`POST .../versions` adds one).",
                   "format": "int32",
                   "minimum": 0,
                   "type": "integer"
@@ -381,7 +397,7 @@
             "type": "string"
           },
           "version_count": {
-            "description": "Always 0 in S1; S2 adds versions.",
+            "description": "Number of stored versions (`POST .../versions` adds one).",
             "format": "int32",
             "minimum": 0,
             "type": "integer"
@@ -398,6 +414,50 @@
           "updated_at"
         ],
         "type": "object"
+      },
+      "SecretVersion": {
+        "description": "Metadata of one stored version. Never carries the value or any key material.",
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "key_id": {
+            "description": "The KMS key the version's data key is wrapped under, e.g. `gateway:v1`.",
+            "type": "string"
+          },
+          "secret_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "version": {
+            "description": "1 for the first version, then 2, 3, ...",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "secret_id",
+          "version",
+          "key_id",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "SecretVersionList": {
+        "description": "All versions of a secret, oldest first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SecretVersion"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -410,7 +470,7 @@
     }
   },
   "info": {
-    "description": "Orgs, projects, environments and secret metadata. Secret values are never part of this API.",
+    "description": "Orgs, projects, environments, secret metadata and write-only secret versions. A secret value can be written to a new version; no endpoint ever returns a value.",
     "license": {
       "name": "see repository"
     },
@@ -1965,6 +2025,228 @@
           }
         ],
         "summary": "Update secret metadata",
+        "tags": [
+          "secrets"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions": {
+      "get": {
+        "operationId": "list",
+        "parameters": [
+          {
+            "description": "Project id",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "environment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Secret id",
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretVersionList"
+                }
+              }
+            },
+            "description": "Every version, oldest first"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List secret versions (metadata only, never a value)",
+        "tags": [
+          "secrets"
+        ]
+      },
+      "post": {
+        "operationId": "create",
+        "parameters": [
+          {
+            "description": "Project id",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "environment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Secret id",
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSecretVersion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretVersion"
+                }
+              }
+            },
+            "description": "Created; version metadata only",
+            "headers": {
+              "Location": {
+                "description": "URL of the secret's versions",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service or key service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Write a new secret version (the value is encrypted and never returned)",
         "tags": [
           "secrets"
         ]

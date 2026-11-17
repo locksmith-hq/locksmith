@@ -78,16 +78,36 @@ fn openapi_snapshot_matches_committed_file() {
     }
 }
 
+/// Only the version-write request body may carry `value`, and it must be a write-only string;
+/// no other schema (in particular no response) has a value field.
 #[test]
 fn openapi_is_3_1_and_has_no_secret_value_field() {
     let spec: Value = serde_json::from_str(&generated()).unwrap();
     assert!(spec["openapi"].as_str().unwrap().starts_with("3.1"));
     let schemas = spec["components"]["schemas"].as_object().unwrap();
     for (name, schema) in schemas {
-        assert!(
-            schema["properties"].get("value").is_none(),
-            "schema {name} must not carry a `value` property"
-        );
+        let value = schema["properties"].get("value");
+        if name == "NewSecretVersion" {
+            let value = value.expect("NewSecretVersion.value");
+            assert_eq!(value["type"], "string");
+            assert_eq!(value["writeOnly"], true, "value must be writeOnly");
+            assert_eq!(value["format"], "password");
+        } else {
+            assert!(
+                value.is_none(),
+                "schema {name} must not carry a `value` property"
+            );
+        }
+    }
+    // Responses never reference the request schema.
+    for (path, item) in spec["paths"].as_object().unwrap() {
+        for (method, op) in item.as_object().unwrap() {
+            let responses = op["responses"].to_string();
+            assert!(
+                !responses.contains("NewSecretVersion"),
+                "{method} {path} returns the value schema"
+            );
+        }
     }
 }
 

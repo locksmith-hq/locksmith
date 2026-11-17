@@ -40,7 +40,8 @@ pub struct SecretVersionList {
     pub items: Vec<SecretVersion>,
 }
 
-/// Request body of a version write. No `Debug`, `Clone` or `Serialize`: it owns the value.
+/// Request body of a version write.
+// No `Debug`, `Clone` or `Serialize`: it owns the value.
 #[derive(serde::Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NewSecretVersion {
@@ -288,4 +289,59 @@ pub async fn list(
         })
         .await?;
     Ok(Json(SecretVersionList { items }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::marker::PhantomData;
+
+    /// Compile-time trait probe: the inherent const applies only when `T` has the trait,
+    /// otherwise the blanket trait const (false) is used.
+    struct Probe<T>(PhantomData<T>);
+    trait Fallback {
+        const DEBUG: bool = false;
+        const CLONE: bool = false;
+        const SERIALIZE: bool = false;
+    }
+    impl<T> Fallback for Probe<T> {}
+    #[allow(dead_code)]
+    impl<T: std::fmt::Debug> Probe<T> {
+        const DEBUG: bool = true;
+    }
+    struct ProbeClone<T>(PhantomData<T>);
+    impl<T> Fallback for ProbeClone<T> {}
+    #[allow(dead_code)]
+    impl<T: Clone> ProbeClone<T> {
+        const CLONE: bool = true;
+    }
+    struct ProbeSer<T>(PhantomData<T>);
+    impl<T> Fallback for ProbeSer<T> {}
+    #[allow(dead_code)]
+    impl<T: Serialize> ProbeSer<T> {
+        const SERIALIZE: bool = true;
+    }
+
+    /// Task 3.3: the value-carrying types cannot be formatted, cloned or serialized.
+    #[test]
+    fn value_types_have_no_debug_clone_or_serialize() {
+        const { assert!(!Probe::<NewSecretVersion>::DEBUG) };
+        const { assert!(!Probe::<SecretValue>::DEBUG) };
+        const { assert!(!ProbeClone::<NewSecretVersion>::CLONE) };
+        const { assert!(!ProbeClone::<SecretValue>::CLONE) };
+        const { assert!(!ProbeSer::<NewSecretVersion>::SERIALIZE) };
+        const { assert!(!ProbeSer::<SecretValue>::SERIALIZE) };
+        // The probe itself works: response metadata does derive Debug and Serialize.
+        const { assert!(Probe::<SecretVersion>::DEBUG) };
+        const { assert!(ProbeSer::<SecretVersion>::SERIALIZE) };
+    }
+
+    #[test]
+    fn value_deserializes_into_secret_bytes() {
+        let v: NewSecretVersion = serde_json::from_str(r#"{"value":"a\"b"}"#).unwrap();
+        assert!(v.value.into_inner().expose() == b"a\"b");
+        let v: NewSecretVersion = serde_json::from_str(r#"{"value":"plain"}"#).unwrap();
+        assert!(v.value.into_inner().expose() == b"plain");
+        assert!(serde_json::from_str::<NewSecretVersion>(r#"{"value":1}"#).is_err());
+    }
 }

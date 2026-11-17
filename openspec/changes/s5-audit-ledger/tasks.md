@@ -6,10 +6,10 @@
 - [ ] 1.3 Verify: `cargo nextest run -p ls-audit -p ls-vault` passes, including the golden vectors, proptest round-trips, and the existing vault audit tests unchanged.
 
 ## 2. Ledger store and append in the control plane [opus]
-- [ ] 2.1 Migrations: `audit_heads`, `audit_events` (UUIDv7 `id`, PK `(org_id, seq)`, RLS and FORCE RLS, INSERT and SELECT only for the app role), `audit_checkpoints`, `audit_verify_runs`, an `audit_verifier` role (SELECT, BYPASSRLS, used only by the CLI); revoke INSERT on `gateway_audit`.
+- [ ] 2.1 Migrations: `audit_heads`, `audit_events` (UUIDv7 `id`, PK `(org_id, seq)`, RLS and FORCE RLS, INSERT and SELECT only for the app role), `audit_checkpoints`, `audit_verify_runs`, an `audit_verifier` role (SELECT, BYPASSRLS, used only by the CLI); revoke INSERT on `gateway_audit`. RLS and FORCE RLS on `audit_heads`, `audit_checkpoints` and `audit_verify_runs`; the app role gets INSERT and SELECT only on `audit_checkpoints`, and no UPDATE or DELETE on `audit_checkpoints`, `audit_verify_runs` or `audit_heads` beyond the head update in 2.2.
 - [ ] 2.2 Postgres store in `ls-audit` (feature `postgres`, sqlx): append in one transaction (set `app.org_id`, lock the head row, hash, insert, update the head); event attributes take an allow-listed identifier type only, never a free-form string from a request.
 - [ ] 2.3 Control plane appends S4 agent and grant admin events, and serves `POST /internal/v1/audit/events` behind the service token; `openapi.json` updated.
-- [ ] 2.4 Verify: `cargo nextest run -p ls-audit --features postgres -p ls-control-plane` covers 50 concurrent appends giving seq 1..50 with intact links, app-role UPDATE and DELETE refused, cross-org isolation, a missing service token returning 401, and no canary in any stored event.
+- [ ] 2.4 Verify: `cargo nextest run -p ls-audit --features postgres -p ls-control-plane` covers 50 concurrent appends giving seq 1..50 with intact links, app-role UPDATE and DELETE refused on `audit_events`, `audit_checkpoints` and `audit_verify_runs`, RLS on all three new tables, cross-org isolation, a missing service token returning 401, and no canary in any stored event.
 
 ## 3. Gateway writes to the ledger [opus]
 - [ ] 3.1 The gateway sends an `attempt` event before the key unwrap and fails closed with 503 if it fails; it sends an `outcome` event after the upstream call (3 retries); denials append a `denied` event; writes to `gateway_audit` are removed.
@@ -17,13 +17,13 @@
 
 ## 4. Signed checkpoints [opus]
 - [ ] 4.1 Compose and `openbao-init.sh` create the `audit-checkpoint` Ed25519 transit key and a sign-only policy and token for the control plane; the public key is written to the verifier config by `just up`.
-- [ ] 4.2 Checkpoint job in the control plane (a `FOR UPDATE SKIP LOCKED` loop, A0-2): every 1000 events or 60 s per org with new events, sign `(org, seq, head hash, time)` through OpenBao and store it in `audit_checkpoints`.
+- [ ] 4.2 Checkpoint job in the control plane (a `FOR UPDATE SKIP LOCKED` loop, A0-2): every 1000 events or 60 s per org with new events, sign the checkpoint bytes through OpenBao and store it in `audit_checkpoints`. The bytes are defined in `ls-audit`: a length-prefixed encoding of `(org, seq, head hash, time)` under its own domain tag `locksmith-checkpoint-v1`, pinned by a golden vector shared with the offline verifier.
 - [ ] 4.3 Verify: `cargo nextest run -p ls-control-plane` covers a checkpoint created at the threshold, a signature that verifies with `ed25519-dalek` under the published key, and a signature that fails under another key.
 
 ## 5. Verify and export CLI [opus]
 - [ ] 5.1 `locksmith-audit verify --db` (verifier role) and `--dir` (offline, public key only), with `--json` output; results are recorded in `audit_verify_runs`; it exits non-zero with the org and first broken seq.
 - [ ] 5.2 `locksmith-audit export` to the file sink (JSON Lines per org, checkpoints, cursor, temp file plus rename plus fsync) behind an `AuditSink` trait; incremental, never writes an event twice.
-- [ ] 5.3 `just audit-verify` (runs `verify --db --checkpoints-from` the export directory), `just audit-export`, and `just audit-tamper-test`; the tamper test also deletes checkpoint rows as the owner and must fail with the export present (as the owner role: edit a field, delete a row, swap two seqs, truncate past a checkpoint, edit an exported line; each must fail verify at the expected seq, and the untouched ledger must pass).
+- [ ] 5.3 `just audit-verify` (runs `verify --db --checkpoints-from` the export directory), `just audit-export`, and `just audit-tamper-test`; the tamper test runs as the owner role: edit a field, delete a row, swap two seqs, truncate past a checkpoint, edit an exported line, and the strongest case: rewrite one event, recompute every later hash, and delete the `audit_checkpoints` rows. Each must fail verify, the last with the export's checkpoints present; the untouched ledger must pass.
 - [ ] 5.4 Verify: `cargo nextest run -p ls-audit` and `just up && just audit-tamper-test`.
 
 ## 6. API, console and desktop [sonnet]

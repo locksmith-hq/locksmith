@@ -49,6 +49,10 @@ The system SHALL periodically sign a checkpoint containing the org, the latest s
 - **WHEN** the database owner deletes the newest events, including ones a checkpoint covers
 - **THEN** verify reports that the chain ends before the latest checkpoint
 
+#### Scenario: Rewrite with checkpoint rows deleted
+- **WHEN** the database owner rewrites an event, recomputes every later hash, and deletes the `audit_checkpoints` rows
+- **THEN** verify against the database alone may pass, but verify with the exported checkpoints (`--checkpoints-from` the export, or `--dir`) fails at the rewritten sequence number or reports the missing checkpoint
+
 #### Scenario: Intact ledger
 - **WHEN** no event has been changed
 - **THEN** verify exits zero and reports the number of events and checkpoints checked per org

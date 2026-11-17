@@ -1,0 +1,36 @@
+[package]
+name = "ls-gateway"
+description = "Locksmith gateway: relays HTTP calls with a secret injected the caller never sees."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "ls_gateway"
+path = "src/lib.rs"
+
+[[bin]]
+name = "locksmith-gateway"
+path = "src/main.rs"
+
+[dependencies]
+# Reused as a library (S3 design decision 1): telemetry setup, the tenant-scoped database
+# handle and readiness. The gateway has no copy of them.
+ls-control-plane = { path = "../control-plane" }
+axum = "0.8.9"
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+secrecy = "0.10"
+serde = { version = "1", features = ["derive"] }
+toml = "1.2"
+uuid = { version = "1.29", features = ["serde"] }
+url = "2"
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

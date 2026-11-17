@@ -5,8 +5,8 @@
 - [x] 1.2 Verify: `cargo nextest run -p ls-control-plane` covers no token → 401, cross-org → 404, and no plaintext field in the schema.
 
 ## 2. Gateway service skeleton [sonnet]
-- [ ] 2.1 Create `services/gateway` (axum, OTel, health), config with bindings TOML, caller token, OpenBao gateway token; migration `gateway_audit` (append-only, RLS).
-- [ ] 2.2 Verify: `cargo nextest run -p ls-gateway -E 'test(config)'` and `cargo clippy -p ls-gateway --all-targets -- -D warnings`.
+- [x] 2.1 Create `services/gateway` (axum, OTel, health), config with bindings TOML, caller token, OpenBao gateway token; migration `gateway_audit` (append-only, RLS).
+- [x] 2.2 Verify: `cargo nextest run -p ls-gateway -E 'test(config)'` and `cargo clippy -p ls-gateway --all-targets -- -D warnings`.
 
 ## 3. Decrypt, inject, redact [opus]
 - [ ] 3.1 Fetch material, unwrap with `OpenBaoTransit`, `open_version`, DEK cache with TTL and zeroize on evict. No Debug/Display/Clone on secret types.

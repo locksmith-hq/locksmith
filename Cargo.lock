@@ -2299,6 +2299,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ls-gateway"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "axum",
+ "http-body-util",
+ "ls-control-plane",
+ "secrecy",
+ "serde",
+ "tokio",
+ "toml",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "ls-hooks"
 version = "0.0.1-alpha.4"
 dependencies = [

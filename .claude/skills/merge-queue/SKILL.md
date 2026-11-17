@@ -28,7 +28,7 @@ Take candidates oldest first, at most 4 per run. A failed candidate does not sto
    - Claude's review passed (from the `claude-review` workflow, which runs on the `ready-to-merge` label and on pushes). A PASS still counts when the PR's own diff is unchanged since the review, for example after merging main in.
 
    If a gate fails:
-   - **Gate 6, review still running:** don't leave it for the next run. Poll with `until bash scripts/merge-gate.sh <pr>; do sleep 60; done` inside `timeout 900`. It merges the moment the verdict lands.
+   - **Gate 6, review still running:** move on; don't wait. The verdict adds a `review-passed`/`review-failed` label, which wakes the event worker to merge or fix it.
    - **Gate 6 FAIL:** fix the findings with the `evaluate-escalate` skill, then push once. The push triggers a new review.
    - **Gate 3 (conflicts):** several PRs are open at once, so this is routine. Lock the change (`run-lock.sh acquire <you> <id>`), merge `origin/main` into the branch, and resolve:
      - `Cargo.lock`, `package-lock.json`: take main's, then rerun `cargo check` / `npm i`.

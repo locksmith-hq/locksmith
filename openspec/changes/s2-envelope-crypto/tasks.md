@@ -12,10 +12,10 @@
 - [x] 2.4 Verify: `just up && cargo nextest run -p ls-envelope -E 'test(kms)'`.
 
 ## 3. Versions API [opus]
-- [ ] 3.1 Migration `secret_versions` (design decision 6): composite FK, RLS, append-only grants.
-- [ ] 3.2 `POST /v1/.../secrets/{id}/versions` accepts a value into `SecretBytes`, seals, wraps, stores, zeroizes; returns version metadata only. `version_count` becomes real; `GET` lists metadata only.
-- [ ] 3.3 Update `openapi.json` snapshot; no DTO derives Debug for the value.
-- [ ] 3.4 Verify: `cargo nextest run -p ls-control-plane` covering cross-org `404`, no value in responses, and value-field misuse.
+- [x] 3.1 Migration `secret_versions` (design decision 6): composite FK, RLS, append-only grants.
+- [x] 3.2 `POST /v1/.../secrets/{id}/versions` accepts a value into `SecretBytes`, seals, wraps, stores, zeroizes; returns version metadata only. `version_count` becomes real; `GET` lists metadata only.
+- [x] 3.3 Update `openapi.json` snapshot; no DTO derives Debug for the value.
+- [x] 3.4 Verify: `cargo nextest run -p ls-control-plane` covering cross-org `404`, no value in responses, and value-field misuse.
 
 ## 4. Leak verification [sonnet]
 - [ ] 4.1 e2e test: write a canary value, then run `just leak-scan` over Postgres, Loki and Tempo; assert clean. A planted canary in a log must still be detected.

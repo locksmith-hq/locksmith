@@ -17,18 +17,19 @@
 | 2 | **Agent bootstrap:** registration returns a one-time enrollment secret, shown once, stored hashed (argon2id via existing `ls-crypto`); `smith login --agent` exchanges it for tokens. | Long-lived API key in env (the agent would hold a reusable credential); mTLS (heavy for a first slice) | OWASP secrets management cheat sheet |
 | 3 | **Enrollment secret is not a vault secret** and is never placed in the agent's reach by Locksmith; the human or launcher supplies it to `smith`, which keeps only the short-lived token in memory/state dir (0600). Honest label: containment, not prevention (a compromised agent can use its token until expiry). | Claiming the token is safe | `openspec/config.yaml` honesty rule |
 | 4 | **Grants are rows** (`agent_grants`: agent, secret binding id, mode=`relay`, expires_at) with RLS and `org_id`; the gateway reads them through a control-plane internal endpoint with caching of at most 10 s. | Grants in gateway TOML (no revocation); direct DB read by the gateway (S3 decision 2) | S3 design decisions 2 and 4 |
-| 5 | **MCP tools `list_grants` and `relay_request`**; `smith relay` mirrors them. Reuse the existing `locksmith-mcp` server and add a remote backend. | New MCP server crate (duplicates transport); `rmcp` rewrite (re-check at apply, out of scope) | `crates/locksmith-mcp/src/main.rs` |
+| 5 | **MCP tools `list_grants` and `relay_request`**; `smith relay` mirrors them. Reuse the existing `locksmith-mcp` server and add a remote backend. | New MCP server crate (duplicates transport); `rmcp` rewrite (out of scope) | `crates/locksmith-mcp/src/main.rs` |
 | 6 | **Thin console page** lists agents and grants and creates grants, so the demo is visible and apps stay green. Full console is T3. | Defer all UI (breaks the every-change apps rule) | `openspec/config.yaml` apps rule |
 
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| jsonwebtoken | MIT | re-check at apply | re-check | sign and verify EdDSA JWTs | not AGPL |
-| ed25519-dalek or ring | MIT/Apache-2.0 | already in lockfile if present, else re-check | re-check | signing key | not AGPL |
-| argon2 (via ls-crypto) | MIT/Apache-2.0 | workspace | n/a | hash enrollment secret | not AGPL |
-| reqwest, axum, subtle | MIT/Apache-2.0, BSD-3 | workspace | n/a | clients, services, constant-time compare | not AGPL |
+| jsonwebtoken | MIT | 12.0.0 | 2026-11-13 | sign and verify EdDSA JWTs | not AGPL |
+| ed25519-dalek | BSD-3-Clause | 3.0.0 | 2026-07-06 | signing key (chosen over ring: pure Rust, no C build) | not AGPL |
+| argon2 (RustCrypto) | MIT/Apache-2.0 | 0.5.3 in lockfile (0.6.0 released 2026-08-27) | 2026-08-27 | hash enrollment secret; stay on the lockfile version unless `ls-crypto` upgrades | not AGPL |
+| axum, reqwest | MIT | workspace (as S3) | n/a | services and clients | not AGPL |
+| subtle | BSD-3-Clause | 2.6.1 (lockfile) | 2024-06-24 | constant-time compare | not AGPL |
 
-Built in-house: grant check and token minting glue, because they gate decryption. Searched first: Ory Hydra and Keycloak client-credentials (extra service for a slice that only needs one signed token). Apply re-checks versions on crates.io.
+Built in-house: grant check and token minting glue, because they gate decryption. Searched first: Ory Hydra and Keycloak client-credentials (extra service for a slice that only needs one signed token). Versions above were checked on crates.io on 2026-11-17; apply re-checks them.
 SDK-licence note: `smith-cli` and plugins are Apache-2.0; they use only permissive crates.
 
 ## Risks / Trade-offs

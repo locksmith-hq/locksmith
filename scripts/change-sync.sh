@@ -13,6 +13,26 @@ here=$(dirname "$0")
 # shellcheck source=scripts/issue-lib.sh
 . "$here/issue-lib.sh"
 
+# Org issue fields (text) on a parked change: "Parked Reason" (Waiting on owner | Stuck) and "Parked Link"
+# (the blocker issue); both cleared when it is not parked. Writes only differences.
+# The Actions token cannot list org issue fields, so fall back to the known ids.
+# shortcut: if a field is ever recreated in org settings, update these ids (read them with a PAT).
+park_ids=$(gh api "orgs/${repo%%/*}/issue-fields" -q '.[]|"\(.name)\t\(.id)"' 2>/dev/null) ||
+  park_ids=$(printf 'Parked Reason\t50026268\nParked Link\t50026309\n')
+F_REASON=$(awk -F'\t' '$1=="Parked Reason"{print $2}' <<<"$park_ids"); F_LINK=$(awk -F'\t' '$1=="Parked Link"{print $2}' <<<"$park_ids")
+park_fields() { # <issue> <reason> <link>; empty values clear
+  [ -n "$F_REASON" ] && [ -n "$F_LINK" ] && [ "${DRY_RUN:-0}" != 1 ] || return 0
+  local cur f want
+  cur=$(gh api "repos/$repo/issues/$1/issue-field-values" -q '.[]|"\(.issue_field_id)\t\(.value)"') || return 0
+  for f in "$F_REASON	$2" "$F_LINK	$3"; do
+    want=${f#*$'\t'}; f=${f%%$'\t'*}
+    [ "$(awk -F'\t' -v f="$f" '$1==f{print $2}' <<<"$cur")" = "$want" ] && continue
+    if [ -n "$want" ]; then gh api -X POST "repos/$repo/issues/$1/issue-field-values" \
+      --input - <<<"{\"issue_field_values\":[{\"field_id\":$f,\"value\":$(jq -Rn --arg v "$want" '$v')}]}" >/dev/null
+    else gh api -X DELETE "repos/$repo/issues/$1/issue-field-values/$f" >/dev/null; fi || echo "park fields: could not update #$1"
+  done
+}
+
 # The top of a parked change's page: why it waits and who moves next, in plain words.
 parked_block() { # <owner|rescue> <blocker-issue> <id>
   local j title why
@@ -83,11 +103,13 @@ bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   body=$(render "$id" "$state" "$detail")
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '===== %s\n%s\n' "$id" "$body"; continue; fi
   n=$(bash "$here/change-issue.sh" "$id") || continue
-  # Label plus the board's Parked reason / Parked issue fields say why a change is parked (owner or stuck).
+  # The label and the Parked Reason / Parked Link issue fields say why a change is parked.
   lstate=$state; [ "$state" = parked ] && { [ "${detail%% *}" = owner ] && lstate=parked-owner || lstate=parked-stuck; }
   # The title follows the proposal, so an issue opened by a planner's lock gets its real name.
   title=$(sed -nE '1s/^# *(Proposal: *)?//p' "openspec/changes/$id/proposal.md" 2>/dev/null)
-  gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$lstate" && board "$n" "$lstate" "${detail##*#}"
+  gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$lstate" && board "$n" "$lstate"
+  if [ "$state" = parked ]; then park_fields "$n" "$([ "${detail%% *}" = owner ] && echo "Waiting on owner" || echo Stuck)" \
+    "https://github.com/$repo/issues/${detail##*#}"; else park_fields "$n" "" ""; fi
   link_pr "$id" "$n"
 done
 

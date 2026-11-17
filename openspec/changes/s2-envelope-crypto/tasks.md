@@ -22,4 +22,4 @@
 - [x] 4.2 Verify: `just test-e2e && just leak-scan`.
 
 ## 5. Local verification
-- [ ] 5.1 `just up`, the S2 smoke test (write a value, gateway token decrypts, control-plane token cannot), then `just ci`.
+- [x] 5.1 `just up`, the S2 smoke test (write a value, gateway token decrypts, control-plane token cannot), then `just ci`.

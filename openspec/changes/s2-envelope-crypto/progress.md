@@ -39,3 +39,8 @@
 - Task: 3.1-3.4 - done (migration 0003 secret_versions with composite FK, forced RLS, append-only grants; POST/GET versions API sealing via ls-envelope + OpenBao wrap; openapi snapshot; tests)
 - Verified: `just ci` green; `LS_REQUIRE_KMS=1 cargo nextest run -p ls-control-plane` 48/48; independent Opus evaluator PASS
 - Notes for next session: OpenBao wrap runs inside the tenant tx under FOR UPDATE (throughput risk, bounded by 10s timeout); KMS optional (503 if OPENBAO_ADDR unset); version list unpaginated; secret delete cascades versions. Next: section 4 (leak verification e2e), then 5.1.
+
+## 2026-11-17 worker (tasks 4.1, 4.2, 5.1)
+- Task: 4.1 e2e `canary_secret_value_never_reaches_postgres_logs_or_traces` (writes a canary as a secret value, waits for the org's version-write trace in Tempo, then `just leak-scan --require-coverage`) and `leak_scan_detects_a_planted_canary`; 4.2 verify; 5.1 smoke (live OpenBao wrap/unwrap tests: gateway decrypts, control-plane cannot) + `just ci`.
+- Verified: `just test-e2e` 8/8 and `just leak-scan` clean on `just up` + `just api`; `just ci` green (exit 0). Opus evaluator found 2 blockers (Tempo not awaited, no coverage requirement) plus minor issues; all fixed and e2e re-run green.
+- Notes: all S2 tasks are ticked; next step is archive and mark the PR ready.

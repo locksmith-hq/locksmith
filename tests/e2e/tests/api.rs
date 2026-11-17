@@ -379,9 +379,38 @@ async fn canary_secret_value_never_reaches_postgres_logs_or_traces() {
     assert_eq!(l.status, StatusCode::OK);
     assert!(!l.body.to_string().contains(&canary), "value listed");
 
-    // Let Loki ingest the request logs before scanning.
-    tokio::time::sleep(Duration::from_secs(10)).await;
-    let (clean, out) = leak_scan(&[]);
+    // Wait until Tempo has this org's version-write trace, so the scan really covers it.
+    let search = format!(
+        "{}/api/datasources/proxy/uid/tempo/api/search?tags=service.name%3Dlocksmith-api%20org.id%3D{org}&limit=20",
+        grafana()
+    );
+    let started = Instant::now();
+    let mut seen = false;
+    while started.elapsed() < Duration::from_secs(90) && !seen {
+        let found: Value = c
+            .get(&search)
+            .basic_auth("admin", Some("admin"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap_or(Value::Null);
+        seen = found["traces"].as_array().is_some_and(|t| {
+            t.iter().any(|t| {
+                t["rootTraceName"]
+                    .as_str()
+                    .is_some_and(|n| n.contains("versions"))
+            })
+        });
+        if !seen {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+    }
+    assert!(seen, "no version-write trace in Tempo within 90 s");
+    // Loki ingests quickly; --require-coverage fails if a source had nothing to scan.
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let (clean, out) = leak_scan(&["--require-coverage", "--explain"]);
     assert!(clean, "leak-scan found the canary:\n{out}");
 }
 
@@ -394,6 +423,10 @@ fn leak_scan_detects_a_planted_canary() {
     let (clean, out) = leak_scan(&["--dir", dir.to_str().unwrap()]);
     std::fs::remove_dir_all(&dir).ok();
     assert!(!clean, "planted canary not detected");
-    assert!(out.contains("LEAK"), "no LEAK line: {out}");
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("LEAK") && l.contains("planted.log")),
+        "no LEAK line naming planted.log: {out}"
+    );
     assert!(!out.contains(&canary), "oracle printed the canary");
 }

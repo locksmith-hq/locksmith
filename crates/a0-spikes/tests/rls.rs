@@ -345,11 +345,7 @@ async fn uuidv7_ids_sort_by_creation_time() {
 /// First canary from the leak-scan canary file, if any (`just canary new`).
 fn canary() -> Option<SecretBytes> {
     let path = std::env::var("LOCKSMITH_CANARIES").unwrap_or_else(|_| {
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../infra/compose/.canaries"
-        )
-        .into()
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../infra/compose/.canaries").into()
     });
     let text = SecretBytes::new(std::fs::read(path).ok()?);
     let text = std::str::from_utf8(text.expose()).ok()?;

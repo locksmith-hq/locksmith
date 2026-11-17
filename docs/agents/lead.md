@@ -12,16 +12,18 @@ If a `needs-rescue` issue is open, take the oldest whose change you can lock (`b
 - **Protected fix (any run):** if a `needs-owner` issue needs a protected-file edit and has no PR, open one on `claude/lead-<date>`, linking it; the owner merges.
 
 ## 2. Runs
-Parse the window's `run-metadata` blocks and failed CI runs. Flag runs that are **stuck** (over 2700 s with no task done, or one task across 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120) or **wasteful** (Opus over 40% of tokens, repeated reads or retries).
+Parse the window's `run-metadata` and failed CI runs. Flag **stuck** runs (over 2700 s, no task done, or one task over 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120) or **wasteful** (Opus over 40% of tokens, repeated reads or retries).
 
-Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer a script, then a skill gotcha, then a role-file edit, then a lesson (`lessons.md`, 5 at most). Total `docs/agents` + `.claude/skills` words must not grow. Revert fixes 7+ days old whose metric didn't move.
+Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > role-file edit > lesson (`lessons.md`, 5 at most). Total `docs/agents` + `.claude/skills` words must not grow. Revert 7+ day-old fixes whose metric didn't move.
+
+**Actions minutes:** run `scripts/actions-usage.py`; log four lines. On ALERT or rising minutes: `needs-owner` issue with numbers, then a protected fix.
 
 ## 3. Code
 Review diffs merged to main in the window; `merge-review` already covers security. Look for:
 - duplication across PRs;
 - reinvented wheels: cite a registry, repo (`gh api search/repositories`) or docs;
 - readability, layering drift;
-- too specific, only with evidence: the same problem solved twice, or a roadmap change that would have to rewrite rather than extend it.
+- too specific, with evidence: solved twice, or a roadmap change would rewrite it.
 
 Each finding cites evidence, landing as:
 - small and safe: fix it on `claude/lead-<date>`;

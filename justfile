@@ -105,6 +105,24 @@ api:
     export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
 
+# Run locksmith-gateway against `just up` and `just api`. Needs LOCKSMITH_GATEWAY_BINDINGS (a TOML
+# file naming the org and bindings; see tests/e2e/tests/relay.rs for the shape). The gateway connects
+# as locksmith_app until the locksmith_gateway role lands (S3 progress notes).
+gateway:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    set -a; . "$root/infra/compose/.env.example"; set +a
+    : "${LOCKSMITH_GATEWAY_BINDINGS:?set LOCKSMITH_GATEWAY_BINDINGS to a bindings TOML file}"
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    cd "$root" && exec cargo run -q -p ls-gateway --bin locksmith-gateway
+
+# S3 relay smoke test (needs `just up` and `just api`): the test starts its own gateway, relays a
+# canary secret to the WireMock upstream and checks nothing leaks back. Run `just leak-scan` after.
+relay-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo nextest run -p ls-e2e --test relay
+
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
     cargo nextest run -p ls-e2e

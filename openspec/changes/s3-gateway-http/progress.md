@@ -26,3 +26,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.1-3.4 - done (independent opus review PASS; `just ci` green)
 - Verified: `just ci` -> exit 0
 - Notes for next session: review follow-ups, none blocking. (1) MEDIUM: gateway connects as `locksmith_app`, which is too broad for design decision 2; add a `locksmith_gateway` role with INSERT on `gateway_audit` and EXECUTE on `current_org_id()` only, wire it in 4.1. (2) LOW: egress guard misses NAT64 64:ff9b::/96, 6to4, IPv4-compatible and fec0::/10 ranges; extend `egress.rs` canonicalisation. (3) LOW: ls-redact URL form matches one percent-encoding only (not encodeURIComponent `!*'()`, `+` for space, mixed-case hex). (4) LOW: 401/400 attempts are not audited; spec says every attempt. Task 4.x and 5.x remain.
+
+## 2026-11-17 20:17 UTC worker
+- Task: 4.1, 4.2, 4.3, 5.1 - done
+- Verified: `just up` + `just api`, `just relay-smoke` -> 1 passed; `just leak-scan` -> clean; `tests/kit/leak_scan_test.sh` -> all PASS (planted canaries detected); `just ci` -> green
+- Notes for next session: change is complete; the four review follow-ups in the previous entry (locksmith_gateway role, extra egress ranges, URL-encoding forms, auditing 401/400) are still open and belong in a follow-up change. `just gateway` needs LOCKSMITH_GATEWAY_BINDINGS; relay-smoke starts its own gateway from target/debug.

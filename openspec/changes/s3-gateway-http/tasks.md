@@ -15,9 +15,9 @@
 - [x] 3.4 Verify: `cargo nextest run -p ls-gateway` including echoed secret in plain/base64/URL/hex, disallowed host makes no decrypt call, redirect not followed, failure paths leak nothing.
 
 ## 4. Compose and e2e [sonnet]
-- [ ] 4.1 Compose entries and `just gateway`, `just relay-smoke`; OpenBao gateway token wiring from S2.
-- [ ] 4.2 e2e: write a canary secret through the control plane, relay to the mock upstream, assert the upstream saw it, the caller did not, and `just leak-scan` is clean over Postgres, Loki, Tempo and the transcript; a planted canary is still detected.
-- [ ] 4.3 Verify: `just up && just relay-smoke && just leak-scan`.
+- [x] 4.1 Compose entries and `just gateway`, `just relay-smoke`; OpenBao gateway token wiring from S2.
+- [x] 4.2 e2e: write a canary secret through the control plane, relay to the mock upstream, assert the upstream saw it, the caller did not, and `just leak-scan` is clean over Postgres, Loki, Tempo and the transcript; a planted canary is still detected.
+- [x] 4.3 Verify: `just up && just relay-smoke && just leak-scan`.
 
 ## 5. Local verification
-- [ ] 5.1 `just up`, the S3 smoke test (`just relay-smoke`), then `just ci`.
+- [x] 5.1 `just up`, the S3 smoke test (`just relay-smoke`), then `just ci`.

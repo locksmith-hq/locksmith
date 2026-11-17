@@ -1,35 +1,29 @@
 //! Tasks 3.1-3.5: the `/v1` resource API against a throwaway `postgres:18` container
 //! (testcontainers; needs a Docker daemon). Each test starts its own container.
 
+mod common;
+
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderMap, Request, StatusCode};
 use http_body_util::BodyExt;
 use ls_control_plane::app::{self, AppState};
-use ls_control_plane::db::{Database, PoolSettings};
+use ls_control_plane::db::PoolSettings;
 use ls_control_plane::migrate;
 use ls_control_plane::readiness::ReadyFlag;
 use serde_json::{Value, json};
 use sqlx_core::connection::Connection;
 use sqlx_core::query_scalar::query_scalar;
-use sqlx_postgres::{PgConnectOptions, PgConnection};
-use testcontainers::core::{IntoContainerPort, WaitFor};
-use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-const BOOTSTRAP_PASSWORD: &str = "bootstrap-test-only";
-const APP_PASSWORD: &str = "locksmith-app-dev-only";
 const CANARY: &str = "CANARY-7f3a91c2-do-not-echo";
 
 struct Api {
     app: Router,
-    _container: ContainerAsync<GenericImage>,
-    port: u16,
+    pg: common::Pg,
 }
 
 struct Reply {
@@ -40,49 +34,15 @@ struct Reply {
 
 impl Api {
     async fn start() -> Self {
-        let container = GenericImage::new("postgres", "18")
-            .with_exposed_port(5432.tcp())
-            .with_wait_for(WaitFor::message_on_stderr(
-                "database system is ready to accept connections",
-            ))
-            .with_env_var("POSTGRES_PASSWORD", BOOTSTRAP_PASSWORD)
-            .with_startup_timeout(Duration::from_secs(120))
-            .start()
-            .await
-            .expect("start postgres:18 (is Docker running?)");
-        let port = container.get_host_port_ipv4(5432.tcp()).await.unwrap();
-        let options = |user: &str, password: &str| {
-            PgConnectOptions::new()
-                .host("127.0.0.1")
-                .port(port)
-                .database("postgres")
-                .username(user)
-                .password(password)
-        };
-        // The image restarts the server once after init; wait until TCP logins work.
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-        loop {
-            match PgConnection::connect_with(&options("postgres", BOOTSTRAP_PASSWORD)).await {
-                Ok(c) => {
-                    c.close().await.unwrap();
-                    break;
-                }
-                Err(e) if tokio::time::Instant::now() > deadline => panic!("postgres: {e}"),
-                Err(_) => tokio::time::sleep(Duration::from_millis(200)).await,
-            }
-        }
-        migrate::run(options("postgres", BOOTSTRAP_PASSWORD))
+        let pg = common::Pg::start().await;
+        migrate::run(pg.bootstrap())
             .await
             .expect("migrations apply");
-        let db = Database::connect_lazy(
-            options("locksmith_app", APP_PASSWORD),
-            PoolSettings::default(),
-        );
+        let db = pg.app_db(PoolSettings::default());
         let state = AppState::new(true, Arc::new(ReadyFlag::new(true)), db);
         Self {
             app: app::build(state),
-            _container: container,
-            port,
+            pg,
         }
     }
 
@@ -135,16 +95,7 @@ impl Api {
 
     /// Row count in the database, bypassing row-level security (bootstrap superuser).
     async fn count(&self, table: &str) -> i64 {
-        let mut c = PgConnection::connect_with(
-            &PgConnectOptions::new()
-                .host("127.0.0.1")
-                .port(self.port)
-                .database("postgres")
-                .username("postgres")
-                .password(BOOTSTRAP_PASSWORD),
-        )
-        .await
-        .unwrap();
+        let mut c = self.pg.admin().await;
         let n = query_scalar(sqlx_core::sql_str::AssertSqlSafe(format!(
             "SELECT count(*) FROM {table}"
         )))

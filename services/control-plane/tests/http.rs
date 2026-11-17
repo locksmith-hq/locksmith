@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+mod common;
+
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
 use ls_control_plane::app::{self, AppState, BODY_LIMIT_BYTES};
 use ls_control_plane::auth::OrgBinding;
-use ls_control_plane::db::{Database, PoolSettings, connect_options};
 use ls_control_plane::readiness::ReadyFlag;
 use tower::ServiceExt;
 
@@ -18,9 +19,11 @@ async fn whoami(org: OrgBinding) -> String {
 
 fn app(dev_auth: bool, ready: bool) -> Router {
     // A lazy pool that never connects: these tests touch no tenant data.
-    let url = "postgres://nobody@127.0.0.1:1/none".to_owned().into();
-    let db = Database::connect_lazy(connect_options(&url).unwrap(), PoolSettings::default());
-    let state = AppState::new(dev_auth, Arc::new(ReadyFlag::new(ready)), db);
+    let state = AppState::new(
+        dev_auth,
+        Arc::new(ReadyFlag::new(ready)),
+        common::unreachable_db(),
+    );
     app::with_layers(app::routes().route("/whoami", get(whoami)), state)
 }
 

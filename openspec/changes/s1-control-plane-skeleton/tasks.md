@@ -26,8 +26,8 @@
 - [x] 4.3 Verify: `cargo nextest run -p ls-control-plane -E 'test(openapi)'` passes. After a deliberate route rename, the test fails; revert the rename.
 
 ## 5. Telemetry
-- [ ] 5.1 OTLP HTTP export of traces and logs (design decision 12) with `service.name=locksmith-api`. Server spans are named by route template and carry method, status and org id; no headers or bodies are recorded.
-- [ ] 5.2 Exporter failure never fails a request. A test with an unreachable OTLP endpoint checks that requests succeed, and that the export error is logged at most once a minute.
+- [x] 5.1 OTLP HTTP export of traces and logs (design decision 12) with `service.name=locksmith-api`. Server spans are named by route template and carry method, status and org id; no headers or bodies are recorded.
+- [x] 5.2 Exporter failure never fails a request. A test with an unreachable OTLP endpoint checks that requests succeed, and that the export error is logged at most once a minute.
 - [ ] 5.3 Verify: with `just up` and `just api`, one request appears in Tempo through the `grafana` MCP or Grafana's datasource proxy. Record the query used in progress.md.
 
 ## 6. Recipes and end-to-end

@@ -23,7 +23,8 @@ use opentelemetry_sdk::logs::{
 };
 use opentelemetry_sdk::trace::{BatchConfigBuilder, BatchSpanProcessor, SdkTracerProvider};
 use tracing::{Event, Level, Metadata, Subscriber};
-use tracing_subscriber::filter::{EnvFilter, filter_fn};
+use tracing_log::NormalizeEvent;
+use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt::format::{self, Writer};
 use tracing_subscriber::fmt::time::{FormatTime, SystemTime};
 use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields, MakeWriter};
@@ -184,15 +185,47 @@ where
     Providers { traces, logs }
 }
 
-/// Targets whose events describe the exporter machinery itself.
+/// Targets whose events describe the exporter machinery itself. OTel's `otel_*!` macros use
+/// the package name as target (`opentelemetry-otlp`), while `tracing` macros use the module
+/// path (`opentelemetry_sdk::trace`), so both `-` and `_` separators count. `tower_http` is
+/// the app's own request tracing (its 5xx "response failed" events), not the exporter.
 fn is_internal(target: &str) -> bool {
+    if target == "tower_http" || target.starts_with("tower_http::") {
+        return false;
+    }
     ["opentelemetry", "reqwest", "hyper", "h2", "tower"]
         .iter()
         .any(|p| {
-            target == *p
-                || target.starts_with(&format!("{p}_"))
-                || target.starts_with(&format!("{p}::"))
+            target.strip_prefix(p).is_some_and(|rest| {
+                rest.is_empty()
+                    || rest.starts_with('_')
+                    || rest.starts_with('-')
+                    || rest.starts_with("::")
+            })
         })
+}
+
+/// Whether an event comes from the exporter machinery. Events bridged from the `log` crate
+/// (reqwest, hyper) carry the target `log`; their real target is in the normalized metadata.
+fn is_internal_event(event: &Event<'_>) -> bool {
+    match event.normalized_metadata() {
+        Some(meta) => is_internal(meta.target()),
+        None => is_internal(event.metadata().target()),
+    }
+}
+
+/// Keeps exporter-internal events out of the OTel layers, so export failures never loop back
+/// into export.
+struct NotInternal;
+
+impl<S: Subscriber> Filter<S> for NotInternal {
+    fn enabled(&self, meta: &Metadata<'_>, _cx: &Context<'_, S>) -> bool {
+        !is_internal(meta.target())
+    }
+
+    fn event_enabled(&self, event: &Event<'_>, _cx: &Context<'_, S>) -> bool {
+        !is_internal_event(event)
+    }
 }
 
 /// Allows one event per interval; the clock is passed in so it can be tested.
@@ -235,11 +268,10 @@ impl<S: Subscriber> Filter<S> for InternalLogLimiter {
     }
 
     fn event_enabled(&self, event: &Event<'_>, _cx: &Context<'_, S>) -> bool {
-        let meta = event.metadata();
-        if !is_internal(meta.target()) {
+        if !is_internal_event(event) {
             return true;
         }
-        *meta.level() <= Level::WARN && self.0.allow()
+        *event.metadata().level() <= Level::WARN && self.0.allow()
     }
 }
 
@@ -260,7 +292,7 @@ where
         event: &Event<'_>,
     ) -> std::fmt::Result {
         let meta = event.metadata();
-        if !is_internal(meta.target()) {
+        if !is_internal_event(event) {
             return self.0.format_event(ctx, writer, event);
         }
         SystemTime.format_time(&mut writer)?;
@@ -320,15 +352,14 @@ fn install<W>(
 where
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
-    let not_internal = || filter_fn(|m: &Metadata<'_>| !is_internal(m.target()));
     let trace_layer = providers.as_ref().map(|p| {
         tracing_opentelemetry::layer()
             .with_tracer(p.traces.tracer(SERVICE_NAME))
-            .with_filter(not_internal())
+            .with_filter(NotInternal)
     });
     let log_layer = providers
         .as_ref()
-        .map(|p| OpenTelemetryTracingBridge::new(&p.logs).with_filter(not_internal()));
+        .map(|p| OpenTelemetryTracingBridge::new(&p.logs).with_filter(NotInternal));
 
     Registry::default()
         .with(env_filter)
@@ -375,6 +406,13 @@ mod tests {
         assert!(is_internal("opentelemetry_sdk::trace"));
         assert!(is_internal("opentelemetry"));
         assert!(is_internal("reqwest::connect"));
+        // Package-name targets used by OTel's internal-logging macros.
+        assert!(is_internal("opentelemetry-otlp"));
+        assert!(is_internal("opentelemetry-http"));
+        assert!(is_internal("opentelemetry-appender-tracing"));
+        assert!(is_internal("opentelemetry_sdk"));
+        assert!(is_internal("hyper-util"));
+        assert!(!is_internal("tower_http::trace::on_failure"));
         assert!(!is_internal("ls_control_plane::app"));
         assert!(!is_internal("opentelemetryish"));
     }

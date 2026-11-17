@@ -25,8 +25,11 @@ tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "sig
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 secrecy = "0.10"
-uuid = { version = "1.29", features = ["v4", "v7"] }
+uuid = { version = "1.29", features = ["v4", "v7", "serde"] }
 http = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
 # Not the sqlx facade: it pulls sqlx-sqlite into resolution, which conflicts with ls-vault's
 # rusqlite (see crates/a0-spikes/Cargo.toml). `_rt-tokio` is the facade's `runtime-tokio`.
 sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "migrate", "uuid"] }

@@ -14,11 +14,11 @@
 - [x] 2.5 Verify: `cargo nextest run -p ls-control-plane -p a0-spikes` passes.
 
 ## 3. Resource API
-- [ ] 3.1 Orgs (dev create, get) and projects (create, get, list, patch name and description, delete) under `/v1`, with `201` plus `Location`, `404` for other orgs' ids, and `409` on duplicate names.
-- [ ] 3.2 Environments under a project and secret metadata under a project and environment (create, get, list, patch, delete). `version_count` is always 0 in S1.
-- [ ] 3.3 RFC 9457 problem details (design decision 9) and `deny_unknown_fields` on every input type. A test checks that a `value` field gets `400` and stores nothing.
-- [ ] 3.4 Keyset pagination with an opaque `next` cursor and `limit` of at most 100. A test covers 120 items with `limit=50`.
-- [ ] 3.5 Verify: `cargo nextest run -p ls-control-plane` passes, covering every `control-plane-api` scenario except the e2e ones.
+- [x] 3.1 Orgs (dev create, get) and projects (create, get, list, patch name and description, delete) under `/v1`, with `201` plus `Location`, `404` for other orgs' ids, and `409` on duplicate names.
+- [x] 3.2 Environments under a project and secret metadata under a project and environment (create, get, list, patch, delete). `version_count` is always 0 in S1.
+- [x] 3.3 RFC 9457 problem details (design decision 9) and `deny_unknown_fields` on every input type. A test checks that a `value` field gets `400` and stores nothing.
+- [x] 3.4 Keyset pagination with an opaque `next` cursor and `limit` of at most 100. A test covers 120 items with `limit=50`.
+- [x] 3.5 Verify: `cargo nextest run -p ls-control-plane` passes, covering every `control-plane-api` scenario except the e2e ones.
 
 ## 4. OpenAPI contract
 - [ ] 4.1 Annotate routes and schemas with utoipa and utoipa-axum, and serve `/openapi.json` (OpenAPI 3.1).

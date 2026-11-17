@@ -14,6 +14,7 @@ use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::db::Database;
+use crate::problem::ApiError;
 use crate::readiness::Readiness;
 
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -47,11 +48,13 @@ impl AppState {
     }
 }
 
-/// Routes without layers or state applied; later sections add `/v1` here.
+/// Routes without layers or state applied; the `/v1` API is merged in.
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
+        .merge(crate::api::router())
+        .fallback(fallback)
 }
 
 /// Apply the standard layer stack and state to a router.
@@ -73,6 +76,10 @@ pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
 /// The full application.
 pub fn build(state: AppState) -> Router {
     with_layers(routes(), state)
+}
+
+async fn fallback() -> ApiError {
+    ApiError::not_found()
 }
 
 async fn healthz() -> StatusCode {

@@ -5,6 +5,8 @@
 //! - [`seal_version`] / [`open_version`]: AES-256-GCM (via `ls-crypto`) under a fresh random
 //!   256-bit data key (DEK) per secret version, with a fresh random 96-bit nonce. One
 //!   encryption per DEK keeps the random-nonce collision bound irrelevant.
+//! - [`KeyWrapper`]: wraps each DEK with a KMS key into a `dek-wrap` blob ([`WrappedDek`]);
+//!   [`OpenBaoTransit`] implements it over OpenBao transit (design decision 3).
 //!
 //! The DEK and plaintext live only in `ls-crypto`'s [`SecretKey32`] / [`SecretBytes`]
 //! (zeroized on drop) or in [`DataKey`] / [`SealedVersion`], which wrap them. None of these
@@ -15,11 +17,15 @@
 //! plane yields ciphertext and KMS-wrapped DEKs, not values.
 
 pub mod header;
+mod openbao;
 mod version;
+mod wrap;
 
 pub use header::{Binding, FormatField, Header, KeyId, Purpose};
 pub use ls_crypto::{SecretBytes, SecretKey32};
+pub use openbao::{BaoToken, OpenBaoTransit};
 pub use version::{DataKey, SealedVersion, open_version, seal_version};
+pub use wrap::{KeyWrapper, TransportKind, WRAPPED_DEK_LEN, WrapError, WrapKeyId, WrappedDek};
 
 /// Every way sealing or opening can fail. No variant carries plaintext or key material.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

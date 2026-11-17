@@ -42,6 +42,7 @@ opentelemetry_sdk = "0.33.1"
 tracing-opentelemetry = "0.34.0"
 opentelemetry-appender-tracing = "0.33.1"
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace", "logs"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }

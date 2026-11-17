@@ -14,3 +14,8 @@
 ## 2026-11-17 worker (tasks 1.1-1.3 ticked)
 - Verified: `just ci` green (exit 0); ls-envelope 20/20; independent Opus evaluator PASS. KAT key material for vector 4 changed to low-entropy values (avoids gitleaks generic-api-key); vectors regenerated with pyca/cryptography.
 - Next: task 2.1 (KeyWrapper + OpenBao transit; needs `just up`). Sections 2-5 untouched.
+
+## 2026-11-17 14:55 worker
+- Task: 2.1 - done (`KeyWrapper` trait + OpenBao transit client in `crates/ls-envelope`; wrapped DEK is an 80-byte `dek-wrap` blob; key_id = name padded to 12 bytes + u32 version; AAD bound; `vaultrs` rejected, rationale in design.md)
+- Verified: `just ci` -> green; ls-envelope 34/34; independent Opus evaluator PASS
+- Notes for next session: reqwest `rustls-no-provider` in ls-envelope unifies workspace-wide, so any process building a reqwest client needs a rustls provider installed (control-plane telemetry init now installs ring). Per-request token HeaderValue copy is not zeroized (minor). `KeyWrapper` is not dyn-compatible; use generics. Next: 2.2 (compose transit key + policies/tokens), 2.3 live tests (needs `just up`).

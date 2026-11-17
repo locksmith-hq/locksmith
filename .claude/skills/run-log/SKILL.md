@@ -8,7 +8,7 @@ description: End-of-run logging for Locksmith scheduled agents — the run-metad
 ## 1. progress.md entry
 Append one entry to `openspec/changes/<id>/progress.md`, even if the run failed. The file is append-only. Use this format:
 ```
-## <UTC date time> <worker|rescue|review|learning>
+## <UTC date time> <worker|lead|review>
 - Task: <id> - <done|failed|blocked|ci-fix>
 - Verified: <command> -> <result>
 - Notes for next session: <traps, what to try next>
@@ -19,7 +19,7 @@ Build the block with the script, passing only your own fields on stdin:
 ```
 bash scripts/run-meta.sh block <<'EOF'
   orchestrator: <model>
-  outcome: done|failed|rescue|blocked|idle|ci-fix|merged|learned|no-fix|healthy
+  outcome: done|failed|rescue|blocked|idle|ci-fix|merged|rescued|learned|reviewed|healthy
   change: <id|none>
   task: <ids|none>
   attempts: <n>

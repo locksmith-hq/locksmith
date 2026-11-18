@@ -8,7 +8,7 @@ description: Mark Locksmith PRs ready-to-merge (with the archive inside), fix re
 ## Mark a PR ready (any agent)
 When the last task is ticked and verified, or an archive, lead or research PR is complete:
 0. If this PR ticks a change's last task, archive the change in this same PR first: `archive-change` steps 2–4 on this branch.
-0b. While the `ci` workflow is disabled (#307), run `bash scripts/local-ci-attest.sh <pr>` on the clean, pushed PR head; rerun it after every push.
+0b. If `ci` is disabled (#307), run `bash scripts/local-ci-attest.sh <pr>` on the clean, pushed head; again after each push.
 1. Make sure the PR is not a draft. Always create PRs with `-F draft=false`.
 2. Remove the `in-progress` label and add `ready-to-merge`.
 3. Comment a summary: what changed (3 lines), how it was verified, and the risks. Every merge is a merge commit, so it can be undone with `git revert -m 1 <sha>`.
@@ -24,7 +24,7 @@ Take candidates oldest first, at most 4 per run. A failed candidate does not sto
    - the change is complete;
    - the task-edit guard passes;
    - the PR is mergeable (GitHub reports no conflicts; being behind main is fine);
-   - CI is green (or a `local-ci <sha>: PASS` attestation while `ci` is disabled);
+   - CI is green (or attested, step 0b);
    - no protected files changed;
    - Claude's review passed (from the `claude-review` workflow, which runs on the `ready-to-merge` label and on pushes). A PASS still counts when the PR's own diff is unchanged since the review, for example after merging main in.
 
@@ -37,4 +37,5 @@ Take candidates oldest first, at most 4 per run. A failed candidate does not sto
      - Code: keep both behaviours; if they truly conflict, the later PR adapts.
      Then run `just ci`, push once and release the lock.
    - **Any other failure:** comment the reason on the PR. For protected files, also open a `needs-owner` issue unless the PR links one.
+   - `ci` disabled: gate 4 needs the step 0b attestation, so attest before labelling. `claude-review` disabled: `skip 6`.
 2. **On GATE PASS,** do nothing: merge-on-green merges it. Never merge a PR yourself.

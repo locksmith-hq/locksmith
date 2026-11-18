@@ -2,7 +2,7 @@
 
 The owner asked on 2026-11-16 for PRs to merge autonomously, with no waiting window.
 
-- Only the **worker** (through the `merge-queue` skill) and the `merge-on-green` workflow merge. The workflow runs the same gate the moment `ci` or `claude-review` finishes green, so a ready PR doesn't wait for the next worker run.
+- Only the **worker** (through the `merge-queue` skill) and the `merge-on-green` workflow merge. The workflow runs the same gate the moment `ci` or `claude-review` finishes green, so a ready PR doesn't wait for the next worker run. The workflow covers every branch in the repo; the worker only `claude/*`.
 - A PR merges only if `scripts/merge-gate.sh <pr>` prints `GATE PASS <sha>`. The script checks that:
   - the work is complete;
   - the guard passes;

@@ -16,7 +16,8 @@ state=$(jq -r .state <<<"$pr"); draft=$(jq -r .draft <<<"$pr")
 head_ref=$(jq -r .head.ref <<<"$pr"); sha=$(jq -r .head.sha <<<"$pr")
 [ "$state" = open ] || fail "PR is $state"
 [ "$draft" = false ] || fail "PR is a draft (cloud runs cannot un-draft; needs owner)"
-[[ "$head_ref" == claude/* ]] || fail "head $head_ref is not a claude/* branch"
+# The worker merges only agent branches; the merge-on-green workflow (MERGE_ANY_BRANCH=1) merges any branch.
+[[ "$head_ref" == claude/* || "${MERGE_ANY_BRANCH:-0}" = 1 ]] || fail "head $head_ref is not a claude/* branch"
 jq -e '.labels[]|select(.name=="ready-to-merge")' <<<"$pr" >/dev/null || fail "no ready-to-merge label"
 jq -e '.labels[]|select(.name=="hold")' <<<"$pr" >/dev/null && fail "owner hold label"
 

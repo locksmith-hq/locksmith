@@ -1,6 +1,6 @@
 name: merge-on-green
 
-# Merges a ready-to-merge PR as soon as its last gate turns green, with no agent run (docs/agents/merge.md).
+# Merges any ready-to-merge PR from this repo (any branch; fork PRs never reach here) as soon as its last gate turns green, with no agent run (docs/agents/merge.md).
 # Fires when `ci` or `claude-review` finishes on a PR, runs scripts/merge-gate.sh from main, and merges the
 # reviewed SHA on GATE PASS. Anything else is left for the worker. Budget: ~1 billed Linux minute per run;
 # runs without the ready-to-merge label stop at the first step.
@@ -50,6 +50,7 @@ jobs:
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
+          MERGE_ANY_BRANCH: '1'
         run: |
           cp scripts/merge-gate.sh "$RUNNER_TEMP/merge-gate.sh"
           out=$(bash "$RUNNER_TEMP/merge-gate.sh" "$PR" 2>&1); echo "$out"

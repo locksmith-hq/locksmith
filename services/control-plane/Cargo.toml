@@ -65,3 +65,5 @@ hex = "0.4"
 ls-tenant-lint = { path = "../../crates/ls-tenant-lint" }
 similar = "3.2.1"
 ls-pg-test = { path = "../../crates/ls-pg-test" }
+# S5 checkpoint tests: an in-process fake of the OpenBao transit sign endpoint.
+wiremock = { workspace = true }

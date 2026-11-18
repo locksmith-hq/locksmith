@@ -12,15 +12,18 @@
 //! Records carry identifiers only: callers never encode a secret value.
 //!
 //! [`event`] defines the server ledger's events and records (allow-listed identifier types
-//! only). The `postgres` feature adds [`pg`], the Postgres store with the transactional append;
-//! without it the crate stays pure.
+//! only). [`checkpoint`] defines the bytes a signed checkpoint signs (domain tag
+//! `locksmith-checkpoint-v1`). The `postgres` feature adds [`pg`], the Postgres store with the
+//! transactional append; without it the crate stays pure.
 
 use sha2::{Digest, Sha256};
 
+pub mod checkpoint;
 pub mod event;
 #[cfg(feature = "postgres")]
 pub mod pg;
 
+pub use checkpoint::{CHECKPOINT_DOMAIN, CheckpointBody};
 pub use event::{
     Actor, AttrTag, AttrValue, Attrs, Code, Event, Host, InvalidIdentifier, Record, StoredAttrs,
     Target, attr, kind, outcome,

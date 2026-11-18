@@ -2385,6 +2385,8 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 name = "ls-audit"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "ed25519-dalek",
+ "hex",
  "ls-pg-test",
  "proptest",
  "serde_json",

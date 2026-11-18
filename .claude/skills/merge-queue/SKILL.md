@@ -3,7 +3,7 @@ name: merge-queue
 description: Autonomously merge finished Locksmith PRs (label ready-to-merge) through deterministic gates plus an independent Opus review, then archive, and fix red main first. Also how to mark a PR ready. Worker step 0.
 ---
 
-# Merge queue (only the worker merges)
+# Merge queue (only the worker and the merge-on-green workflow merge)
 
 ## Mark a PR ready (any agent)
 When the last task is ticked and verified, or an archive, lead or research PR is complete:

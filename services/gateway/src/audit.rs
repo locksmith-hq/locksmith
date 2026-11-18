@@ -1,7 +1,8 @@
 //! One audit row per relay attempt (S3 design decision 8), appended to `gateway_audit`.
 //!
-//! A record names who and where (secret id, version, caller, method, scheme, host, path) and what
-//! happened (outcome, upstream status). It never holds the value, a header, a body or the query
+//! A record names who and where (agent id, secret id, version, caller, method, scheme, host, path)
+//! and what happened (outcome, upstream status). Refusals after authentication (no grant, expired
+//! grant, disallowed host) are audited too, with the agent id. It never holds the value, a header, a body or the query
 //! string. S5 moves this into the hash chain.
 
 use std::sync::Mutex;
@@ -16,6 +17,10 @@ use crate::decrypt::BoxFuture;
 pub enum Outcome {
     /// The upstream answered and the redacted response was returned.
     Ok,
+    /// The agent holds no unexpired relay grant for the secret (S4 task 2.2).
+    NoGrant,
+    /// The agent's grants could not be read; refused (fail closed).
+    GrantsUnavailable,
     /// No binding for the secret, or the target's origin is not the binding's.
     Denied,
     /// The host resolves to a private, loopback, link-local or metadata address.
@@ -38,6 +43,8 @@ impl Outcome {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Ok => "ok",
+            Self::NoGrant => "no_grant",
+            Self::GrantsUnavailable => "grants_unavailable",
             Self::Denied => "denied",
             Self::DeniedAddress => "denied_address",
             Self::MaterialError => "material_error",
@@ -56,6 +63,8 @@ impl Outcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditRecord {
     pub org_id: Uuid,
+    /// The agent whose token made the call (`sub` of the verified token).
+    pub agent_id: Uuid,
     pub secret_id: Uuid,
     pub version: u32,
     pub caller: String,
@@ -108,11 +117,12 @@ impl AuditSink for PgAudit {
                     Box::pin(async move {
                         sql::query(
                             "INSERT INTO gateway_audit \
-                             (org_id, secret_id, version, caller, method, scheme, host, path, \
-                              outcome, status, request_id) \
-                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                             (org_id, agent_id, secret_id, version, caller, method, scheme, host, \
+                              path, outcome, status, request_id) \
+                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
                         )
                         .bind(rec.org_id)
+                        .bind(rec.agent_id)
                         .bind(rec.secret_id)
                         .bind(version)
                         .bind(rec.caller)

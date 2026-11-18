@@ -20,7 +20,7 @@ path = "src/main.rs"
 [dependencies]
 axum = "0.8.9"
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.7.1", features = ["request-id", "timeout", "limit", "trace"] }
+tower-http = { version = "0.7.1", features = ["request-id", "timeout", "limit", "trace", "cors"] }
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
@@ -49,6 +49,12 @@ ls-envelope = { path = "../../crates/ls-envelope" }
 zeroize = "1.9.1"
 # S3: constant-time comparison of the gateway service token on the internal material endpoint.
 subtle = "2.6.1"
+# S4: agent tokens. EdDSA JWTs (RFC 8037) signed with an Ed25519 key; RustCrypto backend (no C
+# build). Enrollment secrets are hashed with Argon2id through ls-crypto.
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["alloc", "fast", "pkcs8", "zeroize"] }
+sha2 = "0.10"
+ls-crypto = { path = "../../crates/ls-crypto" }
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }

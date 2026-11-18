@@ -10,7 +10,7 @@ export interface ScreenProps {
   /** Runs an action, shows its rejection under the vault banner and refreshes status. */
   act: <T>(fn: () => Promise<T>, label?: (r: T) => string) => Promise<void>;
   /** Switches the main screen. */
-  go: (tab: "Overview" | "Sessions" | "Keys" | "Tokens" | "Relays" | "Audit") => void;
+  go: (tab: "Overview" | "Sessions" | "Keys" | "Tokens" | "Agents" | "Relays" | "Audit") => void;
 }
 
 export const msg = (e: unknown) =>
@@ -552,6 +552,106 @@ export function Audit(_: ScreenProps) {
             </tbody>
           </table>
         </div>
+      )}
+    </section>
+  );
+}
+
+/** Agents and their grants, from the control plane. Create shows the enrollment secret once. */
+export function Agents(_: ScreenProps) {
+  const [cfg, setCfg] = useState({ url: api.controlPlane.url(), org: api.controlPlane.org() });
+  const [client, setClient] = useState(api.agentsClient);
+  const [agents, setAgents] = useState<api.Agent[] | null>(null);
+  const [grants, setGrants] = useState<Record<string, api.AgentGrant[]>>({});
+  const [err, setErr] = useState("");
+  // Component state only: never stored or logged, gone when dismissed.
+  const [secret, setSecret] = useState<{ agent: string; value: string } | null>(null);
+  const [name, setName] = useState("");
+  const [secretId, setSecretId] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    if (!client) return;
+    try {
+      const list = await client.listAgents();
+      const g = await Promise.all(list.map((a) => client.listGrants(a.id)));
+      setAgents(list);
+      setGrants(Object.fromEntries(list.map((a, i) => [a.id, g[i]!])));
+    } catch (e) { setErr(msg(e)); }
+  }, [client]);
+  useEffect(() => { void load(); }, [load]);
+
+  const run = async (f: () => Promise<void>) => {
+    setErr("");
+    try { await f(); } catch (e) { setErr(msg(e)); }
+    await load();
+  };
+
+  return (
+    <section className="screen" aria-labelledby="h-agents">
+      <Head id="h-agents" title="Agents" sub="Agents use secrets through the gateway without ever holding them. Grants say which secrets an agent may relay." />
+      <form className="card" aria-label="Control plane" onSubmit={(e) => {
+        e.preventDefault();
+        api.controlPlane.save(cfg.url, cfg.org);
+        setAgents(null);
+        setClient(api.agentsClient());
+      }}>
+        <input aria-label="Control plane URL" value={cfg.url} onChange={(e) => setCfg({ ...cfg, url: e.target.value.trim() })} />
+        <input aria-label="Org id" value={cfg.org} onChange={(e) => setCfg({ ...cfg, org: e.target.value.trim() })} />
+        <button type="submit" className="btn sm">Connect</button>
+      </form>
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="key">Enter an org id to list agents.</Empty> : (
+        <>
+          {secret && (
+            <div className="card" role="region" aria-label="Enrollment secret">
+              <p>Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.</p>
+              <code className="block" data-testid="enrollment-secret">{secret.value}</code>
+              <button type="button" className="btn sm" onClick={() => setSecret(null)}>Dismiss</button>
+            </div>
+          )}
+          <form className="card" aria-label="Create agent" onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              const r = await client.createAgent({ name, description: "" });
+              setSecret({ agent: r.agent.name, value: r.enrollment_secret });
+              setName("");
+            });
+          }}>
+            <input aria-label="Agent name" required value={name} onChange={(e) => setName(e.target.value)} />
+            <button type="submit" className="btn primary sm">Create agent</button>
+          </form>
+          {!agents ? <Loading what="agents" /> : agents.length === 0 ? <Empty icon="key"><b>No agents yet.</b></Empty> : (
+            <div className="sessions">
+              {agents.map((a) => (
+                <article key={a.id} className="card" aria-label={`Agent ${a.name}`}>
+                  <div className="who"><b>{a.name}</b><span className="mono">{a.id}</span></div>
+                  <ul>
+                    {(grants[a.id] ?? []).map((g) => (
+                      <li key={g.id}>
+                        <span className="mono">{g.secret_name}</span> ({g.mode}) {g.expires_at ? `expires ${g.expires_at}` : "no expiry"}
+                        <button type="button" className="btn sm danger-text" aria-label={`Revoke ${g.secret_name} for ${a.name}`}
+                          onClick={() => void run(() => client.revokeGrant(a.id, g.id))}>Revoke</button>
+                      </li>
+                    ))}
+                  </ul>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    void run(async () => {
+                      await client.createGrant(a.id, { secret_id: secretId[a.id] ?? "", mode: "relay", expires_at: null });
+                      setSecretId({ ...secretId, [a.id]: "" });
+                    });
+                  }}>
+                    <input aria-label={`Secret id for ${a.name}`} required value={secretId[a.id] ?? ""}
+                      onChange={(e) => setSecretId({ ...secretId, [a.id]: e.target.value.trim() })} />
+                    <button type="submit" className="btn sm">Grant</button>
+                  </form>
+                  <button type="button" className="btn sm danger-text" aria-label={`Delete ${a.name}`}
+                    onClick={() => void run(() => client.deleteAgent(a.id))}>Delete agent</button>
+                </article>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </section>
   );

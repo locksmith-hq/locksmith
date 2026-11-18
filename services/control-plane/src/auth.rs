@@ -109,8 +109,10 @@ impl FromRequestParts<AppState> for ServiceOrgBinding {
     }
 }
 
-/// The credential of an `Authorization: Bearer <token>` value (scheme case-insensitive).
-fn bearer(value: &[u8]) -> Option<&[u8]> {
+/// The credential of an `Authorization: Bearer <token>` value (scheme case-insensitive,
+/// surrounding whitespace trimmed, empty refused). The one bearer parser: the gateway uses it for
+/// agent tokens too.
+pub fn bearer(value: &[u8]) -> Option<&[u8]> {
     const SCHEME: &[u8] = b"bearer ";
     let (scheme, rest) = value.split_at_checked(SCHEME.len())?;
     scheme

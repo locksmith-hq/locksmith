@@ -1,4 +1,5 @@
-//! The gateway router: health probes and `POST /v1/relay` ([`crate::relay`]).
+//! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
+//! ([`crate::grants`]).
 
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use ls_control_plane::readiness::Readiness;
 
+use crate::grants;
 use crate::relay::{self, Relay};
 
 /// Shared, cheaply cloneable state.
@@ -25,7 +27,7 @@ impl AppState {
         }
     }
 
-    /// Serve `/v1/relay` (without it the route answers `503`).
+    /// Serve `/v1/relay` and `/v1/grants` (without it both answer `503`).
     pub fn with_relay(mut self, relay: Arc<Relay>) -> Self {
         self.relay = Some(relay);
         self
@@ -49,6 +51,7 @@ pub fn build(state: AppState) -> Router {
             "/v1/relay",
             post(relay::route).layer(DefaultBodyLimit::max(body_limit)),
         )
+        .route("/v1/grants", get(grants::route))
         .with_state(state)
 }
 

@@ -15,7 +15,6 @@ use uuid::Uuid;
 pub const ENV_BIND: &str = "LOCKSMITH_GATEWAY_BIND";
 pub const ENV_DATABASE_URL: &str = "DATABASE_URL";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
-pub const ENV_CALLER_TOKEN: &str = "LOCKSMITH_GATEWAY_CALLER_TOKEN";
 pub const ENV_CONTROL_PLANE_URL: &str = "LOCKSMITH_CONTROL_PLANE_URL";
 pub const ENV_SERVICE_TOKEN: &str = "LOCKSMITH_GATEWAY_SERVICE_TOKEN";
 pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
@@ -69,8 +68,8 @@ pub struct Config {
     pub bind: SocketAddr,
     pub database_url: SecretString,
     pub otlp_endpoint: Option<String>,
-    /// The static bearer token callers present on `/v1/relay` (S3 design decision 7).
-    pub caller_token: SecretString,
+    /// The control plane: internal endpoints (material, grants) and the agent-token JWKS
+    /// (`/.well-known/jwks.json`) that authenticates callers (S4 task 2.1).
     pub control_plane_url: Url,
     /// Presented to the control plane's internal material endpoint (S3 task 1).
     pub service_token: SecretString,
@@ -191,7 +190,6 @@ impl Config {
 
         let database_url = SecretString::from(required(ENV_DATABASE_URL)?);
         let otlp_endpoint = get(ENV_OTLP_ENDPOINT).filter(|v| !v.trim().is_empty());
-        let caller_token = token(ENV_CALLER_TOKEN)?;
         let service_token = token(ENV_SERVICE_TOKEN)?;
 
         let control_plane_url = Url::parse(&required(ENV_CONTROL_PLANE_URL)?)
@@ -222,7 +220,6 @@ impl Config {
             bind,
             database_url,
             otlp_endpoint,
-            caller_token,
             control_plane_url,
             service_token,
             openbao,
@@ -248,7 +245,6 @@ mod tests {
     fn env() -> HashMap<&'static str, String> {
         HashMap::from([
             (ENV_DATABASE_URL, "postgres://u:p@localhost/db".to_owned()),
-            (ENV_CALLER_TOKEN, "c".repeat(32)),
             (ENV_SERVICE_TOKEN, "s".repeat(32)),
             (ENV_CONTROL_PLANE_URL, "http://localhost:8080".to_owned()),
             (ENV_OPENBAO_ADDR, "http://localhost:8200".to_owned()),
@@ -275,7 +271,6 @@ mod tests {
     fn config_requires_each_variable() {
         for var in [
             ENV_DATABASE_URL,
-            ENV_CALLER_TOKEN,
             ENV_SERVICE_TOKEN,
             ENV_CONTROL_PLANE_URL,
             ENV_OPENBAO_ADDR,
@@ -293,7 +288,7 @@ mod tests {
 
     #[test]
     fn config_rejects_short_or_padded_tokens() {
-        for var in [ENV_CALLER_TOKEN, ENV_SERVICE_TOKEN] {
+        for var in [ENV_SERVICE_TOKEN] {
             for bad in ["short".to_owned(), format!(" {}", "x".repeat(32))] {
                 let mut e = env();
                 e.insert(var, bad);
@@ -308,7 +303,7 @@ mod tests {
     #[test]
     fn config_errors_never_contain_values() {
         let mut e = env();
-        e.insert(ENV_CALLER_TOKEN, "hunter2".to_owned());
+        e.insert(ENV_SERVICE_TOKEN, "hunter2".to_owned());
         let msg = load(&e, &bindings_toml("")).err().unwrap().to_string();
         assert!(!msg.contains("hunter2"), "{msg}");
     }

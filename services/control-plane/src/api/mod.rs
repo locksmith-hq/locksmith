@@ -4,8 +4,11 @@
 //! Handlers reach Postgres only through [`crate::db::Database::with_org`], bound to the org
 //! from [`crate::auth::OrgBinding`]. Closures never set another org. Input types are all
 //! `deny_unknown_fields`. Only `versions::NewSecretVersion` has a value field: it deserializes
-//! straight into `SecretBytes` and has no `Debug`; no response type carries a value.
+//! straight into `SecretBytes` and has no `Debug`; no response type carries a value. The one
+//! credential a response carries is an agent's enrollment secret (shown once, at registration or
+//! rotation) and the short-lived agent token from `POST /v1/agent-tokens` (`agents.rs`).
 
+mod agents;
 mod environments;
 mod extract;
 mod internal;
@@ -55,7 +58,15 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(secrets::create, secrets::list))
         .routes(routes!(secrets::get_one, secrets::patch, secrets::delete))
         .routes(routes!(versions::create, versions::list))
+        .routes(routes!(agents::create, agents::list))
+        .routes(routes!(agents::get_one, agents::delete))
+        .routes(routes!(agents::rotate_enrollment))
+        .routes(routes!(agents::create_grant, agents::list_grants))
+        .routes(routes!(agents::delete_grant))
+        .routes(routes!(agents::mint_token))
+        .routes(routes!(agents::jwks))
         .routes(routes!(internal::material))
+        .routes(routes!(internal::agent_grants))
 }
 
 /// SQL column list shared by projects, environments and secrets.

@@ -184,3 +184,181 @@ async fn openapi_json_is_served_and_matches_generated_spec() {
     let served: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(render(served), generated());
 }
+
+/// Every component schema a response can reach (following `$ref`s transitively).
+fn response_schemas(spec: &Value) -> std::collections::BTreeSet<String> {
+    fn refs(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::Object(m) => {
+                if let Some(Value::String(r)) = m.get("$ref")
+                    && let Some(name) = r.strip_prefix("#/components/schemas/")
+                {
+                    out.push(name.to_owned());
+                }
+                m.values().for_each(|v| refs(v, out));
+            }
+            Value::Array(a) => a.iter().for_each(|v| refs(v, out)),
+            _ => {}
+        }
+    }
+    let mut todo = Vec::new();
+    for item in spec["paths"].as_object().unwrap().values() {
+        for op in item.as_object().unwrap().values() {
+            refs(&op["responses"], &mut todo);
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    while let Some(name) = todo.pop() {
+        if seen.insert(name.clone()) {
+            refs(&spec["components"]["schemas"][&name], &mut todo);
+        }
+    }
+    seen
+}
+
+/// S4 task 1.3: no response schema carries a secret field. The only credentials any response
+/// carries are the enrollment secret (shown once, in `AgentEnrollment`) and the short-lived agent
+/// token (`AgentToken`); no response has a value, plaintext, hash, private key or any other
+/// password-style field, and no request schema that carries a credential is ever returned.
+#[test]
+fn no_secret_field_in_any_response_schema() {
+    let spec: Value = serde_json::from_str(&generated()).unwrap();
+    let reachable = response_schemas(&spec);
+    for expected in [
+        "Agent",
+        "AgentEnrollment",
+        "AgentGrant",
+        "AgentGrantSet",
+        "ActiveGrant",
+        "AgentToken",
+        "JwkSet",
+        "Jwk",
+    ] {
+        assert!(reachable.contains(expected), "{expected} is not a response");
+    }
+    for request_only in [
+        "NewSecretVersion",
+        "AgentTokenRequest",
+        "NewAgent",
+        "NewAgentGrant",
+    ] {
+        assert!(
+            !reachable.contains(request_only),
+            "{request_only} is returned"
+        );
+    }
+
+    const ALLOWED: [(&str, &str); 2] = [
+        ("AgentEnrollment", "enrollment_secret"),
+        ("AgentToken", "access_token"),
+    ];
+    // Names that match the patterns below but carry no credential.
+    const BENIGN: [(&str, &str); 1] = [("AgentToken", "token_type")];
+    const FORBIDDEN: [&str; 9] = [
+        "value",
+        "plaintext",
+        "secret",
+        "secret_value",
+        "password",
+        "hash",
+        "token",
+        "key",
+        "d",
+    ];
+    for name in &reachable {
+        let props = spec["components"]["schemas"][name]["properties"].as_object();
+        for (prop, schema) in props.into_iter().flatten() {
+            let allowed = ALLOWED.contains(&(name.as_str(), prop.as_str()))
+                || BENIGN.contains(&(name.as_str(), prop.as_str()));
+            let lower = prop.to_ascii_lowercase();
+            assert!(
+                allowed
+                    || !(FORBIDDEN.contains(&lower.as_str())
+                        || lower.contains("secret")
+                            && !lower.ends_with("_id")
+                            && lower != "secret_name"
+                        || lower.contains("hash")
+                        || lower.contains("plain")
+                        || lower.contains("private")
+                        || lower.contains("token")),
+                "response schema {name} has a secret-looking field `{prop}`"
+            );
+            if !allowed {
+                assert_ne!(schema["format"], "password", "{name}.{prop}");
+                assert_ne!(schema["writeOnly"], true, "{name}.{prop}");
+            }
+        }
+    }
+    // The credential fields are explicitly marked read-only and say they are shown once.
+    let enrollment =
+        &spec["components"]["schemas"]["AgentEnrollment"]["properties"]["enrollment_secret"];
+    assert_eq!(enrollment["readOnly"], true);
+    assert!(
+        enrollment["description"]
+            .as_str()
+            .unwrap()
+            .contains("Shown only in this response")
+    );
+    // Only registration and rotation return the enrollment secret.
+    let mut returning: Vec<String> = Vec::new();
+    for (path, item) in spec["paths"].as_object().unwrap() {
+        for (method, op) in item.as_object().unwrap() {
+            if op["responses"].to_string().contains("AgentEnrollment") {
+                returning.push(format!("{method} {path}"));
+            }
+        }
+    }
+    returning.sort();
+    assert_eq!(
+        returning,
+        [
+            "post /v1/agents",
+            "post /v1/agents/{agent_id}/enrollment-secret"
+        ]
+    );
+}
+
+/// S4 task 1.2: the token, JWKS and internal grants routes are in the document with the right
+/// security: the token exchange and JWKS take no org binding; the grants lookup needs the
+/// service token.
+#[test]
+fn agent_routes_are_documented() {
+    let spec: Value = serde_json::from_str(&generated()).unwrap();
+    let paths = &spec["paths"];
+    let token = &paths["/v1/agent-tokens"]["post"];
+    assert_eq!(token["security"], Value::Null);
+    assert_eq!(
+        token["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/AgentToken"
+    );
+    assert!(token["responses"].get("401").is_some());
+    let jwks = &paths["/.well-known/jwks.json"]["get"];
+    assert_eq!(
+        jwks["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/JwkSet"
+    );
+    let lookup = &paths["/internal/v1/agents/{agent_id}/grants"]["get"];
+    assert_eq!(lookup["tags"], serde_json::json!(["internal"]));
+    assert_eq!(
+        lookup["security"],
+        serde_json::json!([{ "service_token": [] }])
+    );
+    for (path, method) in [
+        ("/v1/agents", "post"),
+        ("/v1/agents", "get"),
+        ("/v1/agents/{agent_id}", "get"),
+        ("/v1/agents/{agent_id}", "delete"),
+        ("/v1/agents/{agent_id}/enrollment-secret", "post"),
+        ("/v1/agents/{agent_id}/grants", "post"),
+        ("/v1/agents/{agent_id}/grants", "get"),
+        ("/v1/agents/{agent_id}/grants/{grant_id}", "delete"),
+    ] {
+        assert_eq!(
+            paths[path][method]["security"],
+            serde_json::json!([{ "dev_org": [] }]),
+            "{method} {path}"
+        );
+    }
+    let mode = &spec["components"]["schemas"]["GrantMode"];
+    assert_eq!(mode["enum"], serde_json::json!(["relay"]));
+}

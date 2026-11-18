@@ -22,7 +22,7 @@ ls-platform = { path = "../ls-platform" }
 ls-vault = { path = "../ls-vault" }
 ls-ipc = { path = "../ls-ipc" }
 ls-broker = { path = "../ls-broker" }
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 clap_complete = "4.5"
 rpassword = "7"
 semver = "1"
@@ -33,9 +33,15 @@ signal-hook = "0.4.6"
 toml = "1.2.1"
 serde = { version = "1.0.229", features = ["derive"] }
 ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
+# S4 task 3.1: remote mode against the gateway (state file, requests and redaction shared with
+# locksmith-mcp in ls-connector).
+ls-connector = { path = "../ls-connector" }
+secrecy = "0.10"
 ls-hooks = { version = "0.0.1-alpha.4", path = "../ls-hooks" }
 ls-proxy = { version = "0.0.1-alpha.4", path = "../ls-proxy" }
 
 [dev-dependencies]
+wiremock = { workspace = true }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
 regex = "1.13.1"

@@ -22,7 +22,7 @@ path = "src/main.rs"
 # handle and readiness. The gateway has no copy of them.
 ls-control-plane = { path = "../control-plane" }
 axum = "0.8.9"
-tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 secrecy = "0.10"
@@ -42,8 +42,12 @@ rustls-platform-verifier = "0.7.1"
 base64 = "0.22.1"
 bytes = "1.12.1"
 serde_json = "1"
-subtle = "2.6.1"
 zeroize = "1.9.1"
+# S4 task 2.1: agent tokens verified through the control plane's JWKS. Same jsonwebtoken build as
+# the control plane (RustCrypto backend, no C build); claims and validation come from
+# ls_control_plane::agent_token.
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
+time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
 
 [dev-dependencies]
 http-body-util = "0.1"

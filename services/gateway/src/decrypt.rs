@@ -114,41 +114,59 @@ impl ControlPlane {
         })
     }
 
-    fn url(&self, secret_id: Uuid, version: u32) -> Result<Url, MaterialError> {
-        self.base
-            .join(&format!(
-                "internal/v1/secrets/{secret_id}/versions/{version}/material"
-            ))
-            .map_err(|_| MaterialError::BadResponse)
-    }
-
-    async fn get(&self, secret_id: Uuid, version: u32) -> Result<Material, MaterialError> {
+    /// `GET` an `/internal/v1` path with the service token and the org header; the body, read up
+    /// to `max` bytes. Errors carry the status class only, never a response body.
+    pub(crate) async fn internal_get(&self, path: &str, max: usize) -> Result<Vec<u8>, Internal> {
+        let url = self.base.join(path).map_err(|_| Internal::BadResponse)?;
         let mut auth = HeaderValue::try_from(format!("Bearer {}", self.token.expose_secret()))
-            .map_err(|_| MaterialError::Denied)?;
+            .map_err(|_| Internal::Denied)?;
         auth.set_sensitive(true);
         let mut resp = self
             .client
-            .get(self.url(secret_id, version)?)
+            .get(url)
             .header(AUTHORIZATION, auth)
             .header(ORG_HEADER, self.org_id.to_string())
             .send()
             .await
-            .map_err(|_| MaterialError::Unavailable)?;
+            .map_err(|_| Internal::Unavailable)?;
         match resp.status().as_u16() {
             200 => {}
-            404 => return Err(MaterialError::NotFound),
-            401 | 403 => return Err(MaterialError::Denied),
-            _ => return Err(MaterialError::Unavailable),
+            404 => return Err(Internal::NotFound),
+            401 | 403 => return Err(Internal::Denied),
+            _ => return Err(Internal::Unavailable),
         }
         let mut body = Vec::new();
-        while let Some(chunk) = resp.chunk().await.map_err(|_| MaterialError::Unavailable)? {
-            if body.len() + chunk.len() > MAX_MATERIAL_RESPONSE {
-                return Err(MaterialError::BadResponse);
+        while let Some(chunk) = resp.chunk().await.map_err(|_| Internal::Unavailable)? {
+            if body.len() + chunk.len() > max {
+                return Err(Internal::BadResponse);
             }
             body.extend_from_slice(&chunk);
         }
+        Ok(body)
+    }
+
+    async fn get(&self, secret_id: Uuid, version: u32) -> Result<Material, MaterialError> {
+        let path = format!("internal/v1/secrets/{secret_id}/versions/{version}/material");
+        let body = self
+            .internal_get(&path, MAX_MATERIAL_RESPONSE)
+            .await
+            .map_err(|e| match e {
+                Internal::NotFound => MaterialError::NotFound,
+                Internal::Denied => MaterialError::Denied,
+                Internal::Unavailable => MaterialError::Unavailable,
+                Internal::BadResponse => MaterialError::BadResponse,
+            })?;
         parse_material(&body, secret_id, version)
     }
+}
+
+/// How an internal control-plane call failed. Status classes only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Internal {
+    NotFound,
+    Denied,
+    Unavailable,
+    BadResponse,
 }
 
 impl MaterialSource for ControlPlane {

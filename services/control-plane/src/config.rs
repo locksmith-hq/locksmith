@@ -6,7 +6,7 @@
 use std::fmt;
 use std::net::SocketAddr;
 
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 
 pub const ENV_DATABASE_URL: &str = "DATABASE_URL";
 pub const ENV_DATABASE_OWNER_URL: &str = "DATABASE_OWNER_URL";
@@ -18,6 +18,8 @@ pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_CONTROL_PLANE_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
 pub const ENV_OPENBAO_KEY_VERSION: &str = "OPENBAO_TRANSIT_KEY_VERSION";
 pub const ENV_GATEWAY_SERVICE_TOKEN: &str = "LOCKSMITH_GATEWAY_SERVICE_TOKEN";
+/// S4: the Ed25519 seed (32 bytes, base64) that signs agent tokens.
+pub const ENV_AGENT_SIGNING_KEY: &str = "LOCKSMITH_AGENT_SIGNING_KEY";
 
 /// Shortest accepted gateway service token, in bytes (a 256-bit random token in hex or base64
 /// is longer). Shorter values are rejected rather than accepted as a guessable credential.
@@ -64,6 +66,9 @@ pub struct Config {
     /// The bearer token the gateway presents on `/internal/v1` (S3 design decision 2). `None`
     /// when unset: every internal request is then refused (`401`, fail closed).
     pub gateway_service_token: Option<SecretString>,
+    /// The agent-token signing seed (S4 design decision 1), validated. `None` when unset: with
+    /// dev auth an ephemeral key is generated at startup, otherwise token requests answer `503`.
+    pub agent_signing_key: Option<SecretString>,
 }
 
 /// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
@@ -140,6 +145,17 @@ impl Config {
             Some(v) => Some(SecretString::from(v)),
         };
 
+        let agent_signing_key = match get(ENV_AGENT_SIGNING_KEY) {
+            None => None,
+            Some(v) if v.is_empty() => None,
+            Some(v) => {
+                let v = SecretString::from(v);
+                crate::agent_token::AgentTokenSigner::from_base64_seed(v.expose_secret())
+                    .map_err(|_| ConfigError::Invalid(ENV_AGENT_SIGNING_KEY))?;
+                Some(v)
+            }
+        };
+
         Ok(Self {
             database_url,
             database_owner_url,
@@ -148,6 +164,7 @@ impl Config {
             dev_auth,
             kms,
             gateway_service_token,
+            agent_signing_key,
         })
     }
 }
@@ -275,6 +292,26 @@ mod tests {
         .ok()
         .unwrap();
         assert!(c.gateway_service_token.is_some());
+    }
+
+    #[test]
+    fn agent_signing_key_is_optional_and_must_be_a_32_byte_seed() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(c.agent_signing_key.is_none());
+        for bad in ["hunter8", "aHVudGVyOA", "aHVudGVyOC1ub3QtMzItYnl0ZXM="] {
+            let err = Config::from_lookup(lookup(&with(&[(ENV_AGENT_SIGNING_KEY, bad)])))
+                .err()
+                .unwrap();
+            assert_eq!(err, ConfigError::Invalid(ENV_AGENT_SIGNING_KEY));
+            assert!(!err.to_string().contains(bad));
+        }
+        let c = Config::from_lookup(lookup(&with(&[(
+            ENV_AGENT_SIGNING_KEY,
+            "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
+        )])))
+        .ok()
+        .unwrap();
+        assert!(c.agent_signing_key.is_some());
     }
 
     #[test]

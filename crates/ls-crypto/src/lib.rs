@@ -7,6 +7,7 @@ pub mod aead;
 pub mod kdf;
 pub mod recovery;
 pub mod secret;
+pub mod verifier;
 pub mod wrap;
 
 pub use secret::{SecretBytes, SecretKey32};

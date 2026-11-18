@@ -11,3 +11,8 @@ workspace = true
 [dependencies]
 ls-ipc = { path = "../ls-ipc" }
 serde_json = "1"
+ls-connector = { path = "../ls-connector" }
+
+[dev-dependencies]
+wiremock = { workspace = true }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros"] }

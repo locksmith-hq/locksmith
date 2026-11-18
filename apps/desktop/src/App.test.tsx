@@ -66,7 +66,7 @@ test("unlock calls unlock_secure and shows result, no password input anywhere", 
   await go("Unlock vault");
   expect(m.unlockSecure).toHaveBeenCalled();
   expect(await screen.findByText(/Unlock cancelled/)).toBeInTheDocument();
-  for (const t of ["Overview", "Sessions", "Keys", "Tokens", "Relays", "Audit"]) {
+  for (const t of ["Overview", "Sessions", "Keys", "Tokens", "Agents", "Relays", "Audit"]) {
     await nav(t);
     noPassword(container);
   }
@@ -300,4 +300,29 @@ test("overview and sessions: Claude mark, reported model chip, none for unreport
   const s1 = (await screen.findByRole("button", { name: "Claude Code session A1" })).closest("li")!;
   expect(within(s1).getByRole("img", { name: "Claude" })).toBeInTheDocument();
   expect(within(screen.getByRole("button", { name: "Cursor session H1" }).closest("li")!).queryByRole("img", { name: "Claude" })).toBeNull();
+});
+
+test("agents: lists grants, creates an agent and shows its enrollment secret once, revokes a grant", async () => {
+  const agent = { id: "a1", name: "bot", description: "" } as never;
+  const grant = { id: "g1", secret_name: "STRIPE", mode: "relay", expires_at: null } as never;
+  const client = {
+    listAgents: vi.fn().mockResolvedValue([agent]),
+    listGrants: vi.fn().mockResolvedValue([grant]),
+    createAgent: vi.fn().mockResolvedValue({ agent: { name: "new" }, enrollment_secret: "es_once" }),
+    revokeGrant: vi.fn().mockResolvedValue(undefined),
+    createGrant: vi.fn(), deleteAgent: vi.fn(), rotateEnrollment: vi.fn(),
+  };
+  vi.mocked(api.controlPlane.url).mockReturnValue("http://127.0.0.1:8080");
+  vi.mocked(api.controlPlane.org).mockReturnValue("org1");
+  m.agentsClient.mockReturnValue(client as never);
+  render(<App />);
+  await nav("Agents");
+  expect(await screen.findByText("STRIPE")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Revoke STRIPE for bot" }));
+  expect(client.revokeGrant).toHaveBeenCalledWith("a1", "g1");
+  await userEvent.type(screen.getByLabelText("Agent name"), "new");
+  await userEvent.click(screen.getByRole("button", { name: "Create agent" }));
+  expect(await screen.findByTestId("enrollment-secret")).toHaveTextContent("es_once");
+  await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(screen.queryByTestId("enrollment-secret")).toBeNull();
 });

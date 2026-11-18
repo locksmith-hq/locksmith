@@ -1,0 +1,25 @@
+[package]
+name = "ls-connector"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# S4 remote mode shared by `smith` (task 3.1) and `locksmith-mcp` (task 3.2): agent state file,
+# gateway request shapes and output redaction. Blocking client (both callers are synchronous),
+# same rustls/ring/OS-trust-store setup as ls-envelope so no aws-lc-rs build is added.
+[dependencies]
+ls-core = { path = "../ls-core" }
+ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "blocking"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7.1"
+secrecy = "0.10"
+base64 = "0.22.1"
+url = "2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1"
+zeroize = "1"

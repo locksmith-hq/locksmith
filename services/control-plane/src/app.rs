@@ -4,11 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{MatchedPath, Request, State};
-use axum::http::{HeaderName, StatusCode};
+use axum::http::{HeaderName, HeaderValue, Method, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
 use tower::ServiceBuilder;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
@@ -18,6 +19,7 @@ use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
 use crate::db::Database;
 use crate::kms::DekWrapper;
@@ -33,7 +35,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 #[openapi(
     info(
         title = "Locksmith control-plane API",
-        description = "Orgs, projects, environments, secret metadata and write-only secret versions. A secret value can be written to a new version; no endpoint ever returns a value.",
+        description = "Orgs, projects, environments, secret metadata, write-only secret versions, agents and their grants. A secret value can be written to a new version; no endpoint ever returns a value. An agent's enrollment secret is returned once, when it is created or rotated.",
         license(name = "see repository"),
     ),
     // The shared error sets in `api::responses` reference `Problem` by `$ref`.
@@ -42,6 +44,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
     tags(
         (name = "health", description = "Liveness and readiness"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
+        (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
     )
 )]
@@ -82,6 +85,7 @@ pub struct AppState {
     db: Database,
     kms: Option<Arc<dyn DekWrapper>>,
     service_token: Option<Arc<ServiceToken>>,
+    agent_signer: Option<Arc<AgentTokenSigner>>,
 }
 
 impl AppState {
@@ -93,7 +97,20 @@ impl AppState {
             db,
             kms: None,
             service_token: None,
+            agent_signer: None,
         }
+    }
+
+    /// Mint agent tokens with `signer` and publish its public key in the JWKS (S4). Without
+    /// one, token requests answer `503` and the JWKS is empty.
+    pub fn with_agent_signer(mut self, signer: AgentTokenSigner) -> Self {
+        self.agent_signer = Some(Arc::new(signer));
+        self
+    }
+
+    /// The agent-token signing key, if one is configured.
+    pub fn agent_signer(&self) -> Option<&AgentTokenSigner> {
+        self.agent_signer.as_deref()
     }
 
     /// Accept `token` on the `/internal/v1` routes. Without one they answer `401` (fail closed).
@@ -149,6 +166,24 @@ pub fn routes() -> Router<AppState> {
         .fallback(fallback)
 }
 
+/// CORS for the desktop app's webview only (Tauri origins). The desktop Agents tab calls this API
+/// cross-origin with a custom header, so the preflight must succeed; no other origin is allowed.
+fn desktop_cors() -> CorsLayer {
+    let origins = [
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    ]
+    .map(HeaderValue::from_static);
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_headers([
+            HeaderName::from_static("content-type"),
+            HeaderName::from_static("x-locksmith-dev-org"),
+        ])
+}
+
 /// Apply the standard layer stack and state to a router.
 pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
     let id_header = HeaderName::from_static(REQUEST_ID_HEADER);
@@ -165,7 +200,8 @@ pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
                 StatusCode::REQUEST_TIMEOUT,
                 REQUEST_TIMEOUT,
             ))
-            .layer(RequestBodyLimitLayer::new(BODY_LIMIT_BYTES)),
+            .layer(RequestBodyLimitLayer::new(BODY_LIMIT_BYTES))
+            .layer(desktop_cors()),
     )
 }
 

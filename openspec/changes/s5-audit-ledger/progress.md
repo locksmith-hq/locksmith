@@ -82,3 +82,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.4 - done
 - Verified: `cargo nextest run -p ls-audit` -> 40 passed; `just up && just audit-tamper-test` -> 2 passed (every tamper case fails verify, untouched ledger passes)
 - Notes for next session: next is group 6 (API, web audit page, desktop view) then 7.x smoke. Agent identity token request returned 403 via proxy, so the run acted as the owner account.
+
+## 2026-11-18 harriet (worker)
+- Task: 6.1 audit events and status API (done; sonnet implemented, opus evaluator PASS)
+- Verified: `just ci` green; `cargo nextest run -p ls-control-plane` 91/91.
+- Notes for next session: 6.2 (web audit page), 6.3 (desktop view), 6.4, then 7.x and 8.1. Chain hashes are exposed as `digest`/`prev_digest` (the openapi test rejects "hash" fields). `attrs` types as `Record<string, never>` in schema.d.ts; consider `unknown` for the console.

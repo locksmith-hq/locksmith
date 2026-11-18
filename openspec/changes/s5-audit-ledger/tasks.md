@@ -27,7 +27,7 @@
 - [x] 5.4 Verify: `cargo nextest run -p ls-audit` and `just up && just audit-tamper-test`.
 
 ## 6. API, console and desktop [sonnet]
-- [ ] 6.1 `GET /v1/audit/events` (paged, newest first, org-scoped) and `GET /v1/audit/status` (latest checkpoint, latest verify run); `openapi.json` and the generated TS types updated.
+- [x] 6.1 `GET /v1/audit/events` (paged, newest first, org-scoped) and `GET /v1/audit/status` (latest checkpoint, latest verify run); `openapi.json` and the generated TS types updated.
 - [ ] 6.2 Web console audit page: an event list with kind, actor, target and outcome, plus chain status (latest checkpoint seq, verify result and time).
 - [ ] 6.3 `apps/desktop` audit view reading the same API through the Tauri frontend.
 - [ ] 6.4 Verify: `cargo nextest run -p ls-control-plane` (API and RLS), `npm run lint`, and `just apps-build`.

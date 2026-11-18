@@ -140,3 +140,37 @@ connector-smoke:
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
     cargo nextest run -p ls-e2e
+
+# Run one component's tests by directory name (see docs/testing.md): `just test control-plane`.
+test name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    n="$1"
+    dir=""
+    for d in crates/"$n" services/"$n" apps/"$n" packages/"$n" integrations/"$n" tests/"$n"; do
+      [ -d "$d" ] && dir="$d" && break
+    done
+    run() { echo "+ $*" >&2; "$@"; }
+    if [ -z "$dir" ] || ! grep -q "^| \`$dir\` |" docs/testing.md; then
+      echo "just test: unknown component '$n'. Valid names:" >&2
+      sed -n 's/^| `[a-z0-9]*\/\([a-z0-9_.-]*\)` |.*/  \1/p' docs/testing.md >&2
+      exit 1
+    fi
+    case "$dir" in
+      apps/desktop) run just desktop-test; run npm test --workspace apps/desktop ;;
+      apps/web) run npm test --workspace apps/web ;;
+      tests/e2e) run just test-e2e ;;
+      tests/adversarial) run bash tests/adversarial/run.sh selftest ;;
+      tests/kit) run bash tests/kit/leak_scan_test.sh ;;
+      *)
+        pkg=$(cargo metadata --no-deps --format-version 1 | jq -r --arg m "$PWD/$dir/Cargo.toml" '.packages[]|select(.manifest_path==$m)|.name')
+        if [ -n "$pkg" ]; then run cargo nextest run -p "$pkg" --no-tests pass
+        elif [ -f "$dir/package.json" ] && jq -e '.scripts.test' "$dir/package.json" >/dev/null; then run npm test --workspace "$dir"
+        else
+          cov=$(awk -F'|' -v d="\`$dir\`" '$2 ~ d {print $6}' docs/testing.md)
+          echo "just test: $n has no tests of its own; covered by:$cov" >&2
+          tgt=$(grep -o '`[a-z]*/[a-z0-9_-]*`' <<<"$cov" | head -1 | tr -d '`' || true)
+          if [ -n "$tgt" ]; then run just test "${tgt#*/}"
+          elif grep -q 'just test-web' <<<"$cov"; then run just test-web; fi
+        fi ;;
+    esac

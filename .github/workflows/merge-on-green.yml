@@ -1,7 +1,8 @@
 name: merge-on-green
 
 # Merges open PRs the moment their gates pass, with no agent run (docs/agents/merge.md). Fork PRs never reach here.
-# Fires when `ci` or `claude-review` finishes on a PR and runs scripts/merge-gate.sh from main with MERGE_ON_GREEN=1:
+# Fires when `ci` or `claude-review` finishes on a PR, or when a PR gets the ready-to-merge label
+# (the only trigger while the owner has those workflows disabled; the gate then skips their checks), and runs scripts/merge-gate.sh from main with MERGE_ON_GREEN=1:
 # - owner (non-claude/*) branches: no label or review; merges once tasks are complete and CI is green (owner 2026-11-18);
 # - agent (claude/*) branches: the full gate, so they merge only after ready-to-merge and a claude-review PASS.
 # Budget: ~1 billed Linux minute per run.
@@ -12,26 +13,34 @@ on:
   workflow_run:
     workflows: [ci, claude-review]
     types: [completed]
+  # pull_request_target runs this file from main, never the PR's copy; same-repo PRs only (job `if`).
+  pull_request_target:
+    types: [labeled]
 
 permissions:
   contents: read
   pull-requests: read
   issues: read
   checks: read
+  actions: read
 
 jobs:
   merge:
     if: >-
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.pull_requests[0] != null
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.pull_requests[0] != null) ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.label.name == 'ready-to-merge' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     concurrency:
-      group: merge-on-green-${{ github.event.workflow_run.pull_requests[0].number }}
+      group: merge-on-green-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
       cancel-in-progress: false
     env:
-      PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+      PR: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
     steps:
       - uses: actions/checkout@v4
         with:

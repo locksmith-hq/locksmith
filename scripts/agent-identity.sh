@@ -29,7 +29,7 @@ jwt() { # <app_id> <pem-file>
   printf '%s.%s.%s' "$h" "$p" "$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -sign "$2" | b64url)"
 }
 token() {
-  local persona row app inst _ var key pem t
+  local persona row app inst _ var key pem t resp code
   persona=$(cat "$state/persona" 2>/dev/null) || return 1
   if [ -f "$state/token" ] && [ $(($(date +%s) - $(cat "$state/minted" 2>/dev/null || echo 0))) -lt 3000 ]; then
     cat "$state/token"; return 0
@@ -37,16 +37,21 @@ token() {
   row=$(ids "$persona") || return 1
   read -r app inst _ <<<"$row"
   var="AGENT_APP_KEY_$(tr '[:lower:]' '[:upper:]' <<<"$persona")"
-  key="${!var:-}"; [ -n "$key" ] || return 1
+  # Each failure records its cause in $state/why, so the WARN line says what to fix.
+  key="${!var:-}"; [ -n "$key" ] || { why "$var is not set in this environment"; return 1; }
   pem=$(umask 077 && mktemp) || return 1
   printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
-  t=$(curl -fsS -X POST -H "Authorization: Bearer $(jwt "$app" "$pem")" -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null | jq -r '.token // empty')
+  grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
+  resp=$(curl -sS -w '\n%{http_code}' -X POST -H "Authorization: Bearer $(jwt "$app" "$pem")" -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null) || { rm -f "$pem"; why "cannot reach api.github.com (curl exit $?)"; return 1; }
   rm -f "$pem"
-  [ -n "$t" ] || return 1
+  code=${resp##*$'\n'}
+  t=$(jq -r '.token // empty' <<<"${resp%$'\n'*}" 2>/dev/null)
+  [ -n "$t" ] || { why "GitHub answered HTTP $code to the token request: $(jq -r '.message // "no message"' <<<"${resp%$'\n'*}" 2>/dev/null | head -c 120)"; return 1; }
   (umask 077 && printf '%s' "$t" >"$state/token" && date +%s >"$state/minted")
   printf '%s' "$t"
 }
+why() { printf '%s' "$1" >"$state/why"; }
 fallback() { # <reason>: undo everything so the run continues as the owner
   if [ -f "$state/git" ]; then # only undo git settings this script made
     git config --local --unset-all credential.https://github.com.helper 2>/dev/null
@@ -63,7 +68,7 @@ setup() {
   row=$(ids "$persona") || { echo "FAIL identity: unknown persona '$persona'"; exit 1; }
   read -r _ _ uid <<<"$row"
   (umask 077 && mkdir -p "$state") && printf '%s' "$persona" >"$state/persona"
-  token >/dev/null || fallback "no working key for $persona"
+  token >/dev/null || fallback "$(cat "$state/why" 2>/dev/null || echo "no working key for $persona")"
 
   # gh: a shim earlier on PATH adds the app token, so every later `gh api` call acts as the app.
   real=$(command -v gh) || fallback "gh not found"
@@ -103,6 +108,11 @@ selftest() {
   printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -verify "$d/k.pub" -signature "$d/sig" >/dev/null || { echo "selftest: bad signature"; exit 1; }
   ids alfie >/dev/null || { echo "selftest: persona table"; exit 1; }
   if ids nobody >/dev/null 2>&1; then echo "selftest: unknown persona accepted"; exit 1; fi
+  state="$d/s"; mkdir "$state"; printf alfie >"$state/persona"
+  if (unset AGENT_APP_KEY_ALFIE; token >/dev/null 2>&1); then echo "selftest: token without a key"; exit 1; fi
+  grep -q 'AGENT_APP_KEY_ALFIE is not set' "$state/why" || { echo "selftest: missing-key cause not recorded"; exit 1; }
+  if (AGENT_APP_KEY_ALFIE=$(printf 'not a key' | openssl base64 -A) token >/dev/null 2>&1); then echo "selftest: token from a bad key"; exit 1; fi
+  grep -q 'not the base64 of a private key' "$state/why" || { echo "selftest: bad-key cause not recorded"; exit 1; }
   echo "agent-identity selftest: OK"
 }
 

@@ -41,7 +41,7 @@ The gateway SHALL keep the injected header out of the agent's control: agent att
 Case G4 SHALL make the reflecting upstream return the secret as base32, UTF-16LE, UTF-16BE, `\u` JSON escapes, HTML entities, quoted-printable, an unlabelled gzip body, reversed, split across headers and one character per line. Each form SHALL either produce no oracle hit or match an entry in the residual register.
 
 #### Scenario: Encoding sweep
-- **WHEN** case G4 runs every listed form
+- **WHEN** case G4 runs every listed form, each of which the oracle can detect
 - **THEN** base32, UTF-16 and `\u`-escaped forms produce no hit, and every other hit matches a residual entry
 
 ### Requirement: Control-plane and ledger surfaces return no values

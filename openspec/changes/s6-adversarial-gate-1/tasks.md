@@ -1,7 +1,7 @@
 # Tasks: S6 adversarial gate 1
 
 ## 1. Oracle encodings [opus]
-- [ ] 1.1 Add base32, UTF-16LE, UTF-16BE, `\u` JSON escapes, HTML numeric entities, quoted-printable and gzip-wrapped forms (of the canary bytes and the canary text) to `tests/kit/oracle.py`, stdlib only; extend `selftest` with one planted hit per form and a clean-corpus check; output still never prints the canary.
+- [ ] 1.1 Add base32, UTF-16LE, UTF-16BE, `\u` JSON escapes, HTML numeric entities, quoted-printable and gzip-wrapped forms, plus the reversed form and a separator-stripped form (the scanned text with whitespace and header framing removed, which finds a canary split across headers or one character per line), of the canary bytes and the canary text, to `tests/kit/oracle.py`, stdlib only; extend `selftest` with one planted hit per form and a clean-corpus check; output still never prints the canary.
 - [ ] 1.2 Verify: `bash tests/adversarial/run.sh selftest` and `bash tests/kit/leak_scan_test.sh` (with `just up`) pass.
 
 ## 2. Harness: gateway target and residual register [opus]

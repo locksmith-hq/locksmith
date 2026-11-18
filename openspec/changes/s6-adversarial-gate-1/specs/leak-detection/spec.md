@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Oracle scans extended encodings
-The canary oracle SHALL also find a canary, and the canary text, as base32, UTF-16LE, UTF-16BE, `\u` JSON escapes, HTML numeric entities, quoted-printable and inside a gzip stream with or without a `Content-Encoding` label. Its self-test SHALL cover every form, and its output SHALL still never print the canary.
+The canary oracle SHALL also find a canary, and the canary text, as base32, UTF-16LE, UTF-16BE, `\u` JSON escapes, HTML numeric entities, quoted-printable and inside a gzip stream with or without a `Content-Encoding` label, reversed, and in a separator-stripped view of the scanned text (whitespace and header framing removed) that finds a canary split across headers or one character per line. Its self-test SHALL cover every form, and its output SHALL still never print the canary.
 
 #### Scenario: Self-test covers new forms
 - **WHEN** `run.sh selftest` runs

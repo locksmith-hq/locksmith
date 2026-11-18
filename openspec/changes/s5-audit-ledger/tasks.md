@@ -33,8 +33,8 @@
 - [x] 6.4 Verify: `cargo nextest run -p ls-control-plane` (API and RLS), `npm run lint`, and `just apps-build`.
 
 ## 7. Smoke and e2e [sonnet]
-- [ ] 7.1 `just audit-smoke`: register an agent, grant the canary, relay through `smith`, wait for a checkpoint, export, `audit-verify --db` and `--dir`, then `just leak-scan` over the DB, Loki, Tempo and the export directory; record append p99 at 200 relays/s with `oha` in progress.md.
-- [ ] 7.2 Verify: `just up && just audit-smoke && just leak-scan`.
+- [x] 7.1 `just audit-smoke`: register an agent, grant the canary, relay through `smith`, wait for a checkpoint, export, `audit-verify --db` and `--dir`, then `just leak-scan` over the DB, Loki, Tempo and the export directory; record append p99 at 200 relays/s with `oha` in progress.md.
+- [x] 7.2 Verify: `just up && just audit-smoke && just leak-scan`.
 
 ## 8. Local verification
 - [ ] 8.1 `just up`, `just audit-smoke`, `just audit-tamper-test`, `just apps-build`, then `just ci`.

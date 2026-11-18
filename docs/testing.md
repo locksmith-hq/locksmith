@@ -42,7 +42,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `integrations/codex` | agent plugin (files) | `just test codex` | no | `tests/adversarial` | Thin plugin (config only); real integration tests come with P3 |
 | `integrations/cursor` | agent plugin (files) | `just test cursor` | no | `tests/adversarial` | Thin plugin (hooks and MCP config); real integration tests come with P3 |
 | `tests/adversarial` | shell harness | `just test adversarial` | no | self | `run.sh selftest`; agent cases need `--agent` |
-| `tests/e2e` | Rust e2e (package `ls-e2e`) | `just test e2e` | yes | self | Needs `just up` and `just api`; `just relay-smoke`, `just connector-smoke` |
+| `tests/e2e` | Rust e2e (package `ls-e2e`) | `just test e2e` | yes | self | Needs `just up` and `just api`; `just relay-smoke`, `just connector-smoke`, `just audit-smoke` |
 | `tests/kit` | shell + python | `just test kit` | no | self | `leak_scan_test.sh` |
 
 ## Dev environment
@@ -53,7 +53,7 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just ps` and `just logs` show what runs.
 - `just psql` opens a database shell.
 - `just api` and `just gateway` run the services against the stack.
-- `just relay-smoke` and `just connector-smoke` are the smoke tests that need `just up` and `just api`.
+- `just relay-smoke`, `just connector-smoke` and `just audit-smoke` are the smoke tests that need `just up` and `just api`. `just audit-smoke` also runs `oha` at 200 relays/s when it is installed (`AUDIT_SMOKE_LOAD=0` skips that).
 - `just test-e2e` runs every e2e test.
 - `just audit-export`, `just audit-verify` and `just audit-tamper-test` export, verify and tamper-test the audit ledger.
 - `just leak-scan` checks for leaked canary secrets after a run.

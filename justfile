@@ -149,6 +149,23 @@ audit-tamper-test:
     export LOCKSMITH_AUDIT_TEST_ADMIN_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres"
     cd "$root" && exec cargo nextest run -p locksmith-audit --test tamper
 
+# S5 audit smoke (needs `just up` and `just api`): an agent relays a canary through `smith`, oha
+# drives 200 relays/s when installed (prints relay and append p99), a signed checkpoint covers the
+# head, then export, `audit-verify` (--db and --dir) and `leak-scan` over the stack and the export.
+audit-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    cd "$root"
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo build -q -p locksmith-audit
+    AUDIT_SMOKE_LOAD="${AUDIT_SMOKE_LOAD:-1}" cargo nextest run -p ls-e2e --test audit --no-capture
+    dir="${LOCKSMITH_AUDIT_EXPORT_DIR:-$root/infra/compose/.audit-export}"
+    just audit-export
+    just audit-verify
+    just leak-scan --explain --require-coverage --dir "$dir"
+
 # Run locksmith-api against `just up`: dev auth on, loopback bind, OTLP to the LGTM container.
 api:
     #!/usr/bin/env bash

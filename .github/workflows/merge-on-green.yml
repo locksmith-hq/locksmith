@@ -45,7 +45,8 @@ jobs:
           MERGE_ON_GREEN: '1'
         run: |
           cp scripts/merge-gate.sh "$RUNNER_TEMP/merge-gate.sh"
-          out=$(bash "$RUNNER_TEMP/merge-gate.sh" "$PR" 2>&1); echo "$out"
+          # A gate miss (not ready yet) is normal: print why and stay green instead of failing under bash -e.
+          out=$(bash "$RUNNER_TEMP/merge-gate.sh" "$PR" 2>&1) || true; echo "$out"
           sha=$(sed -nE 's/^GATE PASS ([0-9a-f]{40})$/\1/p' <<<"$out")
           echo "sha=$sha" >>"$GITHUB_OUTPUT"
       - if: steps.gate.outputs.sha != ''

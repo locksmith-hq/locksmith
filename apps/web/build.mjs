@@ -1,6 +1,9 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { build } from 'vite';
+import react from '@vitejs/plugin-react';
 
-const dir = join(import.meta.dirname, 'dist');
-mkdirSync(dir, { recursive: true });
-writeFileSync(join(dir, 'index.html'), '<h1>Locksmith web</h1>\n');
+await build({
+  root: import.meta.dirname,
+  configFile: false,
+  plugins: [react()],
+  build: { outDir: 'dist', emptyOutDir: true },
+});

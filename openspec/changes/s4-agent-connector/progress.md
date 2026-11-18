@@ -52,3 +52,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.2, 3.3 - done
 - Verified: `cargo nextest run -p smith-cli -p locksmith-mcp -p ls-connector` -> 141 passed, 2 skipped; `just ci` exit 0; Opus evaluator PASS (new crate ls-connector shared by smith and MCP; list_grants/relay_request; credential headers refused in MCP)
 - Notes for next session: task 4.1 (web agents/grants page, types from openapi.json). Open: smith `relay -H` still accepts Authorization/Cookie (MCP rejects; one call `ls_connector::reject_credential_headers`). Earlier nits still open (GrantError kind logging in relay.rs, design.md decision 4 wording).
+
+## 2026-11-18 worker
+- Task: 4.1 - done
+- Verified: `npm run lint` (tsc), `npm test` in apps/web -> 5 passed, `npm run build`, `just ci` exit 0; checked by a second reviewer pass on lint/tests/build and storage use (Sonnet implementer; no independent Opus evaluator run)
+- Notes for next session: task 4.2 (desktop agents and grants view). Types come from `apps/web/src/schema.d.ts` (openapi-typescript); openapi operationIds are duplicated across resources, so only `components` types are used; unique operationIds would fix it. No rotate-enrollment button in the web UI yet. Open nits from earlier: smith `relay -H` accepts Authorization/Cookie (use `ls_connector::reject_credential_headers`), GrantError kind logging in relay.rs, design.md decision 4 wording.

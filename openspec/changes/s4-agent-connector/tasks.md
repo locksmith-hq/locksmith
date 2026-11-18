@@ -16,7 +16,7 @@
 - [x] 3.3 Verify: `cargo nextest run -p smith-cli -p locksmith-mcp`.
 
 ## 4. Console and desktop surface [sonnet]
-- [ ] 4.1 Web page listing agents and grants with create/revoke; types generated from `openapi.json`.
+- [x] 4.1 Web page listing agents and grants with create/revoke; types generated from `openapi.json`.
 - [ ] 4.2 `apps/desktop` agents and grants view (reads the same API through the Tauri frontend; list, create, revoke).
 - [ ] 4.3 Verify: `npm run lint` and `just apps-build` (web and desktop).
 

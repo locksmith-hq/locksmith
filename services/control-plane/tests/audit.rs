@@ -628,3 +628,148 @@ async fn admin_events_are_chained_and_hold_no_canary() {
         assert!(!text.contains(s.as_str()));
     }
 }
+
+/// S5 task 6.1: `GET /v1/audit/events` pages the bound org's events newest first and never shows
+/// another org's; `GET /v1/audit/status` reports the head, the latest checkpoint and the latest
+/// verify run.
+#[tokio::test]
+async fn audit_read_api_pages_newest_first_and_is_org_scoped() {
+    let f = Fixture::start().await;
+    let (a, b) = (f.org("a").await, f.org("b").await);
+    let auth = bearer(TOKEN);
+    let (agent, secret) = (Uuid::now_v7(), Uuid::now_v7());
+    for _ in 0..5 {
+        let r = post_event(&f.app, Some(&auth), Some(a), &attempt(agent, secret)).await;
+        assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+    }
+    let denied = json!({
+        "kind": "relay.denied", "outcome": "no_grant", "agent_id": agent, "secret_id": secret,
+    });
+    assert_eq!(
+        post_event(&f.app, Some(&auth), Some(b), &denied)
+            .await
+            .status,
+        StatusCode::CREATED
+    );
+
+    // Pages of 2: seq 5,4 then 3,2 then 1; `next` only while more remain.
+    let mut seen = Vec::new();
+    let mut uri = "/v1/audit/events?limit=2".to_owned();
+    loop {
+        let r = dev(&f.app, "GET", &uri, a, None).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+        let items = r.body["items"].as_array().unwrap();
+        assert!(items.len() <= 2);
+        seen.extend(items.iter().map(|e| e["seq"].as_i64().unwrap()));
+        match r.body["next"].as_str() {
+            Some(n) => uri = format!("/v1/audit/events?limit=2&cursor={n}"),
+            None => break,
+        }
+    }
+    assert_eq!(seen, [5, 4, 3, 2, 1]);
+
+    let r = dev(&f.app, "GET", "/v1/audit/events", a, None).await;
+    let first = &r.body["items"][0];
+    assert_eq!(first["kind"], "relay.attempt");
+    assert_eq!(first["outcome"], "pending");
+    assert_eq!(first["actor"], format!("agent:{agent}"));
+    assert_eq!(first["target"], format!("secret:{secret}"));
+    assert_eq!(first["attrs"]["host"]["host"], "api.example.com");
+    let recs = f.records(a).await;
+    assert_eq!(first["digest"], hex::encode(recs[4].hash));
+    assert_eq!(first["prev_digest"], hex::encode(recs[3].hash));
+    assert!(r.body.get("next").is_none());
+
+    // Org B sees only its own event.
+    let r = dev(&f.app, "GET", "/v1/audit/events", b, None).await;
+    assert_eq!(r.body["items"].as_array().unwrap().len(), 1);
+    assert_eq!(r.body["items"][0]["kind"], "relay.denied");
+
+    for bad in [
+        "/v1/audit/events?limit=0",
+        "/v1/audit/events?limit=101",
+        "/v1/audit/events?cursor=not-a-cursor",
+        "/v1/audit/events?unknown=1",
+    ] {
+        let r = dev(&f.app, "GET", bad, a, None).await;
+        assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
+    }
+    // No org binding: 401.
+    let r = send(
+        &f.app,
+        Request::builder()
+            .uri("/v1/audit/events")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_problem(&r, StatusCode::UNAUTHORIZED, "unauthenticated");
+
+    // Status: no checkpoint and no verify run yet.
+    let r = dev(&f.app, "GET", "/v1/audit/status", a, None).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    assert_eq!(r.body, json!({"head_seq": 5}));
+    let r = dev(&f.app, "GET", "/v1/audit/status", Uuid::now_v7(), None).await;
+    assert_eq!(r.body, json!({"head_seq": 0}));
+
+    // Seed a checkpoint (app role) and two verify runs (owner); the newest run wins, and org B
+    // sees neither.
+    let mut c = PgConnection::connect_with(&f.pg.app()).await.unwrap();
+    let mut tx = c.begin().await.unwrap();
+    ls_audit::pg::bind_org(&mut tx, a).await.unwrap();
+    sqlx_core::query::query(
+        "INSERT INTO audit_checkpoints (org_id, seq, hash, at, key_id, signature) \
+         VALUES ($1, 5, $2, now(), 'audit-checkpoint:1', $3)",
+    )
+    .bind(a)
+    .bind(recs[4].hash.as_slice())
+    .bind([7u8; 64].as_slice())
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let mut o = PgConnection::connect_with(&f.pg.owner()).await.unwrap();
+    for (ok, finished, broken) in [
+        (false, "2026-01-01T00:00:00Z", Some(3i64)),
+        (true, "2026-01-02T00:00:00Z", None),
+    ] {
+        let mut tx = o.begin().await.unwrap();
+        ls_audit::pg::bind_org(&mut tx, a).await.unwrap();
+        sqlx_core::query::query(
+            "INSERT INTO audit_verify_runs (org_id, mode, started_at, finished_at, ok, events, \
+             checkpoints, broken_seq, break_kind) \
+             VALUES ($1, 'db', $2::timestamptz, $2::timestamptz, $3, 5, 1, $4, \
+             CASE WHEN $4::bigint IS NULL THEN NULL ELSE 'hash' END)",
+        )
+        .bind(a)
+        .bind(finished)
+        .bind(ok)
+        .bind(broken)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
+    let r = dev(&f.app, "GET", "/v1/audit/status", a, None).await;
+    assert_eq!(r.body["head_seq"], 5);
+    assert_eq!(r.body["latest_checkpoint"]["seq"], 5);
+    assert_eq!(
+        r.body["latest_checkpoint"]["digest"],
+        hex::encode(recs[4].hash)
+    );
+    assert_eq!(r.body["latest_checkpoint"]["key_id"], "audit-checkpoint:1");
+    assert!(r.body["latest_checkpoint"].get("signature").is_none());
+    let v = &r.body["latest_verify"];
+    assert_eq!(
+        (v["ok"].clone(), v["mode"].clone()),
+        (json!(true), json!("db"))
+    );
+    assert_eq!(
+        (v["events"].clone(), v["checkpoints"].clone()),
+        (json!(5), json!(1))
+    );
+    assert_eq!(v["finished_at"], "2026-01-02T00:00:00Z");
+    assert!(v.get("broken_seq").is_none());
+    let r = dev(&f.app, "GET", "/v1/audit/status", b, None).await;
+    assert_eq!(r.body, json!({"head_seq": 1}));
+}

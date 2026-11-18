@@ -232,6 +232,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List audit events, newest first */
+        get: operations["list_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audit/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the audit chain status */
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -493,6 +527,91 @@ export interface components {
              * @description The event's sequence number in the org's chain, starting at 1.
              */
             seq: number;
+        };
+        /** @description The newest signed checkpoint of the org's chain. */
+        AuditCheckpoint: {
+            /** Format: date-time */
+            at: string;
+            /** @description The chain digest at `seq`, lowercase hex. */
+            digest: string;
+            /** @description Signing key name and version, e.g. `audit-checkpoint:1`. */
+            key_id: string;
+            /**
+             * Format: int64
+             * @description Chain position the checkpoint covers.
+             */
+            seq: number;
+        };
+        /** @description One audit event. */
+        AuditEvent: {
+            /** @description `agent:<id>`, `user:<id>` or `service:<code>`. */
+            actor: string;
+            /** Format: date-time */
+            at: string;
+            /** @description Identifier-typed attributes (ids, hosts, codes, integers) only. */
+            attrs: Record<string, never>;
+            /** @description This event's SHA-256 chain digest, lowercase hex. */
+            digest: string;
+            /** Format: uuid */
+            id: string;
+            /** @description Static event code, e.g. `relay.attempt` or `agent.created`. */
+            kind: string;
+            outcome: string;
+            /** @description SHA-256 chain digest of the previous event, lowercase hex (64 zeros for `seq` 1). */
+            prev_digest: string;
+            /**
+             * Format: int64
+             * @description Position in the org's chain, starting at 1 with no gaps.
+             */
+            seq: number;
+            /** @description `secret:<id>`, `agent:<id>`, `grant:<id>`, ...; absent when the event has no target. */
+            target?: string | null;
+        };
+        /** @description One page of events, newest first. `next` is absent on the last page. */
+        AuditEventPage: {
+            items: components["schemas"]["AuditEvent"][];
+            next?: string | null;
+        };
+        /** @description Chain status of the bound org. */
+        AuditStatus: {
+            /**
+             * Format: int64
+             * @description Seq of the newest event (0 when the org has none).
+             */
+            head_seq: number;
+            latest_checkpoint?: components["schemas"]["AuditCheckpoint"] | null;
+            latest_verify?: components["schemas"]["AuditVerifyRun"] | null;
+        };
+        /** @description The newest `locksmith-audit verify` run recorded for the org. */
+        AuditVerifyRun: {
+            /** @description `sequence`, `link`, `hash` or `checkpoint`, when the run failed. */
+            break_kind?: string | null;
+            /**
+             * Format: int64
+             * @description The first broken seq, when the run failed.
+             */
+            broken_seq?: number | null;
+            /** Format: int64 */
+            checkpoints: number;
+            /**
+             * Format: int64
+             * @description Events and checkpoints the run walked.
+             */
+            events: number;
+            /** Format: date-time */
+            finished_at: string;
+            /** Format: uuid */
+            id: string;
+            /** @description `db` or `dir`. */
+            mode: string;
+            ok: boolean;
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: int64
+             * @description Set when the chain ends before the latest checkpoint.
+             */
+            truncated_at?: number | null;
         };
         Environment: {
             /** Format: date-time */
@@ -1606,6 +1725,114 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_events: {
+        parameters: {
+            query?: {
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: number;
+                /** @description Opaque cursor: the `next` value of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of audit events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditStatus"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

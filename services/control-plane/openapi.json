@@ -215,6 +215,218 @@
         ],
         "type": "object"
       },
+      "AuditCheckpoint": {
+        "description": "The newest signed checkpoint of the org's chain.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "digest": {
+            "description": "The chain digest at `seq`, lowercase hex.",
+            "type": "string"
+          },
+          "key_id": {
+            "description": "Signing key name and version, e.g. `audit-checkpoint:1`.",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Chain position the checkpoint covers.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "digest",
+          "at",
+          "key_id"
+        ],
+        "type": "object"
+      },
+      "AuditEvent": {
+        "description": "One audit event.",
+        "properties": {
+          "actor": {
+            "description": "`agent:<id>`, `user:<id>` or `service:<code>`.",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "attrs": {
+            "description": "Identifier-typed attributes (ids, hosts, codes, integers) only.",
+            "type": "object"
+          },
+          "digest": {
+            "description": "This event's SHA-256 chain digest, lowercase hex.",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Static event code, e.g. `relay.attempt` or `agent.created`.",
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "prev_digest": {
+            "description": "SHA-256 chain digest of the previous event, lowercase hex (64 zeros for `seq` 1).",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Position in the org's chain, starting at 1 with no gaps.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "target": {
+            "description": "`secret:<id>`, `agent:<id>`, `grant:<id>`, ...; absent when the event has no target.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "seq",
+          "id",
+          "at",
+          "kind",
+          "actor",
+          "outcome",
+          "attrs",
+          "prev_digest",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "AuditEventPage": {
+        "description": "One page of events, newest first. `next` is absent on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "AuditStatus": {
+        "description": "Chain status of the bound org.",
+        "properties": {
+          "head_seq": {
+            "description": "Seq of the newest event (0 when the org has none).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "latest_checkpoint": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AuditCheckpoint",
+                "description": "Absent until the first checkpoint is signed."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_verify": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AuditVerifyRun",
+                "description": "Absent until a verify run has been recorded."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "head_seq"
+        ],
+        "type": "object"
+      },
+      "AuditVerifyRun": {
+        "description": "The newest `locksmith-audit verify` run recorded for the org.",
+        "properties": {
+          "break_kind": {
+            "description": "`sequence`, `link`, `hash` or `checkpoint`, when the run failed.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "broken_seq": {
+            "description": "The first broken seq, when the run failed.",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "checkpoints": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "events": {
+            "description": "Events and checkpoints the run walked.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "mode": {
+            "description": "`db` or `dir`.",
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "truncated_at": {
+            "description": "Set when the chain ends before the latest checkpoint.",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "mode",
+          "started_at",
+          "finished_at",
+          "ok",
+          "events",
+          "checkpoints"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "created_at": {
@@ -2192,6 +2404,150 @@
         "summary": "Revoke a grant",
         "tags": [
           "agents"
+        ]
+      }
+    },
+    "/v1/audit/events": {
+      "get": {
+        "operationId": "list_events",
+        "parameters": [
+          {
+            "description": "Page size, 1 to 100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: the `next` value of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            },
+            "description": "A page of audit events"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List audit events, newest first",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/v1/audit/status": {
+      "get": {
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Get the audit chain status",
+        "tags": [
+          "audit"
         ]
       }
     },

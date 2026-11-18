@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createClient, type Agent, type AgentGrant, type Client } from "./api";
+import { createClient, type Agent, type AgentGrant, type Client } from "@locksmith/control-plane-client";
 
 const ORG_KEY = "locksmith.org"; // an org id is not a secret; the enrollment secret is never stored
 

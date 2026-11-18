@@ -57,3 +57,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 4.1 - done
 - Verified: `npm run lint` (tsc), `npm test` in apps/web -> 5 passed, `npm run build`, `just ci` exit 0; checked by a second reviewer pass on lint/tests/build and storage use (Sonnet implementer; no independent Opus evaluator run)
 - Notes for next session: task 4.2 (desktop agents and grants view). Types come from `apps/web/src/schema.d.ts` (openapi-typescript); openapi operationIds are duplicated across resources, so only `components` types are used; unique operationIds would fix it. No rotate-enrollment button in the web UI yet. Open nits from earlier: smith `relay -H` accepts Authorization/Cookie (use `ls_connector::reject_credential_headers`), GrantError kind logging in relay.rs, design.md decision 4 wording.
+
+## 2026-11-18 worker
+- Task: 4.2 - done (4.3 not ticked)
+- Verified: desktop `npx vitest run` -> 23 passed, web 5 passed; `npm run lint` and `npm run build` ok; `just ci` exit 0. `just apps-build` fails in this VM: gdk-3.0.pc missing (no GTK dev libs), so the Tauri build is unverified. No independent evaluator run (Sonnet implementer only).
+- Notes for next session: control-plane client moved to shared package `packages/control-plane-client` (web imports it). Desktop Agents tab calls control plane via fetch (URL + org id in localStorage; CSP connect-src now allows loopback). The control plane has NO CORS layer, so desktop fetch from the webview will fail until CORS is added for the tauri origin or the calls move to a Rust command (needs a decision/Opus-tier since it is the auth service). Tick 4.3 on a machine that can run `just apps-build`.

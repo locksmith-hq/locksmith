@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
-import { createClient } from "./api";
+import { createClient } from "@locksmith/control-plane-client";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const SID = "22222222-2222-4222-8222-222222222222";

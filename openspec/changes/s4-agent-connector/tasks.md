@@ -17,7 +17,7 @@
 
 ## 4. Console and desktop surface [sonnet]
 - [x] 4.1 Web page listing agents and grants with create/revoke; types generated from `openapi.json`.
-- [ ] 4.2 `apps/desktop` agents and grants view (reads the same API through the Tauri frontend; list, create, revoke).
+- [x] 4.2 `apps/desktop` agents and grants view (reads the same API through the Tauri frontend; list, create, revoke).
 - [ ] 4.3 Verify: `npm run lint` and `just apps-build` (web and desktop).
 
 ## 5. Demo and e2e [sonnet]

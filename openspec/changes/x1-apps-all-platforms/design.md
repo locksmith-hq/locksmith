@@ -4,8 +4,8 @@ Observed: `crates/ls-ipc/src/lib.rs` uses `std::os::unix::net`; `apps/desktop/sr
 ## Decisions and evidence
 | Decision | Alternatives rejected | Evidence |
 |---|---|---|
-| Named pipes via `tokio::net::windows::named_pipe` / `interprocess` crate behind one trait | Windows AF_UNIX sockets (Win10 1803+, no peer-credential API); TCP loopback (any local process can connect) | Task 1.1 spike picks between `interprocess` and tokio's pipes by running the same round-trip and peer-SID test; record result in progress.md |
-| Peer check on Windows: compare the pipe client's SID with the server's token SID; pipe created with a DACL for the current user only | Trust the default pipe ACL | Microsoft named-pipe security docs (cite in spike) |
+| Named pipes via `tokio::net::windows::named_pipe` (tokio 1.54.1, already in the workspace) plus `windows-sys` for the DACL and SID calls, behind one trait | `interprocess` 2.4.8 (safe SDDL `SecurityDescriptor` and `client_process_id()`, but adds 5 crates and two 0BSD-only ones, `recvmsg` and `doctest-file`, that `cargo deny` rejects under `deny.toml`); Windows AF_UNIX sockets (Win10 1803+, no peer-credential API); TCP loopback (any local process can connect) | Spike 1.1 (2026-11-18): the same round trip, current-user DACL and peer-SID check was written for both candidates and passed `cargo check`, `clippy` and `cargo build` (a PE32+ .exe links) for `x86_64-pc-windows-gnu`. `cargo deny check` with the repo policy: tokio variant passes everything, interprocess variant fails licences. The runtime round trip was **not executed** (no Windows host or wine in the VM); task 4.2 must run it on a Windows runner |
+| Peer check on Windows: `GetNamedPipeClientProcessId` → `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` → `OpenProcessToken` → `GetTokenInformation(TokenUser)` → `EqualSid` with the server's own token SID; the client does the same with `GetNamedPipeServerProcessId` against pipe squatting. Every pipe instance is created with the protected SDDL DACL `D:P(A;;GA;;;<current user SID>)`, `reject_remote_clients(true)`, and `first_pipe_instance(true)` on the first | Trust the default pipe ACL (grants read to Everyone and anonymous); a PID-only check | Microsoft docs: "Named Pipe Security and Access Rights", `CreateNamedPipeW` (`FILE_FLAG_FIRST_PIPE_INSTANCE`, `PIPE_REJECT_REMOTE_CLIENTS`), `GetNamedPipeClientProcessId`. Compile-checked in spike 1.1; with tokio each new instance must pass the security attributes again (one `unsafe` call, `create_with_security_attributes_raw`) |
 | Vendor OpenSSL for SQLCipher on Windows (`openssl-src`/`vendored`) | Require a system OpenSSL; drop SQLCipher on Windows | Removes the exclusion without an install step; confirm build time in the spike |
 | Smoke test = headless launch plus an IPC health call, not UI automation | WebDriver/tauri-driver e2e on three OSes | Costs few CI minutes; UI tests stay in the console's Playwright suite (T3) |
 | Platform CI stays manual (`ci-platforms`) | Per-PR matrix | AGENTS.md CI policy: macOS ~10x and Windows ~2x minutes |
@@ -13,11 +13,12 @@ Observed: `crates/ls-ipc/src/lib.rs` uses `std::os::unix::net`; `apps/desktop/sr
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| `interprocess` (candidate) | MIT/Apache-2.0 | spike to pin | spike to record | cross-platform local sockets and pipes | permissive, fine anywhere |
-| `windows`/`windows-sys` | MIT/Apache-2.0 | spike to pin | spike to record | SID lookup for the peer check | permissive |
-| `openssl-src` | MIT/Apache-2.0 | spike to pin | spike to record | vendored OpenSSL for SQLCipher | permissive |
+| `tokio` (`net::windows::named_pipe`) | MIT | 1.54.1 (already in Cargo.lock) | 2026-10-21 | named-pipe server and client; chosen in spike 1.1 | permissive |
+| `windows-sys` | MIT OR Apache-2.0 | 0.61.2 (already in Cargo.lock) | 2025-10-06 | SDDL DACL, pipe peer PID, token SID lookup and compare | permissive |
+| `interprocess` (rejected in spike 1.1) | 0BSD OR Apache-2.0; deps `recvmsg` 1.0.0 and `doctest-file` 1.1.1 are 0BSD only | 2.4.8 | 2026-11-08 | not used: extra deps and 0BSD (not in `deny.toml`) for no capability tokio plus `windows-sys` lacks | permissive, but needs a `deny.toml` change |
+| `openssl-src` | MIT/Apache-2.0 | 400.0.2+4.0.3 (latest, not yet tried) | 2026-10-01 | vendored OpenSSL for SQLCipher | permissive; note `deny.toml` bans `openssl-sys`, which a vendored build pulls in |
 | `tauri` 2 | MIT/Apache-2.0 | already used | existing | desktop shell | permissive |
-Built in-house: only the thin transport trait and the peer-identity check; searched crates.io for a maintained peer-credential crate first (spike records the result).
+Built in-house: only the thin transport trait and the peer-identity check; searched crates.io for a maintained peer-credential crate first (2026-11-18: "peer credentials", "peercred", "named pipe client sid"). The hits are Unix-only (`unix-cred`, `uds` last released 2023-12-31) or application crates, so no Windows peer-SID crate exists to reuse.
 
 ## Risks
 - Windows-only failures cannot be reproduced in the agent VM (Linux). Mitigation: keep platform code behind `cfg(windows)` modules with trait-level tests that run on Linux, and run `ci-platforms` once at the end of each group that touches Windows code (budget: manual runs only, see Actions minutes policy).

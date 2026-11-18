@@ -77,3 +77,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Done: `verify --db --checkpoints-from <dir>` (export checkpoints join the DB ones; export-only orgs verified); `just audit-export`, `audit-verify` (runs --db --checkpoints-from, then --dir), `audit-tamper-test`; Rust tamper test (`tests/tamper.rs`) covers field edit, row delete, seq swap, truncation, exported line edit, and rewrite-with-recomputed-hashes plus deleted checkpoint rows (caught only with export checkpoints).
 - Open (nits): (1) `audit_verify_runs` row records ok=true when only an unreadable exported checkpoint line failed. (2) `just audit-verify --json` prints two JSON documents. (3) recipe comments show oddly in `just --list`. (4) rewrite between last exported checkpoint and export cursor is caught by --dir, not --db --checkpoints-from (audit-verify runs both). (5) owner deleting an export-only org's `orgs` row makes verify exit 2 not 1.
 - Notes for next session: 5.4 (`just up && just audit-tamper-test`, full stack with OpenBao) then group 6 (API, web, desktop). Build with CARGO_INCREMENTAL=0. Identity WARN: app token request got HTTP 403 from the proxy, run acted as owner account.
+
+## 2026-11-18 worker (alfie)
+- Task: 5.4 - done
+- Verified: `cargo nextest run -p ls-audit` -> 40 passed; `just up && just audit-tamper-test` -> 2 passed (every tamper case fails verify, untouched ledger passes)
+- Notes for next session: next is group 6 (API, web audit page, desktop view) then 7.x smoke. Agent identity token request returned 403 via proxy, so the run acted as the owner account.

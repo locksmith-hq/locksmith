@@ -24,7 +24,7 @@
 - [x] 5.1 `locksmith-audit verify --db` (verifier role) and `--dir` (offline, public key only), with `--json` output; results are recorded in `audit_verify_runs`; it exits non-zero with the org and first broken seq.
 - [x] 5.2 `locksmith-audit export` to the file sink (JSON Lines per org, checkpoints, cursor, temp file plus rename plus fsync) behind an `AuditSink` trait; incremental, never writes an event twice.
 - [x] 5.3 `just audit-verify` (runs `verify --db --checkpoints-from` the export directory), `just audit-export`, and `just audit-tamper-test`; the tamper test runs as the owner role: edit a field, delete a row, swap two seqs, truncate past a checkpoint, edit an exported line, and the strongest case: rewrite one event, recompute every later hash, and delete the `audit_checkpoints` rows. Each must fail verify, the last with the export's checkpoints present; the untouched ledger must pass.
-- [ ] 5.4 Verify: `cargo nextest run -p ls-audit` and `just up && just audit-tamper-test`.
+- [x] 5.4 Verify: `cargo nextest run -p ls-audit` and `just up && just audit-tamper-test`.
 
 ## 6. API, console and desktop [sonnet]
 - [ ] 6.1 `GET /v1/audit/events` (paged, newest first, org-scoped) and `GET /v1/audit/status` (latest checkpoint, latest verify run); `openapi.json` and the generated TS types updated.

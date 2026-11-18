@@ -13,3 +13,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Finding: replace `PgAudit` behind the existing `AuditSink` trait (`services/gateway/src/relay.rs:46`) so `relay.rs` barely changes. Don't extend the `gateway_audit` writer, since 3.1 removes it.
 - Carried from the PR 191 merge review (agent-log 2026-11-17 20:27Z): outcome retries need an idempotency key on the attempt id, and the rollback must either keep a gated legacy writer or be documented as a code revert. Add both to design.md before task 3.1.
 - Notes for next session: the shared e2e helpers (`api`, `wiremock`, `uniq`, `mint_canary`) now live in `tests/e2e/src/lib.rs` (lead PR); use them for 7.1.
+
+## 2026-11-18 11:30 worker
+- Task: 1.1-1.3 - done
+- Verified: `just ci` -> green; `cargo nextest run -p ls-audit -p ls-vault` -> 37 passed (golden vectors written before the switch, pass on old and new code)
+- Notes for next session: group 2 next (Postgres ledger, migrations, store). `ls-audit::row_hash(canonical, suffix)` takes an empty suffix for the server ledger (no MAC). Run `npm ci` before `just ci` or web lint fails on the missing control-plane-client link. Reuse the Pg test harness from control-plane tests (see lead finding above).

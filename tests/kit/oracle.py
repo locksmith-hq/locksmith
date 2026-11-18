@@ -147,11 +147,13 @@ VIEWS = (
     ("qp", re.compile(rb"=(?:([0-9A-Fa-f]{2})|[ \t]*\r?\n)"), qp_repl, b"="),
     ("json-u", re.compile(rb"\\u([0-9A-Fa-f]{4})"), json_u_repl, b"\\u"),
     ("html-entity", re.compile(rb"&#(?:[xX]([0-9A-Fa-f]{1,6})|([0-9]{1,7}));?"), html_repl, b"&#"),
-    # Whitespace, and an HTTP header name (RFC 9110 token) with its colon at a line start.
-    ("stripped", re.compile(rb"(?m)^[!#$%&'*+.^_`|~0-9A-Za-z-]+:|\s+"), lambda m: b"", None),
+    # Whitespace, and an HTTP header name (RFC 9110 token) with its colon at a line start,
+    # after any spaces or tabs.
+    ("stripped", re.compile(rb"(?m)\s*^[ \t]*[!#$%&'*+.^_`|~0-9A-Za-z-]+:|\s+"), lambda m: b"", None),
 )
 GZIP_MAGIC = b"\x1f\x8b\x08"
 GZIP_MAX_MEMBERS = 256
+GZIP_MAX_ATTEMPTS = 4096  # gzip-looking offsets tried per buffer, decoded or not
 GZIP_MAX_DEPTH = 3
 
 
@@ -216,12 +218,16 @@ class Matcher:
         # The stripped view drops whitespace, so its needles do too (raw bytes can hold some).
         self.stripped = [(name, WS_RE.sub(b"", needle)) for name, needle in self.needles]
 
-    def find(self, data):
+    def find(self, data, budget=MAX_BYTES):
         """Return [(label, offset)]. A view hit's offset is where it starts in data (for a gzip
-        member, where the member starts)."""
-        return self._find(data, 0, [MAX_BYTES])
+        member, where the member starts). Afterwards self.incomplete is None, or why the gzip
+        views stopped before the end of the data (the member limit or the byte budget)."""
+        state = {"budget": budget, "incomplete": None}
+        hits = self._find(data, 0, state)
+        self.incomplete = state["incomplete"]
+        return hits
 
-    def _find(self, data, depth, budget):
+    def _find(self, data, depth, state):
         hits = find_hits(data, self.needles)
         base = collections.Counter(name for name, _off in hits)
         base_offs = set(hits)
@@ -242,23 +248,32 @@ class Matcher:
                 if (name, off) not in base_offs:
                     hits.append(("%s/%s" % (label, name), off))
         if depth < GZIP_MAX_DEPTH:
-            start = members = 0
+            # Only members that decode count toward the limits; junk that looks like a gzip
+            # header costs an attempt. Stopping early on any limit marks the scan incomplete.
+            start = members = attempts = 0
             buf = memoryview(data)
-            while members < GZIP_MAX_MEMBERS and budget[0] > 0:
+            while True:
                 i = data.find(GZIP_MAGIC, start)
                 if i < 0:
                     break
+                if members >= GZIP_MAX_MEMBERS or attempts >= GZIP_MAX_ATTEMPTS or state["budget"] <= 0:
+                    state["incomplete"] = "gzip budget exhausted, not fully scanned"
+                    break
                 start = i + 1
-                members += 1
+                attempts += 1
+                d = zlib.decompressobj(31)
                 try:
                     # wbits 31: a gzip header; output stops at the member's end or the budget.
-                    out = zlib.decompressobj(31).decompress(buf[i:], budget[0])
+                    out = d.decompress(buf[i:], state["budget"])
                 except zlib.error:
                     continue
-                if not out:
+                if not out and not d.eof:
                     continue
-                budget[0] -= len(out)
-                for name, _off in self._find(out, depth + 1, budget):
+                members += 1
+                state["budget"] -= len(out)
+                if d.unconsumed_tail:
+                    state["incomplete"] = "gzip budget exhausted, not fully scanned"
+                for name, _off in self._find(out, depth + 1, state):
                     hits.append(("gzip/" + name, i))
         return hits
 
@@ -302,6 +317,8 @@ def collect(canary, paths):
             continue
         for name, off in m.find(data):
             hits.append((name, fp, off))
+        if m.incomplete:
+            errors.append("%s: %s" % (m.incomplete, fp))
     return hits, errors
 
 
@@ -348,6 +365,18 @@ class Report:
     def scan(self, data, locator):
         for name, _off in self.m.find(data):
             self.leak(name, locator)
+        self.incomplete(locator)
+
+    def incomplete(self, locator, strict=True):
+        """Report a gzip view that stopped early, like content over 50 MB: an error, or (legacy
+        positional paths) a notice."""
+        if not self.m.incomplete:
+            return
+        msg = "%s: %s" % (self.m.incomplete, locator)
+        if strict:
+            self.error(msg)
+        else:
+            print("notice: %s" % self.m.safe(msg), file=sys.stderr, flush=True)
 
     def unreach(self, name, why):
         self.unreachable.append(name)
@@ -394,6 +423,7 @@ def scan_paths(rep, paths):
             continue
         for name, off in rep.m.find(data):
             rep.leak(name, "%s:%d" % (fp, off))
+        rep.incomplete(fp, strict=False)
 
 
 def scan_dir(rep, path):
@@ -412,6 +442,7 @@ def scan_dir(rep, path):
         total += len(data)
         for name, off in rep.m.find(data):
             rep.leak(name, "dir:%s:%d" % (fp, off))
+        rep.incomplete("dir:%s" % fp)
     rep.cover("dir", "files", path=path, files=files, bytes=total)
 
 
@@ -734,6 +765,10 @@ def view_plants(canary):
         ("text-stripped-lines", "\r\n".join(canary).encode(), "stripped", "utf8"),
         ("text-stripped-headers", ("HTTP/1.1 200 OK\r\nDate: x\r\nX-Part-1: %s\r\nX-Part-2: %s\r\n\r\n"
                                    % (canary[:half], canary[half:])).encode(), "stripped", "utf8"),
+        ("text-stripped-tab-headers", ("X-Part-1: %s\r\n\tX-Part-2: %s\r\n"
+                                       % (canary[:half], canary[half:])).encode(), "stripped", "utf8"),
+        # 256 gzip-looking markers that do not decode must not use up the member limit.
+        ("text-gzip-after-junk", GZIP_MAGIC * GZIP_MAX_MEMBERS + gzip.compress(text), "gzip", "utf8"),
     ]
 
 
@@ -754,6 +789,32 @@ def clean_corpus():
     return b"\n".join(parts)
 
 
+def gzip_limit_checks(tmp):
+    """Yield (name, ok) for gzip inputs that hit the member, attempt and byte limits."""
+    canary = gen_canary()
+    text = canary.encode()
+    member = gzip.compress(text)
+    cases = [
+        ("gzip-members-exhausted", gzip.compress(b"") * GZIP_MAX_MEMBERS + member),
+        ("gzip-attempts-exhausted", GZIP_MAGIC * GZIP_MAX_ATTEMPTS + member),
+        # Real size: 60 MB of zeros in front uses up the 50 MB budget.
+        ("gzip-budget-exhausted", gzip.compress(bytes(60 << 20)) + member),
+    ]
+    for name, data in cases:
+        path = os.path.join(tmp, "%s.bin" % name)
+        with open(path, "wb") as fh:
+            fh.write(data)
+        _hits, errors = collect(canary, [path])
+        yield name, any(e.startswith("gzip budget exhausted") for e in errors)
+    # A small budget: one byte short of the padding fails closed; enough budget finds the canary.
+    m = Matcher([canary])
+    data = gzip.compress(bytes(4096)) + member
+    m.find(data, budget=4095)
+    short_ok = bool(m.incomplete)
+    hits = m.find(data, budget=4096 + len(text))
+    yield "gzip-small-budget", short_ok and not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
+
+
 def cmd_selftest(_args):
     ok_all = True
     names = [name for name, _f, _n in variants(gen_canary())]
@@ -768,9 +829,9 @@ def cmd_selftest(_args):
             found = any(name in h[0].split("+") for h in hits) and not errors
             ok_all = ok_all and found
             print("%s %s" % ("ok" if found else "FAIL", name))
-        for name, planted, view, enc in view_plants(gen_canary()):
+        for i in range(len(view_plants(gen_canary()))):
             canary = gen_canary()
-            planted = [p for n, p, _v, _e in view_plants(canary) if n == name][0]
+            name, planted, view, enc = view_plants(canary)[i]
             path = os.path.join(tmp, "%s.bin" % name)
             with open(path, "wb") as fh:
                 fh.write(b"preamble\n" + planted + b"\ntrailer\n")
@@ -795,6 +856,11 @@ def cmd_selftest(_args):
         corpus_ok = not hits and not errors
         ok_all = ok_all and corpus_ok
         print("%s clean-corpus%s" % ("ok" if corpus_ok else "FAIL", "" if corpus_ok else " (%d hits)" % len(hits)))
+        # A gzip view that stops at a limit says so: as an error from collect, and as
+        # m.incomplete; the canary after the limit is not reported as clean.
+        for name, ok in gzip_limit_checks(tmp):
+            ok_all = ok_all and ok
+            print("%s %s" % ("ok" if ok else "FAIL", name))
         # The locator guard hides any 8-byte fragment of an encoding and passes ordinary text.
         m = Matcher([canary])
         frag = [f for n, f, _ in variants(canary) if n == "hex-lower"][0][10:18].decode()

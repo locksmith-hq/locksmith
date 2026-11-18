@@ -37,4 +37,4 @@
 - [x] 7.2 Verify: `just up && just audit-smoke && just leak-scan`.
 
 ## 8. Local verification
-- [ ] 8.1 `just up`, `just audit-smoke`, `just audit-tamper-test`, `just apps-build`, then `just ci`.
+- [x] 8.1 `just up`, `just audit-smoke`, `just audit-tamper-test`, `just apps-build`, then `just ci`.

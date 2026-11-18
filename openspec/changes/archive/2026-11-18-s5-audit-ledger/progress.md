@@ -105,3 +105,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-18 worker (josie) - evaluator notes on 7.1
 - Evaluator (Opus) PASS on 7.1. Follow-ups: (1) p99 186 ms under relay load breaches design.md's 20 ms trigger ("batch appends or move to Tessera", a new change); the figure is limited by relays reaching only 147/s and a possibly partial Tempo span count, so treat it as unproven either way, not as a pass. (2) Gateway gap: if the caller disconnects mid-relay the `relay.outcome` append is dropped; needs its own task (run the outcome append as a detached task). (3) Consider `AUDIT_SMOKE_LOAD=0` as default for 7.2 (leak-scan slows with each load run). (4) `start_gateway` leaves a temp bindings dir (ids only).
+
+## 2026-11-18 worker (alfie)
+- Task: 8.1 - done; change archived in this PR
+- Verified: `just up` + `just api` + `AUDIT_SMOKE_LOAD=0 just audit-smoke` -> pass (verify ok --db and --dir, leak-scan clean); `just audit-tamper-test` -> 2 passed; `just apps-build` -> built; `just ci` -> green (before archive); `openspec validate --all` -> 12 passed after archive
+- Notes for next session: delta scenario renamed back to "Audit row per call" so `openspec archive` accepts the MODIFIED block. Open follow-ups from 7.1: relay.outcome dropped on caller disconnect (spawn detached), append p99 under relay load unproven vs the 20 ms trigger.

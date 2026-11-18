@@ -1,0 +1,16 @@
+[package]
+name = "ls-audit"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Pure chain core: no IO, permissive crates only (the offline verifier ships to customers).
+[dependencies]
+sha2 = "0.10"
+
+[dev-dependencies]
+proptest = { workspace = true }

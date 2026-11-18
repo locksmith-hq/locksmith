@@ -157,6 +157,21 @@ pub async fn lock_head(conn: &mut PgConnection, org_id: Uuid) -> Result<(u64, Ha
     Ok((to_seq(seq)?, to_hash(&head)?))
 }
 
+/// `org_id`'s head `(seq, hash)` as visible in this transaction, without locking it; `None`
+/// before the org's first append. The checkpoint job reads it (S5 task 4.2).
+pub async fn head_in_tx(
+    conn: &mut PgConnection,
+    org_id: Uuid,
+) -> Result<Option<(u64, Hash)>, Error> {
+    let row: Option<(i64, Vec<u8>)> =
+        query_as("SELECT seq, hash FROM audit_heads WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_optional(&mut *conn)
+            .await?;
+    row.map(|(seq, hash)| Ok((to_seq(seq)?, to_hash(&hash)?)))
+        .transpose()
+}
+
 type Row = (
     Uuid,
     i64,

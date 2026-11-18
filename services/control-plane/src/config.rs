@@ -17,6 +17,10 @@ pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_CONTROL_PLANE_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
 pub const ENV_OPENBAO_KEY_VERSION: &str = "OPENBAO_TRANSIT_KEY_VERSION";
+/// S5: the OpenBao token that may only sign with the audit checkpoint key.
+pub const ENV_AUDIT_CHECKPOINT_TOKEN: &str = "OPENBAO_AUDIT_CHECKPOINT_TOKEN";
+/// S5: the transit key audit checkpoints are signed with (default `audit-checkpoint`).
+pub const ENV_AUDIT_CHECKPOINT_KEY: &str = "OPENBAO_AUDIT_CHECKPOINT_KEY";
 pub const ENV_GATEWAY_SERVICE_TOKEN: &str = "LOCKSMITH_GATEWAY_SERVICE_TOKEN";
 /// S4: the Ed25519 seed (32 bytes, base64) that signs agent tokens.
 pub const ENV_AGENT_SIGNING_KEY: &str = "LOCKSMITH_AGENT_SIGNING_KEY";
@@ -26,6 +30,7 @@ pub const ENV_AGENT_SIGNING_KEY: &str = "LOCKSMITH_AGENT_SIGNING_KEY";
 pub const MIN_SERVICE_TOKEN_BYTES: usize = 32;
 
 const DEFAULT_TRANSIT_KEY: &str = "gateway";
+const DEFAULT_CHECKPOINT_KEY: &str = "audit-checkpoint";
 
 const DEFAULT_BIND: &str = "127.0.0.1:8080";
 
@@ -63,6 +68,9 @@ pub struct Config {
     /// The KMS that wraps secret-version DEKs (S2). `None` when `OPENBAO_ADDR` is unset; secret
     /// version writes then answer `503`.
     pub kms: Option<KmsConfig>,
+    /// The OpenBao transit key that signs audit checkpoints (S5 design decision 4). `None` when
+    /// `OPENBAO_AUDIT_CHECKPOINT_TOKEN` is unset: the checkpoint job then does not run.
+    pub audit_checkpoint: Option<CheckpointKmsConfig>,
     /// The bearer token the gateway presents on `/internal/v1` (S3 design decision 2). `None`
     /// when unset: every internal request is then refused (`401`, fail closed).
     pub gateway_service_token: Option<SecretString>,
@@ -78,6 +86,14 @@ pub struct KmsConfig {
     pub token: SecretString,
     pub key: String,
     pub key_version: u32,
+}
+
+/// OpenBao transit settings for signing audit checkpoints. No `Debug`/`Clone`: it holds the
+/// control plane's sign-only token (a policy allowing `transit/sign/audit-checkpoint` only).
+pub struct CheckpointKmsConfig {
+    pub addr: String,
+    pub token: SecretString,
+    pub key: String,
 }
 
 impl Config {
@@ -112,7 +128,21 @@ impl Config {
             return Err(ConfigError::DevAuthNonLoopback(ENV_BIND));
         }
 
-        let kms = match get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty()) {
+        let openbao_addr = get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty());
+        let audit_checkpoint = match get(ENV_AUDIT_CHECKPOINT_TOKEN).filter(|v| !v.is_empty()) {
+            None => None,
+            Some(token) => Some(CheckpointKmsConfig {
+                addr: openbao_addr
+                    .clone()
+                    .ok_or(ConfigError::Missing(ENV_OPENBAO_ADDR))?,
+                token: SecretString::from(token),
+                key: get(ENV_AUDIT_CHECKPOINT_KEY)
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(|| DEFAULT_CHECKPOINT_KEY.to_owned()),
+            }),
+        };
+
+        let kms = match openbao_addr {
             None => None,
             Some(addr) => {
                 let token = required(ENV_OPENBAO_TOKEN)?;
@@ -163,6 +193,7 @@ impl Config {
             otlp_endpoint,
             dev_auth,
             kms,
+            audit_checkpoint,
             gateway_service_token,
             agent_signing_key,
         })
@@ -268,6 +299,41 @@ mod tests {
         .unwrap();
         assert_eq!(err, ConfigError::Invalid(ENV_OPENBAO_KEY_VERSION));
         assert!(!err.to_string().contains("hunter"));
+    }
+
+    #[test]
+    fn audit_checkpoint_signing_is_optional_and_needs_the_openbao_address() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(c.audit_checkpoint.is_none());
+        let err = Config::from_lookup(lookup(&with(&[(
+            ENV_AUDIT_CHECKPOINT_TOKEN,
+            "tok-hunter9",
+        )])))
+        .err()
+        .unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OPENBAO_ADDR));
+        assert!(!err.to_string().contains("hunter"));
+        let c = Config::from_lookup(lookup(&with(&[
+            (ENV_OPENBAO_ADDR, "http://127.0.0.1:8200"),
+            (ENV_OPENBAO_TOKEN, "tok-hunter4"),
+            (ENV_AUDIT_CHECKPOINT_TOKEN, "tok-hunter9"),
+        ])))
+        .ok()
+        .unwrap();
+        let ck = c.audit_checkpoint.unwrap();
+        assert_eq!(
+            (ck.addr.as_str(), ck.key.as_str(), ck.token.expose_secret()),
+            ("http://127.0.0.1:8200", "audit-checkpoint", "tok-hunter9")
+        );
+        let c = Config::from_lookup(lookup(&with(&[
+            (ENV_OPENBAO_ADDR, "http://127.0.0.1:8200"),
+            (ENV_OPENBAO_TOKEN, "tok-hunter4"),
+            (ENV_AUDIT_CHECKPOINT_TOKEN, "tok-hunter9"),
+            (ENV_AUDIT_CHECKPOINT_KEY, "other-key"),
+        ])))
+        .ok()
+        .unwrap();
+        assert_eq!(c.audit_checkpoint.unwrap().key, "other-key");
     }
 
     #[test]

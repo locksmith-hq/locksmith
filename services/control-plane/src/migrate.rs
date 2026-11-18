@@ -53,6 +53,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "gateway audit read only",
         include_str!("../migrations/0009_gateway_audit_read_only.sql"),
     ),
+    (
+        10,
+        "audit checkpoint jobs",
+        include_str!("../migrations/0010_audit_checkpoint_jobs.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

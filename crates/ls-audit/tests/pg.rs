@@ -236,6 +236,9 @@ async fn rls_isolates_orgs_on_every_ledger_table() {
     assert_eq!(
         rls.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(),
         [
+            // Migration 0010: the checkpoint job's queue (org ids only); the app role reads all
+            // of its rows by design and changes one only when bound to its org.
+            "audit_checkpoint_jobs",
             "audit_checkpoints",
             "audit_events",
             "audit_heads",

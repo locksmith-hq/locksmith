@@ -5,6 +5,9 @@
 set -uo pipefail
 
 apt-get update -q && apt-get install -y -q libssl-dev pkg-config just || true
+# Tauri desktop build (`just apps-build`): without these gdk-3.0.pc is missing and runs skipped the task
+# or spent 40-90 s on apt (5 runs on 2026-11-18). Separate call so a failure keeps the line above.
+apt-get install -y -q libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev || true
 
 # Rust toolchain pinned by rust-toolchain.toml (rustup downloads it on first cargo call; do it now).
 command -v rustup >/dev/null || curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal

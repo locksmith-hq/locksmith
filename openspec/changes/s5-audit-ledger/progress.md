@@ -87,3 +87,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 6.1 audit events and status API (done; sonnet implemented, opus evaluator PASS)
 - Verified: `just ci` green; `cargo nextest run -p ls-control-plane` 91/91.
 - Notes for next session: 6.2 (web audit page), 6.3 (desktop view), 6.4, then 7.x and 8.1. Chain hashes are exposed as `digest`/`prev_digest` (the openapi test rejects "hash" fields). `attrs` types as `Record<string, never>` in schema.d.ts; consider `unknown` for the console.
+
+## 2026-11-18 worker (alfie)
+- Task: 6.2, 6.3, 6.4 - done
+- Verified: `just ci` -> green (before evaluator fixes; web 8 and desktop 24 vitest pass after); `just apps-build` -> built; evaluator (Opus) FAIL on first pass, 4 findings fixed (double Load more guard via ref, stale-org race in web Audit, loading vs empty state, stale error) plus tests for attrs not rendered, failed verify, error path; fixes not re-evaluated.
+- Done: `Client.listAuditEvents/auditStatus` in `packages/control-plane-client`; web Audit page; desktop "Org audit" tab (existing Audit tab is the daemon's local ledger).
+- Notes for next session: group 7 (`just audit-smoke`, oha p99 at 200 relays/s) then 8.1; archive the change in the PR that ticks the last task, fix spec wording at specs/gateway-http-relay/spec.md:6 first. Identity WARN: AGENT_APP_KEY_ALFIE not a base64 private key (56 chars), run acted as owner account. Desktop Agents screen refresh pattern has the same stale-org race (not changed).

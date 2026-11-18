@@ -326,3 +326,21 @@ test("agents: lists grants, creates an agent and shows its enrollment secret onc
   await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
   expect(screen.queryByTestId("enrollment-secret")).toBeNull();
 });
+
+test("org audit: shows chain status and events from the control plane, and pages on demand", async () => {
+  const e = (seq: number, kind: string) => ({ id: `e${seq}`, seq, at: "2026-01-01T00:00:00Z", kind, actor: "agent:a1", target: "secret:s1", outcome: "ok", attrs: { leak: "ATTRSENTINEL" }, digest: "d", prev_digest: "p" });
+  const client = {
+    auditStatus: vi.fn().mockResolvedValue({ head_seq: 3, latest_checkpoint: { seq: 2, at: "t", digest: "d", key_id: "k" }, latest_verify: { ok: false, finished_at: "t2", broken_seq: 2 } }),
+    listAuditEvents: vi.fn().mockResolvedValueOnce({ items: [e(3, "relay.outcome")], next: "c1" }).mockResolvedValueOnce({ items: [e(2, "agent.created")] }),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  render(<App />);
+  await nav("Org audit");
+  expect(await screen.findByText("relay.outcome")).toBeInTheDocument();
+  expect(screen.getByTestId("verify-result")).toHaveTextContent("FAILED");
+  expect(screen.getByText(/checkpoint: seq 2 at t/)).toBeInTheDocument();
+  expect(document.body.textContent).not.toContain("ATTRSENTINEL");
+  await userEvent.click(screen.getByRole("button", { name: "Load more" }));
+  expect(await screen.findByText("agent.created")).toBeInTheDocument();
+  expect(client.listAuditEvents).toHaveBeenLastCalledWith({ cursor: "c1" });
+});

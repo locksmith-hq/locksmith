@@ -8,7 +8,7 @@
 ## 2. Gateway auth and grant enforcement [opus]
 - [x] 2.1 Replace the static caller token with JWT verification via JWKS (cached, rotation by kid); add `GET /v1/grants`.
 - [x] 2.2 Enforce grant (and expiry) before unwrap; write `agent_id` into `gateway_audit`; audit denials.
-- [ ] 2.3 Verify: `cargo nextest run -p ls-gateway` covers forged, expired and wrong-audience tokens, no grant makes no decrypt call, revoked grant stops within the cache TTL.
+- [x] 2.3 Verify: `cargo nextest run -p ls-gateway` covers forged, expired and wrong-audience tokens, no grant makes no decrypt call, revoked grant stops within the cache TTL.
 
 ## 3. smith and MCP remote mode [sonnet]
 - [ ] 3.1 `smith login --agent`, `smith grants`, `smith relay` against the gateway; token kept in a 0600 state file; output redacted.

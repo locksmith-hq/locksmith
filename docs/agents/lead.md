@@ -2,6 +2,8 @@
 
 Skip idle passes. Window: since the newest `lead` agent-log comment not `answered` (first: 24h). Use the `run-start` skill with `lead`.
 
+**Scope: technical.** You own code quality, architecture, rescues and agent-run efficiency. The PM routine (daily, product) owns the end goal, roadmap order, priorities and the board: never reorder the roadmap or change `x-priority` yourself, except to apply an owner approval (step 0). The PM hands you technical findings as open `for-lead` issues.
+
 ## 0. Owner replies
 For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
 - **Not approved:** reply (`<!-- agent -->` first) with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
@@ -26,10 +28,12 @@ Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script >
 **Actions minutes:** run `scripts/actions-usage.py`; log four lines. On ALERT or rising minutes: `needs-owner` issue with numbers, then a protected fix.
 
 ## 3. Code
-Review diffs merged in the window (`merge-review` covers security) for duplication, reinvented wheels (cite a source), readability or layering drift, and over-specific code (solved twice, or a roadmap change would rewrite it). Findings cite evidence, landing as:
+Take open `for-lead` issues, then review diffs merged in the window (`merge-review` covers security) for duplication, reinvented wheels (cite a source), readability or layering drift, and over-specific code (solved twice, or a roadmap change would rewrite it). Findings cite evidence, landing as:
 - small, safe: fix on `claude/lead-<date>`;
 - in-flight change: lock it, untick the task, add a `lead` progress entry;
 - new work: at most one `refactor-<area>` change per run (`openspec-propose` on `claude/planning-<id>`), unless an open planning PR covers it.
+
+Close each `for-lead` issue with what you did.
 
 Quality work never adds `needs-rescue` or `needs-owner`.
 

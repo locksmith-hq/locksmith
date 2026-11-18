@@ -22,8 +22,8 @@
 
 ## 5. Demo and e2e [sonnet]
 - [x] 5.1 Compose wiring and `just connector-smoke`: register agent, grant a canary secret, relay to the mock upstream through `smith` and the MCP tool; assert upstream saw it, the agent did not.
-- [ ] 5.2 Live headless `claude -p` run calling the mock upstream (and a real API such as Langfuse when a key is available to the owner's setup) through the MCP tools; `just leak-scan` on the transcript, DB, Loki and Tempo; planted canary still detected.
-- [ ] 5.3 Verify: `just up && just connector-smoke && just leak-scan`.
+- [x] 5.2 Live headless `claude -p` run calling the mock upstream (and a real API such as Langfuse when a key is available to the owner's setup) through the MCP tools; `just leak-scan` on the transcript, DB, Loki and Tempo; planted canary still detected.
+- [x] 5.3 Verify: `just up && just connector-smoke && just leak-scan`.
 
 ## 6. Local verification
-- [ ] 6.1 `just up`, `just connector-smoke`, `just apps-build`, then `just ci`.
+- [x] 6.1 `just up`, `just connector-smoke`, `just apps-build`, then `just ci`.

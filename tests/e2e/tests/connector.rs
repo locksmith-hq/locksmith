@@ -119,8 +119,20 @@ fn id_of(v: &Value) -> String {
     v["id"].as_str().unwrap().to_owned()
 }
 
-#[tokio::test]
-async fn agent_uses_a_credential_it_never_holds() {
+struct Fixture {
+    c: Client,
+    canary: String,
+    sid: String,
+    enrollment: String,
+    gw: Gateway,
+    home: std::path::PathBuf,
+    url: String,
+    path: String,
+    smith: String,
+    mcp: String,
+}
+
+async fn setup() -> Fixture {
     let c = Client::new();
     let canary = mint_canary();
 
@@ -138,7 +150,13 @@ async fn agent_uses_a_credential_it_never_holds() {
     );
     let base = format!("/v1/projects/{pid}/environments/{eid}/secrets");
     let sid = id_of(&cp(&c, &base, o, json!({ "name": "UPSTREAM_KEY" })).await);
-    cp(&c, &format!("{base}/{sid}/versions"), o, json!({ "value": canary })).await;
+    cp(
+        &c,
+        &format!("{base}/{sid}/versions"),
+        o,
+        json!({ "value": canary }),
+    )
+    .await;
 
     let enrolled = cp(&c, "/v1/agents", o, json!({ "name": uniq("conn-agent") })).await;
     let agent_id = id_of(&enrolled["agent"]);
@@ -172,9 +190,37 @@ async fn agent_uses_a_credential_it_never_holds() {
     let gw = start_gateway(&c, &bindings).await;
     let home = std::env::temp_dir().join(uniq("connector-home"));
     std::fs::create_dir_all(&home).unwrap();
+    let url = format!("{}{path}", wiremock());
     let smith = bin("smith", "LOCKSMITH_SMITH_BIN");
     let mcp = bin("locksmith-mcp", "LOCKSMITH_MCP_BIN");
-    let url = format!("{}{path}", wiremock());
+    Fixture {
+        c,
+        canary,
+        sid,
+        enrollment,
+        gw,
+        home,
+        url,
+        path,
+        smith,
+        mcp,
+    }
+}
+
+#[tokio::test]
+async fn agent_uses_a_credential_it_never_holds() {
+    let Fixture {
+        c,
+        canary,
+        sid,
+        enrollment,
+        gw,
+        home,
+        url,
+        path,
+        smith,
+        mcp,
+    } = setup().await;
 
     // Everything the agent can observe is collected here and checked for the canary and the
     // enrollment secret at the end.
@@ -244,7 +290,10 @@ async fn agent_uses_a_credential_it_never_holds() {
     let out = child.wait_with_output().unwrap();
     seen(&out);
     let replies = String::from_utf8_lossy(&out.stdout).into_owned();
-    assert!(replies.contains("UPSTREAM_KEY"), "list_grants missing the grant");
+    assert!(
+        replies.contains("UPSTREAM_KEY"),
+        "list_grants missing the grant"
+    );
     assert!(replies.contains("REDACTED"), "relay_request not redacted");
 
     // The upstream saw the injected secret at least twice (smith and MCP); the agent never did.
@@ -267,10 +316,109 @@ async fn agent_uses_a_credential_it_never_holds() {
                     .is_some_and(|h| h == format!("Bearer {canary}"))
         })
         .count();
-    assert!(hits >= 2, "upstream saw the injected header {hits} times, expected 2");
+    assert!(
+        hits >= 2,
+        "upstream saw the injected header {hits} times, expected 2"
+    );
 
     observed.push_str(&state);
     assert!(!observed.contains(&canary), "the agent observed the secret");
-    assert!(!observed.contains(&enrollment), "the enrollment secret leaked");
+    assert!(
+        !observed.contains(&enrollment),
+        "the enrollment secret leaked"
+    );
     let _ = std::fs::remove_dir_all(&home);
+}
+
+/// Live headless `claude -p` run (S4 task 5.2). Opt in with `E2E_LIVE_CLAUDE=1`; needs the `claude`
+/// CLI. The agent is given only the `locksmith-mcp` tools. The transcript is written to
+/// `$E2E_TRANSCRIPT` (default `<tmp>/connector-transcript.json`) for `just leak-scan --transcript`.
+#[tokio::test]
+async fn live_claude_uses_the_mcp_tools_without_seeing_the_secret() {
+    if env::var("E2E_LIVE_CLAUDE").ok().as_deref() != Some("1") {
+        eprintln!("skipped: set E2E_LIVE_CLAUDE=1 to run the live claude -p test");
+        return;
+    }
+    let Fixture {
+        c,
+        canary,
+        sid,
+        enrollment,
+        gw,
+        home,
+        url,
+        path,
+        smith,
+        mcp,
+    } = setup().await;
+    let out = agent_cmd(&smith, &home, &gw.base)
+        .env("LOCKSMITH_ENROLLMENT_SECRET", &enrollment)
+        .args(["login", "--agent"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "smith login --agent failed");
+
+    let cfg = home.join("mcp.json");
+    let conf = json!({"mcpServers": {"locksmith": {"command": mcp, "args": [], "env": {
+        "LOCKSMITH_HOME": home, "LOCKSMITH_CONTROL_PLANE_URL": api(), "LOCKSMITH_GATEWAY_URL": gw.base
+    }}}});
+    std::fs::write(&cfg, conf.to_string()).unwrap();
+    let prompt = format!(
+        "Use the locksmith MCP tool list_grants, then the relay_request tool with secret_id {sid}, method GET and url {url} . Report the HTTP status and the JSON body you got back."
+    );
+    let out = Command::new("claude")
+        .current_dir(&home)
+        .args([
+            "-p",
+            &prompt,
+            "--output-format",
+            "json",
+            "--strict-mcp-config",
+            "--mcp-config",
+        ])
+        .arg(&cfg)
+        .args([
+            "--allowedTools",
+            "mcp__locksmith__list_grants,mcp__locksmith__relay_request",
+            "--max-turns",
+            "8",
+        ])
+        .output()
+        .expect("run claude -p");
+    let transcript = String::from_utf8_lossy(&out.stdout).into_owned();
+    let tpath = env::var("E2E_TRANSCRIPT").unwrap_or_else(|_| {
+        std::env::temp_dir()
+            .join("connector-transcript.json")
+            .display()
+            .to_string()
+    });
+    std::fs::write(&tpath, &transcript).unwrap();
+    assert!(out.status.success(), "claude -p failed");
+    assert!(
+        !transcript.contains(&canary),
+        "the transcript contains the secret"
+    );
+    assert!(
+        !transcript.contains(&enrollment),
+        "the transcript contains the enrollment secret"
+    );
+
+    let journal: Value = c
+        .get(format!("{}/__admin/requests", wiremock()))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let seen = journal["requests"].as_array().unwrap().iter().any(|r| {
+        r["request"]["url"] == path.as_str()
+            && r["request"]["headers"]["Authorization"]
+                .as_str()
+                .is_some_and(|h| h == format!("Bearer {canary}"))
+    });
+    assert!(
+        seen,
+        "upstream did not receive the injected header from the live agent"
+    );
 }

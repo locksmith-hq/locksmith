@@ -72,3 +72,13 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.1 - done
 - Verified: `just up`, `just api`, `just connector-smoke` -> 1 passed (smith login/grants/relay and the locksmith-mcp list_grants/relay_request tools against the real gateway and WireMock; upstream saw the injected canary twice; agent stdout/stderr, 0600 state file and MCP replies contain no canary or enrollment secret); `just leak-scan` clean. Test: `tests/e2e/tests/connector.rs`. No independent evaluator run (Sonnet implementer only).
 - Notes for next session: 5.2 needs a headless `claude -p` run with the MCP server; 5.3 and 6.1 follow. `just ci` not yet rerun after adding the recipe.
+
+## 2026-11-18 worker
+- Task: 5.2, 5.3 - done
+- Verified: `E2E_LIVE_CLAUDE=1 cargo nextest run -p ls-e2e --test connector` -> 2 passed (headless `claude -p` with only the locksmith MCP tools; upstream saw the injected canary); `just leak-scan` clean on DB, Loki, Tempo; `just leak-scan --transcript` clean on the live transcript; a planted canary in a transcript file is still detected (LEAK, exit 1). Live test is opt-in (E2E_LIVE_CLAUDE=1) so `just connector-smoke` stays offline. Real third-party API (Langfuse) not run: no key. No independent evaluator run.
+- Notes for next session: 6.1 is `just ci` plus apps-build; then archive and mark ready.
+
+## 2026-11-18 worker
+- Task: 6.1 - done
+- Verified: `just up`, `just connector-smoke`, `just leak-scan` clean, `just apps-build` (web + Tauri debug build, after installing the GTK dev packages in the VM) and `just ci` exit 0. All tasks ticked; archived in this PR.
+- Notes for next session: open nits: smith `relay -H` accepts Authorization/Cookie (use `ls_connector::reject_credential_headers`); desktop Agents tab fetch needs CORS or a Rust command (control plane has no CORS layer); real third-party API (Langfuse) run needs the owner's key.

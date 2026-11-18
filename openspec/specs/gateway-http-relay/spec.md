@@ -28,15 +28,19 @@ A secret SHALL be injected only into requests whose scheme and host match the bi
 - **THEN** the gateway does not follow it and does not resend the credential
 
 ### Requirement: Only the gateway can decrypt
-The gateway SHALL be the only component holding the KMS decrypt credential. The control-plane material endpoint SHALL return only ciphertext, the wrapped DEK and the key id, and SHALL require the gateway service token.
+The gateway SHALL be the only component holding the KMS decrypt credential. The control-plane material endpoint SHALL return only ciphertext, the wrapped DEK and the key id, and SHALL require the gateway service token. `/v1/relay` SHALL require a valid agent token (signature, audience, expiry) and an unexpired grant for the requested secret.
 
 #### Scenario: Material endpoint carries no plaintext
 - **WHEN** the material endpoint is called with a valid service token
 - **THEN** the body contains ciphertext and wrapped DEK only, and a request without the token gets 401
 
 #### Scenario: Caller authentication
-- **WHEN** `/v1/relay` is called without the configured caller token
+- **WHEN** `/v1/relay` is called without a valid agent token
 - **THEN** it returns 401 and performs no fetch, unwrap or upstream call
+
+#### Scenario: Caller without a grant
+- **WHEN** `/v1/relay` is called with a valid agent token but no unexpired grant for the secret
+- **THEN** it returns 403 and performs no fetch, unwrap or upstream call
 
 ### Requirement: Plaintext never leaves the call
 The value SHALL exist only in `secrecy`/`zeroize` types, SHALL NOT appear in logs, traces, error messages or database rows, and the DEK cache SHALL expire entries after a bounded TTL.

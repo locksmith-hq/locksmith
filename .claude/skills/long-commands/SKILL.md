@@ -10,7 +10,7 @@ description: Run anything that may take over 2 minutes (cold cargo build/test, j
 3. To check on it, run `bash scripts/bg.sh wait <name>` (at most 110 s). It prints the tail of the log and the exit code. Exit 124: still running.
 
 ## Rules
-- **Wait for state, not time.** Foreground `sleep` is blocked: use `bg.sh wait`, or `until <check>; do sleep 2; done` inside a timeout. Never sleep for a subagent; its result wakes you.
+- **Wait for state, not time.** Foreground `sleep` is blocked: use `bg.sh wait`, or `until <check>; do sleep 2; done` inside a timeout. Never sleep for a subagent; run it in the foreground (`evaluate-escalate`).
 - **No prompts.** Use `-y`, `CI=1`, `--no-pager`, `GIT_EDITOR=true` and `</dev/null`.
 - **Stop retrying identical failures.** If the same command fails twice with the same error, stop and treat it as a task failure (see the `evaluate-escalate` skill).
 - **`just ci` gets one rerun.** If it fails once, rerun it once before treating the failure as real, and record both results. A known flaky test exists (lesson L0, not yet identified).

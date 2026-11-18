@@ -12,6 +12,8 @@ description: The implement → independent evaluate → escalate-one-tier loop f
 
 You may implement small tasks yourself (`self: true` in run-log); step 3 still applies.
 
+Run every implementer and evaluator subagent in the foreground: never `run_in_background`, and never end your turn while a subagent runs. A cloud run stops when your turn ends, so unpushed work is lost (worker A, 2026-11-18 12:06).
+
 ## Loop
 1. **Implement.** Give the implementer:
    - the exact task text, the design excerpt, the files and the verification command;

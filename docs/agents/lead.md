@@ -23,7 +23,7 @@ Take the oldest open `needs-rescue` issue whose change you can lock (`bash scrip
 ## 2. Runs
 Check worker sessions via `Claude_Code_Remote`: `list_triggers` `last_run`; `list_sessions` (title `Locksmith worker`) status, summary. Logs: read `Lead (local)` comments. Plus `run-metadata`, failed CI. Flag **stuck** (active long after start, no `run-metadata`, over 2700s, no task done, one task over 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120, long waits) or **wasteful** (Opus over 40% of tokens, repeat reads/retries) runs.
 
-Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > role-file edit > lesson (`lessons.md`, max 5). Total `docs/agents` + `.claude/skills` words must not grow. Revert 7+ day-old fixes whose metric didn't move.
+Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > new skill (`skill-creator` skill, for procedures workers repeat or improvise) > role-file edit > lesson (`lessons.md`, max 5). Except new skills, agent-doc words must not grow. Revert 7+ day-old fixes whose metric didn't move.
 
 **Actions minutes:** run `scripts/actions-usage.py` once; log four lines. On ALERT or rising minutes: `needs-owner` issue with numbers, then a protected fix.
 
@@ -38,4 +38,4 @@ Close each `for-lead` issue with what you did.
 Quality work never adds `needs-rescue` or `needs-owner`.
 
 ## Ship
-Run `just ci`. Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); mark it ready with the `merge-queue` skill: not a draft, plus the `ready-to-merge` label. Without the label it never merges. Use the `run-log` skill; outcome `rescued`, `learned`, `reviewed` or `idle`.
+Run `just ci`. Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill), or it never merges. Use the `run-log` skill; outcome `rescued`, `learned`, `reviewed` or `idle`.

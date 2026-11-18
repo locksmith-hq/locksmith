@@ -1,0 +1,21 @@
+[package]
+name = "ls-pg-test"
+description = "Test support: a throwaway postgres:18 container shared by the Postgres integration tests."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Dev-dependency only: crates list it under [dev-dependencies], never [dependencies].
+# Not the sqlx facade (it pulls sqlx-sqlite; see crates/a0-spikes/Cargo.toml).
+[dependencies]
+sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "migrate"] }
+sqlx-postgres = { version = "0.9.0", default-features = false, features = ["migrate"] }
+testcontainers = { workspace = true }
+tokio = { version = "1.54", features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1.54", features = ["macros", "rt-multi-thread", "time"] }

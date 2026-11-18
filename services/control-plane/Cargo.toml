@@ -62,4 +62,4 @@ http-body-util = "0.1"
 hex = "0.4"
 ls-tenant-lint = { path = "../../crates/ls-tenant-lint" }
 similar = "3.2.1"
-testcontainers = { workspace = true }
+ls-pg-test = { path = "../../crates/ls-pg-test" }

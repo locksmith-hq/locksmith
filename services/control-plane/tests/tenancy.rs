@@ -8,11 +8,12 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use common::{OWNER_PASSWORD, Pg};
+use common::Pg;
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::db::{Database, DbReadiness, PoolSettings, sql};
 use ls_control_plane::migrate;
 use ls_control_plane::readiness::Readiness;
+use ls_pg_test::OWNER_PASSWORD;
 use sqlx_core::connection::Connection;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -87,7 +88,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             .fetch_all(&mut admin)
             .await
             .unwrap();
-    assert_eq!(applied, [1, 2, 3, 4, 5, 6, 7]);
+    assert_eq!(applied, [1, 2, 3, 4, 5, 6, 7, 8]);
 
     // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
     migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
@@ -97,7 +98,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         .fetch_one(&mut admin)
         .await
         .unwrap();
-    assert_eq!(count, 7);
+    assert_eq!(count, 8);
 
     let tables: Vec<(String, String, bool, bool)> = sql::query_as(
         "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity
@@ -114,6 +115,10 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         [
             "agent_grants",
             "agents",
+            "audit_checkpoints",
+            "audit_events",
+            "audit_heads",
+            "audit_verify_runs",
             "environments",
             "gateway_audit",
             "orgs",
@@ -132,7 +137,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(policies, 8);
+    assert_eq!(policies, 12);
 
     let value_like: Vec<String> = sql::query_scalar(
         "SELECT table_name || '.' || column_name FROM information_schema.columns

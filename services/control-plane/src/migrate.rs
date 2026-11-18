@@ -43,6 +43,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "gateway audit agent id",
         include_str!("../migrations/0007_gateway_audit_agent.sql"),
     ),
+    (
+        8,
+        "audit ledger",
+        include_str!("../migrations/0008_audit_ledger.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

@@ -53,5 +53,4 @@ time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 wiremock = { workspace = true }
-testcontainers = { workspace = true }
-sqlx-postgres = { version = "0.9.0", default-features = false }
+ls-pg-test = { path = "../../crates/ls-pg-test" }

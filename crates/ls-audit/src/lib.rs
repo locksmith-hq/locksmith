@@ -10,8 +10,21 @@
 //!   broken `seq` and whether the tail was truncated below a checkpoint.
 //!
 //! Records carry identifiers only: callers never encode a secret value.
+//!
+//! [`event`] defines the server ledger's events and records (allow-listed identifier types
+//! only). The `postgres` feature adds [`pg`], the Postgres store with the transactional append;
+//! without it the crate stays pure.
 
 use sha2::{Digest, Sha256};
+
+pub mod event;
+#[cfg(feature = "postgres")]
+pub mod pg;
+
+pub use event::{
+    Actor, AttrTag, AttrValue, Attrs, Code, Event, Host, InvalidIdentifier, Record, StoredAttrs,
+    Target, kind, outcome,
+};
 
 /// Domain tag of the server ledger (`audit_events` in Postgres).
 pub const LEDGER_DOMAIN: &[u8] = b"locksmith-ledger-v1";

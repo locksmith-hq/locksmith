@@ -35,3 +35,8 @@
 - Task: 1.2, 1.4 - done
 - Verified: `just ci` -> exit 0; `cargo nextest run -p ls-ipc` -> 14 passed (6 new in tests/transport.rs, foreign-peer test ran as root); independent Opus evaluator PASS
 - Notes for next session: `Transport`/`Listener` traits in crates/ls-ipc/src/transport.rs, `Client<T = DefaultTransport>`; no new non-dev deps. The peer-uid check still lives in ls_platform + ls_broker, not ls-ipc: 1.3 should add peer identity to the trait and move the Unix check behind it, and the foreign-peer test should then exercise the shipped check (it skips silently when not root). locksmithd still binds UnixListener directly: switch to Listener::bind in 2.1. 1.1 stays unticked (compile-only spike). Next: 1.3 (Opus).
+
+## 2026-11-18 worker
+- Task: 1.1 - done (ticked)
+- Verified: design.md and progress.md both record versions, licences, last-release dates and the choice; re-checked against the crates.io API today: tokio 1.54.1 MIT 2026-10-21, windows-sys 0.61.2 MIT OR Apache-2.0 2025-10-06, interprocess 2.4.8 0BSD OR Apache-2.0 2026-11-08 (recvmsg 1.0.0 and doctest-file 1.1.1 0BSD), openssl-src 400.0.2+4.0.3 MIT/Apache-2.0 2026-10-01 -> all match; Cargo.lock has tokio 1.54.1 and windows-sys 0.61.2. Choice: tokio named pipes plus windows-sys.
+- Notes for next session: the spike's runtime round trip on Windows is still owed by task 4.2 (recorded in design.md risks).

@@ -1,6 +1,6 @@
 ---
 name: run-log
-description: End-of-run logging for Locksmith scheduled agents — the run-metadata block, friction entries, the change's progress.md entry, and the agent-log issue comment. Use before the final push of every non-idle run, including parked, red-main and owner-blocked exits.
+description: End-of-run logging for Locksmith scheduled agents — the run-metadata block, friction entries, the change's progress.md entry, and the agent-log issue comment. Use before the final push of every run, including idle, parked, red-main and owner-blocked exits.
 ---
 
 # Run log
@@ -35,4 +35,14 @@ EOF
 The script prints one complete fenced block, so don't wrap it in another fence. Take subagent numbers from each Agent result's usage, and write `unknown` instead of guessing. Never put secrets in it.
 
 ## 3. agent-log comment
-Post one comment on the open issue labelled `agent-log`: first the line `<!-- agent -->`, then 1–3 lines of summary, then the block. Every comment you post anywhere starts with `<!-- agent -->`. Use `gh api repos/locksmith-hq/locksmith/issues/<n>/comments -f body=...`, because `gh issue` is blocked in cloud runs.
+Post one comment on the open issue labelled `agent-log`: first the line `<!-- agent -->`, then 1–3 lines of summary, then the activity list below, then the block.
+
+Every run posts one, idle runs included. The activity list records everything this run changed, one line each with a link, and `none` for an empty heading:
+```
+**Activity**
+- Commits: <short sha> <subject> (branch), from `git log <base_sha>..HEAD` on each branch you pushed
+- Comments: <PR/issue link>: <one-line gist>
+- PRs: <link> opened|pushed|labelled <label>|merged|closed: <why>
+- Issues: <link> opened|edited|retitled|labelled|closed: <what>
+```
+Track these as you go. All agents post as the owner account, so GitHub cannot tell your actions from another run's. Every comment you post anywhere starts with `<!-- agent -->`. Use `gh api repos/locksmith-hq/locksmith/issues/<n>/comments -f body=...`, because `gh issue` is blocked in cloud runs.

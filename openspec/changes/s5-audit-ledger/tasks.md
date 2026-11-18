@@ -2,7 +2,7 @@
 
 ## 1. Chain core extracted from ls-vault [opus]
 - [x] 1.1 Create `crates/ls-audit` (pure, no IO): the length-prefixed field encoder, `row_hash`, and a verify walk over rows and checkpoints that returns the first broken `seq` and a tail-truncation result; ledger domain tag `locksmith-ledger-v1`.
-- [ ] 1.2 Switch `ls-vault` audit to `ls-audit` for encoding and the verify walk, keeping its domain tag, MAC ratchet and on-disk bytes; add a golden-vector test made from the current `ls-vault` output before the switch.
+- [x] 1.2 Switch `ls-vault` audit to `ls-audit` for encoding and the verify walk, keeping its domain tag, MAC ratchet and on-disk bytes; add a golden-vector test made from the current `ls-vault` output before the switch.
 - [ ] 1.3 Verify: `cargo nextest run -p ls-audit -p ls-vault` passes, including the golden vectors, proptest round-trips, and the existing vault audit tests unchanged.
 
 ## 2. Ledger store and append in the control plane [opus]

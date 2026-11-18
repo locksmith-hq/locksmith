@@ -13,11 +13,12 @@
 
 use crate::vault::{Error, Vault};
 use hmac::{Hmac, Mac};
+use ls_audit::{BreakKind, Encoder, Link};
 use ls_crypto::SecretKey32;
 use ls_crypto::aead::{self, Aad, Sealed};
 use ls_crypto::recovery::RecoveryPhrase;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -92,39 +93,28 @@ fn ratchet(k: &SecretKey32) -> SecretKey32 {
     SecretKey32::from_bytes(hmac(k.expose(), b"ratchet"))
 }
 
-/// Deterministic encoding: domain tag, then every field as u32 length + bytes, in fixed order.
+/// Deterministic encoding (`ls_audit::Encoder`): domain tag, then every field as u32 length +
+/// bytes, in fixed order. Pinned by the golden vectors below.
 pub(crate) fn canonical(seq: u64, r: &AuditRecord, prev: &[u8; 32]) -> Vec<u8> {
-    let mut out = DOMAIN.to_vec();
-    let mut put = |b: &[u8]| {
-        out.extend_from_slice(&(b.len() as u32).to_be_bytes());
-        out.extend_from_slice(b);
-    };
-    let opt = |o: &Option<String>| -> Vec<u8> {
-        match o {
-            None => vec![0],
-            Some(s) => [&[1u8][..], s.as_bytes()].concat(),
-        }
-    };
-    put(&seq.to_be_bytes());
-    put(&r.ts.to_be_bytes());
-    put(&opt(&r.session_id));
-    put(&r.actor_pid.to_be_bytes());
-    put(&r.actor_start.to_be_bytes());
-    put(r.actor_exe.as_bytes());
-    put(r.actor_exe_hash.as_bytes());
-    put(r.action.as_bytes());
-    put(&opt(&r.target));
-    put(r.policy_rule.as_bytes());
-    put(r.decision.as_bytes());
-    put(prev);
-    out
+    let mut e = Encoder::new(DOMAIN);
+    e.field(&seq.to_be_bytes())
+        .field(&r.ts.to_be_bytes())
+        .opt_field(r.session_id.as_deref().map(str::as_bytes))
+        .field(&r.actor_pid.to_be_bytes())
+        .field(&r.actor_start.to_be_bytes())
+        .field(r.actor_exe.as_bytes())
+        .field(r.actor_exe_hash.as_bytes())
+        .field(r.action.as_bytes())
+        .opt_field(r.target.as_deref().map(str::as_bytes))
+        .field(r.policy_rule.as_bytes())
+        .field(r.decision.as_bytes())
+        .field(prev);
+    e.finish()
 }
 
+/// `SHA256(canonical || mac)`: the vault ledger links over the MAC as well.
 fn row_hash(e: &StoredEvent) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(canonical(e.seq, &e.record, &e.prev_hash));
-    h.update(e.mac);
-    h.finalize().into()
+    ls_audit::row_hash(&canonical(e.seq, &e.record, &e.prev_hash), &e.mac)
 }
 
 struct KeyRow {
@@ -351,19 +341,21 @@ impl Vault {
             broken_at: Some(seq),
             detail: format!("event {seq}: {why}"),
         };
-        let mut prev = [0u8; 32];
-        for (i, e) in events.iter().enumerate() {
-            let want = i as u64 + 1;
-            if e.seq != want {
-                return Ok(broken(want, "missing (deleted or reordered)"));
-            }
-            if e.prev_hash != prev {
-                return Ok(broken(
-                    e.seq,
-                    "hash chain broken (edited, deleted or reordered)",
-                ));
-            }
-            prev = row_hash(e);
+        // No stored hash and no checkpoints here: tail truncation is caught by the key position.
+        let walk = ls_audit::verify(
+            events.iter().map(|e| Link {
+                seq: e.seq,
+                prev_hash: e.prev_hash,
+                hash: row_hash(e),
+                stored_hash: None,
+            }),
+            &[],
+        );
+        if let Some(b) = walk.broken {
+            return Ok(match b.kind {
+                BreakKind::Sequence => broken(b.seq, "missing (deleted or reordered)"),
+                _ => broken(b.seq, "hash chain broken (edited, deleted or reordered)"),
+            });
         }
         // The stored key must sit exactly on the newest event, or just after it on a fresh root.
         match events.last() {

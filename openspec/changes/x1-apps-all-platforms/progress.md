@@ -51,3 +51,8 @@
 - Task: 1.1, 1.3 - done (1.3 compile-checked for x86_64-pc-windows-gnu only; Windows run still needed in 4.2)
 - Verified: just ci -> exit 0
 - Notes for next session: next is 2.1/2.2 (opus). Pipe API must not be called inside a tokio runtime thread. Independent review of unsafe in transport/windows.rs left to merge-review.
+
+## 2026-11-18 lead
+- Task: 2.1 - decision only (not started, nothing unticked)
+- Verified: `cargo deny check bans` fails with a `cfg(windows)` `bundled-sqlcipher-vendored-openssl` rusqlite dep and passes with `{ name = "openssl-sys", wrappers = ["libsqlite3-sys"] }`; `cargo deny check licenses` ok; Linux dep tree has no openssl-sys. Changes reverted; only design.md records the decision.
+- Notes for next session: 2.1 applies the design.md row (deny.toml wrapper with a reason line plus the Windows-only target dep), then cross-checks `cargo check -p ls-vault --target x86_64-pc-windows-gnu` (openssl-src needs perl and the mingw toolchain; record the build time). Resolves for-lead #268 item 1.

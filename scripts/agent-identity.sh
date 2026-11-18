@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Runs a scheduled agent as its GitHub App persona instead of the owner's account (owner decision 2026-11-18).
-#   agent-identity.sh setup <persona>   git author, push credentials and a gh shim; WARNs and keeps the owner identity on any failure
+#   agent-identity.sh setup <persona>   git author, push credentials and a gh shim; on any failure undoes them, prints FAIL and exits 1
 #   agent-identity.sh token             prints a valid installation token (cached, re-minted after 50 minutes)
 #   agent-identity.sh credential get    git credential helper
 #   agent-identity.sh selftest          offline checks
-# The app key comes from the environment as AGENT_APP_KEY_<PERSONA> (base64 of the PEM). Never print it or the token.
+# In the cloud the app's auth on the token request is added by a network secret, so the key never enters the VM.
+# Locally the key comes from AGENT_APP_KEY_<PERSONA> (base64 of the PEM) or, on macOS, the login Keychain item
+# "locksmith-agent-<persona>" (same base64). Never print it or the token.
 set -uo pipefail
 repo=locksmith-hq/locksmith
 state="${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}"
@@ -29,7 +31,7 @@ jwt() { # <app_id> <pem-file>
   printf '%s.%s.%s' "$h" "$p" "$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -sign "$2" | b64url)"
 }
 token() {
-  local persona row app inst _ var key pem t resp code
+  local persona row app inst _ var key pem auth=() t resp code
   persona=$(cat "$state/persona" 2>/dev/null) || return 1
   if [ -f "$state/token" ] && [ $(($(date +%s) - $(cat "$state/minted" 2>/dev/null || echo 0))) -lt 3000 ]; then
     cat "$state/token"; return 0
@@ -38,21 +40,25 @@ token() {
   read -r app inst _ <<<"$row"
   var="AGENT_APP_KEY_$(tr '[:lower:]' '[:upper:]' <<<"$persona")"
   # Each failure records its cause in $state/why, so the WARN line says what to fix.
-  key="${!var:-}"; [ -n "$key" ] || { why "$var is not set in this environment"; return 1; }
-  pem=$(umask 077 && mktemp) || return 1
-  printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
-  grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
-  resp=$(curl -sS -w '\n%{http_code}' -X POST -H "Authorization: Bearer $(jwt "$app" "$pem")" -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null) || { rm -f "$pem"; why "cannot reach api.github.com (curl exit $?)"; return 1; }
-  rm -f "$pem"
+  key="${!var:-}"
+  [ -n "$key" ] || ! command -v security >/dev/null || key=$(security find-generic-password -s "locksmith-agent-$persona" -w 2>/dev/null)
+  if [ -n "$key" ]; then # no key: send no auth and let the network secret add it
+    pem=$(umask 077 && mktemp) || return 1
+    printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
+    grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
+    auth=(-H "Authorization: Bearer $(jwt "$app" "$pem")")
+    rm -f "$pem"
+  fi
+  resp=$(curl -sS -w '\n%{http_code}' -X POST ${auth[@]+"${auth[@]}"} -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null) || { why "cannot reach api.github.com (curl exit $?)"; return 1; }
   code=${resp##*$'\n'}
   t=$(jq -r '.token // empty' <<<"${resp%$'\n'*}" 2>/dev/null)
-  [ -n "$t" ] || { why "GitHub answered HTTP $code to the token request: $(jq -r '.message // "no message"' <<<"${resp%$'\n'*}" 2>/dev/null | head -c 120)"; return 1; }
+  [ -n "$t" ] || { why "GitHub answered HTTP $code to the token request$([ -n "$key" ] || echo " (no key here: is the network secret for installation $inst set?)"): $(jq -r '.message // "no message"' <<<"${resp%$'\n'*}" 2>/dev/null | head -c 120)"; return 1; }
   (umask 077 && printf '%s' "$t" >"$state/token" && date +%s >"$state/minted")
   printf '%s' "$t"
 }
 why() { printf '%s' "$1" >"$state/why"; }
-fallback() { # <reason>: undo everything so the run continues as the owner
+fail() { # <reason>: undo everything and fail: a run must never act as the owner by accident
   if [ -f "$state/git" ]; then # only undo git settings this script made
     git config --local --unset-all credential.https://github.com.helper 2>/dev/null
     git config --local --unset remote.origin.pushurl 2>/dev/null
@@ -60,29 +66,29 @@ fallback() { # <reason>: undo everything so the run continues as the owner
   fi
   [ -f "$state/shim" ] && rm -f "$(cat "$state/shim")"
   rm -rf "$state"
-  echo "WARN identity: $1; this run acts as the owner account"
-  exit 0
+  echo "FAIL identity: $1"
+  exit 1
 }
 setup() {
   local persona="$1" row _ uid real dir shim=""
   row=$(ids "$persona") || { echo "FAIL identity: unknown persona '$persona'"; exit 1; }
   read -r _ _ uid <<<"$row"
   (umask 077 && mkdir -p "$state") && printf '%s' "$persona" >"$state/persona"
-  token >/dev/null || fallback "$(cat "$state/why" 2>/dev/null || echo "no working key for $persona")"
+  token >/dev/null || fail "$(cat "$state/why" 2>/dev/null || echo "no working key for $persona")"
 
-  # gh: a shim earlier on PATH adds the app token, so every later `gh api` call acts as the app.
-  real=$(command -v gh) || fallback "gh not found"
+  # gh: a shim earlier on PATH adds the app token, so every later `gh` call inside this checkout acts as the app.
+  # Outside it the shim passes through, so on a shared machine (the owner's Mac) the owner's own gh is unchanged.
+  real=$(command -v gh) || fail "gh not found"
   IFS=: read -ra dirs <<<"$PATH"
   for dir in "${dirs[@]}"; do
     [ "$dir" = "$(dirname "$real")" ] && break
     [ -d "$dir" ] && [ -w "$dir" ] && { shim="$dir/gh"; break; }
   done
-  [ -n "$shim" ] || fallback "no writable PATH directory before $real for the gh shim"
-  # shellcheck disable=SC2016  # the shim expands these at run time
-  printf '#!/usr/bin/env bash\nt=$(bash %q token 2>/dev/null) && export GH_TOKEN="$t"\nexec %q "$@"\n' "$self" "$real" >"$shim"
+  [ -n "$shim" ] || fail "no writable PATH directory before $real for the gh shim"
+  shim_text "$real" "$(git rev-parse --show-toplevel)" >"$shim"
   chmod +x "$shim"; printf '%s' "$shim" >"$state/shim"; hash -r
   [ "$(gh api /installation/repositories -q '.repositories[0].full_name' 2>/dev/null)" = "$repo" ] ||
-    fallback "the app token is not accepted through this network"
+    fail "the app token is not accepted through this network"
 
   # git: commits and pushes as the app. Fetch keeps the remote the session came with.
   : >"$state/git"
@@ -92,8 +98,13 @@ setup() {
   git config --local --add credential.https://github.com.helper "!bash $self credential"
   git config --local remote.origin.pushurl "https://github.com/$repo.git"
   GIT_TERMINAL_PROMPT=0 git ls-remote --heads "https://github.com/$repo.git" main >/dev/null 2>&1 ||
-    fallback "git cannot reach github.com with the app token"
+    fail "git cannot reach github.com with the app token"
   echo "OK identity: locksmith-${persona}[bot]"
+}
+shim_text() { # <real gh> <checkout root>
+  # shellcheck disable=SC2016  # the shim expands these at run time
+  printf '#!/usr/bin/env bash\ncase "$(pwd -P)/" in %q/*) t=$(AGENT_ID_DIR=%q bash %q token 2>/dev/null) && export GH_TOKEN="$t" ;; esac\nexec %q "$@"\n' \
+    "$2" "$state" "$self" "$1"
 }
 selftest() {
   local d h p s
@@ -109,10 +120,16 @@ selftest() {
   ids alfie >/dev/null || { echo "selftest: persona table"; exit 1; }
   if ids nobody >/dev/null 2>&1; then echo "selftest: unknown persona accepted"; exit 1; fi
   state="$d/s"; mkdir "$state"; printf alfie >"$state/persona"
-  if (unset AGENT_APP_KEY_ALFIE; token >/dev/null 2>&1); then echo "selftest: token without a key"; exit 1; fi
-  grep -q 'AGENT_APP_KEY_ALFIE is not set' "$state/why" || { echo "selftest: missing-key cause not recorded"; exit 1; }
   if (AGENT_APP_KEY_ALFIE=$(printf 'not a key' | openssl base64 -A) token >/dev/null 2>&1); then echo "selftest: token from a bad key"; exit 1; fi
   grep -q 'not the base64 of a private key' "$state/why" || { echo "selftest: bad-key cause not recorded"; exit 1; }
+  # the shim adds the token only inside its checkout
+  printf '%s' tok >"$state/token"; date +%s >"$state/minted"
+  # shellcheck disable=SC2016  # expands inside the fake gh
+  printf '#!/usr/bin/env bash\necho "${GH_TOKEN:-none}"\n' >"$d/realgh"; chmod +x "$d/realgh"
+  mkdir -p "$d/repo/sub" "$d/other"; shim_text "$d/realgh" "$(cd "$d/repo" && pwd -P)" >"$d/gh"; chmod +x "$d/gh"
+  [ "$(cd "$d/repo/sub" && GH_TOKEN='' "$d/gh")" = tok ] || { echo "selftest: shim inside checkout"; exit 1; }
+  [ "$(cd "$d/other" && GH_TOKEN='' "$d/gh")" = none ] || { echo "selftest: shim outside checkout"; exit 1; }
+  [ -z "$(env -i HOME="$d" PATH="$PATH" AGENT_APP_KEY_JOSIE=x AGENT_APP_KEY_WALT=x bash "$self" persona)" ] || { echo "selftest: two keys picked one"; exit 1; }
   echo "agent-identity selftest: OK"
 }
 

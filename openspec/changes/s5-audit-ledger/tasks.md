@@ -16,9 +16,9 @@
 - [x] 3.2 Verify: `cargo nextest run -p ls-gateway` covers an allowed call giving `attempt` plus `outcome`, a refused call giving `denied`, an unreachable append endpoint giving 503 with no decrypt call and no upstream request, and no new `gateway_audit` rows.
 
 ## 4. Signed checkpoints [opus]
-- [ ] 4.1 Compose and `openbao-init.sh` create the `audit-checkpoint` Ed25519 transit key and a sign-only policy and token for the control plane; the public key is written to the verifier config by `just up`.
-- [ ] 4.2 Checkpoint job in the control plane (a `FOR UPDATE SKIP LOCKED` loop, A0-2): every 1000 events or 60 s per org with new events, sign the checkpoint bytes through OpenBao and store it in `audit_checkpoints`. The bytes are defined in `ls-audit`: a length-prefixed encoding of `(org, seq, head hash, time)` under its own domain tag `locksmith-checkpoint-v1`, pinned by a golden vector shared with the offline verifier.
-- [ ] 4.3 Verify: `cargo nextest run -p ls-control-plane` covers a checkpoint created at the threshold, a signature that verifies with `ed25519-dalek` under the published key, and a signature that fails under another key.
+- [x] 4.1 Compose and `openbao-init.sh` create the `audit-checkpoint` Ed25519 transit key and a sign-only policy and token for the control plane; the public key is written to the verifier config by `just up`.
+- [x] 4.2 Checkpoint job in the control plane (a `FOR UPDATE SKIP LOCKED` loop, A0-2): every 1000 events or 60 s per org with new events, sign the checkpoint bytes through OpenBao and store it in `audit_checkpoints`. The bytes are defined in `ls-audit`: a length-prefixed encoding of `(org, seq, head hash, time)` under its own domain tag `locksmith-checkpoint-v1`, pinned by a golden vector shared with the offline verifier.
+- [x] 4.3 Verify: `cargo nextest run -p ls-control-plane` covers a checkpoint created at the threshold, a signature that verifies with `ed25519-dalek` under the published key, and a signature that fails under another key.
 
 ## 5. Verify and export CLI [opus]
 - [ ] 5.1 `locksmith-audit verify --db` (verifier role) and `--dir` (offline, public key only), with `--json` output; results are recorded in `audit_verify_runs`; it exits non-zero with the org and first broken seq.

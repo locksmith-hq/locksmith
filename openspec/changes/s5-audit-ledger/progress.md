@@ -49,3 +49,10 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.1, 3.1, 3.2 - done
 - Verified: `just ci` -> green (617 passed, 4 skipped); evaluator (Opus) PASS on 942b84c
 - Notes for next session: group 4 next (OpenBao audit-checkpoint key, checkpoint job). Before archiving, fix spec wording: specs/gateway-http-relay/spec.md:6 says every attempt names the upstream host, but refusals before the origin check omit it by design. Open: attempt_id is not checked against a stored attempt; relay.denied not retried; gateway keeps a PG pool only for readiness.
+
+## 2026-11-18 worker (alfie)
+- Task: 4.1, 4.2, 4.3 - done
+- Verified: `just ci` -> green (636 tests); `cargo nextest run -p ls-audit --features postgres -p ls-control-plane -p ls-envelope -p ls-gateway -p ls-pg-test` -> 222 passed; live OpenBao 2.7.2 checks passed (sign-only token, key not exportable); gitleaks clean; evaluator (Opus) PASS
+- Done: `ls-audit` checkpoint bytes (`locksmith-checkpoint-v1`, golden vector `tests/fixtures/checkpoint-v1.json`); `ls-envelope` `TransitSigner`; control-plane checkpoint job (migration 0010 `audit_checkpoint_jobs`, SKIP LOCKED, 1000 events or 60 s); `openbao-init.sh` key, policy and token; `just up` writes `infra/compose/.audit-verifier.json`.
+- Open (evaluator nits): (1) 0010 `job_claim_*` policies use `USING true`; harden to `current_org_id() IS NULL`. (2) `db.rs` `without_org` doc no longer true for the jobs table. (3) check `rows_affected() == 1` on the `checked_at` update. (4) the job holds a pooled connection during the OpenBao call. (5) dev OpenBao is in-memory, so a restart makes older checkpoints unverifiable. (6) the control plane cannot verify a signature before storing it; 5.1 will catch it.
+- Notes for next session: group 5 (`locksmith-audit` verify/export CLI) next; the disk filled once, so build with `CARGO_INCREMENTAL=0` and clear `target/` if needed.

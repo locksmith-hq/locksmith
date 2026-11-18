@@ -35,7 +35,7 @@ use super::{all, exists_or_404, one};
 use crate::app::AppState;
 use crate::auth::ServiceOrgBinding;
 use crate::db::sql::{self, Row};
-use crate::problem::ApiError;
+use crate::problem::{ApiError, Kind, Problem};
 
 /// The stored envelope of one secret version. Ciphertext and a wrapped data key only: never the
 /// value, and never an unwrapped key.
@@ -313,7 +313,9 @@ pub struct NewRelayEvent {
     /// Upstream HTTP status, when a response was received.
     #[schema(minimum = 100, maximum = 599)]
     pub status: Option<u16>,
-    /// Links the `relay.outcome` event to its `relay.attempt` event.
+    /// Links the `relay.outcome` event to its `relay.attempt` event (the `id` the attempt's
+    /// append returned). Required for `relay.outcome`, and its idempotency key: an outcome
+    /// resent for the same attempt returns the stored event instead of appending another.
     pub attempt_id: Option<Uuid>,
 }
 
@@ -327,6 +329,10 @@ impl NewRelayEvent {
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        // The outcome is idempotent on its attempt (design decision 5), so it must name one.
+        if self.kind == RelayEventKind::Outcome && self.attempt_id.is_none() {
+            return Err(ApiError::validation("`relay.outcome` needs `attempt_id`"));
         }
         let mut attrs = Attrs::new();
         if let Some(v) = self.version {
@@ -379,13 +385,15 @@ pub struct AppendedEvent {
     path = "/internal/v1/audit/events",
     tag = "internal",
     summary = "Append a relay event to the org's audit ledger (gateway only)",
-    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query.",
+    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
     params(
         ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to (the agent token's `org`)"),
     ),
     request_body = NewRelayEvent,
     responses(
         (status = 201, description = "Appended", body = AppendedEvent),
+        (status = 200, description = "`relay.outcome` already recorded for this `attempt_id` with the same fields; nothing appended", body = AppendedEvent),
+        (status = 409, description = "`relay.outcome` already recorded for this `attempt_id` with different fields", body = Problem, content_type = "application/problem+json"),
         InternalWriteErrors,
     ),
     security(("service_token" = []))
@@ -395,20 +403,41 @@ pub async fn append_event(
     org: ServiceOrgBinding,
     ApiJson(input): ApiJson<NewRelayEvent>,
 ) -> Result<(StatusCode, Json<AppendedEvent>), ApiError> {
+    let attempt_id = match input.kind {
+        RelayEventKind::Outcome => input.attempt_id,
+        _ => None,
+    };
     let event = input.into_event()?;
     let org_id = org.org_id;
     let appended = state
         .db()
         .with_org(org_id, move |c| {
-            Box::pin(async move { crate::audit::append(c, org_id, &event).await })
+            Box::pin(async move {
+                match attempt_id {
+                    Some(a) => crate::audit::append_outcome_once(c, org_id, a, &event).await,
+                    None => crate::audit::append(c, org_id, &event)
+                        .await
+                        .map(crate::audit::Once::Appended),
+                }
+            })
         })
         .await
         .map_err(ApiError::from)?;
+    let (status, a) = match appended {
+        crate::audit::Once::Appended(a) => (StatusCode::CREATED, a),
+        crate::audit::Once::Existing(a) => (StatusCode::OK, a),
+        crate::audit::Once::Conflict => {
+            return Err(ApiError::new(
+                Kind::Conflict,
+                "a different outcome is already recorded for this attempt",
+            ));
+        }
+    };
     Ok((
-        StatusCode::CREATED,
+        status,
         Json(AppendedEvent {
-            id: appended.id,
-            seq: appended.seq,
+            id: a.id,
+            seq: a.seq,
         }),
     ))
 }

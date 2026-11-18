@@ -4,7 +4,7 @@
 //! Modules: [`config`], [`auth`] (agent tokens verified through the control plane's JWKS),
 //! [`grants`] (`GET /v1/grants`), [`decrypt`] (material fetch, DEK unwrap and cache, open), [`egress`]
 //! (host allowlist, address guard, pinned client), [`relay`] (`POST /v1/relay`: inject, call,
-//! redact), [`audit`] (`gateway_audit` rows), [`app`] (the router).
+//! redact), [`audit`] (relay events in the org's audit ledger), [`app`] (the router).
 
 pub mod app;
 pub mod audit;

@@ -48,6 +48,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "audit ledger",
         include_str!("../migrations/0008_audit_ledger.sql"),
     ),
+    (
+        9,
+        "gateway audit read only",
+        include_str!("../migrations/0009_gateway_audit_read_only.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

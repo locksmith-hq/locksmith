@@ -403,7 +403,7 @@
             "type": "string"
           },
           "attempt_id": {
-            "description": "Links the `relay.outcome` event to its `relay.attempt` event.",
+            "description": "Links the `relay.outcome` event to its `relay.attempt` event (the `id` the attempt's\nappend returned). Required for `relay.outcome`, and its idempotency key: an outcome\nresent for the same attempt returns the stored event instead of appending another.",
             "format": "uuid",
             "type": [
               "string",
@@ -1207,7 +1207,7 @@
     },
     "/internal/v1/audit/events": {
       "post": {
-        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query.",
+        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
         "operationId": "append_event",
         "parameters": [
           {
@@ -1232,6 +1232,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendedEvent"
+                }
+              }
+            },
+            "description": "`relay.outcome` already recorded for this `attempt_id` with the same fields; nothing appended"
+          },
           "201": {
             "content": {
               "application/json": {
@@ -1261,6 +1271,16 @@
               }
             },
             "description": "Missing or invalid service token or org header"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "`relay.outcome` already recorded for this `attempt_id` with different fields"
           },
           "413": {
             "content": {

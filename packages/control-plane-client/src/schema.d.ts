@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Append a relay event to the org's audit ledger (gateway only)
-         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query.
+         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
          */
         post: operations["append_event"];
         delete?: never;
@@ -571,7 +571,9 @@ export interface components {
             agent_id: string;
             /**
              * Format: uuid
-             * @description Links the `relay.outcome` event to its `relay.attempt` event.
+             * @description Links the `relay.outcome` event to its `relay.attempt` event (the `id` the attempt's
+             *     append returned). Required for `relay.outcome`, and its idempotency key: an outcome
+             *     resent for the same attempt returns the stored event instead of appending another.
              */
             attempt_id?: string | null;
             /**
@@ -916,6 +918,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description `relay.outcome` already recorded for this `attempt_id` with the same fields; nothing appended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendedEvent"];
+                };
+            };
             /** @description Appended */
             201: {
                 headers: {
@@ -936,6 +947,15 @@ export interface operations {
             };
             /** @description Missing or invalid service token or org header */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `relay.outcome` already recorded for this `attempt_id` with different fields */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

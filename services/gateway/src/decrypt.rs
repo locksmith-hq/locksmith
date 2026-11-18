@@ -145,6 +145,40 @@ impl ControlPlane {
         Ok(body)
     }
 
+    /// `POST` a JSON body to an `/internal/v1` path with the service token and the org header.
+    /// Returns the status and the body read up to `max` bytes; `Err` only when no answer
+    /// arrived. Callers map the status; no error carries a response body.
+    pub(crate) async fn internal_post_json(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        max: usize,
+    ) -> Result<(u16, Vec<u8>), Internal> {
+        let url = self.base.join(path).map_err(|_| Internal::BadResponse)?;
+        let mut auth = HeaderValue::try_from(format!("Bearer {}", self.token.expose_secret()))
+            .map_err(|_| Internal::Denied)?;
+        auth.set_sensitive(true);
+        let mut resp = self
+            .client
+            .post(url)
+            .header(AUTHORIZATION, auth)
+            .header(ORG_HEADER, self.org_id.to_string())
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await
+            .map_err(|_| Internal::Unavailable)?;
+        let status = resp.status().as_u16();
+        let mut out = Vec::new();
+        while let Some(chunk) = resp.chunk().await.map_err(|_| Internal::Unavailable)? {
+            if out.len() + chunk.len() > max {
+                return Err(Internal::BadResponse);
+            }
+            out.extend_from_slice(&chunk);
+        }
+        Ok((status, out))
+    }
+
     async fn get(&self, secret_id: Uuid, version: u32) -> Result<Material, MaterialError> {
         let path = format!("internal/v1/secrets/{secret_id}/versions/{version}/material");
         let body = self

@@ -88,7 +88,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             .fetch_all(&mut admin)
             .await
             .unwrap();
-    assert_eq!(applied, [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(applied, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
     // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
     migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
@@ -98,7 +98,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         .fetch_one(&mut admin)
         .await
         .unwrap();
-    assert_eq!(count, 8);
+    assert_eq!(count, 9);
 
     let tables: Vec<(String, String, bool, bool)> = sql::query_as(
         "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity
@@ -694,10 +694,11 @@ async fn secret_versions_are_isolated_append_only_and_cascade() {
     db.close().await;
 }
 
-/// S3 task 2.1 (design decision 8): `gateway_audit` is tenant-isolated and append-only for the
-/// app role.
+/// S3 task 2.1 (design decision 8), S5 task 3.1 (design decision 6): `gateway_audit` is
+/// read-only legacy. Rows written before S5 stay tenant-isolated for the app role, which may no
+/// longer INSERT (migration 0009), UPDATE or DELETE.
 #[tokio::test]
-async fn gateway_audit_is_isolated_and_append_only() {
+async fn gateway_audit_is_isolated_and_read_only() {
     let pg = Pg::migrated().await;
     let db = pg.app_db(PoolSettings {
         max_connections: 2,
@@ -706,43 +707,38 @@ async fn gateway_audit_is_isolated_and_append_only() {
     let a = create_org(&db, "org-a").await;
     let b = create_org(&db, "org-b").await;
     let secret = Uuid::now_v7();
-    let insert = |org: Uuid, row_org: Uuid| {
+    // A legacy row, written as the bootstrap superuser (as the pre-S5 gateway would have).
+    let mut admin = pg.admin().await;
+    sql::query(
+        "INSERT INTO gateway_audit (org_id, secret_id, method, scheme, host, path, outcome, status)
+         VALUES ($1, $2, 'GET', 'https', 'api.example.com', '/v1/x', 'ok', 200)",
+    )
+    .bind(a)
+    .bind(secret)
+    .execute(&mut admin)
+    .await
+    .unwrap();
+
+    let count = |org: Uuid| {
         let db = db.clone();
         async move {
-            db.with_org(org, move |c| {
+            db.with_org(org, |c| {
                 Box::pin(async move {
-                    sql::query(
-                        "INSERT INTO gateway_audit (org_id, secret_id, method, scheme, host, path, outcome, status)
-                         VALUES ($1, $2, 'GET', 'https', 'api.example.com', '/v1/x', 'ok', 200)",
-                    )
-                    .bind(row_org)
-                    .bind(secret)
-                    .execute(c)
-                    .await
-                    .map(|_| ())
+                    sql::query_scalar::<_, i64>("SELECT count(*) FROM gateway_audit")
+                        .fetch_one(c)
+                        .await
                 })
             })
             .await
+            .unwrap()
         }
     };
-    insert(a, a).await.unwrap();
-    // A row claiming org B while bound to org A: RLS WITH CHECK refuses.
-    let err = insert(a, b).await.expect_err("cross-org insert");
-    assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{err}");
-
-    let seen_by_b: i64 = db
-        .with_org(b, |c| {
-            Box::pin(async move {
-                sql::query_scalar("SELECT count(*) FROM gateway_audit")
-                    .fetch_one(c)
-                    .await
-            })
-        })
-        .await
-        .unwrap();
-    assert_eq!(seen_by_b, 0);
+    assert_eq!(count(a).await, 1, "legacy rows stay readable");
+    assert_eq!(count(b).await, 0, "and tenant-isolated");
 
     for stmt in [
+        "INSERT INTO gateway_audit (org_id, secret_id, method, scheme, host, path, outcome, status)
+         VALUES (current_org_id(), gen_random_uuid(), 'GET', 'https', 'h', '/', 'ok', 200)",
         "UPDATE gateway_audit SET outcome = 'x'",
         "DELETE FROM gateway_audit",
     ] {
@@ -754,5 +750,6 @@ async fn gateway_audit_is_isolated_and_append_only() {
             .expect_err(stmt);
         assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{stmt}: {err}");
     }
+    assert_eq!(count(a).await, 1);
     db.close().await;
 }

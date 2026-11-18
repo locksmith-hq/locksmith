@@ -2539,6 +2539,7 @@ dependencies = [
  "bytes",
  "http-body-util",
  "jsonwebtoken",
+ "ls-audit",
  "ls-control-plane",
  "ls-envelope",
  "ls-pg-test",

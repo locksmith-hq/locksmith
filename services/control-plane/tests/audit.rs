@@ -186,6 +186,8 @@ async fn non_allow_listed_bodies_are_400() {
         json!({"kind": "relay.outcome", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "relay.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "relay.attempt", "outcome": "pending", "agent_id": Uuid::now_v7()}),
+        // An outcome must name its attempt (the idempotency key).
+        json!({"kind": "relay.outcome", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
     ] {
         let r = post_event(&app, Some(&auth), org, &bad).await;
         assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
@@ -364,6 +366,95 @@ async fn endpoint_appends_are_isolated_per_org() {
         .unwrap();
     assert_eq!(all, 1);
     tx.rollback().await.unwrap();
+}
+
+/// S5 task 3.1 (design decision 5): `relay.outcome` is idempotent on `attempt_id`. A resend
+/// with the same fields returns the stored event (`200`, same id and seq) and appends nothing; a
+/// different outcome for the same attempt is a `409`; concurrent resends append once. The partial
+/// unique index from migration 0009 refuses a second outcome even past the endpoint.
+#[tokio::test]
+async fn relay_outcome_is_idempotent_on_attempt_id() {
+    let f = Fixture::start().await;
+    let org = f.org("org-idempotent").await;
+    let auth = bearer(TOKEN);
+    let (agent, secret) = (Uuid::now_v7(), Uuid::now_v7());
+    let a = post_event(&f.app, Some(&auth), Some(org), &attempt(agent, secret)).await;
+    assert_eq!(a.status, StatusCode::CREATED, "{}", a.raw);
+    let outcome = json!({
+        "kind": "relay.outcome", "outcome": "ok", "agent_id": agent, "secret_id": secret,
+        "version": 1, "method": "GET", "host": "api.example.com", "status": 200,
+        "attempt_id": id(&a),
+    });
+    let first = post_event(&f.app, Some(&auth), Some(org), &outcome).await;
+    assert_eq!(first.status, StatusCode::CREATED, "{}", first.raw);
+    let again = post_event(&f.app, Some(&auth), Some(org), &outcome).await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.raw);
+    assert_eq!(again.body, first.body, "the stored event, not a new one");
+
+    let mut other = outcome.clone();
+    other["status"] = json!(502);
+    other["outcome"] = json!("upstream_error");
+    let r = post_event(&f.app, Some(&auth), Some(org), &other).await;
+    assert_problem(&r, StatusCode::CONFLICT, "conflict");
+
+    // Concurrent resends of a second attempt's outcome: one append, every answer the same event.
+    let b = post_event(&f.app, Some(&auth), Some(org), &attempt(agent, secret)).await;
+    let mut second = outcome.clone();
+    second["attempt_id"] = json!(id(&b));
+    let mut tasks = Vec::new();
+    for _ in 0..8 {
+        let (app, auth, body) = (f.app.clone(), auth.clone(), second.clone());
+        tasks.push(tokio::spawn(async move {
+            post_event(&app, Some(&auth), Some(org), &body).await
+        }));
+    }
+    let mut ids = BTreeSet::new();
+    let mut created = 0;
+    for t in tasks {
+        let r = t.await.unwrap();
+        assert!(
+            matches!(r.status, StatusCode::CREATED | StatusCode::OK),
+            "{}",
+            r.raw
+        );
+        created += usize::from(r.status == StatusCode::CREATED);
+        ids.insert(id(&r));
+    }
+    assert_eq!((created, ids.len()), (1, 1));
+
+    let rows = f.records(org).await;
+    assert_eq!(
+        rows.iter().map(|r| r.kind.as_str()).collect::<Vec<_>>(),
+        [
+            "relay.attempt",
+            "relay.outcome",
+            "relay.attempt",
+            "relay.outcome"
+        ]
+    );
+    assert_intact(&rows);
+
+    // Backstop: a direct append of a second outcome for the first attempt is refused by the
+    // unique index (unique_violation), and the chain is unchanged.
+    let event = ls_audit::Event {
+        kind: ls_audit::kind::RELAY_OUTCOME,
+        actor: ls_audit::Actor::Agent(agent),
+        target: Some(ls_audit::Target::Secret(secret)),
+        outcome: ls_audit::outcome::OK,
+        attrs: ls_audit::Attrs::new().id(ls_audit::attr::ATTEMPT_ID, id(&a)),
+    };
+    let mut c = PgConnection::connect_with(&f.pg.app()).await.unwrap();
+    let mut tx = c.begin().await.unwrap();
+    ls_audit::pg::bind_org(&mut tx, org).await.unwrap();
+    let err = ls_audit::pg::append_in_tx(&mut tx, org, &event)
+        .await
+        .expect_err("second outcome for one attempt");
+    assert_eq!(
+        err.as_database_error().and_then(|d| d.code()).as_deref(),
+        Some("23505")
+    );
+    tx.rollback().await.unwrap();
+    assert_eq!(f.records(org).await.len(), 4);
 }
 
 /// S4 admin requests append `agent.created`, `grant.created`, `agent.rotated`,

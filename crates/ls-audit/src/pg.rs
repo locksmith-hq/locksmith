@@ -97,26 +97,9 @@ pub async fn append_in_tx(
     org_id: Uuid,
     event: &Event,
 ) -> Result<Appended, Error> {
-    // The first append creates the head; a concurrent first append waits on the unique index
-    // and then does nothing.
-    query("INSERT INTO audit_heads (org_id) VALUES ($1) ON CONFLICT (org_id) DO NOTHING")
-        .bind(org_id)
-        .execute(&mut *conn)
-        .await?;
-    let (seq, head): (i64, Vec<u8>) =
-        query_as("SELECT seq, hash FROM audit_heads WHERE org_id = $1 FOR UPDATE")
-            .bind(org_id)
-            .fetch_one(&mut *conn)
-            .await?;
-    let seq = to_seq(seq)? + 1;
-    let record = Record::new(
-        org_id,
-        seq,
-        Uuid::now_v7(),
-        now_micros(),
-        event,
-        to_hash(&head)?,
-    );
+    let (seq, head) = lock_head(conn, org_id).await?;
+    let seq = seq + 1;
+    let record = Record::new(org_id, seq, Uuid::now_v7(), now_micros(), event, head);
     let attrs = record
         .attrs
         .as_ref()
@@ -153,6 +136,25 @@ pub async fn append_in_tx(
         id: record.id,
         hash: record.hash,
     })
+}
+
+/// Lock `org_id`'s head row (creating it on the first use) until the caller's transaction
+/// ends, and return the head's `(seq, hash)`. Every append takes this lock, so a caller that
+/// must check the chain before appending (e.g. an idempotent append) takes it first and then
+/// sees no concurrent append. Taking it again in the same transaction is a no-op.
+pub async fn lock_head(conn: &mut PgConnection, org_id: Uuid) -> Result<(u64, Hash), Error> {
+    // The first append creates the head; a concurrent first append waits on the unique index
+    // and then does nothing.
+    query("INSERT INTO audit_heads (org_id) VALUES ($1) ON CONFLICT (org_id) DO NOTHING")
+        .bind(org_id)
+        .execute(&mut *conn)
+        .await?;
+    let (seq, head): (i64, Vec<u8>) =
+        query_as("SELECT seq, hash FROM audit_heads WHERE org_id = $1 FOR UPDATE")
+            .bind(org_id)
+            .fetch_one(&mut *conn)
+            .await?;
+    Ok((to_seq(seq)?, to_hash(&head)?))
 }
 
 type Row = (

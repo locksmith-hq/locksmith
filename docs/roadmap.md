@@ -50,6 +50,7 @@ uses what the previous one taught us.
 | S6 | `s6-adversarial-gate-1` [opus] | Scripted and live-agent extraction attempts against S1–S5 (env, reflection, header echo, encodings). | Suite green in CI and nightly | ☐ |
 | X1 | `x1-apps-all-platforms` | The desktop app builds and launches on macOS, Linux and Windows (`ls-ipc` over a Windows named pipe), and the web console builds; `ci-platforms` builds the Tauri bundle on all three. From here every phase ends green on all three. | `just apps-build` locally, `ci-platforms` green on all three | ☐ |
 | H1 | `h1-test-recipes` | Every crate, service, app, package and integration has a documented test recipe: `docs/testing.md` maps each one to its command, `just test <name>` runs it, and tree-check fails when a new component has no entry. | `just test <name>` for every listed component, tree-check fails on a planted unlisted crate | ☑ |
+| G1 | `g1-go-public` | The repo is ready to flip public: full-history secret scan triaged, AGPL/Apache licences in every manifest, a public README and community docs, `scripts/public-check.sh` in `just ci`, and an owner flip checklist. Only the owner flips visibility and re-enables `ci`. | `bash scripts/public-check.test.sh`, `gitleaks detect` clean | ☐ |
 
 ## Phase 2: Team product
 

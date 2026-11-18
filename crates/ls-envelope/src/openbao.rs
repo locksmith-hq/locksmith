@@ -1,7 +1,8 @@
 //! [`KeyWrapper`] over the OpenBao transit engine (design decision 3).
 //!
 //! A thin client for two endpoints, `POST /v1/{mount}/encrypt/{key}` and
-//! `POST /v1/{mount}/decrypt/{key}`. `vaultrs` was rejected: its client settings derive
+//! `POST /v1/{mount}/decrypt/{key}`, plus [`TransitSigner`] for `POST /v1/{mount}/sign/{key}`
+//! (S5 audit checkpoints). `vaultrs` was rejected: its client settings derive
 //! `Debug` and `Clone` over the token as a plain `String`, and its transit requests take the
 //! plaintext as a `String`.
 //!
@@ -110,39 +111,48 @@ impl OpenBaoTransit {
 
     /// POST a JSON body; return the response body in a zeroizing buffer.
     async fn post(&self, op: &str, body: bytes::Bytes) -> Result<Zeroizing<Vec<u8>>, WrapError> {
-        let mut resp = self
-            .client
-            .post(self.url(op))
-            .header(TOKEN_HEADER, self.token.header_value()?)
-            .header(CONTENT_TYPE, "application/json")
-            .body(body)
-            .send()
-            .await
-            .map_err(transport)?;
-        let status = resp.status();
-        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-            return Err(WrapError::Denied);
-        }
-        if !status.is_success() {
-            return Err(WrapError::Rejected {
-                status: status.as_u16(),
-            });
-        }
-        let mut out = Zeroizing::new(Vec::with_capacity(1024));
-        while let Some(chunk) = resp.chunk().await.map_err(transport)? {
-            if out.len() + chunk.len() > MAX_RESPONSE {
-                return Err(WrapError::BadResponse);
-            }
-            if out.len() + chunk.len() > out.capacity() {
-                // Grow into a fresh zeroizing buffer so no unwiped copy is left behind.
-                let mut bigger = Zeroizing::new(Vec::with_capacity((out.len() + chunk.len()) * 2));
-                bigger.extend_from_slice(&out);
-                out = bigger;
-            }
-            out.extend_from_slice(&chunk);
-        }
-        Ok(out)
+        post(&self.client, &self.url(op), &self.token, body).await
     }
+}
+
+/// POST a JSON body with the token; return the response body in a zeroizing buffer.
+async fn post(
+    client: &reqwest::Client,
+    url: &str,
+    token: &BaoToken,
+    body: bytes::Bytes,
+) -> Result<Zeroizing<Vec<u8>>, WrapError> {
+    let mut resp = client
+        .post(url)
+        .header(TOKEN_HEADER, token.header_value()?)
+        .header(CONTENT_TYPE, "application/json")
+        .body(body)
+        .send()
+        .await
+        .map_err(transport)?;
+    let status = resp.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        return Err(WrapError::Denied);
+    }
+    if !status.is_success() {
+        return Err(WrapError::Rejected {
+            status: status.as_u16(),
+        });
+    }
+    let mut out = Zeroizing::new(Vec::with_capacity(1024));
+    while let Some(chunk) = resp.chunk().await.map_err(transport)? {
+        if out.len() + chunk.len() > MAX_RESPONSE {
+            return Err(WrapError::BadResponse);
+        }
+        if out.len() + chunk.len() > out.capacity() {
+            // Grow into a fresh zeroizing buffer so no unwiped copy is left behind.
+            let mut bigger = Zeroizing::new(Vec::with_capacity((out.len() + chunk.len()) * 2));
+            bigger.extend_from_slice(&out);
+            out = bigger;
+        }
+        out.extend_from_slice(&chunk);
+    }
+    Ok(out)
 }
 
 impl std::fmt::Debug for OpenBaoTransit {
@@ -246,6 +256,125 @@ impl KeyWrapper for OpenBaoTransit {
         let mut key = Zeroizing::new([0u8; 32]);
         key.copy_from_slice(&buf[..32]);
         Ok(SecretKey32::from_bytes(*key))
+    }
+}
+
+/// Signs messages with an OpenBao transit signing key: `POST /v1/{mount}/sign/{key}` (S5
+/// design decision 4, the `audit-checkpoint` Ed25519 key). The token should hold a policy that
+/// allows `update` on that one path only; this client never reads or exports the key.
+///
+/// Signing is not secret (the message and the signature are public), but the token is: it lives
+/// in [`BaoToken`] and `Debug` shows the address, mount and key only.
+pub struct TransitSigner {
+    client: reqwest::Client,
+    addr: String,
+    mount: String,
+    key: String,
+    token: BaoToken,
+}
+
+/// A transit signature: the key version that made it and the raw signature bytes (64 for
+/// Ed25519).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransitSignature {
+    pub key_version: u32,
+    pub signature: Vec<u8>,
+}
+
+#[derive(serde::Serialize)]
+struct SignReq<'a> {
+    input: &'a str,
+}
+
+#[derive(serde::Deserialize)]
+struct SignResp {
+    data: SignData,
+}
+
+#[derive(serde::Deserialize)]
+struct SignData {
+    signature: String,
+}
+
+/// Longest transit key name accepted for signing (OpenBao allows more; ours are short).
+const MAX_SIGN_KEY_LEN: usize = 64;
+
+impl TransitSigner {
+    /// `addr` is the OpenBao base URL; `key` the transit key name (1-64 bytes of
+    /// `[A-Za-z0-9_-]`). Mount defaults to `transit`. Same client defaults as
+    /// [`OpenBaoTransit::new`].
+    pub fn new(addr: &str, key: &str, token: BaoToken) -> Result<Self, WrapError> {
+        Self::with_client(default_client()?, addr, key, token)
+    }
+
+    /// As [`Self::new`] with a caller-built client.
+    pub fn with_client(
+        client: reqwest::Client,
+        addr: &str,
+        key: &str,
+        token: BaoToken,
+    ) -> Result<Self, WrapError> {
+        token.header_value()?;
+        let key_ok = !key.is_empty()
+            && key.len() <= MAX_SIGN_KEY_LEN
+            && key
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+        if !key_ok {
+            return Err(WrapError::InvalidConfig);
+        }
+        Ok(Self {
+            client,
+            addr: validate_addr(addr)?,
+            mount: "transit".to_owned(),
+            key: key.to_owned(),
+            token,
+        })
+    }
+
+    /// The transit key name.
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    /// Sign `message` with the latest version of the key.
+    pub async fn sign(&self, message: &[u8]) -> Result<TransitSignature, WrapError> {
+        let input = B64.encode(message);
+        let body =
+            serde_json::to_vec(&SignReq { input: &input }).map_err(|_| WrapError::BadResponse)?;
+        let url = format!("{}/v1/{}/sign/{}", self.addr, self.mount, self.key);
+        let resp = post(&self.client, &url, &self.token, body.into()).await?;
+        let resp: SignResp = serde_json::from_slice(&resp).map_err(|_| WrapError::BadResponse)?;
+        let rest = resp
+            .data
+            .signature
+            .strip_prefix(CT_PREFIX)
+            .ok_or(WrapError::BadResponse)?;
+        let (v, b64) = rest.split_once(':').ok_or(WrapError::BadResponse)?;
+        let key_version = v
+            .parse::<u32>()
+            .ok()
+            .filter(|&v| v >= 1)
+            .ok_or(WrapError::BadResponse)?;
+        let signature = B64.decode(b64).map_err(|_| WrapError::BadResponse)?;
+        if signature.is_empty() {
+            return Err(WrapError::BadResponse);
+        }
+        Ok(TransitSignature {
+            key_version,
+            signature,
+        })
+    }
+}
+
+impl std::fmt::Debug for TransitSigner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransitSigner")
+            .field("addr", &self.addr)
+            .field("mount", &self.mount)
+            .field("key", &self.key)
+            .field("token", &"<redacted>")
+            .finish()
     }
 }
 

@@ -7,7 +7,7 @@
 - [x] 1.4 Verify: `cargo nextest run -p ls-ipc` passes on Linux, including round trip and foreign-peer tests via the trait.
 
 ## 2. Windows builds for secret-touching crates [opus]
-- [ ] 2.1 Make `ls-vault` (SQLCipher with vendored OpenSSL), `ls-broker`, `smith-cli` and `locksmithd` compile under `cfg(windows)`, using the transport trait; no change to crypto or on-disk formats.
+- [x] 2.1 Make `ls-vault` (SQLCipher with vendored OpenSSL), `ls-broker`, `smith-cli` and `locksmithd` compile under `cfg(windows)`, using the transport trait; no change to crypto or on-disk formats.
 - [ ] 2.2 Replace Unix-only paths and permission calls (0600 file modes, socket paths) with a platform module that has an ACL equivalent on Windows.
 - [ ] 2.3 Verify: `cargo nextest run --workspace` stays green on Linux and `cargo check --workspace --target x86_64-pc-windows-gnu` compiles where the toolchain allows.
 

@@ -56,3 +56,8 @@
 - Task: 2.1 - decision only (not started, nothing unticked)
 - Verified: `cargo deny check bans` fails with a `cfg(windows)` `bundled-sqlcipher-vendored-openssl` rusqlite dep and passes with `{ name = "openssl-sys", wrappers = ["libsqlite3-sys"] }`; `cargo deny check licenses` ok; Linux dep tree has no openssl-sys. Changes reverted; only design.md records the decision.
 - Notes for next session: 2.1 applies the design.md row (deny.toml wrapper with a reason line plus the Windows-only target dep), then cross-checks `cargo check -p ls-vault --target x86_64-pc-windows-gnu` (openssl-src needs perl and the mingw toolchain; record the build time). Resolves for-lead #268 item 1.
+
+## 2026-11-18 worker
+- Task: 2.1 - done (ticked; compile/clippy-verified for x86_64-pc-windows-gnu, runtime pending 4.2)
+- Verified: `just ci` -> exit 0; `cargo check --target x86_64-pc-windows-gnu -p ls-vault -p ls-broker -p smith-cli -p locksmithd` -> ok, cold build 2m18s; `cargo deny check bans licenses sources` ok; independent Opus evaluator PASS
+- Notes for next session: deny.toml has the openssl-sys wrapper for libsqlite3-sys; locksmithd binds via ls_ipc::Listener. On Windows everything fails closed: Peer::of errors, is_private_dir errors (2.2 adds ACL checks), `smith run`/prompt refused. NO task covers porting peer attestation, `smith run` and the prompt to Windows: add one. Test modules using std::os::unix lack cfg(unix) (ls-vault vault.rs, ls-broker doctor.rs/lib.rs, locksmithd policy.rs): gate them in 2.3. design.md dep table says openssl-src 400.0.2 but 300.6.1+3.6.3 resolved: fix the row. `smith daemon install` has no Windows branch. 8 ls-e2e tests panic "No rustls crypto provider" in plain nextest but pass under just ci. Next: 2.2.

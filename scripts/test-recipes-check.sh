@@ -21,7 +21,8 @@ for r in $rows; do
 done
 
 # `just <recipe>` mentioned in the Dev environment section must exist in the justfile.
-recipes=$(just --summary 2>/dev/null | tr ' ' '\n')
+# Parsed from the justfile text: CI runners do not have `just` installed.
+recipes=$(sed -n 's/^\([a-z][a-z0-9-]*\)\( [^:=]*\)\{0,1\}:\([^=].*\)\{0,1\}$/\1/p' justfile)
 for rec in $(sed -n '/^## Dev environment/,$p' "$doc" | grep -o '`just [a-z][a-z0-9-]*' | sed 's/`just //' | sort -u); do
   grep -qxF "$rec" <<<"$recipes" || { echo "test-recipes: just recipe '$rec' named in $doc does not exist" >&2; fail=1; }
 done

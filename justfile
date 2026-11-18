@@ -128,6 +128,15 @@ relay-smoke:
     cargo build -q -p ls-gateway --bin locksmith-gateway
     cargo nextest run -p ls-e2e --test relay
 
+# S4 connector smoke test (needs `just up` and `just api`): registers an agent, grants a canary
+# secret and relays to the WireMock upstream through `smith` and the MCP tools; asserts the upstream
+# saw the secret and the agent did not. Run `just leak-scan` after.
+connector-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo build -q -p locksmith-mcp
+    cargo nextest run -p ls-e2e --test connector
+
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
     cargo nextest run -p ls-e2e

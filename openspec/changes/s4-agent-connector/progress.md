@@ -67,3 +67,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 4.3 - done
 - Verified: `npm run lint` (all workspaces) and `just apps-build` (web + Tauri desktop debug build) exit 0 after `apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev` and `npm i` (stale workspace link for control-plane-client). `just ci` not rerun after merging main.
 - Notes for next session: next is 5.1 (compose wiring, `just connector-smoke`; needs `just up`). Desktop CORS gap from 4.2 still open.
+
+## 2026-11-18 worker
+- Task: 5.1 - done
+- Verified: `just up`, `just api`, `just connector-smoke` -> 1 passed (smith login/grants/relay and the locksmith-mcp list_grants/relay_request tools against the real gateway and WireMock; upstream saw the injected canary twice; agent stdout/stderr, 0600 state file and MCP replies contain no canary or enrollment secret); `just leak-scan` clean. Test: `tests/e2e/tests/connector.rs`. No independent evaluator run (Sonnet implementer only).
+- Notes for next session: 5.2 needs a headless `claude -p` run with the MCP server; 5.3 and 6.1 follow. `just ci` not yet rerun after adding the recipe.

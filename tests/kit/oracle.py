@@ -5,6 +5,16 @@ A canary is 32 random bytes, printed as base64url without padding. The oracle
 never prints a canary, nor any fragment of one: every location it prints is
 checked first and replaced by a hash if it contains part of an encoding.
 
+Each canary is searched for, as its raw bytes and as its text, in fixed encodings
+(plain, percent, JSON, hex, base64 and base64url at three offsets, base32 upper and
+lower at five offsets, UTF-16LE, UTF-16BE, reversed) and in decoded views of the
+scanned data, labelled `<view>/<encoding>`: `gzip/` (any gzip member, labelled
+or not, nested up to three deep), `qp/` (quoted-printable), `json-u/` (\\uXXXX
+escapes), `html-entity/` (numeric character references) and `stripped/` (the data
+with whitespace and header framing such as `X-Part-2:` removed, which finds a
+canary split across headers or written one character per line). A decoded view
+reports only what the undecoded data does not already show.
+
 scan searches files (positional paths, --dir, --transcript) and, with --stack,
 the local F0 stack: Postgres (psql --csv), Loki (query_range) and Tempo (search,
 then each trace) through the Grafana HTTP API on localhost. It prints one line
@@ -24,8 +34,11 @@ import datetime
 import hashlib
 import io
 import json
+import collections
+import gzip
 import math
 import os
+import quopri
 import re
 import secrets
 import shlex
@@ -35,6 +48,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 
 MAX_BYTES = 50 * 1024 * 1024
 # A printed locator must not share this many consecutive bytes with any canary encoding.
@@ -84,6 +98,86 @@ def variants(canary):
                 # Keep only the characters that do not depend on the zero prefix or the padding.
                 needle = full[math.ceil(4 * k / 3):-4]
                 out.append(("%s%s-offset%d" % (prefix, label, k), full.encode(), needle.encode()))
+        # base32 (RFC 4648 section 6) works in 5-byte groups, so five offsets; padded or not and
+        # upper or lower case.
+        for k in range(5):
+            full = base64.b32encode(b"\x00" * k + src)
+            needle = full[math.ceil(8 * k / 5):-8]
+            out.append(("%sb32-offset%d" % (prefix, k), full, needle))
+            out.append(("%sb32-lower-offset%d" % (prefix, k), full.lower(), needle.lower()))
+        # UTF-16 of the text, and of the bytes read as Latin-1 code units.
+        units = src.decode("latin-1")
+        for label, codec in (("utf16le", "utf-16-le"), ("utf16be", "utf-16-be")):
+            enc = units.encode(codec)
+            out.append((prefix + label, enc, enc))
+        out.append((prefix + "reversed", src[::-1], src[::-1]))
+    return out
+
+
+# --- decoded views ------------------------------------------------------------------------------
+# A view rewrites the scanned data with one regex; every fixed needle is then searched in it.
+
+def codepoint_bytes(cp):
+    """A code point as one byte when it fits (a raw canary byte), else as UTF-8."""
+    if cp <= 0xFF:
+        return bytes([cp])
+    if cp > 0x10FFFF:
+        return None
+    return chr(cp).encode("utf-8", "surrogatepass")
+
+
+def qp_repl(m):
+    return bytes([int(m.group(1), 16)]) if m.group(1) else b""
+
+
+def json_u_repl(m):
+    return codepoint_bytes(int(m.group(1), 16))
+
+
+def html_repl(m):
+    cp = int(m.group(1), 16) if m.group(1) else int(m.group(2))
+    r = codepoint_bytes(cp)
+    return m.group(0) if r is None else r
+
+
+WS_RE = re.compile(rb"\s+")
+# (label, pattern, replacement, a byte string the data must contain for the view to apply)
+VIEWS = (
+    # RFC 2045 section 6.7: `=XX` octets and `=` soft line breaks.
+    ("qp", re.compile(rb"=(?:([0-9A-Fa-f]{2})|[ \t]*\r?\n)"), qp_repl, b"="),
+    ("json-u", re.compile(rb"\\u([0-9A-Fa-f]{4})"), json_u_repl, b"\\u"),
+    ("html-entity", re.compile(rb"&#(?:[xX]([0-9A-Fa-f]{1,6})|([0-9]{1,7}));?"), html_repl, b"&#"),
+    # Whitespace, and an HTTP header name (RFC 9110 token) with its colon at a line start.
+    ("stripped", re.compile(rb"(?m)^[!#$%&'*+.^_`|~0-9A-Za-z-]+:|\s+"), lambda m: b"", None),
+)
+GZIP_MAGIC = b"\x1f\x8b\x08"
+GZIP_MAX_MEMBERS = 256
+GZIP_MAX_DEPTH = 3
+
+
+def view_offsets(pattern, repl, data, voffs):
+    """Map sorted offsets in pattern.sub(repl, data) back to offsets in data."""
+    out = []
+    it = iter(voffs)
+    v = next(it, None)
+    vpos = opos = 0
+    for m in pattern.finditer(data):
+        if v is None:
+            return out
+        keep = m.start() - opos
+        while v is not None and v < vpos + keep:
+            out.append(opos + v - vpos)
+            v = next(it, None)
+        vpos += keep
+        rlen = len(repl(m))
+        while v is not None and v < vpos + rlen:
+            out.append(m.start())
+            v = next(it, None)
+        vpos += rlen
+        opos = m.end()
+    while v is not None:
+        out.append(opos + v - vpos)
+        v = next(it, None)
     return out
 
 
@@ -119,9 +213,54 @@ class Matcher:
                     for i in range(len(s) - GRAM + 1):
                         self.grams.add(s[i:i + GRAM])
         self.needles = [("+".join(names), needle) for needle, names in by_needle.items()]
+        # The stripped view drops whitespace, so its needles do too (raw bytes can hold some).
+        self.stripped = [(name, WS_RE.sub(b"", needle)) for name, needle in self.needles]
 
     def find(self, data):
-        return find_hits(data, self.needles)
+        """Return [(label, offset)]. A view hit's offset is where it starts in data (for a gzip
+        member, where the member starts)."""
+        return self._find(data, 0, [MAX_BYTES])
+
+    def _find(self, data, depth, budget):
+        hits = find_hits(data, self.needles)
+        base = collections.Counter(name for name, _off in hits)
+        base_offs = set(hits)
+        for label, pattern, repl, trigger in VIEWS:
+            if trigger is not None and trigger not in data:
+                continue
+            view = pattern.sub(repl, data)
+            if view == data:
+                continue
+            vhits = find_hits(view, self.stripped if label == "stripped" else self.needles)
+            counts = collections.Counter(name for name, _off in vhits)
+            # Only what decoding adds: a canary the plain scan already found is not reported twice.
+            new = sorted((off, name) for name, off in vhits if counts[name] > base[name])
+            if not new:
+                continue
+            offs = view_offsets(pattern, repl, data, [off for off, _name in new])
+            for (_voff, name), off in zip(new, offs):
+                if (name, off) not in base_offs:
+                    hits.append(("%s/%s" % (label, name), off))
+        if depth < GZIP_MAX_DEPTH:
+            start = members = 0
+            buf = memoryview(data)
+            while members < GZIP_MAX_MEMBERS and budget[0] > 0:
+                i = data.find(GZIP_MAGIC, start)
+                if i < 0:
+                    break
+                start = i + 1
+                members += 1
+                try:
+                    # wbits 31: a gzip header; output stops at the member's end or the budget.
+                    out = zlib.decompressobj(31).decompress(buf[i:], budget[0])
+                except zlib.error:
+                    continue
+                if not out:
+                    continue
+                budget[0] -= len(out)
+                for name, _off in self._find(out, depth + 1, budget):
+                    hits.append(("gzip/" + name, i))
+        return hits
 
     def safe(self, text):
         """Return text, or a hash of it if it shares GRAM bytes with any canary encoding."""
@@ -574,6 +713,47 @@ def cmd_scan(args):
     return 0
 
 
+def view_plants(canary):
+    """(form, planted bytes, label of the view that must find it, base encoding it decodes to)."""
+    raw = b64url_decode(canary)
+    text = canary.encode()
+    half = len(canary) // 2
+    qp_text = quopri.encodestring(b"x" * 60 + text)
+    return [
+        ("gzip", gzip.compress(raw), "gzip", "raw"),
+        ("text-gzip", gzip.compress(text), "gzip", "utf8"),
+        ("text-gzip-gzip", gzip.compress(gzip.compress(text)), "gzip/gzip", "utf8"),
+        ("qp", quopri.encodestring(raw), "qp", "raw"),
+        # A soft line break (`=` newline) falls inside the canary.
+        ("text-qp", qp_text, "qp", "utf8"),
+        ("json-u", "".join("\\u%04x" % b for b in raw).encode(), "json-u", "raw"),
+        ("text-json-u", "".join("\\u%04X" % ord(c) for c in canary).encode(), "json-u", "utf8"),
+        ("html-entity", "".join("&#%d;" % b for b in raw).encode(), "html-entity", "raw"),
+        ("text-html-entity", "".join("&#x%x;" % ord(c) for c in canary).encode(), "html-entity", "utf8"),
+        ("stripped", b"\n".join(raw[i:i + 1] for i in range(len(raw))), "stripped", "raw"),
+        ("text-stripped-lines", "\r\n".join(canary).encode(), "stripped", "utf8"),
+        ("text-stripped-headers", ("HTTP/1.1 200 OK\r\nDate: x\r\nX-Part-1: %s\r\nX-Part-2: %s\r\n\r\n"
+                                   % (canary[:half], canary[half:])).encode(), "stripped", "utf8"),
+    ]
+
+
+def clean_corpus():
+    """Random bytes and text in every form a view decodes, with no canary in it."""
+    rnd = secrets.token_bytes(1 << 16)
+    words = base64.urlsafe_b64encode(secrets.token_bytes(4096))
+    text = b" ".join(words[i:i + 9] for i in range(0, len(words), 9))
+    parts = [
+        rnd, text, words, rnd.hex().encode(), base64.b32encode(rnd[:4096]),
+        rnd[:4096].decode("latin-1").encode("utf-16-le"), words.decode().encode("utf-16-be"),
+        gzip.compress(text), gzip.compress(rnd), quopri.encodestring(rnd[:4096]), quopri.encodestring(text),
+        "".join("\\u%04x" % b for b in rnd[:2048]).encode(), "".join("&#%d;" % b for b in rnd[:2048]).encode(),
+        b"\n".join(words[i:i + 1] for i in range(2048)),
+        b"".join(b"X-Part-%d: %s\r\n" % (i, words[i * 7:i * 7 + 7]) for i in range(256)),
+        rnd[::-1], words[::-1],
+    ]
+    return b"\n".join(parts)
+
+
 def cmd_selftest(_args):
     ok_all = True
     names = [name for name, _f, _n in variants(gen_canary())]
@@ -588,6 +768,17 @@ def cmd_selftest(_args):
             found = any(name in h[0].split("+") for h in hits) and not errors
             ok_all = ok_all and found
             print("%s %s" % ("ok" if found else "FAIL", name))
+        for name, planted, view, enc in view_plants(gen_canary()):
+            canary = gen_canary()
+            planted = [p for n, p, _v, _e in view_plants(canary) if n == name][0]
+            path = os.path.join(tmp, "%s.bin" % name)
+            with open(path, "wb") as fh:
+                fh.write(b"preamble\n" + planted + b"\ntrailer\n")
+            hits, errors = collect(canary, [path])
+            found = not errors and any(
+                h[0].rsplit("/", 1)[0] == view and enc in h[0].rsplit("/", 1)[1].split("+") for h in hits)
+            ok_all = ok_all and found
+            print("%s %s" % ("ok" if found else "FAIL", name))
         canary = gen_canary()
         clean = os.path.join(tmp, "clean.txt")
         with open(clean, "wb") as fh:
@@ -596,6 +787,14 @@ def cmd_selftest(_args):
         clean_ok = not hits and not errors
         ok_all = ok_all and clean_ok
         print("%s clean-file" % ("ok" if clean_ok else "FAIL"))
+        # Random bytes and text, in every form above, under a canary that was never written.
+        corpus = os.path.join(tmp, "clean-corpus.bin")
+        with open(corpus, "wb") as fh:
+            fh.write(clean_corpus())
+        hits, errors = collect(gen_canary(), [corpus])
+        corpus_ok = not hits and not errors
+        ok_all = ok_all and corpus_ok
+        print("%s clean-corpus%s" % ("ok" if corpus_ok else "FAIL", "" if corpus_ok else " (%d hits)" % len(hits)))
         # The locator guard hides any 8-byte fragment of an encoding and passes ordinary text.
         m = Matcher([canary])
         frag = [f for n, f, _ in variants(canary) if n == "hex-lower"][0][10:18].decode()

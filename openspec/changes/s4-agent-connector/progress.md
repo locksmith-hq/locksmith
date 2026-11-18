@@ -27,3 +27,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.1 - blocked (parked: task is [opus], gateway auth path; this worker run is on the Sonnet/Haiku tier and did not write auth code)
 - Verified: `scripts/worker-has-work.sh` -> s4-agent-connector ready; `scripts/run-lock.sh acquire` ok; PR #215 open, not draft, no ready-to-merge label; main CI latest run in progress (no failure seen)
 - Notes for next session: pick up at 2.1 on an Opus tier. Start from the lead notes (61190d3): one shared bearer extractor, remove `caller_token`, `STATIC_CALLER` (relay.rs:54) and `ENV_CALLER_TOKEN`, then JWKS via `Jwk::decoding_key()` with kid overlap. Re-check jsonwebtoken and signing-crate versions on crates.io first. Full `just ci` not run this session.
+
+## 2026-11-18 worker
+- Task: 2.1 - done
+- Verified: `cargo nextest run -p ls-gateway -p ls-control-plane` -> 122 passed; `just ci` green; Opus evaluator PASS (af0497a)
+- Notes for next session: task 2.2 (grants cache <=10 s, grant check before unwrap on /v1/relay, `agent_id` column in gateway_audit, audit denials). Evaluator nice-to-haves: serve cached key during stale-JWKS refresh instead of blocking; tests could assert exact error for alg none/HS256; removed-key overlap (15.5 min) also trusts a leaked key. e2e relay test only compiled, not run (needs `just up`). Unused `subtle` dep removed from gateway.

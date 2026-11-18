@@ -6,7 +6,7 @@
 - [x] 1.3 Verify: `cargo nextest run -p ls-control-plane` covers cross-org isolation, expired token, wrong audience, one-time enrollment secret, no secret field in any response schema.
 
 ## 2. Gateway auth and grant enforcement [opus]
-- [ ] 2.1 Replace the static caller token with JWT verification via JWKS (cached, rotation by kid); add `GET /v1/grants`.
+- [x] 2.1 Replace the static caller token with JWT verification via JWKS (cached, rotation by kid); add `GET /v1/grants`.
 - [ ] 2.2 Enforce grant (and expiry) before unwrap; write `agent_id` into `gateway_audit`; audit denials.
 - [ ] 2.3 Verify: `cargo nextest run -p ls-gateway` covers forged, expired and wrong-audience tokens, no grant makes no decrypt call, revoked grant stops within the cache TTL.
 

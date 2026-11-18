@@ -2515,7 +2515,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx-postgres",
- "subtle",
  "testcontainers",
  "time",
  "tokio",

@@ -42,7 +42,6 @@ rustls-platform-verifier = "0.7.1"
 base64 = "0.22.1"
 bytes = "1.12.1"
 serde_json = "1"
-subtle = "2.6.1"
 zeroize = "1.9.1"
 # S4 task 2.1: agent tokens verified through the control plane's JWKS. Same jsonwebtoken build as
 # the control plane (RustCrypto backend, no C build); claims and validation come from

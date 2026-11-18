@@ -19,7 +19,7 @@ Build the block with the script, passing only your own fields on stdin:
 ```
 bash scripts/run-meta.sh block <<'EOF'
   orchestrator: <model>
-  outcome: done|failed|rescue|blocked|idle|ci-fix|merged|rescued|learned|reviewed|healthy
+  outcome: done|failed|rescue|blocked|idle|ci-fix|merged|rescued|learned|reviewed|healthy|answered
   change: <id|none>
   task: <ids|none>
   attempts: <n>

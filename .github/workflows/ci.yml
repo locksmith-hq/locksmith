@@ -62,7 +62,7 @@ jobs:
       - name: OpenSpec task-edit guard
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: bash scripts/check-task-edits.test.sh && bash scripts/change-status.test.sh && bash scripts/check-task-edits.sh && bash scripts/check-agent-docs.sh
+        run: bash scripts/check-task-edits.test.sh && bash scripts/change-status.test.sh && bash scripts/owner-replies.test.sh && bash scripts/check-task-edits.sh && bash scripts/check-agent-docs.sh
       - name: gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1

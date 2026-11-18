@@ -5,7 +5,7 @@ description: Start of every scheduled Locksmith agent run. Runs preflight (docke
 
 # Run start
 
-1. Run `bash scripts/agent-start.sh <kind>`, where `<kind>` is one of worker, lead, review, health or research.
+1. Run `bash scripts/agent-start.sh <kind> [persona]`, where `<kind>` is one of worker, lead, review, health or research. If your routine prompt names a persona (linus, alfie, josie, harriet or walt), pass it: the run then acts as that GitHub App. A `WARN identity` line means it still acts as the owner account.
    - It prints one line per check: `OK`, `FIXED`, `WARN` or `FAIL`.
    - Fix every `FAIL` before doing real work.
    - Record each `WARN` or `FAIL` line, and each `FIXED` except docker (expected), as `friction` (format: `run-log` skill).

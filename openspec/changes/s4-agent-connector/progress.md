@@ -32,3 +32,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.1 - done
 - Verified: `cargo nextest run -p ls-gateway -p ls-control-plane` -> 122 passed; `just ci` green; Opus evaluator PASS (af0497a)
 - Notes for next session: task 2.2 (grants cache <=10 s, grant check before unwrap on /v1/relay, `agent_id` column in gateway_audit, audit denials). Evaluator nice-to-haves: serve cached key during stale-JWKS refresh instead of blocking; tests could assert exact error for alg none/HS256; removed-key overlap (15.5 min) also trusts a leaked key. e2e relay test only compiled, not run (needs `just up`). Unused `subtle` dep removed from gateway.
+
+## 2026-11-18 worker
+- Task: 2.2 - done
+- Verified: `cargo nextest run -p ls-gateway -p ls-control-plane` -> 130 passed; `just ci` green; Opus evaluator PASS (9194dc4)
+- Notes for next session: task 2.3 (verify: forged/expired/wrong-aud token tests, revoke within TTL - mostly covered; confirm and tick). Grant cache holds empty lists up to 10 s, so connector-smoke (5.1) must create the grant before the agent's first call or wait ~10 s. Evaluator nits: log the GrantError kind in relay.rs (~515); design.md decision 4 says "secret binding id" but code uses secret_id; cache `retain` per miss under mutex.

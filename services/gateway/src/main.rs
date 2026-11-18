@@ -8,6 +8,7 @@ use ls_control_plane::telemetry;
 use ls_envelope::{BaoToken, OpenBaoTransit, WrapKeyId};
 use ls_gateway::app::{self, AppState};
 use ls_gateway::audit::PgAudit;
+use ls_gateway::auth::{AgentAuth, HttpJwks, JwksSettings};
 use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
@@ -89,17 +90,31 @@ async fn main() -> ExitCode {
         tracing::error!("control-plane client could not be configured");
         return ExitCode::FAILURE;
     };
+    // Agent tokens (S4 task 2.1): verified through the control plane's JWKS, cached by kid.
+    let Ok(jwks) = HttpJwks::new(&config.control_plane_url) else {
+        tracing::error!("JWKS client could not be configured");
+        return ExitCode::FAILURE;
+    };
+    let auth = Arc::new(AgentAuth::new(
+        config.bindings.org_id,
+        Arc::new(jwks),
+        JwksSettings::default(),
+    ));
+    // Warm the key cache; a failure here is retried on the first request.
+    auth.refresh().await;
     let cache = Arc::new(DekCache::new(CacheSettings::default()));
     let sweeper = cache.spawn_sweeper(CACHE_SWEEP);
+    let control_plane = Arc::new(control_plane);
     let decryptor = Decryptor::new(
         config.bindings.org_id,
-        Arc::new(control_plane),
+        control_plane.clone(),
         Arc::new(transit),
         cache,
     );
     let binding_count = config.bindings.bindings.len();
     let relay = Relay::new(
-        config.caller_token,
+        auth,
+        control_plane,
         config.bindings,
         decryptor,
         Arc::new(SystemResolver),

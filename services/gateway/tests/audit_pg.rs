@@ -35,7 +35,7 @@ fn record(org: Uuid, secret: Uuid, outcome: Outcome, status: Option<u16>) -> Aud
         org_id: org,
         secret_id: secret,
         version: 3,
-        caller: "static-token".to_owned(),
+        caller: "0197c1f0-0000-7000-8000-0000000000a1".to_owned(),
         method: "GET".to_owned(),
         scheme: "https".to_owned(),
         host: "api.example.com".to_owned(),
@@ -122,13 +122,13 @@ async fn pg_audit_appends_one_row_per_attempt() {
                 "ok".to_owned(),
                 Some(200),
                 Some(3),
-                Some("static-token".to_owned())
+                Some("0197c1f0-0000-7000-8000-0000000000a1".to_owned())
             ),
             (
                 "denied".to_owned(),
                 None,
                 Some(3),
-                Some("static-token".to_owned())
+                Some("0197c1f0-0000-7000-8000-0000000000a1".to_owned())
             ),
         ]
     );

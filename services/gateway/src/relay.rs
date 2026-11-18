@@ -2,7 +2,8 @@
 //! one upstream request, return the redacted response and audit the attempt.
 //!
 //! Order of checks, each before the next step runs:
-//! 1. caller token (constant time) -> `401`, nothing else happens and nothing is audited;
+//! 1. agent token ([`crate::auth`]: JWKS signature, audience, expiry, org) -> `401`, nothing
+//!    else happens and nothing is audited;
 //! 2. request shape -> `400`;
 //! 3. binding for the secret and the target's origin -> `403 denied`;
 //! 4. DNS and address guard -> `403 denied_address` (still no fetch, no unwrap);
@@ -30,28 +31,24 @@ use std::time::Duration;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use ls_redact::{MIN_ENCODED_LEN, Redactor, Secret};
 use reqwest::header::{HeaderName, HeaderValue};
-use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use subtle::ConstantTimeEq;
 use tracing::Instrument;
 use url::Url;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::audit::{AuditRecord, AuditSink, Outcome};
+use crate::auth::AgentAuth;
 use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
 use crate::egress::{self, EgressError, Resolver};
-
-/// The caller name recorded in the audit row while S3 has one static caller token (S4 replaces
-/// it with agent identity).
-pub const STATIC_CALLER: &str = "static-token";
+use crate::grants::GrantSource;
 
 /// Label in redaction markers: `[REDACTED:SECRET]`.
 pub const REDACTION_LABEL: &str = "SECRET";
@@ -108,10 +105,11 @@ impl Default for RelayOptions {
     }
 }
 
-/// Everything the relay route needs. No `Debug`/`Clone`: it holds the caller token.
+/// Everything the `/v1` routes need. No `Debug`/`Clone`: it holds the decrypt path.
 pub struct Relay {
     org_id: Uuid,
-    caller_token: SecretString,
+    auth: Arc<AgentAuth>,
+    grants: Arc<dyn GrantSource>,
     bindings: Bindings,
     decryptor: Decryptor,
     resolver: Arc<dyn Resolver>,
@@ -120,8 +118,10 @@ pub struct Relay {
 }
 
 impl Relay {
+    /// `auth` must verify tokens for `bindings.org_id`, the org this gateway serves.
     pub fn new(
-        caller_token: SecretString,
+        auth: Arc<AgentAuth>,
+        grants: Arc<dyn GrantSource>,
         bindings: Bindings,
         decryptor: Decryptor,
         resolver: Arc<dyn Resolver>,
@@ -130,7 +130,8 @@ impl Relay {
     ) -> Self {
         Self {
             org_id: bindings.org_id,
-            caller_token,
+            auth,
+            grants,
             bindings,
             decryptor,
             resolver,
@@ -143,16 +144,16 @@ impl Relay {
         &self.options
     }
 
-    fn authorized(&self, headers: &HeaderMap) -> bool {
-        let Some(presented) = headers
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.as_bytes().strip_prefix(b"Bearer "))
-        else {
-            return false;
-        };
-        presented
-            .ct_eq(self.caller_token.expose_secret().as_bytes())
-            .into()
+    pub fn auth(&self) -> &AgentAuth {
+        &self.auth
+    }
+
+    pub fn grants(&self) -> &dyn GrantSource {
+        self.grants.as_ref()
+    }
+
+    pub fn bindings(&self) -> &Bindings {
+        &self.bindings
     }
 }
 
@@ -189,7 +190,7 @@ struct ErrorBody {
     request_id: String,
 }
 
-fn error(status: StatusCode, slug: &'static str, request_id: &str) -> Response {
+pub(crate) fn error(status: StatusCode, slug: &'static str, request_id: &str) -> Response {
     let mut r = (
         status,
         Json(ErrorBody {
@@ -302,9 +303,13 @@ fn audit_host(url: &Url) -> String {
 /// The handler. See the module docs for the order of checks.
 pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Response {
     let request_id = Uuid::new_v4().to_string();
-    if !relay.authorized(&headers) {
-        return error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id);
-    }
+    let agent = match relay.auth.authenticate(&headers).await {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::info!(reason = e.as_str(), "agent token refused");
+            return error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id);
+        }
+    };
     let Some(req) = parse(&body, relay.options.max_request_body) else {
         return error(StatusCode::BAD_REQUEST, "bad_request", &request_id);
     };
@@ -313,6 +318,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
     let span = tracing::info_span!(
         "relay",
         request_id = %request_id,
+        agent.id = %agent.agent_id,
         secret.id = %req.secret_id,
         secret.version = req.version,
         upstream.host = %host,
@@ -324,7 +330,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
         org_id: relay.org_id,
         secret_id: req.secret_id,
         version: req.version,
-        caller: STATIC_CALLER.to_owned(),
+        caller: agent.agent_id.to_string(),
         method: req.method.as_str().to_owned(),
         scheme: req.url.scheme().to_owned(),
         host,
@@ -606,14 +612,19 @@ mod tests {
     use super::*;
     use crate::app::{self, AppState};
     use crate::audit::MemoryAudit;
+    use crate::auth::testkit::StubJwks;
+    use crate::auth::{AgentAuth, JwksSettings};
     use crate::decrypt::testkit::{key, seal};
     use crate::decrypt::{CacheSettings, ControlPlane, DekCache};
     use crate::egress::testkit::StubResolver;
+    use crate::grants::testkit::StubGrants;
+    use crate::grants::{Grant, GrantList, GrantView};
     use axum::Router;
     use axum::body::Body;
     use axum::http::Request;
     use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
     use http_body_util::BodyExt;
+    use ls_control_plane::agent_token::{AUDIENCE, AgentClaims, AgentTokenSigner};
     use ls_control_plane::readiness::ReadyFlag;
     use ls_envelope::{BaoToken, OpenBaoTransit};
     use std::sync::Mutex;
@@ -632,7 +643,22 @@ mod tests {
     const UNBOUND: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_000000000005);
     /// A canary with characters that URL-encoding changes.
     const VALUE: &[u8] = b"canary-relay-7Hk2/q+Zx9=W";
-    const CALLER: &str = "caller-token-0123456789abcdef0123456789";
+    const AGENT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a1);
+
+    fn signer() -> AgentTokenSigner {
+        AgentTokenSigner::from_seed(zeroize::Zeroizing::new([7u8; 32])).unwrap()
+    }
+
+    fn agent_claims(org: Uuid, aud: &str, exp_in: i64) -> AgentClaims {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        AgentClaims {
+            sub: AGENT,
+            org,
+            aud: aud.to_owned(),
+            iat: now,
+            exp: now + exp_in,
+        }
+    }
 
     fn percent(v: &[u8]) -> String {
         percent_case(v, true)
@@ -696,7 +722,11 @@ mod tests {
         bao: MockServer,
         audit: Arc<MemoryAudit>,
         resolver: Arc<StubResolver>,
+        grants: Arc<StubGrants>,
         dead_port: u16,
+        signer: AgentTokenSigner,
+        /// A valid agent token for [`AGENT`] in [`ORG`].
+        token: String,
     }
 
     struct Setup {
@@ -798,8 +828,17 @@ mod tests {
             fail: setup.audit_fails,
             ..MemoryAudit::default()
         });
+        let signer = signer();
+        let auth = Arc::new(AgentAuth::new(
+            ORG,
+            Arc::new(StubJwks::with(vec![signer.jwk().clone()])),
+            JwksSettings::default(),
+        ));
+        let token = signer.sign(&agent_claims(ORG, AUDIENCE, 600)).unwrap();
+        let grants = Arc::new(StubGrants::default());
         let relay = Relay::new(
-            CALLER.to_owned().into(),
+            auth,
+            grants.clone(),
             bindings,
             decryptor,
             resolver.clone(),
@@ -815,7 +854,10 @@ mod tests {
             bao,
             audit,
             resolver,
+            grants,
             dead_port,
+            signer,
+            token,
         }
     }
 
@@ -858,7 +900,7 @@ mod tests {
 
         async fn relay_get(&self, secret: Uuid, url: &str) -> (StatusCode, Vec<u8>) {
             self.call(
-                Some(CALLER),
+                Some(self.token.as_str()),
                 serde_json::json!({ "secret_id": secret, "version": 1, "method": "GET", "url": url }),
             )
             .await
@@ -913,7 +955,7 @@ mod tests {
             .await;
         let (status, raw) = h
             .call(
-                Some(CALLER),
+                Some(h.token.as_str()),
                 serde_json::json!({
                     "secret_id": SECRET, "version": 1, "method": "POST",
                     "url": format!("{}/v1/charge?amount=5#frag", h.origin()),
@@ -944,7 +986,7 @@ mod tests {
             format!("upstream.test:{}", h.upstream.address().port())
         );
         assert_eq!(r.path, "/v1/charge", "no query string in the audit row");
-        assert_eq!(r.caller, STATIC_CALLER);
+        assert_eq!(r.caller, AGENT.to_string(), "the audit row names the agent");
         h.assert_audit_clean();
         // DNS was answered by the stub (the pinned path), once.
         assert_eq!(
@@ -1120,21 +1162,246 @@ mod tests {
         );
     }
 
-    /// Spec "Caller authentication": no fetch, unwrap or upstream call; nothing to audit.
+    /// Spec "Caller authentication" / "Expired or forged token": `401`, no fetch, unwrap or
+    /// upstream call; nothing to audit.
     #[tokio::test]
     async fn unauthenticated_caller_is_refused_first() {
         let h = harness(Setup::default()).await;
         let body = serde_json::json!({
             "secret_id": SECRET, "version": 1, "method": "GET", "url": format!("{}/x", h.origin())
         });
-        for token in [None, Some("wrong"), Some(&CALLER[..CALLER.len() - 1])] {
-            let (status, _) = h.call(token, body.clone()).await;
+        let other = AgentTokenSigner::from_seed(zeroize::Zeroizing::new([8u8; 32])).unwrap();
+        let parts: Vec<&str> = h.token.split('.').collect();
+        let tampered = format!(
+            "{}.{}.{}",
+            parts[0],
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&agent_claims(ORG, AUDIENCE, 3600)).unwrap()),
+            parts[2]
+        );
+        let refused = [
+            ("none", None),
+            ("garbage", Some("wrong".to_owned())),
+            ("truncated", Some(h.token[..h.token.len() - 1].to_owned())),
+            (
+                "forged (unknown key)",
+                Some(other.sign(&agent_claims(ORG, AUDIENCE, 600)).unwrap()),
+            ),
+            ("forged (tampered payload)", Some(tampered)),
+            (
+                "expired",
+                Some(h.signer.sign(&agent_claims(ORG, AUDIENCE, -120)).unwrap()),
+            ),
+            (
+                "wrong audience",
+                Some(
+                    h.signer
+                        .sign(&agent_claims(ORG, "control-plane", 600))
+                        .unwrap(),
+                ),
+            ),
+            (
+                "other org",
+                Some(
+                    h.signer
+                        .sign(&agent_claims(Uuid::now_v7(), AUDIENCE, 600))
+                        .unwrap(),
+                ),
+            ),
+        ];
+        for (name, token) in &refused {
+            let (status, raw) = h.call(token.as_deref(), body.clone()).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{name}");
+            assert!(
+                String::from_utf8_lossy(&raw).contains("\"unauthenticated\""),
+                "{name}"
+            );
+        }
+        // Lower-case scheme is the same credential (one shared bearer parser).
+        let resp = h
+            .app
+            .clone()
+            .oneshot(
+                Request::post("/v1/relay")
+                    .header("authorization", format!("bearer {}", h.token))
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "authenticated, bad body"
+        );
+
+        assert_eq!(h.kms_calls().await, 0, "no KMS call");
+        assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
+        assert_eq!(Harness::hits(&h.upstream).await, 0, "no upstream call");
+        assert!(h.audit.records().is_empty());
+    }
+
+    async fn get_grants(h: &Harness, token: Option<&str>) -> (StatusCode, Vec<u8>) {
+        let mut req = Request::get("/v1/grants");
+        if let Some(t) = token {
+            req = req.header("authorization", format!("Bearer {t}"));
+        }
+        let resp = h
+            .app
+            .clone()
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let status = resp.status();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        (status, body.to_vec())
+    }
+
+    /// `GET /v1/grants`: the calling agent's unexpired grants with the origin each may be sent
+    /// to; names, ids, modes and origins only.
+    #[tokio::test]
+    async fn grants_lists_the_calling_agents_grants() {
+        let h = harness(Setup::default()).await;
+        let now = time::OffsetDateTime::now_utc();
+        let grant = |secret_id, name: &str, expires_at| Grant {
+            grant_id: Uuid::now_v7(),
+            secret_id,
+            secret_name: name.to_owned(),
+            mode: "relay".to_owned(),
+            expires_at,
+        };
+        let later = now + time::Duration::hours(1);
+        h.grants.set(
+            AGENT,
+            vec![
+                grant(SECRET, "UPSTREAM_KEY", Some(later)),
+                grant(UNBOUND, "NOT_HERE", None),
+                // Expired since the control plane answered: filtered by the gateway too.
+                grant(DEAD, "OLD", Some(now - time::Duration::seconds(1))),
+            ],
+        );
+        h.grants
+            .set(Uuid::now_v7(), vec![grant(INTERNAL, "OTHER_AGENT", None)]);
+
+        let (status, body) = get_grants(&h, Some(h.token.as_str())).await;
+        assert_eq!(status, StatusCode::OK);
+        let list: GrantList = serde_json::from_slice(&body).unwrap();
+        assert_eq!(list.agent_id, AGENT);
+        let later = time::OffsetDateTime::from_unix_timestamp(later.unix_timestamp()).unwrap();
+        assert_eq!(
+            list.grants,
+            vec![
+                GrantView {
+                    secret_id: SECRET,
+                    secret_name: "UPSTREAM_KEY".to_owned(),
+                    mode: "relay".to_owned(),
+                    expires_at: list.grants[0].expires_at,
+                    allowed_origin: Some(h.origin()),
+                },
+                GrantView {
+                    secret_id: UNBOUND,
+                    secret_name: "NOT_HERE".to_owned(),
+                    mode: "relay".to_owned(),
+                    expires_at: None,
+                    allowed_origin: None,
+                },
+            ]
+        );
+        assert_eq!(
+            list.grants[0].expires_at.map(|t| t.unix_timestamp()),
+            Some(later.unix_timestamp())
+        );
+        // Only the documented fields: nothing that could carry a value.
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let mut keys: Vec<&str> = v["grants"][0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "allowed_origin",
+                "expires_at",
+                "mode",
+                "secret_id",
+                "secret_name"
+            ]
+        );
+        assert_clean("grants response", &body);
+        assert_eq!(h.kms_calls().await, 0, "listing grants decrypts nothing");
+        assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
+    }
+
+    #[tokio::test]
+    async fn grants_requires_a_valid_agent_token() {
+        let h = harness(Setup::default()).await;
+        let expired = h.signer.sign(&agent_claims(ORG, AUDIENCE, -120)).unwrap();
+        let wrong_aud = h
+            .signer
+            .sign(&agent_claims(ORG, "control-plane", 600))
+            .unwrap();
+        for token in [
+            None,
+            Some("x"),
+            Some(expired.as_str()),
+            Some(wrong_aud.as_str()),
+        ] {
+            let (status, _) = get_grants(&h, token).await;
             assert_eq!(status, StatusCode::UNAUTHORIZED);
         }
-        assert_eq!(h.kms_calls().await, 0);
-        assert_eq!(Harness::hits(&h.cp).await, 0);
-        assert_eq!(Harness::hits(&h.upstream).await, 0);
-        assert!(h.audit.records().is_empty());
+        assert_eq!(h.grants.calls(), 0, "no grant lookup before authentication");
+    }
+
+    #[tokio::test]
+    async fn grants_unavailable_is_a_fixed_502() {
+        let h = harness(Setup::default()).await;
+        let failing = StubGrants {
+            fail: true,
+            ..StubGrants::default()
+        };
+        let relay = Relay::new(
+            Arc::new(AgentAuth::new(
+                ORG,
+                Arc::new(StubJwks::with(vec![h.signer.jwk().clone()])),
+                JwksSettings::default(),
+            )),
+            Arc::new(failing),
+            Bindings {
+                org_id: ORG,
+                bindings: Vec::new(),
+            },
+            Decryptor::new(
+                ORG,
+                Arc::new(
+                    ControlPlane::new(h.cp.uri().parse().unwrap(), ORG, "s".repeat(32).into())
+                        .unwrap(),
+                ),
+                Arc::new(
+                    OpenBaoTransit::new(&h.bao.uri(), key(), BaoToken::new("bao".to_owned()))
+                        .unwrap(),
+                ),
+                Arc::new(DekCache::new(CacheSettings::default())),
+            ),
+            h.resolver.clone(),
+            h.audit.clone(),
+            RelayOptions::default(),
+        );
+        let app =
+            app::build(AppState::new(Arc::new(ReadyFlag::new(true))).with_relay(Arc::new(relay)));
+        let resp = app
+            .oneshot(
+                Request::get("/v1/grants")
+                    .header("authorization", format!("Bearer {}", h.token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        assert!(String::from_utf8_lossy(&body).contains("grants_unavailable"));
     }
 
     #[tokio::test]
@@ -1150,7 +1417,7 @@ mod tests {
             serde_json::json!({ "secret_id": SECRET, "version": 1, "method": "GET", "url": format!("{o}/"), "body": "a", "body_base64": "YQ==" }),
             serde_json::json!({ "secret_id": SECRET, "version": 1, "method": "GET", "url": format!("{o}/"), "extra": 1 }),
         ] {
-            let (status, _) = h.call(Some(CALLER), bad).await;
+            let (status, _) = h.call(Some(h.token.as_str()), bad).await;
             assert_eq!(status, StatusCode::BAD_REQUEST);
         }
         assert_eq!(h.kms_calls().await, 0);
@@ -1211,7 +1478,7 @@ mod tests {
         // Unknown version: 404, nothing unwrapped.
         let (status, _) = h
             .call(
-                Some(CALLER),
+                Some(h.token.as_str()),
                 serde_json::json!({ "secret_id": SECRET, "version": 9, "method": "GET", "url": format!("{}/x", h.origin()) }),
             )
             .await;
@@ -1285,7 +1552,7 @@ mod tests {
             .await;
         let (status, _) = h
             .call(
-                Some(CALLER),
+                Some(h.token.as_str()),
                 serde_json::json!({ "secret_id": SECRET, "version": 2, "method": "GET", "url": format!("{}/x", h.origin()) }),
             )
             .await;

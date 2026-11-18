@@ -14,3 +14,5 @@ dist/
 infra/compose/.canaries
 # Audit checkpoint verifier config written by `just up` (public keys of the local stack only)
 infra/compose/.audit-verifier.json
+# Audit ledger export written by `just audit-export` (one local stack's ledger)
+infra/compose/.audit-export/

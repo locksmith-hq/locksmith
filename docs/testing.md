@@ -24,7 +24,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-tenant-lint` | Rust lib | `just test ls-tenant-lint` | no | `just test-rust` |  |
 | `crates/ls-update` | Rust lib | `just test ls-update` | no | `just test-rust` |  |
 | `crates/ls-audit` | Rust lib | `just test ls-audit` | no (`--features postgres` tests need Docker) | `just test-rust` (core only) | Audit chain core; the `postgres` feature adds the ledger store, tested with `cargo nextest run -p ls-audit --features postgres`; secrets path |
-| `crates/locksmith-audit` | Rust bin | `just test locksmith-audit` | no (`--db` tests need Docker) | `just test-rust` | Audit ledger CLI (`verify --db` / `--dir`); secrets path: prints identifiers and counts only |
+| `crates/locksmith-audit` | Rust bin | `just test locksmith-audit` | no (`--db` tests need Docker) | `just test-rust` | Audit ledger CLI (`verify --db` / `--dir`, `export`); `tests/tamper.rs` is `just audit-tamper-test`; secrets path: prints identifiers and counts only |
 | `crates/ls-pg-test` | Rust lib (test support) | `just test ls-pg-test` | no | `just test-rust` | Shared throwaway `postgres:18` harness (needs Docker) for the control-plane, gateway and ledger tests |
 | `crates/ls-vault` | Rust lib | `just test ls-vault` | no | `just test-rust` | Vault; secrets path |
 | `crates/smith-cli` | Rust bin | `just test smith-cli` | no | `just test-rust` | `smith` CLI; some db tests skip without Postgres |
@@ -55,5 +55,6 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just api` and `just gateway` run the services against the stack.
 - `just relay-smoke` and `just connector-smoke` are the smoke tests that need `just up` and `just api`.
 - `just test-e2e` runs every e2e test.
+- `just audit-export`, `just audit-verify` and `just audit-tamper-test` export, verify and tamper-test the audit ledger.
 - `just leak-scan` checks for leaked canary secrets after a run.
 - `just ci` is the full pre-push check (no stack needed).

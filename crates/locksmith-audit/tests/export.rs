@@ -51,7 +51,7 @@ impl Fixture {
         for i in 1..=n {
             let ap = ledger.append(org, &event(i)).await.unwrap();
             if Some(ap.seq) == checkpoint_at {
-                store_checkpoint(&self.pg, &sign(&SEED, org, ap.seq, ap.hash)).await;
+                store_checkpoint(&self.pg.owner(), &sign(&SEED, org, ap.seq, ap.hash)).await;
             }
         }
     }
@@ -261,7 +261,7 @@ async fn export_refuses_a_ledger_that_no_longer_extends_it() {
     f.append(f.a, 2, None).await;
     f.append(f.b, 1, None).await;
     owner_exec(
-        &f.pg,
+        &f.pg.owner(),
         f.a,
         &format!(
             "UPDATE audit_events SET outcome = 'ok' WHERE org_id = '{}' AND seq = 7",
@@ -291,7 +291,7 @@ async fn export_refuses_a_ledger_that_no_longer_extends_it() {
     assert_eq!(f.export(&[]).code, 0);
     f.append(f.a, 1, None).await;
     owner_exec(
-        &f.pg,
+        &f.pg.owner(),
         f.a,
         &format!(
             "UPDATE audit_events SET prev_hash = '\\x{}' WHERE org_id = '{}' AND seq = 7",

@@ -1,4 +1,5 @@
-//! `locksmith-audit verify --db | --dir <export> [--json]` (S5 task 5.1) and
+//! `locksmith-audit verify --db [--checkpoints-from <export>] | --dir <export> [--json]` (S5
+//! tasks 5.1, 5.3) and
 //! `locksmith-audit export --dir <export> [--json]` (task 5.2).
 //!
 //! Verify exit status: 0 when every org verifies, 1 when any org fails (stderr names each org
@@ -70,6 +71,11 @@ struct VerifyArgs {
     /// Verify an export directory offline (public keys only, no database or KMS).
     #[arg(long, value_name = "DIR")]
     dir: Option<PathBuf>,
+    /// With `--db`: also trust the signed checkpoints in this export directory
+    /// (`<org_id>/checkpoints.jsonl`), so history rewritten or truncated in the database fails
+    /// even after its `audit_checkpoints` rows were deleted.
+    #[arg(long, value_name = "DIR")]
+    checkpoints_from: Option<PathBuf>,
     /// Postgres URL for `--db`, logging in as `audit_verifier`. Never printed.
     #[arg(
         long,
@@ -96,6 +102,10 @@ fn main() -> ExitCode {
         Cmd::Verify(args) => args,
         Cmd::Export(args) => return export(&args),
     };
+    if args.checkpoints_from.is_some() && !args.db {
+        eprintln!("locksmith-audit: --checkpoints-from needs --db");
+        return ExitCode::from(2);
+    }
     if args.db && args.database_url.is_none() {
         eprintln!("locksmith-audit: --db needs --database-url or LOCKSMITH_AUDIT_DATABASE_URL");
         return ExitCode::from(2);
@@ -110,6 +120,7 @@ fn main() -> ExitCode {
                 rt.block_on(verify_db(
                     args.database_url.as_deref().unwrap_or_default(),
                     &keys,
+                    args.checkpoints_from.as_deref(),
                 ))
             }),
     });

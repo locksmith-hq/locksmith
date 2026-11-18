@@ -3,6 +3,8 @@
 //!
 //! - [`verify_db`] walks every org in Postgres as the `audit_verifier` role (SELECT and
 //!   BYPASSRLS) in one read-only snapshot, then records one `audit_verify_runs` row per org.
+//!   With `--checkpoints-from <export>` it also trusts the export's signed checkpoints, so a
+//!   rewrite or truncation is caught even after the `audit_checkpoints` rows are deleted.
 //! - [`verify_dir`] reads an export directory ([`ls_audit::export`]) offline: no database and no
 //!   KMS, only the checkpoint public keys.
 //!
@@ -11,7 +13,7 @@
 //! chain (tail truncation). Output carries identifiers, counts, `seq` numbers and key ids only;
 //! the database URL (which holds the role's password) is never printed.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -101,11 +103,14 @@ pub struct Malformed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrgResult {
     pub report: OrgReport,
-    /// Unreadable export lines (always empty for `--db`). Any makes the org fail: a dropped
-    /// event line could otherwise hide an edit to the newest events.
+    /// Unreadable export lines (for `--db`, only `--checkpoints-from` checkpoint lines). Any
+    /// makes the org fail: a dropped line could otherwise hide an edit or a truncation.
     pub malformed: Vec<Malformed>,
     /// The `audit_verify_runs` row written for this result (`--db` only).
     pub run_id: Option<Uuid>,
+    /// Checkpoints read for this org from the `--checkpoints-from` export (`--db` with that
+    /// flag only; 0 when the export has none for the org).
+    pub exported_checkpoints: Option<u64>,
 }
 
 impl OrgResult {
@@ -143,45 +148,81 @@ impl Outcome {
 /// Verify every org in the database at `url` (connect as `audit_verifier`) and record one
 /// `audit_verify_runs` row per org. The ledger is read in one `REPEATABLE READ` read-only
 /// snapshot, so a checkpoint written during the run cannot look like a truncation.
-pub async fn verify_db(url: &str, keys: &KeyRing) -> Result<Outcome, Error> {
+///
+/// With `checkpoints_from` (an export directory, design decision 8), each org's exported
+/// `checkpoints.jsonl` is trusted alongside its `audit_checkpoints` rows: every exported
+/// checkpoint whose signature verifies must match the database chain, and the chain must not end
+/// before it. This catches a database owner who rewrites history (recomputing every later hash)
+/// or truncates it and then deletes the checkpoint rows. Orgs that appear only in the export are
+/// verified too (with no events, so any exported checkpoint reports a truncation). The export's
+/// event files are not read; `verify --dir` checks those.
+pub async fn verify_db(
+    url: &str,
+    keys: &KeyRing,
+    checkpoints_from: Option<&Path>,
+) -> Result<Outcome, Error> {
+    let mut exported = match checkpoints_from {
+        Some(dir) => Some(exported_checkpoints(dir)?),
+        None => None,
+    };
     let opts = PgConnectOptions::from_str(url)
         .map_err(|_| Error::Db("the database URL does not parse".into()))?;
     let mut conn = PgConnection::connect_with(&opts)
         .await
         .map_err(db_err("connect"))?;
 
-    let mut reports = Vec::new();
+    let mut checked = Vec::new();
     {
         let mut tx = conn.begin().await.map_err(db_err("begin"))?;
         query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             .execute(&mut *tx)
             .await
             .map_err(db_err("snapshot"))?;
-        for org in pg::ledger_orgs_in_tx(&mut tx)
+        let mut orgs: BTreeSet<Uuid> = pg::ledger_orgs_in_tx(&mut tx)
             .await
             .map_err(db_err("list orgs"))?
-        {
+            .into_iter()
+            .collect();
+        if let Some(e) = &exported {
+            orgs.extend(e.keys().copied());
+        }
+        for org in orgs {
             let started = pg::now_unix_micros();
             let records = pg::records_in_tx(&mut tx, org)
                 .await
                 .map_err(db_err("read events"))?;
-            let cps = pg::signed_checkpoints_in_tx(&mut tx, org)
+            let mut cps = pg::signed_checkpoints_in_tx(&mut tx, org)
                 .await
                 .map_err(db_err("read checkpoints"))?;
-            reports.push((started, verify_org(org, &records, &cps, keys)));
+            let mut malformed = Vec::new();
+            let mut from_export = None;
+            if let Some(e) = exported.as_mut() {
+                let (ecps, bad) = e.remove(&org).unwrap_or_default();
+                from_export = Some(u64::try_from(ecps.len()).unwrap_or(u64::MAX));
+                // The exporter copies the database rows, so an intact pair is identical.
+                for c in ecps {
+                    if !cps.contains(&c) {
+                        cps.push(c);
+                    }
+                }
+                malformed = bad;
+            }
+            let report = verify_org(org, &records, &cps, keys);
+            checked.push((started, report, malformed, from_export));
         }
         tx.commit().await.map_err(db_err("end snapshot"))?;
     }
 
-    let mut orgs = Vec::with_capacity(reports.len());
-    for (started, report) in reports {
+    let mut orgs = Vec::with_capacity(checked.len());
+    for (started, report, malformed, exported_checkpoints) in checked {
         let run_id = pg::record_verify_run(&mut conn, VerifyMode::Db, started, &report)
             .await
             .map_err(db_err("record verify run"))?;
         orgs.push(OrgResult {
             report,
-            malformed: Vec::new(),
+            malformed,
             run_id: Some(run_id),
+            exported_checkpoints,
         });
     }
     let _ = conn.close().await;
@@ -191,9 +232,8 @@ pub async fn verify_db(url: &str, keys: &KeyRing) -> Result<Outcome, Error> {
     })
 }
 
-/// Verify an export directory offline: every `<org_id>/` directory's event files (in
-/// `first_seq` order, lines in file order) and `checkpoints.jsonl`.
-pub fn verify_dir(dir: &Path, keys: &KeyRing) -> Result<Outcome, Error> {
+/// The `<org_id>/` directories of an export directory, by org.
+fn org_dirs(dir: &Path) -> Result<BTreeMap<Uuid, PathBuf>, Error> {
     let io = |p: &Path, e: std::io::Error| Error::Io(format!("{}: {e}", p.display()));
     let mut org_dirs: BTreeMap<Uuid, PathBuf> = BTreeMap::new();
     for entry in std::fs::read_dir(dir).map_err(|e| io(dir, e))? {
@@ -214,9 +254,48 @@ pub fn verify_dir(dir: &Path, keys: &KeyRing) -> Result<Outcome, Error> {
             org_dirs.insert(org, entry.path());
         }
     }
+    Ok(org_dirs)
+}
 
-    let mut orgs = Vec::with_capacity(org_dirs.len());
-    for (org, path) in org_dirs {
+/// The signed checkpoints in `<org_dir>/checkpoints.jsonl` (none when the file is missing).
+/// Unreadable lines go to `malformed`.
+fn read_checkpoints(
+    org_dir: &Path,
+    org: Uuid,
+    malformed: &mut Vec<Malformed>,
+) -> Result<Vec<SignedCheckpoint>, Error> {
+    let mut cps = Vec::new();
+    let cp_path = org_dir.join(CHECKPOINTS_FILE);
+    if cp_path.exists() {
+        for (n, v) in read_lines(&cp_path, org, CHECKPOINTS_FILE, malformed)? {
+            match parse_checkpoint_line(&v) {
+                Some(c) => cps.push(c),
+                None => malformed.push(bad_line(org, CHECKPOINTS_FILE, n, &v)),
+            }
+        }
+    }
+    Ok(cps)
+}
+
+/// Every org's exported checkpoints and unreadable checkpoint lines (`--checkpoints-from`).
+type ExportedCheckpoints = BTreeMap<Uuid, (Vec<SignedCheckpoint>, Vec<Malformed>)>;
+
+fn exported_checkpoints(dir: &Path) -> Result<ExportedCheckpoints, Error> {
+    let mut out = BTreeMap::new();
+    for (org, path) in org_dirs(dir)? {
+        let mut malformed = Vec::new();
+        let cps = read_checkpoints(&path, org, &mut malformed)?;
+        out.insert(org, (cps, malformed));
+    }
+    Ok(out)
+}
+
+/// Verify an export directory offline: every `<org_id>/` directory's event files (in
+/// `first_seq` order, lines in file order) and `checkpoints.jsonl`.
+pub fn verify_dir(dir: &Path, keys: &KeyRing) -> Result<Outcome, Error> {
+    let io = |p: &Path, e: std::io::Error| Error::Io(format!("{}: {e}", p.display()));
+    let mut orgs = Vec::new();
+    for (org, path) in org_dirs(dir)? {
         let mut files: Vec<(u64, String)> = Vec::new();
         for entry in std::fs::read_dir(&path).map_err(|e| io(&path, e))? {
             let entry = entry.map_err(|e| io(&path, e))?;
@@ -238,20 +317,12 @@ pub fn verify_dir(dir: &Path, keys: &KeyRing) -> Result<Outcome, Error> {
                 }
             }
         }
-        let mut cps: Vec<SignedCheckpoint> = Vec::new();
-        let cp_path = path.join(CHECKPOINTS_FILE);
-        if cp_path.exists() {
-            for (n, v) in read_lines(&cp_path, org, CHECKPOINTS_FILE, &mut malformed)? {
-                match parse_checkpoint_line(&v) {
-                    Some(c) => cps.push(c),
-                    None => malformed.push(bad_line(org, CHECKPOINTS_FILE, n, &v)),
-                }
-            }
-        }
+        let cps = read_checkpoints(&path, org, &mut malformed)?;
         orgs.push(OrgResult {
             report: verify_org(org, &records, &cps, keys),
             malformed,
             run_id: None,
+            exported_checkpoints: None,
         });
     }
     Ok(Outcome {
@@ -335,6 +406,7 @@ pub fn to_json(o: &Outcome) -> Value {
                     "seq": m.seq,
                 })).collect::<Vec<_>>(),
                 "open_attempts": rep.open_attempts,
+                "exported_checkpoints": r.exported_checkpoints,
                 "verify_run_id": r.run_id.map(|id| id.hyphenated().to_string()),
             })
         })
@@ -375,6 +447,9 @@ pub fn to_text(o: &Outcome) -> String {
         );
         if let Some(cp) = rep.latest_checkpoint_seq {
             let _ = write!(s, " (latest checkpoint seq {cp})");
+        }
+        if let Some(n) = r.exported_checkpoints {
+            let _ = write!(s, ", {n} from the export");
         }
         if rep.open_attempts > 0 {
             let _ = write!(s, ", {} open attempt(s)", rep.open_attempts);

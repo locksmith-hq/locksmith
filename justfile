@@ -104,6 +104,51 @@ leak-scan *args:
     cd {{quote(invocation_directory())}}
     exec python3 -I "$root/tests/kit/oracle.py" scan --canary-file "$canaries" --stack "$@"
 
+# S5 audit ledger CLI against `just up`, as the `audit_verifier` role. The export directory is
+# LOCKSMITH_AUDIT_EXPORT_DIR (default infra/compose/.audit-export, gitignored); extra args (e.g.
+# --json) go to locksmith-audit.
+audit-export *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    eval "$(grep -E '^(POSTGRES_DB|LOCKSMITH_AUDIT_VERIFIER_PASSWORD)=' "$root/infra/compose/.env.example")"
+    export LOCKSMITH_AUDIT_DATABASE_URL="postgres://audit_verifier:${LOCKSMITH_AUDIT_VERIFIER_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}"
+    dir="${LOCKSMITH_AUDIT_EXPORT_DIR:-$root/infra/compose/.audit-export}"
+    cd "$root" && exec cargo run -q -p locksmith-audit -- export --dir "$dir" "$@"
+
+# Verify every org's chain and checkpoints in the database. When an export exists, also trust its
+# signed checkpoints (`--checkpoints-from`, so a rewrite or truncation shows even after the
+# `audit_checkpoints` rows are deleted) and verify the export itself offline (`--dir`).
+audit-verify *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    eval "$(grep -E '^(POSTGRES_DB|LOCKSMITH_AUDIT_VERIFIER_PASSWORD)=' "$root/infra/compose/.env.example")"
+    export LOCKSMITH_AUDIT_DATABASE_URL="postgres://audit_verifier:${LOCKSMITH_AUDIT_VERIFIER_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}"
+    dir="${LOCKSMITH_AUDIT_EXPORT_DIR:-$root/infra/compose/.audit-export}"
+    cd "$root"
+    bin="cargo run -q -p locksmith-audit --"
+    if [ ! -d "$dir" ]; then
+      echo "audit-verify: no export at $dir, so the database is checked against its own checkpoint rows only (run just audit-export)" >&2
+      exec $bin verify --db "$@"
+    fi
+    rc=0
+    $bin verify --db --checkpoints-from "$dir" "$@" || rc=$?
+    $bin verify --dir "$dir" "$@" || { c=$?; [ "$rc" -ge "$c" ] || rc=$c; }
+    exit "$rc"
+
+# The audit tamper test (needs `just up`): in a scratch database on the compose Postgres, tamper as
+# locksmith_owner (edit a field, delete a row, swap seqs, truncate past a checkpoint, edit exported
+# lines, rewrite history and delete the checkpoint rows) and check each fails verify while the
+# untouched ledger passes. `just ci` runs the same test against a throwaway container.
+audit-tamper-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    eval "$(grep -E '^POSTGRES_(USER|PASSWORD)=' "$root/infra/compose/.env.example")"
+    export LOCKSMITH_AUDIT_TEST_ADMIN_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres"
+    cd "$root" && exec cargo nextest run -p locksmith-audit --test tamper
+
 # Run locksmith-api against `just up`: dev auth on, loopback bind, OTLP to the LGTM container.
 api:
     #!/usr/bin/env bash

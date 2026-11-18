@@ -44,7 +44,7 @@ impl Fixture {
             ledger.append(b, &event(i)).await.unwrap();
         }
         app.close().await;
-        store_checkpoint(&pg, &sign(&SEED, a, 4, head4.unwrap())).await;
+        store_checkpoint(&pg.owner(), &sign(&SEED, a, 4, head4.unwrap())).await;
         let tmp = TempDir::new().unwrap();
         write_config(&tmp.path().join("verifier.json"));
         Self { pg, tmp, a, b }
@@ -125,7 +125,7 @@ async fn db_verify_records_runs_and_detects_tampering() {
 
     // Edited field at seq 3.
     owner_exec(
-        &f.pg,
+        &f.pg.owner(),
         f.a,
         &format!(
             "UPDATE audit_events SET outcome = 'ok' WHERE org_id = '{}' AND seq = 3",
@@ -156,7 +156,7 @@ async fn db_verify_detects_truncation_and_bad_signatures() {
 
     // Delete the tail past the checkpoint at seq 4.
     owner_exec(
-        &f.pg,
+        &f.pg.owner(),
         f.a,
         &format!(
             "DELETE FROM audit_events WHERE org_id = '{}' AND seq >= 3",
@@ -185,7 +185,11 @@ async fn db_verify_detects_truncation_and_bad_signatures() {
         .await
         .unwrap()
     };
-    store_checkpoint(&f.pg, &sign(&OTHER_SEED, f.b, 2, head.try_into().unwrap())).await;
+    store_checkpoint(
+        &f.pg.owner(),
+        &sign(&OTHER_SEED, f.b, 2, head.try_into().unwrap()),
+    )
+    .await;
     let r = f.verify();
     assert_eq!(r.code, 1);
     let b = org(&r.json(), f.b);

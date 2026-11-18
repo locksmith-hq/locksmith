@@ -16,4 +16,4 @@ printf '@%s decision needed: %s\n\n' "$OWNER" "$TITLE"
 printf -- '- Change: %s\n' "${change:-not named}"
 printf -- '- Brief: %s\n' "${briefs:-none prepared}"
 # shellcheck disable=SC2016 # literal backticks for markdown
-printf '\nReply `approved`, or reply with concerns. The scheduled agents wait until you answer here.\n'
+printf '\nReply `approved`, or reply with concerns. Only the named change waits; the other agents keep working.\n'

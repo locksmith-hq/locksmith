@@ -23,13 +23,13 @@ Every routine reads this file and its role file from origin/main.
 - **Tokens.** Read only what the current step needs. Use the `long-commands` skill for anything slow or flaky.
 
 ## Owner decisions (human only)
-Keep workers moving: the owner is needed only for
+The owner is needed only for
 - admin setup only the owner can do: secrets and tokens, GitHub settings, AWS accounts and guardrails, billing, routines;
 - a big, hard-to-reverse decision: a paid service, licence, security model, data format, or contradicting `openspec/decisions.md`;
 - a security problem with real exposure;
 - an issue the lead failed to rescue twice, or an owner-gate task.
 
-Decide the rest yourself, with evidence in design.md (design options; wrong task text via a `claude/planning-*` PR). Only the affected change waits: park it and take another.
+Decide the rest yourself, with evidence in design.md (wrong task text via a `claude/planning-*` PR). Only the affected change waits: park it, take another. A `needs-owner` issue with `Change: none` waits nothing.
 
 To raise one:
 1. Open a `needs-owner` issue, unless an open issue with the same title exists. Its first line is a one-sentence summary; then write `Change: <id>` (the board shows it on that change), link any Artifact brief, and give the options and your recommendation. `owner-alert` @mentions the owner with these (email and GitHub mobile).

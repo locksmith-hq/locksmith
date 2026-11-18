@@ -115,3 +115,33 @@ async fn dev_auth_on_requires_a_valid_header() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn cors_preflight_allows_only_tauri_origins() {
+    let preflight = |origin: &str| {
+        Request::builder()
+            .method("OPTIONS")
+            .uri("/healthz")
+            .header("origin", origin)
+            .header("access-control-request-method", "GET")
+            .header(
+                "access-control-request-headers",
+                "x-locksmith-dev-org,content-type",
+            )
+            .body(Body::empty())
+            .unwrap()
+    };
+    let ok = app(true, true)
+        .oneshot(preflight("tauri://localhost"))
+        .await
+        .unwrap();
+    assert_eq!(
+        ok.headers().get("access-control-allow-origin").unwrap(),
+        "tauri://localhost"
+    );
+    let bad = app(true, true)
+        .oneshot(preflight("https://evil.example"))
+        .await
+        .unwrap();
+    assert!(bad.headers().get("access-control-allow-origin").is_none());
+}

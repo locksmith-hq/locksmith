@@ -169,6 +169,7 @@ pub fn relay(json: bool, a: RelayArgs) -> Result<ExitCode, Fail> {
             .ok_or_else(|| Fail(ExitCode::Usage, "header must be `Name: value`".into()))?;
         headers.push((n.trim().to_owned(), v.trim().to_owned()));
     }
+    ls_connector::reject_credential_headers(&headers)?;
     let body = if let Some(d) = a.data {
         Some(RelayBody::Text(d))
     } else if a.data_stdin {

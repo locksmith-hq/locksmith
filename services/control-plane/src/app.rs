@@ -4,11 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{MatchedPath, Request, State};
-use axum::http::{HeaderName, StatusCode};
+use axum::http::{HeaderName, HeaderValue, Method, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
 use tower::ServiceBuilder;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
@@ -165,6 +166,24 @@ pub fn routes() -> Router<AppState> {
         .fallback(fallback)
 }
 
+/// CORS for the desktop app's webview only (Tauri origins). The desktop Agents tab calls this API
+/// cross-origin with a custom header, so the preflight must succeed; no other origin is allowed.
+fn desktop_cors() -> CorsLayer {
+    let origins = [
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    ]
+    .map(HeaderValue::from_static);
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_headers([
+            HeaderName::from_static("content-type"),
+            HeaderName::from_static("x-locksmith-dev-org"),
+        ])
+}
+
 /// Apply the standard layer stack and state to a router.
 pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
     let id_header = HeaderName::from_static(REQUEST_ID_HEADER);
@@ -181,7 +200,8 @@ pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
                 StatusCode::REQUEST_TIMEOUT,
                 REQUEST_TIMEOUT,
             ))
-            .layer(RequestBodyLimitLayer::new(BODY_LIMIT_BYTES)),
+            .layer(RequestBodyLimitLayer::new(BODY_LIMIT_BYTES))
+            .layer(desktop_cors()),
     )
 }
 

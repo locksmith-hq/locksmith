@@ -27,7 +27,8 @@ export const tokenRevoke = (token: string) => call<number>("token_revoke", { tok
 export const relayInfo = () => call<RelayInfo>("relay_info");
 
 // Agents and grants live in the control plane, not the daemon: the frontend calls its REST API
-// directly (tauri.conf.json allows only loopback in connect-src). The URL and org id are not
+// directly (tauri.conf.json allows only loopback in connect-src; the control plane answers the
+// CORS preflight for Tauri origins only). The URL and org id are not
 // secrets; the enrollment secret is returned to the screen and never stored.
 export { type Agent, type AgentGrant, type Client as AgentsClient } from "@locksmith/control-plane-client";
 const CP_URL = "locksmith.controlPlane";

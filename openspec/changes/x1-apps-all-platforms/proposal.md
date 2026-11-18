@@ -1,3 +1,5 @@
+# X1 apps on all platforms
+
 ## Why
 The desktop app (Tauri) and `ls-ipc` only run on Unix: IPC uses Unix domain sockets, and the manual `ci-platforms` Windows job excludes `ls-vault`, `smith-cli`, `ls-ipc`, `ls-broker` and `locksmithd` with a "rejoin later" shortcut. Every later phase would add more platform debt. X1 pays it once so that from here each phase ends green on macOS, Linux and Windows.
 
@@ -15,7 +17,7 @@ A user on macOS, Linux or Windows can install the desktop app, start it, and see
 Code signing and notarisation, installers and auto-update (P2), new desktop features, Windows services, any change to the secret or crypto design.
 
 ## Depends on
-`s4-agent-connector` (the desktop surface it adds must be what gets ported).
+Nothing unmerged. It ports `ls-ipc`, the vault, the daemon and the Tauri shell, none of which S4 changes; S4's desktop agents view is web frontend code inside the Tauri webview and runs unchanged on every OS. Any S4 conflict in `apps/desktop` is resolved by the merge queue.
 
 ## Protected files
 `.github/workflows/ci-platforms.yml` is protected. Workflow edits go in a separate PR the owner merges (needs-owner issue); agent tasks here never edit workflows.

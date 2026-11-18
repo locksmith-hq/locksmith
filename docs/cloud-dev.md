@@ -148,6 +148,8 @@ Each persona is a private GitHub App owned by `locksmith-hq`, installed only on 
 | Harriet | `locksmith-harriet` | Worker (events) | code, PRs, issues (write) |
 | Walt | `locksmith-walt` | PM (no routine yet) | PRs, issues (write); code (read) |
 
+**Paused (2026-11-18):** runs act as the owner account. `cloud-setup.sh` no longer calls `agent-identity.sh setup` and `agent-start.sh` no longer checks the identity, because the installation-token mint was not working yet. The text below describes the design to restore.
+
 How a run becomes its persona: each persona has its own cloud environment (`locksmith-dev` is Alfie, `locksmith-josie`, `locksmith-harriet`, `locksmith-lead` is Linus, `locksmith-walt`) with `AGENT_PERSONA=<persona>`. The setup script (`scripts/cloud-setup.sh`) calls `scripts/agent-identity.sh setup` once, and `scripts/agent-start.sh` only checks the git author is the persona's bot, failing the run otherwise. That script mints a one-hour installation token (in the cloud the environment's network secret adds the app's auth to that request; locally it signs with `AGENT_APP_KEY_<PERSONA>` or the Keychain key), sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If no token comes back or it is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
 
 Owner setup:

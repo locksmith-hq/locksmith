@@ -66,6 +66,11 @@ EOF
       ticks=$( { git log --since="@${since:-$(date -u +%s)}" --no-merges -p -- '*tasks.md'; git diff HEAD -- '*tasks.md'; } 2>/dev/null | grep -c '^+.*\[x\]' || true)
       if [ "${ticks:-0}" -gt 0 ]; then echo "run-meta: WARN evaluator: n/a but this run ticked $ticks task(s): run the evaluator (evaluate-escalate step 3) or untick before you push" >&2; fi
     fi
+    # worker.md step 6: 3 worker runs on 2026-11-18 were asked to plan and ended without planning.
+    if grep -q '^KIND=worker' "$state" 2>/dev/null; then
+      asked=$(bash "$(dirname "$0")/worker-has-work.sh" 2>/dev/null || true)
+      if grep -q 'plan the next one' <<<"$asked"; then echo "run-meta: WARN planning is still asked and no planning PR is open: do worker.md step 6 before you finish" >&2; fi
+    fi
     ;;
   *) echo "usage: $0 start <kind> | report | block < agent-fields" >&2; exit 2 ;;
 esac

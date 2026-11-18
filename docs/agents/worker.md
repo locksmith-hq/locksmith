@@ -12,7 +12,7 @@ Each run unblocks finished work, then works on changes for about 40 minutes. A b
 3. **Branch.** If `origin/claude/change-<id>` exists, use it and merge main in (`run-start` step 3). Otherwise branch from `origin/main`. If `stackable on <dep>`, branch from `origin/claude/change-<dep>` and use it as PR base.
 4. **Baseline** (skip if `run-start` merged nothing and the last progress entry shows `just ci` green): run `bash scripts/bg.sh start ci 1800 -- just ci` and start task one; poll with `bg.sh wait ci`, never looped (no `sleep`). If red, fix it first.
 5. **Tasks.** Work in order with the `evaluate-escalate` skill, committing after each. **Park** the change when a task needs a rescue, needs the owner (see `common.md`), or fails twice: finish it (step 7), then go back to step 1 for the next change.
-6. **Plan ahead.** If `worker-has-work.sh` asked for planning and no `claude/planning-*` PR is open, write the next roadmap change whose prerequisites are archived or in review. Lock its id first (`run-lock.sh acquire worker-<session> <id>`; busy: plan the next one). Use the `openspec-propose` skill on `claude/planning-<id>`, set `x-depends_on: [..]`, then open a PR marked ready.
+6. **Plan ahead** (also after step 5): if `worker-has-work.sh` printed `plan the next one`, write the next roadmap change whose prerequisites are archived or in review. Lock its id first (`run-lock.sh acquire worker-<session> <id>`; busy: plan the next one). Use the `openspec-propose` skill on `claude/planning-<id>`, set `x-depends_on: [..]`, then open a PR marked ready.
 7. **Finish each change** before leaving it:
    - Use the `run-log` skill.
    - Push the branch once and open a non-draft PR if none exists.

@@ -13,6 +13,7 @@ case "${1:-}" in
     {
       echo "KIND=${2:-unknown}"
       echo "START_EPOCH=$(date -u +%s)"
+      rm -f /tmp/bg-times
       echo "BASE_SHA=$(git rev-parse --short origin/main 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo none)"
     } > "$state"
     echo "run-meta: started ${2:-unknown}"
@@ -49,6 +50,7 @@ run-metadata:
   head_sha: $head
   commits: $commits
   diff: "$stat"
+  just_ci_s: "$(awk '$1=="ci"{printf "%s%ss exit %s", sep, $2, $3; sep=", "}' /tmp/bg-times 2>/dev/null)"
   runner: "$(nproc 2>/dev/null || sysctl -n hw.ncpu) cpu, ${mem_gb} GB"
 EOF
     ;;

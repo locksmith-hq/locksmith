@@ -24,7 +24,6 @@ bash scripts/run-meta.sh block <<'EOF'
   task: <ids|none>
   attempts: <n>
   evaluator: PASS|FAIL|n/a
-  just_ci_s: <s|n/a>
   ci_run: <url|none>
   subagents:
     - {role: implementer|evaluator|reviewer|research, tier: <t>, duration_ms: <n|unknown>, tokens: <n|unknown>, tool_uses: <n|unknown>, result: ok|fail}

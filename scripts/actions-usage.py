@@ -28,15 +28,36 @@ def ts(s):
     return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
-def runs_since(day):
+def _runs(window):
     out, page = [], 1
     while True:
-        d = gh(f"repos/{REPO}/actions/runs?created=>={day}&status=completed&per_page=100&page={page}")
-        batch = (d or {}).get("workflow_runs", [])
+        d = gh(f"repos/{REPO}/actions/runs?created={window}&status=completed&per_page=100&page={page}") or {}
+        batch = d.get("workflow_runs", [])
         out += batch
         if len(batch) < 100:
-            return out
+            return out, d.get("total_count", len(out))
         page += 1
+
+
+def runs_since(day, now=None):
+    """All completed runs since `day`. The runs API returns at most 1000 results per query, so query
+    one window at a time and split any window that hits the cap (a single query silently dropped
+    the oldest runs and inflated the daily average)."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    out, start = [], dt.datetime.fromisoformat(day).replace(tzinfo=dt.timezone.utc)
+    windows = []
+    while start < now:
+        windows.append((start, min(start + dt.timedelta(days=1), now)))
+        start += dt.timedelta(days=1)
+    while windows:
+        a, b = windows.pop()
+        batch, total = _runs(f"{a:%Y-%m-%dT%H:%M:%SZ}..{b - dt.timedelta(seconds=1):%Y-%m-%dT%H:%M:%SZ}")
+        if total > len(batch) and b - a > dt.timedelta(minutes=10):
+            mid = a + (b - a) / 2
+            windows += [(a, mid), (mid, b)]
+        else:
+            out += batch
+    return out
 
 
 def _job_minutes(r):

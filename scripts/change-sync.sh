@@ -13,8 +13,8 @@ here=$(dirname "$0")
 # shellcheck source=scripts/issue-lib.sh
 . "$here/issue-lib.sh"
 
-# Org issue fields (text) on a parked change: "Parked Reason" (Waiting on owner | Stuck) and "Parked Link"
-# (the blocker issue); both cleared when it is not parked. Writes only differences.
+# Org issue fields (text) on a parked or blocked change: "Parked Reason" (Waiting on owner | Stuck |
+# Waiting on <dep>) and "Parked Link" (the blocker or dependency issue); cleared in every other state. Writes only differences.
 # The Actions token cannot list org issue fields, so fall back to the known ids.
 # shortcut: if a field is ever recreated in org settings, update these ids (read them with a PAT).
 park_ids=$(gh api "orgs/${repo%%/*}/issue-fields" -q '.[]|"\(.name)\t\(.id)"' 2>/dev/null) ||
@@ -107,13 +107,16 @@ bash "$here/change-status.sh" | while IFS=$'\t' read -r id state detail; do
   body=$(render "$id" "$state" "$detail")
   if [ "${DRY_RUN:-0}" = 1 ]; then printf '===== %s\n%s\n' "$id" "$body"; continue; fi
   n=$(bash "$here/change-issue.sh" "$id") || continue
-  # The label and the Parked Reason / Parked Link issue fields say why a change is parked.
+  # The label and the Parked Reason / Parked Link issue fields say why a change is parked or blocked.
   lstate=$state; [ "$state" = parked ] && { [ "${detail%% *}" = owner ] && lstate=parked-owner || lstate=parked-stuck; }
   # The title follows the proposal, so an issue opened by a planner's lock gets its real name.
   title=$(sed -nE '1s/^# *(Proposal: *)?//p' "openspec/changes/$id/proposal.md" 2>/dev/null)
   gh api -X PATCH "repos/$repo/issues/$n" -f title="$id: ${title:-$id}" -f body="$body" -f state=open >/dev/null && label "$n" "$lstate" && board "$n" "$lstate"
   if [ "$state" = parked ]; then park_fields "$n" "$([ "${detail%% *}" = owner ] && echo "Waiting on owner" || echo Stuck)" \
-    "https://github.com/$repo/issues/${detail##*#}"; else park_fields "$n" "" ""; fi
+    "https://github.com/$repo/issues/${detail##*#}"
+  elif [ "$state" = blocked ]; then dep=${detail#needs }; dn=$(bash "$here/change-issue.sh" "$dep" --find)
+    park_fields "$n" "Waiting on $dep" "${dn:+https://github.com/$repo/issues/$dn}"
+  else park_fields "$n" "" ""; fi
   link_pr "$id" "$n"
 done
 

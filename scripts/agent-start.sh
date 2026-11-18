@@ -4,6 +4,8 @@
 # Starts run metadata, runs preflight, prints active lessons. Exit 1 if preflight has a FAIL.
 set -uo pipefail
 kind="${1:?usage: agent-start.sh <kind>}"
+# Fresh origin/main first: lessons and gates read it (a stale view cost a worker 120 s, 2026-11-17).
+git fetch -q origin || echo "WARN   git-fetch      failed"
 bash scripts/run-meta.sh start "$kind"
 echo "== preflight"
 bash scripts/agent-preflight.sh; pf=$?

@@ -11,57 +11,12 @@ use std::env;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use ls_e2e::{api, mint_canary, root, uniq, wiremock};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 
 const CALLER_TOKEN: &str = "dev-only-gateway-caller-token-0123456789ab";
 const SERVICE_TOKEN: &str = "dev-only-gateway-service-token-0123456789";
-
-fn root() -> &'static str {
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../..")
-}
-
-fn api() -> String {
-    env::var("E2E_API_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into())
-}
-
-fn wiremock() -> String {
-    env::var("E2E_WIREMOCK_URL").unwrap_or_else(|_| "http://127.0.0.1:8089".into())
-}
-
-fn uniq(prefix: &str) -> String {
-    let t = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    format!("{prefix}-{t}")
-}
-
-/// A fresh canary from the leak oracle (the gitignored canary file); never printed.
-fn mint_canary() -> String {
-    let file = env::var("LOCKSMITH_CANARIES")
-        .unwrap_or_else(|_| format!("{}/infra/compose/.canaries", root()));
-    let out = Command::new("python3")
-        .args([
-            "-I",
-            &format!("{}/tests/kit/oracle.py", root()),
-            "canary-new",
-            "--file",
-            &file,
-        ])
-        .output()
-        .expect("run oracle");
-    assert!(out.status.success(), "oracle canary-new failed");
-    std::fs::read_to_string(&file)
-        .unwrap()
-        .lines()
-        .last()
-        .unwrap()
-        .split_whitespace()
-        .nth(1)
-        .unwrap()
-        .to_owned()
-}
 
 async fn cp(c: &Client, path: &str, org: Option<&str>, body: Value) -> Value {
     let mut req = c.post(format!("{}{path}", api())).json(&body);

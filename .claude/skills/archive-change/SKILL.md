@@ -1,6 +1,6 @@
 ---
 name: archive-change
-description: Archive a merged OpenSpec change so its delta specs fold into openspec/specs and the roadmap shows it done. Use right after a change's PR merges.
+description: Archive a finished OpenSpec change inside the PR that ticks its last task, so its delta specs fold into openspec/specs and the roadmap shows it done. A separate archive PR is only for a change merged without one.
 ---
 
 # Archive a change

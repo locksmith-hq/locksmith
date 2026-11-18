@@ -33,14 +33,10 @@ signal-hook = "0.4.6"
 toml = "1.2.1"
 serde = { version = "1.0.229", features = ["derive"] }
 ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
-# S4 task 3.1: remote mode against the gateway. Blocking client (smith is synchronous), same
-# rustls/ring/OS-trust-store setup as ls-envelope so no aws-lc-rs build is added.
-reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "blocking"] }
-rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-platform-verifier = "0.7.1"
+# S4 task 3.1: remote mode against the gateway (state file, requests and redaction shared with
+# locksmith-mcp in ls-connector).
+ls-connector = { path = "../ls-connector" }
 secrecy = "0.10"
-base64 = "0.22.1"
-url = "2"
 ls-hooks = { version = "0.0.1-alpha.4", path = "../ls-hooks" }
 ls-proxy = { version = "0.0.1-alpha.4", path = "../ls-proxy" }
 

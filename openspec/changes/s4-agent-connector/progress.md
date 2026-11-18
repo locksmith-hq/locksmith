@@ -47,3 +47,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.1 - done
 - Verified: `cargo nextest run -p smith-cli` -> 125 passed; `just ci` exit 0; Sonnet evaluator PASS (request shapes match gateway/control-plane, 0600 state file, no secret in argv/output/state, wiremock integration tests)
 - Notes for next session: task 3.2 (locksmith-mcp `list_grants`/`relay_request` remote backend; reuse connector.rs state/redaction logic from smith-cli, maybe factor shared code). Evaluator nits: enrollment secret JSON passes through a non-zeroized Vec/String; consider rejecting Authorization/Cookie in `relay -H`; redaction matches only the exact token string. Earlier nits still open (GrantError kind logging in relay.rs, design.md decision 4 wording).
+
+## 2026-11-18 worker
+- Task: 3.2, 3.3 - done
+- Verified: `cargo nextest run -p smith-cli -p locksmith-mcp -p ls-connector` -> 141 passed, 2 skipped; `just ci` exit 0; Opus evaluator PASS (new crate ls-connector shared by smith and MCP; list_grants/relay_request; credential headers refused in MCP)
+- Notes for next session: task 4.1 (web agents/grants page, types from openapi.json). Open: smith `relay -H` still accepts Authorization/Cookie (MCP rejects; one call `ls_connector::reject_credential_headers`). Earlier nits still open (GrantError kind logging in relay.rs, design.md decision 4 wording).

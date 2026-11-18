@@ -2348,8 +2348,11 @@ dependencies = [
 name = "locksmith-mcp"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "ls-connector",
  "ls-ipc",
  "serde_json",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]
@@ -2388,6 +2391,23 @@ dependencies = [
  "ls-diag",
  "ls-ipc",
  "ls-platform",
+]
+
+[[package]]
+name = "ls-connector"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "base64 0.22.1",
+ "ls-core",
+ "ls-redact",
+ "reqwest",
+ "rustls",
+ "rustls-platform-verifier",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -4302,11 +4322,11 @@ checksum = "149309498a5f7334b12ddae0cad8aba81ce785fe91755068867e017cf98fee46"
 name = "smith-cli"
 version = "0.0.1-alpha.4"
 dependencies = [
- "base64 0.22.1",
  "clap",
  "clap_complete",
  "inventory",
  "ls-broker",
+ "ls-connector",
  "ls-core",
  "ls-crypto",
  "ls-diag",
@@ -4320,10 +4340,7 @@ dependencies = [
  "portable-pty",
  "rcgen",
  "regex",
- "reqwest",
  "rpassword",
- "rustls",
- "rustls-platform-verifier",
  "secrecy",
  "semver",
  "serde",
@@ -4331,7 +4348,6 @@ dependencies = [
  "signal-hook",
  "tokio",
  "toml",
- "url",
  "wiremock",
  "zeroize",
 ]

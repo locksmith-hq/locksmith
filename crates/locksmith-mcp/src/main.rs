@@ -3,9 +3,15 @@
 //! It is an attested daemon client (`Role::Mcp`). Every tool answers with names and metadata or an
 //! opaque `lsk_` token; no tool input or output has a field that can carry a secret value (see the
 //! `schemas_carry_no_value_field` test). The agent's lease, not the agent, picks the project.
+//!
+//! Remote mode (S4 task 3.2): `list_grants` and `relay_request` talk to the Locksmith gateway with
+//! the short-lived agent token that `smith login --agent` saved (0600 state file, shared code in
+//! `ls-connector`). The token never appears in a tool result (it is redacted), the gateway injects
+//! the credential upstream, and the local-vault tools above are unchanged.
 // shortcut: hand-rolled JSON-RPC instead of `rmcp` (design D1 names it), to avoid a new
 // dependency for a handful of tools; switch to rmcp when request_secret/rotate_secret (task 1.3) land.
 
+use ls_connector::{RelayBody, RelayRequest, State};
 use ls_ipc::{Client, Request, Response};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -40,7 +46,20 @@ fn tools() -> Value {
         {"name": "locksmith_explain_block",
          "description": "Explain why an action was blocked and what the supported path is.",
          "inputSchema": {"type": "object", "required": ["reason"], "properties": {
-             "reason": {"type": "string", "description": "The block message or rule id you received."}}}}
+             "reason": {"type": "string", "description": "The block message or rule id you received."}}}},
+        {"name": "list_grants",
+         "description": "Remote mode: secrets this agent may use through the Locksmith gateway (id, name, mode, allowed host, expiry). Never values. Needs `smith login --agent` first.",
+         "inputSchema": {"type": "object", "properties": {}}},
+        {"name": "relay_request",
+         "description": "Remote mode: send an HTTP request through the Locksmith gateway, which adds the granted credential and returns the upstream response with secrets redacted. Never pass a credential yourself: Authorization, Proxy-Authorization and Cookie headers are refused.",
+         "inputSchema": {"type": "object", "required": ["secret_id", "url"], "properties": {
+             "secret_id": {"type": "string", "description": "Secret id (UUID) from list_grants."},
+             "version": {"type": "integer", "minimum": 1, "description": "Secret version, default 1."},
+             "method": {"type": "string", "description": "HTTP method, default GET."},
+             "url": {"type": "string", "description": "Upstream URL on the grant's allowed host."},
+             "headers": {"type": "object", "additionalProperties": {"type": "string"},
+                         "description": "Extra request headers, name to string. No credentials."},
+             "body": {"type": "string", "description": "Request body (text)."}}}}
     ])
 }
 
@@ -177,6 +196,8 @@ fn tool_call(name: &str, args: &Value) -> Value {
             let r = args["reason"].as_str().unwrap_or_default();
             return text(explain(r).into(), false);
         }
+        "list_grants" => return remote(list_grants()),
+        "relay_request" => return remote(relay_request(args)),
         _ => return text(format!("unknown tool {name}"), true),
     };
     match call_daemon(&req) {
@@ -198,6 +219,82 @@ fn tool_call(name: &str, args: &Value) -> Value {
         Ok(_) => text("unexpected daemon response".into(), true),
         Err(e) => text(e, true),
     }
+}
+
+/// A remote-mode result: the (already redacted) JSON, or a fixed, value-free error message.
+fn remote(r: Result<Value, ls_connector::Error>) -> Value {
+    match r {
+        Ok(v) => text(v.to_string(), false),
+        Err(e) => text(e.message, true),
+    }
+}
+
+/// `list_grants`: names, modes, hosts and expiries from the gateway; the token is redacted.
+fn list_grants() -> Result<Value, ls_connector::Error> {
+    let st = State::load_fresh()?;
+    ls_connector::grants(&st)
+}
+
+fn usage(msg: &str) -> ls_connector::Error {
+    ls_connector::Error {
+        kind: ls_connector::ErrorKind::Usage,
+        message: msg.to_owned(),
+    }
+}
+
+/// Validate `relay_request` arguments. No network or state access.
+fn relay_args(args: &Value) -> Result<RelayRequest, ls_connector::Error> {
+    let (Some(secret_id), Some(url)) = (args["secret_id"].as_str(), args["url"].as_str()) else {
+        return Err(usage("`secret_id` and `url` are required"));
+    };
+    let secret_id = ls_connector::uuid_like(secret_id)?;
+    let version = match &args["version"] {
+        Value::Null => 1,
+        v => v
+            .as_u64()
+            .filter(|n| *n >= 1)
+            .and_then(|n| u32::try_from(n).ok())
+            .ok_or_else(|| usage("`version` must be a positive integer"))?,
+    };
+    let method = match &args["method"] {
+        Value::Null => "GET".to_owned(),
+        Value::String(m) if !m.is_empty() => m.to_ascii_uppercase(),
+        _ => return Err(usage("`method` must be a non-empty string")),
+    };
+    let mut headers = Vec::new();
+    match &args["headers"] {
+        Value::Null => {}
+        Value::Object(m) => {
+            for (n, v) in m {
+                let Some(v) = v.as_str() else {
+                    return Err(usage("`headers` values must be strings"));
+                };
+                headers.push((n.trim().to_owned(), v.trim().to_owned()));
+            }
+        }
+        _ => return Err(usage("`headers` must be an object of name to string")),
+    }
+    ls_connector::reject_credential_headers(&headers)?;
+    let body = match &args["body"] {
+        Value::Null => None,
+        Value::String(b) => Some(RelayBody::Text(b.clone())),
+        _ => return Err(usage("`body` must be a string")),
+    };
+    Ok(RelayRequest {
+        secret_id,
+        version,
+        method,
+        url: url.to_owned(),
+        headers,
+        body,
+    })
+}
+
+/// `relay_request`: the redacted upstream response `{status, headers, body | body_base64}`.
+fn relay_request(args: &Value) -> Result<Value, ls_connector::Error> {
+    let req = relay_args(args)?;
+    let st = State::load_fresh()?;
+    Ok(ls_connector::relay(&st, req)?.to_json())
 }
 
 /// `locksmith_status`: lease metadata and key names only.
@@ -295,9 +392,26 @@ mod tests {
     }
 
     #[test]
-    fn lists_five_tools_and_notifications_get_no_reply() {
+    fn lists_seven_tools_and_notifications_get_no_reply() {
         let r = handle(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list"})).unwrap();
-        assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 5);
+        let names: Vec<&str> = r["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "locksmith_list_keys",
+                "locksmith_status",
+                "locksmith_issue_token",
+                "locksmith_start_session",
+                "locksmith_explain_block",
+                "list_grants",
+                "relay_request"
+            ]
+        );
         assert!(handle(&json!({"jsonrpc":"2.0","method":"notifications/initialized"})).is_none());
     }
 
@@ -366,5 +480,30 @@ mod tests {
     fn issue_token_requires_a_key() {
         let r = tool_call("locksmith_issue_token", &json!({}));
         assert_eq!(r["isError"], true);
+    }
+
+    #[test]
+    fn relay_request_validates_arguments_before_any_call() {
+        const ID: &str = "0191a3b2-7c1e-7a3f-8b2d-5e6f7a8b9c0d";
+        for args in [
+            json!({}),
+            json!({"secret_id": ID}),
+            json!({"secret_id": "nope", "url": "https://a.example/"}),
+            json!({"secret_id": ID, "url": "https://a.example/", "version": 0}),
+            json!({"secret_id": ID, "url": "https://a.example/", "method": 3}),
+            json!({"secret_id": ID, "url": "https://a.example/", "headers": [["a", "b"]]}),
+            json!({"secret_id": ID, "url": "https://a.example/", "headers": {"a": 1}}),
+            json!({"secret_id": ID, "url": "https://a.example/", "body": {"k": 1}}),
+            json!({"secret_id": ID, "url": "https://a.example/", "headers": {"Authorization": "Bearer x"}}),
+            json!({"secret_id": ID, "url": "https://a.example/", "headers": {"cookie": "s=1"}}),
+        ] {
+            let e = relay_args(&args).err().unwrap_or_else(|| panic!("{args}"));
+            assert_eq!(e.kind, ls_connector::ErrorKind::Usage, "{args}");
+        }
+        let r = relay_args(&json!({"secret_id": ID, "url": "https://a.example/",
+            "method": "post", "headers": {"x-a": "b"}, "body": "{}"}))
+        .unwrap();
+        assert_eq!((r.version, r.method.as_str()), (1, "POST"));
+        assert_eq!(r.headers, [("x-a".to_owned(), "b".to_owned())]);
     }
 }

@@ -12,8 +12,8 @@
 
 ## 3. smith and MCP remote mode [sonnet]
 - [x] 3.1 `smith login --agent`, `smith grants`, `smith relay` against the gateway; token kept in a 0600 state file; output redacted.
-- [ ] 3.2 `locksmith-mcp` tools `list_grants` and `relay_request` using the remote backend; local-vault behaviour unchanged.
-- [ ] 3.3 Verify: `cargo nextest run -p smith-cli -p locksmith-mcp`.
+- [x] 3.2 `locksmith-mcp` tools `list_grants` and `relay_request` using the remote backend; local-vault behaviour unchanged.
+- [x] 3.3 Verify: `cargo nextest run -p smith-cli -p locksmith-mcp`.
 
 ## 4. Console and desktop surface [sonnet]
 - [ ] 4.1 Web page listing agents and grants with create/revoke; types generated from `openapi.json`.

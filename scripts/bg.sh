@@ -15,7 +15,8 @@ case "$cmd" in
     rm -f "$rc"
     # No stdin: a command that reads it (a stray `cat`) hung a worker run for 30 min.
     ( s=$(date +%s); timeout -s KILL "$t" "$@" </dev/null >"$log" 2>&1; c=$?
-      echo "$name $(( $(date +%s) - s )) $c" >>/tmp/bg-times; echo $c >"$rc" ) &
+      echo "$name $(( $(date +%s) - s )) $c" >>/tmp/bg-times; echo $c >"$rc" ) </dev/null >/dev/null 2>&1 &
+    # The subshell above must not hold our stdout: `bg.sh start ... | tail` blocked until the job ended.
     echo "bg: started $name (timeout ${t}s), log $log"
     ;;
   status)

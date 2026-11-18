@@ -195,6 +195,26 @@
         ],
         "type": "object"
       },
+      "AppendedEvent": {
+        "description": "Where an event landed in the org's chain.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "description": "The event's sequence number in the org's chain, starting at 1.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "seq"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "created_at": {
@@ -370,6 +390,87 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "NewRelayEvent": {
+        "additionalProperties": false,
+        "description": "One relay event from the gateway. Ids, codes, a host and numbers only: there is no field\nfor a URL, path, query string, header, body or value.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent whose verified token made the call (the event's actor).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "attempt_id": {
+            "description": "Links the `relay.outcome` event to its `relay.attempt` event.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "host": {
+            "description": "Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or\nquery.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RelayEventKind"
+          },
+          "method": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RelayMethod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RelayOutcome"
+          },
+          "port": {
+            "description": "Upstream port, when the URL names one explicitly.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "secret_id": {
+            "description": "The secret the call used (the event's target).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "status": {
+            "description": "Upstream HTTP status, when a response was received.",
+            "format": "int32",
+            "maximum": 599,
+            "minimum": 100,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "int32",
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "outcome",
+          "agent_id",
+          "secret_id"
         ],
         "type": "object"
       },
@@ -787,6 +888,47 @@
         ],
         "type": "object"
       },
+      "RelayEventKind": {
+        "description": "The kind of a relay event.",
+        "enum": [
+          "relay.attempt",
+          "relay.outcome",
+          "relay.denied"
+        ],
+        "type": "string"
+      },
+      "RelayMethod": {
+        "description": "The upstream request method.",
+        "enum": [
+          "GET",
+          "HEAD",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE",
+          "OPTIONS"
+        ],
+        "type": "string"
+      },
+      "RelayOutcome": {
+        "description": "The outcome of a relay event (the gateway's outcome codes, plus `pending` for an attempt).",
+        "enum": [
+          "pending",
+          "ok",
+          "no_grant",
+          "grants_unavailable",
+          "denied",
+          "denied_address",
+          "material_error",
+          "decrypt_failed",
+          "inject_failed",
+          "upstream_unreachable",
+          "upstream_timeout",
+          "upstream_error",
+          "redaction_failed"
+        ],
+        "type": "string"
+      },
       "Secret": {
         "properties": {
           "created_at": {
@@ -1058,6 +1200,105 @@
           }
         ],
         "summary": "List an agent's unexpired grants (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/audit/events": {
+      "post": {
+        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query.",
+        "operationId": "append_event",
+        "parameters": [
+          {
+            "description": "The org the event belongs to (the agent token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewRelayEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendedEvent"
+                }
+              }
+            },
+            "description": "Appended"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Append a relay event to the org's audit ledger (gateway only)",
         "tags": [
           "internal"
         ]

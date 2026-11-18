@@ -67,6 +67,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(agents::jwks))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
+        .routes(routes!(internal::append_event))
 }
 
 /// SQL column list shared by projects, environments and secrets.

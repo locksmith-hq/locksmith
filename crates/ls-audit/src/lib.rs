@@ -23,7 +23,7 @@ pub mod pg;
 
 pub use event::{
     Actor, AttrTag, AttrValue, Attrs, Code, Event, Host, InvalidIdentifier, Record, StoredAttrs,
-    Target, kind, outcome,
+    Target, attr, kind, outcome,
 };
 
 /// Domain tag of the server ledger (`audit_events` in Postgres).

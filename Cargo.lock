@@ -2435,6 +2435,7 @@ dependencies = [
  "http",
  "http-body-util",
  "jsonwebtoken",
+ "ls-audit",
  "ls-crypto",
  "ls-envelope",
  "ls-pg-test",

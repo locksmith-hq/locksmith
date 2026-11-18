@@ -100,6 +100,24 @@ pub mod outcome {
     pub const ERROR: Code = Code::new("error");
 }
 
+/// Attribute keys in use. New keys are new constants.
+pub mod attr {
+    use super::Code;
+    pub const AGENT_ID: Code = Code::new("agent_id");
+    pub const SECRET_ID: Code = Code::new("secret_id");
+    pub const VERSION: Code = Code::new("version");
+    pub const MODE: Code = Code::new("mode");
+    /// Unix seconds.
+    pub const EXPIRES_AT: Code = Code::new("expires_at");
+    pub const GRANTS_REVOKED: Code = Code::new("grants_revoked");
+    pub const HOST: Code = Code::new("host");
+    pub const PORT: Code = Code::new("port");
+    pub const METHOD: Code = Code::new("method");
+    pub const STATUS: Code = Code::new("status");
+    /// Links a relay `outcome` event to its `attempt` event.
+    pub const ATTEMPT_ID: Code = Code::new("attempt_id");
+}
+
 /// Who acted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Actor {

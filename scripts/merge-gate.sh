@@ -51,7 +51,20 @@ for _ in 1 2 3; do [ "$m" != null ] && break; sleep 3; m=$(gh api "repos/$repo/p
 [ "$m" = true ] || fail "3 not mergeable (conflicts: merge origin/main into $head_ref, resolve, push)"
 echo "ok 3 mergeable"
 # 4 CI green on the head SHA
+# While the `ci` workflow is disabled (owner, #307), a "local-ci <sha>: PASS" comment from
+# scripts/local-ci-attest.sh, by the owner account or an agent app, stands in for it, for this exact SHA only.
+ci_state=$(gh api "repos/$repo/actions/workflows/ci.yml" -q .state 2>/dev/null || echo unknown)
+if [ "$ci_state" != active ] && [ "$ci_state" != unknown ]; then
+  att=$(gh api "repos/$repo/issues/$n/comments?per_page=100" --paginate \
+    -q ".[]|select(.user.login==\"${OWNER_LOGIN:-tomer555}\" or (.user.type==\"Bot\" and (.user.login|startswith(\"locksmith-\"))))|.body" \
+    | grep -cxF "local-ci $sha: PASS")
+  [ "${att:-0}" -gt 0 ] || fail "4 ci: workflow is $ci_state and no 'local-ci $sha: PASS' comment (run scripts/local-ci-attest.sh $n)"
+  echo "ok 4 ci-green (local attestation; ci workflow $ci_state)"
+  [ "$on_green" = 1 ] && { echo "GATE PASS $sha"; exit 0; }
+  ci_done=1
+fi
 # Latest run per check name; the claude-review jobs (review, mention) are judged by gate 6 instead.
+[ "${ci_done:-0}" = 1 ] || {
 runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" -q '[.check_runs[]|select(.name!="review" and .name!="mention")|{n:.name,s:.status,c:.conclusion,t:(.started_at//"")}]|group_by(.n)|map(max_by(.t))')
 [ "$(jq length <<<"$runs")" -gt 0 ] || fail "4 ci: no check runs yet"
 jq -e 'all(.[]; .s=="completed")' <<<"$runs" >/dev/null || fail "4 ci: checks still running"
@@ -59,8 +72,9 @@ jq -e 'all(.[]; .c=="success" or .c=="skipped" or .c=="neutral")' <<<"$runs" >/d
 jq -e 'any(.[]; .n=="hygiene" and .c=="success")' <<<"$runs" >/dev/null || fail "4 ci: hygiene did not succeed"
 echo "ok 4 ci-green"
 [ "$on_green" = 1 ] && { echo "GATE PASS $sha"; exit 0; }
+}
 # 5 no protected files
-prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude/settings.json .claude/settings.local.json .claude/agents .claude/skills/merge-queue .claude/skills/merge-review 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh AGENTS.md CLAUDE.md openspec/config.yaml docs/agents/common.md docs/agents/merge.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh)
+prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude/settings.json .claude/settings.local.json .claude/agents .claude/skills/merge-queue .claude/skills/merge-review 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/local-ci-attest.sh scripts/check-agent-docs.sh AGENTS.md CLAUDE.md openspec/config.yaml docs/agents/common.md docs/agents/merge.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh)
 [ -z "$prot" ] || fail "5 protected files changed: ${prot//$'\n'/ }"
 echo "ok 5 no-protected-files"
 # 6 independent review by the claude-review workflow (Claude GitHub App), for this exact head SHA

@@ -13,7 +13,7 @@ branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 # gates, workflows, AGENTS.md/CLAUDE.md, config and .claude settings stay owner-only for everyone.
 protected_fail=0
 if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
-  paths=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh
+  paths=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/local-ci-attest.sh scripts/check-agent-docs.sh
          AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents
          .claude/skills/merge-queue .claude/skills/merge-review docs/agents/merge.md docs/agents/common.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh)
   # Lead branches may improve other skills, role files, lessons and helper scripts.

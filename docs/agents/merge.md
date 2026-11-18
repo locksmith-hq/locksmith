@@ -7,7 +7,7 @@ The owner asked on 2026-11-16 for PRs to merge autonomously, with no waiting win
   - the work is complete;
   - the guard passes;
   - GitHub reports the PR as mergeable, with no conflicts;
-  - CI is green;
+  - CI is green or, while the `ci` workflow is disabled (#307), a `local-ci <sha>: PASS` comment from `scripts/local-ci-attest.sh` exists for the head SHA;
   - no protected files changed;
   - the independent review passed. That review is the `claude-review` workflow: Claude Opus running in GitHub Actions as the Claude GitHub App, posting `merge-review <sha>: PASS`. The verdict holds while the PR's own diff (by patch-id) is unchanged, so merging main in or pushes that add up to no net change do not need a new review.
 - Merges are pinned to the reviewed SHA and always use a merge commit, so `git revert -m 1` undoes any of them.

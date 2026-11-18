@@ -18,6 +18,7 @@ permissions:
   pull-requests: read
   issues: read
   checks: read
+  actions: read  # merge-gate.sh gate 4 reads whether the ci workflow is disabled (#307)
 
 jobs:
   merge:

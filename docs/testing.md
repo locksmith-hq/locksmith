@@ -23,6 +23,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-redact` | Rust lib | `just test ls-redact` | no | `just test-rust` |  |
 | `crates/ls-tenant-lint` | Rust lib | `just test ls-tenant-lint` | no | `just test-rust` |  |
 | `crates/ls-update` | Rust lib | `just test ls-update` | no | `just test-rust` |  |
+| `crates/ls-audit` | Rust lib | `just test ls-audit` | no | `just test-rust` | Audit chain core; secrets path |
 | `crates/ls-vault` | Rust lib | `just test ls-vault` | no | `just test-rust` | Vault; secrets path |
 | `crates/smith-cli` | Rust bin | `just test smith-cli` | no | `just test-rust` | `smith` CLI; some db tests skip without Postgres |
 | `services/control-plane` | Rust service (axum) | `just test control-plane` | yes (Postgres integration tests) | `just test-e2e` (partial) | Package `ls-control-plane` |

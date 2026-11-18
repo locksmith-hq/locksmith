@@ -5,9 +5,9 @@ description: Run anything that may take over 2 minutes (cold cargo build/test, j
 
 # Long commands
 
-1. Start the command in the background: `bash scripts/bg.sh start <name> <timeout-s> -- <command...>`.
+1. Start the command in the background: `bash scripts/bg.sh start <name> <timeout-s> -- <command...>`. Name `just ci` jobs `ci`: run-meta reports their time.
 2. Meanwhile, do other work.
-3. To check on it, run `bash scripts/bg.sh wait <name> <max-s>`. It prints the tail of the log and the exit code. Exit code 137 means the timeout killed the command; exit code 124 means it is still running.
+3. To check on it, run `bash scripts/bg.sh wait <name>` (at most 110 s). It prints the tail of the log and the exit code. Exit 124: still running.
 
 ## Rules
 - **Wait for state, not time.** Foreground `sleep` is blocked: use `bg.sh wait`, or `until <check>; do sleep 2; done` inside a timeout. Never sleep for a subagent; its result wakes you.

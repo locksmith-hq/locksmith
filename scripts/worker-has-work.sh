@@ -14,11 +14,6 @@ n=$(gh api "repos/$repo/issues?labels=ready-to-merge&state=open" -q length)
 c=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&per_page=1" -q '.workflow_runs[0].conclusion // ""')
 [ "$c" = failure ] && work+=("main CI is red")
 
-# Owner approved on a needs-owner issue (other replies are the lead's: owner-replies.sh)
-while IFS=$'\t' read -r i k; do
-  [ "$k" = approval ] && work+=("owner approved on #$i")
-done < <(bash "$(dirname "$0")/owner-replies.sh")
-
 # Changes a worker may take now (dependency-aware, not parked, not claimed), and finished ones to archive.
 status=$(bash "$(dirname "$0")/change-status.sh")
 while IFS=$'\t' read -r id state _; do

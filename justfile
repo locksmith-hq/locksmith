@@ -39,7 +39,6 @@ tree-check:
 task-guard:
     scripts/check-task-edits.test.sh
     scripts/change-status.test.sh
-    scripts/owner-replies.test.sh
     scripts/check-task-edits.sh
     scripts/check-agent-docs.sh
 

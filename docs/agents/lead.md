@@ -2,8 +2,12 @@
 
 Skip idle passes. Window: since the newest `lead` agent-log comment not `answered` (first: 24h). Use the `run-start` skill with `lead`.
 
-## 0. Owner demands
-Each `demand` in `bash scripts/owner-replies.sh` (recheck before posting): reply (`<!-- agent -->` first) with a revised plan or questions; put the current plan in the issue body. Keep `needs-owner`; `approved` sends it to a worker. Woken for a demand: step 0 only, outcome `answered`.
+## 0. Owner replies
+For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
+- **Not approved:** reply (`<!-- agent -->` first) with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
+- **Approved:** apply it on `claude/planning-<date>` (marked ready): OpenSpec changes and tasks, roadmap order or `x-priority` (the board syncs from them), a line in `owner.md` or `openspec/decisions.md`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
+
+Woken for a reply: step 0 only, outcome `answered`.
 
 ## 1. Rescue
 Take the oldest open `needs-rescue` issue whose change you can lock (`bash scripts/run-lock.sh acquire lead-<session> <id>`; busy: next; release at end). One per run (~45m).

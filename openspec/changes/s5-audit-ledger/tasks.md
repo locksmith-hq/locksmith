@@ -3,7 +3,7 @@
 ## 1. Chain core extracted from ls-vault [opus]
 - [x] 1.1 Create `crates/ls-audit` (pure, no IO): the length-prefixed field encoder, `row_hash`, and a verify walk over rows and checkpoints that returns the first broken `seq` and a tail-truncation result; ledger domain tag `locksmith-ledger-v1`.
 - [x] 1.2 Switch `ls-vault` audit to `ls-audit` for encoding and the verify walk, keeping its domain tag, MAC ratchet and on-disk bytes; add a golden-vector test made from the current `ls-vault` output before the switch.
-- [ ] 1.3 Verify: `cargo nextest run -p ls-audit -p ls-vault` passes, including the golden vectors, proptest round-trips, and the existing vault audit tests unchanged.
+- [x] 1.3 Verify: `cargo nextest run -p ls-audit -p ls-vault` passes, including the golden vectors, proptest round-trips, and the existing vault audit tests unchanged.
 
 ## 2. Ledger store and append in the control plane [opus]
 - [ ] 2.1 Migrations: `audit_heads`, `audit_events` (UUIDv7 `id`, PK `(org_id, seq)`, RLS and FORCE RLS, INSERT and SELECT only for the app role), `audit_checkpoints`, `audit_verify_runs`, an `audit_verifier` role (SELECT and BYPASSRLS, used only by the CLI, plus INSERT on `audit_verify_runs` only, with a policy that allows rows for the org being verified); revoke INSERT on `gateway_audit`. RLS and FORCE RLS on `audit_heads`, `audit_checkpoints` and `audit_verify_runs`; the app role gets INSERT and SELECT only on `audit_checkpoints`, and no UPDATE or DELETE on `audit_checkpoints`, `audit_verify_runs` or `audit_heads` beyond the head update in 2.2.

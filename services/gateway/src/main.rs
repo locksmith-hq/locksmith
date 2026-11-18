@@ -12,6 +12,7 @@ use ls_gateway::auth::{AgentAuth, HttpJwks, JwksSettings};
 use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
+use ls_gateway::grants::{GrantCache, GrantCacheSettings};
 use ls_gateway::relay::{Relay, RelayOptions};
 use secrecy::ExposeSecret;
 use tracing_subscriber::EnvFilter;
@@ -111,10 +112,16 @@ async fn main() -> ExitCode {
         Arc::new(transit),
         cache,
     );
+    // Grants (S4 task 2.2): read through the internal endpoint with the service token, cached for
+    // at most 10 s so a revocation takes effect within that time.
+    let grants = Arc::new(GrantCache::new(
+        control_plane,
+        GrantCacheSettings::default(),
+    ));
     let binding_count = config.bindings.bindings.len();
     let relay = Relay::new(
         auth,
-        control_plane,
+        grants,
         config.bindings,
         decryptor,
         Arc::new(SystemResolver),

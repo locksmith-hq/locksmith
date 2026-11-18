@@ -5,16 +5,21 @@
 //! 1. agent token ([`crate::auth`]: JWKS signature, audience, expiry, org) -> `401`, nothing
 //!    else happens and nothing is audited;
 //! 2. request shape -> `400`;
-//! 3. binding for the secret and the target's origin -> `403 denied`;
-//! 4. DNS and address guard -> `403 denied_address` (still no fetch, no unwrap);
-//! 5. fetch material, unwrap DEK (cached), open the version;
-//! 6. render the binding's header template, send through a client pinned to the checked
+//! 3. grant (S4 task 2.2): the agent's grants (cached at most 10 s, [`crate::grants::GrantCache`])
+//!    must hold an unexpired `relay` grant for the secret -> `403 no_grant`; grants that cannot
+//!    be read -> `502 grants_unavailable` (fail closed). Audited with the agent id;
+//! 4. binding for the secret and the target's origin -> `403 denied`;
+//! 5. DNS and address guard -> `403 denied_address` (still no fetch, no unwrap);
+//! 6. fetch material, unwrap DEK (cached), open the version. Nothing before this step touches
+//!    the material or the KMS;
+//! 7. render the binding's header template, send through a client pinned to the checked
 //!    addresses that follows no redirects;
-//! 7. read the response (identity encoding only, size-bounded), redact headers and body with
+//! 8. read the response (identity encoding only, size-bounded), redact headers and body with
 //!    `ls-redact` (plain, base64, URL, hex, JSON forms), re-check that nothing matches, and
 //!    withhold the response with `502` if any of that fails (fail closed);
-//! 8. append the audit row. If the row cannot be written for a call that reached the upstream,
-//!    the response is withheld (`500`).
+//! 9. append the audit row (every attempt after step 2, refusals included, with the agent id).
+//!    If the row cannot be written for a call that reached the upstream, the response is
+//!    withheld (`500`).
 //!
 //! The value lives in `SecretBytes` / `Zeroizing` buffers and is dropped once the header and the
 //! redactor are built. Copies inside `http::HeaderValue`, hyper and rustls, and the redactor's
@@ -48,7 +53,7 @@ use crate::auth::AgentAuth;
 use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
 use crate::egress::{self, EgressError, Resolver};
-use crate::grants::GrantSource;
+use crate::grants::{GrantSource, allows_relay};
 
 /// Label in redaction markers: `[REDACTED:SECRET]`.
 pub const REDACTION_LABEL: &str = "SECRET";
@@ -328,6 +333,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
     );
     let mut record = AuditRecord {
         org_id: relay.org_id,
+        agent_id: agent.agent_id,
         secret_id: req.secret_id,
         version: req.version,
         caller: agent.agent_id.to_string(),
@@ -341,7 +347,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
     };
 
     async move {
-        let result = run(&relay, req).await;
+        let result = run(&relay, agent.agent_id, req).await;
         let span = tracing::Span::current();
         match &result {
             Ok(resp) => {
@@ -387,13 +393,31 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
     .await
 }
 
-async fn run(relay: &Relay, req: Parsed) -> Result<RelayResponse, Failure> {
-    // 3. Binding and origin: refused before any lookup, fetch or unwrap.
+async fn run(relay: &Relay, agent_id: Uuid, req: Parsed) -> Result<RelayResponse, Failure> {
+    // 3. Grant and its expiry: refused before the binding lookup, DNS, fetch or unwrap. The
+    // expiry is re-checked here because the set may come from the cache.
+    let grants = relay.grants.grants(agent_id).await.map_err(|_| {
+        Failure::new(
+            Outcome::GrantsUnavailable,
+            StatusCode::BAD_GATEWAY,
+            "grants_unavailable",
+        )
+    })?;
+    if !allows_relay(&grants, req.secret_id, time::OffsetDateTime::now_utc()) {
+        return Err(Failure::new(
+            Outcome::NoGrant,
+            StatusCode::FORBIDDEN,
+            "no_grant",
+        ));
+    }
+    drop(grants);
+
+    // 4. Binding and origin: refused before any fetch or unwrap.
     let binding: &Binding = relay
         .bindings
         .for_secret(req.secret_id)
         .ok_or_else(denied)?;
-    // 4. Address guard (resolves once; the client is pinned to the result).
+    // 5. Address guard (resolves once; the client is pinned to the result).
     let target = egress::check(binding, &req.url, relay.resolver.as_ref())
         .await
         .map_err(|e| match e {
@@ -419,7 +443,7 @@ async fn run(relay: &Relay, req: Parsed) -> Result<RelayResponse, Failure> {
             )
         })?;
 
-    // 5. Decrypt.
+    // 6. Decrypt.
     let value = relay
         .decryptor
         .decrypt(req.secret_id, req.version)
@@ -450,7 +474,7 @@ async fn run(relay: &Relay, req: Parsed) -> Result<RelayResponse, Failure> {
         ));
     }
 
-    // 6. Inject: the redactor and the header value are built, then the value is dropped.
+    // 7. Inject: the redactor and the header value are built, then the value is dropped.
     let redactor = Redactor::new(&[Secret::new(REDACTION_LABEL, value.expose())]);
     let header_name = HeaderName::from_bytes(binding.header.as_bytes()).map_err(|_| {
         Failure::new(
@@ -484,7 +508,7 @@ async fn run(relay: &Relay, req: Parsed) -> Result<RelayResponse, Failure> {
     let mut resp = sent.map_err(|e| upstream_failure(&e))?;
     let status = resp.status().as_u16();
 
-    // 7. Read (bounded), refuse encodings that cannot be scanned, redact, re-check.
+    // 8. Read (bounded), refuse encodings that cannot be scanned, redact, re-check.
     let encoded = resp
         .headers()
         .get_all(reqwest::header::CONTENT_ENCODING)
@@ -618,7 +642,7 @@ mod tests {
     use crate::decrypt::{CacheSettings, ControlPlane, DekCache};
     use crate::egress::testkit::StubResolver;
     use crate::grants::testkit::StubGrants;
-    use crate::grants::{Grant, GrantList, GrantView};
+    use crate::grants::{Grant, GrantCache, GrantCacheSettings, GrantList, GrantView};
     use axum::Router;
     use axum::body::Body;
     use axum::http::Request;
@@ -644,6 +668,16 @@ mod tests {
     /// A canary with characters that URL-encoding changes.
     const VALUE: &[u8] = b"canary-relay-7Hk2/q+Zx9=W";
     const AGENT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a1);
+
+    fn grant(secret_id: Uuid, name: &str, expires_at: Option<time::OffsetDateTime>) -> Grant {
+        Grant {
+            grant_id: Uuid::now_v7(),
+            secret_id,
+            secret_name: name.to_owned(),
+            mode: "relay".to_owned(),
+            expires_at,
+        }
+    }
 
     fn signer() -> AgentTokenSigner {
         AgentTokenSigner::from_seed(zeroize::Zeroizing::new([7u8; 32])).unwrap()
@@ -732,6 +766,8 @@ mod tests {
     struct Setup {
         bao_ok: bool,
         audit_fails: bool,
+        /// TTL of the gateway's grant cache in front of [`StubGrants`].
+        grant_ttl: Duration,
         options: RelayOptions,
     }
 
@@ -740,6 +776,7 @@ mod tests {
             Self {
                 bao_ok: true,
                 audit_fails: false,
+                grant_ttl: crate::grants::MAX_GRANT_TTL,
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
@@ -835,10 +872,26 @@ mod tests {
             JwksSettings::default(),
         ));
         let token = signer.sign(&agent_claims(ORG, AUDIENCE, 600)).unwrap();
+        // By default the agent may relay every test secret; tests that need fewer replace the set
+        // before their first call.
         let grants = Arc::new(StubGrants::default());
+        grants.set(
+            AGENT,
+            [SECRET, INTERNAL, DEAD, UNBOUND]
+                .into_iter()
+                .map(|id| grant(id, "TEST", None))
+                .collect(),
+        );
+        let cache = GrantCache::new(
+            grants.clone(),
+            GrantCacheSettings {
+                ttl: setup.grant_ttl,
+                ..GrantCacheSettings::default()
+            },
+        );
         let relay = Relay::new(
             auth,
-            grants.clone(),
+            Arc::new(cache),
             bindings,
             decryptor,
             resolver.clone(),
@@ -987,6 +1040,7 @@ mod tests {
         );
         assert_eq!(r.path, "/v1/charge", "no query string in the audit row");
         assert_eq!(r.caller, AGENT.to_string(), "the audit row names the agent");
+        assert_eq!(r.agent_id, AGENT);
         h.assert_audit_clean();
         // DNS was answered by the stub (the pinned path), once.
         assert_eq!(
@@ -1123,6 +1177,7 @@ mod tests {
         assert_eq!(outcomes.iter().filter(|o| **o == "denied").count(), 6);
         assert_eq!(outcomes.last(), Some(&"denied_address"));
         assert!(h.audit.records().iter().all(|r| r.status.is_none()));
+        assert!(h.audit.records().iter().all(|r| r.agent_id == AGENT));
     }
 
     /// Spec "Redirect to another host": not followed, credential not resent.
@@ -1262,13 +1317,6 @@ mod tests {
     async fn grants_lists_the_calling_agents_grants() {
         let h = harness(Setup::default()).await;
         let now = time::OffsetDateTime::now_utc();
-        let grant = |secret_id, name: &str, expires_at| Grant {
-            grant_id: Uuid::now_v7(),
-            secret_id,
-            secret_name: name.to_owned(),
-            mode: "relay".to_owned(),
-            expires_at,
-        };
         let later = now + time::Duration::hours(1);
         h.grants.set(
             AGENT,
@@ -1391,6 +1439,7 @@ mod tests {
         let app =
             app::build(AppState::new(Arc::new(ReadyFlag::new(true))).with_relay(Arc::new(relay)));
         let resp = app
+            .clone()
             .oneshot(
                 Request::get("/v1/grants")
                     .header("authorization", format!("Bearer {}", h.token))
@@ -1402,6 +1451,146 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         assert!(String::from_utf8_lossy(&body).contains("grants_unavailable"));
+
+        // `/v1/relay` fails closed: no fetch, no unwrap, audited with the agent.
+        let resp = app
+            .oneshot(
+                Request::post("/v1/relay")
+                    .header("authorization", format!("Bearer {}", h.token))
+                    .body(Body::from(
+                        serde_json::json!({
+                            "secret_id": SECRET, "version": 1, "method": "GET",
+                            "url": format!("{}/x", h.origin())
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        assert!(String::from_utf8_lossy(&body).contains("grants_unavailable"));
+        assert_eq!(h.kms_calls().await, 0);
+        assert_eq!(Harness::hits(&h.cp).await, 0);
+        let rec = h.audit.records();
+        assert_eq!(
+            rec.iter()
+                .map(|r| (r.outcome, r.agent_id))
+                .collect::<Vec<_>>(),
+            [(Outcome::GrantsUnavailable, AGENT)]
+        );
+    }
+
+    /// Spec "No grant" / "Caller without a grant": `403`, no material fetch, no KMS decrypt, no
+    /// DNS, no upstream call; the denial is audited with the agent id.
+    #[tokio::test]
+    async fn no_grant_makes_no_decrypt_call() {
+        let h = harness(Setup::default()).await;
+        // A grant for another secret, and one for this secret held by another agent.
+        h.grants.set(AGENT, vec![grant(DEAD, "OTHER_SECRET", None)]);
+        h.grants
+            .set(Uuid::now_v7(), vec![grant(SECRET, "NOT_YOURS", None)]);
+        let (status, raw) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(String::from_utf8_lossy(&raw).contains("\"no_grant\""));
+        assert_clean("no-grant response", &raw);
+
+        assert_eq!(h.kms_calls().await, 0, "no KMS decrypt call");
+        assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
+        assert_eq!(Harness::hits(&h.upstream).await, 0, "no upstream call");
+        assert!(h.resolver.lookups.lock().unwrap().is_empty(), "no DNS");
+        let rec = h.audit.records();
+        assert_eq!(rec.len(), 1, "the denial is audited");
+        let r = &rec[0];
+        assert_eq!(
+            (r.outcome, r.agent_id, r.secret_id, r.status),
+            (Outcome::NoGrant, AGENT, SECRET, None)
+        );
+        h.assert_audit_clean();
+    }
+
+    /// An expired grant is refused before unwrap, including one that expires while its set is
+    /// still cached (the expiry is re-checked on every call).
+    #[tokio::test]
+    async fn expired_grant_is_refused_before_unwrap() {
+        let h = harness(Setup::default()).await;
+        let now = time::OffsetDateTime::now_utc();
+        h.grants.set(
+            AGENT,
+            vec![grant(SECRET, "OLD", Some(now - time::Duration::seconds(1)))],
+        );
+        let (status, raw) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(String::from_utf8_lossy(&raw).contains("\"no_grant\""));
+        assert_eq!(h.kms_calls().await, 0, "no KMS decrypt call");
+        assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
+        assert_eq!(h.outcomes(), ["no_grant"]);
+
+        // Expires 1 s from now; the 10 s cache keeps serving the set, the expiry still bites.
+        let h = harness(Setup::default()).await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("fine"))
+            .mount(&h.upstream)
+            .await;
+        let soon = time::OffsetDateTime::now_utc() + time::Duration::milliseconds(1500);
+        h.grants.set(AGENT, vec![grant(SECRET, "SOON", Some(soon))]);
+        let (status, _) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+        assert_eq!(status, StatusCode::OK);
+        let kms_before = h.kms_calls().await;
+        let wait = soon - time::OffsetDateTime::now_utc() + time::Duration::milliseconds(100);
+        tokio::time::sleep(wait.try_into().unwrap_or(Duration::ZERO)).await;
+        let (status, raw) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_clean("expired-grant response", &raw);
+        assert_eq!(h.grants.calls(), 1, "served from the cache");
+        assert_eq!(h.kms_calls().await, kms_before, "no further KMS call");
+        assert_eq!(
+            Harness::hits(&h.upstream).await,
+            1,
+            "no second upstream call"
+        );
+        assert_eq!(h.outcomes(), ["ok", "no_grant"]);
+        assert!(h.audit.records().iter().all(|r| r.agent_id == AGENT));
+    }
+
+    /// A revoked grant stops working once the cached set is older than the cache TTL, even with
+    /// the data key still cached.
+    #[tokio::test]
+    async fn revoked_grant_stops_within_the_cache_ttl() {
+        let ttl = Duration::from_millis(400);
+        let h = harness(Setup {
+            grant_ttl: ttl,
+            ..Setup::default()
+        })
+        .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("fine"))
+            .mount(&h.upstream)
+            .await;
+        let (status, _) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(h.grants.calls(), 1);
+        let kms_before = h.kms_calls().await;
+        let cp_before = Harness::hits(&h.cp).await;
+
+        // Revoked in the control plane.
+        h.grants.set(AGENT, Vec::new());
+        tokio::time::sleep(ttl + Duration::from_millis(50)).await;
+        let (status, raw) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(String::from_utf8_lossy(&raw).contains("\"no_grant\""));
+        assert_eq!(h.grants.calls(), 2, "re-read after the TTL");
+        assert_eq!(h.kms_calls().await, kms_before, "no KMS call");
+        assert_eq!(Harness::hits(&h.cp).await, cp_before, "no material fetch");
+        assert_eq!(
+            Harness::hits(&h.upstream).await,
+            1,
+            "no second upstream call"
+        );
+        assert_eq!(h.outcomes(), ["ok", "no_grant"]);
+        assert!(h.audit.records().iter().all(|r| r.agent_id == AGENT));
+        h.assert_audit_clean();
     }
 
     #[tokio::test]
@@ -1600,6 +1789,11 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         h.relay_get(SECRET, "http://evil.test/x").await;
         h.relay_get(DEAD, &format!("{}/x", h.dead_origin())).await;
+        let no_grant = harness(Setup::default()).await;
+        no_grant.grants.set(AGENT, Vec::new());
+        no_grant
+            .relay_get(SECRET, &format!("{}/x", no_grant.origin()))
+            .await;
         let failing = harness(Setup {
             bao_ok: false,
             ..Setup::default()

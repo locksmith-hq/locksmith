@@ -5,7 +5,13 @@
 //! agent with the origin each secret may be sent to through this gateway: ids, names, modes,
 //! expiry and origins only, never a value.
 //!
-//! Task 2.2 adds the short-lived cache and the check before unwrap on `/v1/relay`.
+//! [`GrantCache`] keeps each agent's grants for at most [`MAX_GRANT_TTL`] (design decision 4), so
+//! a revoked grant stops working within that time; `/v1/relay` checks [`allows_relay`] before any
+//! material fetch or unwrap (S4 task 2.2).
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::extract::State;
@@ -38,6 +44,16 @@ impl Grant {
     pub fn active_at(&self, now: OffsetDateTime) -> bool {
         self.expires_at.is_none_or(|e| e > now)
     }
+}
+
+/// The only mode `/v1/relay` serves.
+pub const MODE_RELAY: &str = "relay";
+
+/// Whether `grants` hold an unexpired relay grant for `secret_id` at `now`.
+pub fn allows_relay(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) -> bool {
+    grants
+        .iter()
+        .any(|g| g.secret_id == secret_id && g.mode == MODE_RELAY && g.active_at(now))
 }
 
 /// Why grants could not be read. Carries no response body.
@@ -88,6 +104,121 @@ impl ControlPlane {
 impl GrantSource for ControlPlane {
     fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
         Box::pin(self.agent_grants(agent_id))
+    }
+}
+
+/// Longest time a grant set is served from the cache (design decision 4: at most 10 s), so a
+/// revocation takes effect within it. Larger configured TTLs are clamped to this.
+pub const MAX_GRANT_TTL: Duration = Duration::from_secs(10);
+
+/// Grant cache bounds.
+#[derive(Debug, Clone, Copy)]
+pub struct GrantCacheSettings {
+    /// Clamped to [`MAX_GRANT_TTL`]; zero disables caching.
+    pub ttl: Duration,
+    pub max_entries: usize,
+}
+
+impl Default for GrantCacheSettings {
+    fn default() -> Self {
+        Self {
+            ttl: MAX_GRANT_TTL,
+            max_entries: 10_000,
+        }
+    }
+}
+
+struct CachedSet {
+    grants: Vec<Grant>,
+    fetched: Instant,
+}
+
+/// A [`GrantSource`] that serves each agent's grant set from memory for at most the TTL (an empty
+/// set too, so a new grant may also take up to the TTL to be usable). Errors are never cached.
+/// Expiry inside a cached set is re-checked by the caller ([`Grant::active_at`]).
+pub struct GrantCache {
+    source: Arc<dyn GrantSource>,
+    settings: GrantCacheSettings,
+    entries: Mutex<HashMap<Uuid, CachedSet>>,
+}
+
+impl GrantCache {
+    pub fn new(source: Arc<dyn GrantSource>, settings: GrantCacheSettings) -> Self {
+        Self {
+            source,
+            settings: GrantCacheSettings {
+                ttl: settings.ttl.min(MAX_GRANT_TTL),
+                ..settings
+            },
+            entries: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn ttl(&self) -> Duration {
+        self.settings.ttl
+    }
+
+    fn lock(&self) -> MutexGuard<'_, HashMap<Uuid, CachedSet>> {
+        // A panic while holding the lock cannot leave a half-written entry; keep serving.
+        self.entries.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn fresh(&self, e: &CachedSet, now: Instant) -> bool {
+        now.saturating_duration_since(e.fetched) < self.settings.ttl
+    }
+
+    fn get_at(&self, agent_id: Uuid, now: Instant) -> Option<Vec<Grant>> {
+        let mut map = self.lock();
+        match map.get(&agent_id) {
+            Some(e) if self.fresh(e, now) => Some(e.grants.clone()),
+            Some(_) => {
+                map.remove(&agent_id);
+                None
+            }
+            None => None,
+        }
+    }
+
+    fn insert_at(&self, agent_id: Uuid, grants: Vec<Grant>, now: Instant) {
+        if self.settings.max_entries == 0 || self.settings.ttl.is_zero() {
+            return;
+        }
+        let mut map = self.lock();
+        map.retain(|_, e| self.fresh(e, now));
+        while map.len() >= self.settings.max_entries {
+            let oldest = map.iter().min_by_key(|(_, e)| e.fetched).map(|(k, _)| *k);
+            match oldest {
+                Some(k) => {
+                    map.remove(&k);
+                }
+                None => break,
+            }
+        }
+        map.insert(
+            agent_id,
+            CachedSet {
+                grants,
+                fetched: now,
+            },
+        );
+    }
+
+    async fn read(&self, agent_id: Uuid) -> Result<Vec<Grant>, GrantError> {
+        if let Some(g) = self.get_at(agent_id, Instant::now()) {
+            return Ok(g);
+        }
+        // Stamp the entry with the time the fetch started, so it never outlives the TTL
+        // measured from when the control plane was asked.
+        let started = Instant::now();
+        let grants = self.source.grants(agent_id).await?;
+        self.insert_at(agent_id, grants.clone(), started);
+        Ok(grants)
+    }
+}
+
+impl GrantSource for GrantCache {
+    fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+        Box::pin(self.read(agent_id))
     }
 }
 
@@ -274,6 +405,123 @@ mod tests {
         );
         assert!(g[0].expires_at.is_some());
         assert_eq!(client.grants(other).await, Ok(Vec::new()), "deleted agent");
+    }
+
+    fn grant(secret_id: Uuid, mode: &str, expires_at: Option<OffsetDateTime>) -> Grant {
+        Grant {
+            grant_id: Uuid::now_v7(),
+            secret_id,
+            secret_name: "S".to_owned(),
+            mode: mode.to_owned(),
+            expires_at,
+        }
+    }
+
+    #[test]
+    fn allows_relay_needs_an_unexpired_relay_grant_for_the_secret() {
+        let secret = Uuid::now_v7();
+        let now = OffsetDateTime::now_utc();
+        let past = Some(now - time::Duration::seconds(1));
+        let future = Some(now + time::Duration::seconds(60));
+        assert!(allows_relay(&[grant(secret, "relay", None)], secret, now));
+        assert!(allows_relay(&[grant(secret, "relay", future)], secret, now));
+        assert!(!allows_relay(&[], secret, now));
+        assert!(!allows_relay(&[grant(secret, "relay", past)], secret, now));
+        assert!(
+            !allows_relay(&[grant(secret, "relay", Some(now))], secret, now),
+            "expiry is exclusive"
+        );
+        assert!(!allows_relay(&[grant(secret, "inject", None)], secret, now));
+        assert!(!allows_relay(
+            &[grant(Uuid::now_v7(), "relay", None)],
+            secret,
+            now
+        ));
+    }
+
+    #[test]
+    fn cache_ttl_is_at_most_ten_seconds() {
+        let src = Arc::new(testkit::StubGrants::default());
+        let c = GrantCache::new(
+            src.clone(),
+            GrantCacheSettings {
+                ttl: Duration::from_secs(3600),
+                max_entries: 10,
+            },
+        );
+        assert_eq!(c.ttl(), MAX_GRANT_TTL);
+        assert_eq!(MAX_GRANT_TTL, Duration::from_secs(10));
+        assert_eq!(
+            GrantCache::new(src, GrantCacheSettings::default()).ttl(),
+            MAX_GRANT_TTL
+        );
+    }
+
+    #[test]
+    fn cached_set_expires_at_the_ttl() {
+        let c = GrantCache::new(
+            Arc::new(testkit::StubGrants::default()),
+            GrantCacheSettings::default(),
+        );
+        let t0 = Instant::now();
+        let set = vec![grant(Uuid::now_v7(), "relay", None)];
+        c.insert_at(AGENT, set.clone(), t0);
+        assert_eq!(
+            c.get_at(AGENT, t0 + Duration::from_millis(9_999)),
+            Some(set)
+        );
+        assert_eq!(c.get_at(AGENT, t0 + MAX_GRANT_TTL), None, "gone at the TTL");
+        assert_eq!(c.get_at(AGENT, t0), None, "and removed");
+    }
+
+    #[test]
+    fn cache_is_bounded() {
+        let c = GrantCache::new(
+            Arc::new(testkit::StubGrants::default()),
+            GrantCacheSettings {
+                ttl: MAX_GRANT_TTL,
+                max_entries: 2,
+            },
+        );
+        let t0 = Instant::now();
+        let (a, b, d) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        c.insert_at(a, Vec::new(), t0);
+        c.insert_at(b, Vec::new(), t0 + Duration::from_millis(1));
+        c.insert_at(d, Vec::new(), t0 + Duration::from_millis(2));
+        let now = t0 + Duration::from_millis(3);
+        assert_eq!(c.get_at(a, now), None, "oldest evicted");
+        assert!(c.get_at(b, now).is_some() && c.get_at(d, now).is_some());
+    }
+
+    #[tokio::test]
+    async fn cache_serves_within_the_ttl_and_never_caches_errors() {
+        let src = Arc::new(testkit::StubGrants::default());
+        src.set(AGENT, vec![grant(Uuid::now_v7(), "relay", None)]);
+        let c = GrantCache::new(src.clone(), GrantCacheSettings::default());
+        assert_eq!(c.grants(AGENT).await.unwrap().len(), 1);
+        src.set(AGENT, Vec::new());
+        assert_eq!(c.grants(AGENT).await.unwrap().len(), 1, "cached");
+        assert_eq!(src.calls(), 1);
+
+        let failing = Arc::new(testkit::StubGrants {
+            fail: true,
+            ..testkit::StubGrants::default()
+        });
+        let c = GrantCache::new(failing.clone(), GrantCacheSettings::default());
+        assert_eq!(c.grants(AGENT).await, Err(GrantError::Unavailable));
+        assert_eq!(c.grants(AGENT).await, Err(GrantError::Unavailable));
+        assert_eq!(failing.calls(), 2, "errors are not cached");
+
+        let off = GrantCache::new(
+            src.clone(),
+            GrantCacheSettings {
+                ttl: Duration::ZERO,
+                max_entries: 10,
+            },
+        );
+        off.grants(AGENT).await.unwrap();
+        off.grants(AGENT).await.unwrap();
+        assert_eq!(src.calls(), 3, "zero TTL disables caching");
     }
 
     #[test]

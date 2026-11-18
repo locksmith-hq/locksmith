@@ -38,6 +38,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         include_str!("../migrations/0005_gateway_audit_version_caller.sql"),
     ),
     (6, "agents", include_str!("../migrations/0006_agents.sql")),
+    (
+        7,
+        "gateway audit agent id",
+        include_str!("../migrations/0007_gateway_audit_agent.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

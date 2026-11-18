@@ -23,7 +23,7 @@ mod wrap;
 
 pub use header::{Binding, FormatField, Header, KeyId, Purpose};
 pub use ls_crypto::{SecretBytes, SecretKey32};
-pub use openbao::{BaoToken, OpenBaoTransit};
+pub use openbao::{BaoToken, OpenBaoTransit, TransitSignature, TransitSigner};
 pub use version::{DataKey, SealedVersion, open_version, seal_version};
 pub use wrap::{KeyWrapper, TransportKind, WRAPPED_DEK_LEN, WrapError, WrapKeyId, WrappedDek};
 

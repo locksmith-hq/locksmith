@@ -13,11 +13,12 @@
 
 use crate::vault::{Error, Vault};
 use hmac::{Hmac, Mac};
+use ls_audit::{BreakKind, Encoder, Link};
 use ls_crypto::SecretKey32;
 use ls_crypto::aead::{self, Aad, Sealed};
 use ls_crypto::recovery::RecoveryPhrase;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -92,39 +93,28 @@ fn ratchet(k: &SecretKey32) -> SecretKey32 {
     SecretKey32::from_bytes(hmac(k.expose(), b"ratchet"))
 }
 
-/// Deterministic encoding: domain tag, then every field as u32 length + bytes, in fixed order.
+/// Deterministic encoding (`ls_audit::Encoder`): domain tag, then every field as u32 length +
+/// bytes, in fixed order. Pinned by the golden vectors below.
 pub(crate) fn canonical(seq: u64, r: &AuditRecord, prev: &[u8; 32]) -> Vec<u8> {
-    let mut out = DOMAIN.to_vec();
-    let mut put = |b: &[u8]| {
-        out.extend_from_slice(&(b.len() as u32).to_be_bytes());
-        out.extend_from_slice(b);
-    };
-    let opt = |o: &Option<String>| -> Vec<u8> {
-        match o {
-            None => vec![0],
-            Some(s) => [&[1u8][..], s.as_bytes()].concat(),
-        }
-    };
-    put(&seq.to_be_bytes());
-    put(&r.ts.to_be_bytes());
-    put(&opt(&r.session_id));
-    put(&r.actor_pid.to_be_bytes());
-    put(&r.actor_start.to_be_bytes());
-    put(r.actor_exe.as_bytes());
-    put(r.actor_exe_hash.as_bytes());
-    put(r.action.as_bytes());
-    put(&opt(&r.target));
-    put(r.policy_rule.as_bytes());
-    put(r.decision.as_bytes());
-    put(prev);
-    out
+    let mut e = Encoder::new(DOMAIN);
+    e.field(&seq.to_be_bytes())
+        .field(&r.ts.to_be_bytes())
+        .opt_field(r.session_id.as_deref().map(str::as_bytes))
+        .field(&r.actor_pid.to_be_bytes())
+        .field(&r.actor_start.to_be_bytes())
+        .field(r.actor_exe.as_bytes())
+        .field(r.actor_exe_hash.as_bytes())
+        .field(r.action.as_bytes())
+        .opt_field(r.target.as_deref().map(str::as_bytes))
+        .field(r.policy_rule.as_bytes())
+        .field(r.decision.as_bytes())
+        .field(prev);
+    e.finish()
 }
 
+/// `SHA256(canonical || mac)`: the vault ledger links over the MAC as well.
 fn row_hash(e: &StoredEvent) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(canonical(e.seq, &e.record, &e.prev_hash));
-    h.update(e.mac);
-    h.finalize().into()
+    ls_audit::row_hash(&canonical(e.seq, &e.record, &e.prev_hash), &e.mac)
 }
 
 struct KeyRow {
@@ -351,19 +341,21 @@ impl Vault {
             broken_at: Some(seq),
             detail: format!("event {seq}: {why}"),
         };
-        let mut prev = [0u8; 32];
-        for (i, e) in events.iter().enumerate() {
-            let want = i as u64 + 1;
-            if e.seq != want {
-                return Ok(broken(want, "missing (deleted or reordered)"));
-            }
-            if e.prev_hash != prev {
-                return Ok(broken(
-                    e.seq,
-                    "hash chain broken (edited, deleted or reordered)",
-                ));
-            }
-            prev = row_hash(e);
+        // No stored hash and no checkpoints here: tail truncation is caught by the key position.
+        let walk = ls_audit::verify(
+            events.iter().map(|e| Link {
+                seq: e.seq,
+                prev_hash: e.prev_hash,
+                hash: row_hash(e),
+                stored_hash: None,
+            }),
+            &[],
+        );
+        if let Some(b) = walk.broken {
+            return Ok(match b.kind {
+                BreakKind::Sequence => broken(b.seq, "missing (deleted or reordered)"),
+                _ => broken(b.seq, "hash chain broken (edited, deleted or reordered)"),
+            });
         }
         // The stored key must sit exactly on the newest event, or just after it on a fresh root.
         match events.last() {
@@ -606,4 +598,130 @@ mod tests {
             .unwrap();
         assert_eq!(cols.join(","), COLS);
     }
+
+    // Golden vectors (s5-audit-ledger 1.2): recorded from the ls-vault implementation before
+    // the chain core moved to ls-audit. They pin the canonical encoding, the row hash, the MAC
+    // ratchet and the stored `prev_hash`/`mac` columns. Never update them to make a test pass:
+    // a change here means existing ledgers no longer verify.
+
+    fn hx(b: &[u8]) -> String {
+        b.iter().map(|x| format!("{x:02x}")).collect()
+    }
+
+    #[test]
+    fn golden_canonical_row_hash_and_ratchet() {
+        let some = rec("ACCESS", "p/e/K0");
+        let prev = [0x11u8; 32];
+        let none = AuditRecord {
+            session_id: None,
+            target: None,
+            ..rec("UNLOCK", "")
+        };
+        let e = StoredEvent {
+            seq: 3,
+            record: some.clone(),
+            prev_hash: prev,
+            mac: [0x22u8; 32],
+        };
+        // Public test key, not a secret.
+        let k0 = SecretKey32::from_bytes([7u8; 32]);
+        let k1 = ratchet(&k0);
+        let k2 = ratchet(&k1);
+        let got = [
+            ("canonical_some", hx(&canonical(3, &some, &prev))),
+            ("canonical_none", hx(&canonical(1, &none, &[0u8; 32]))),
+            ("row_hash", hx(&row_hash(&e))),
+            ("ratchet_1", hx(k1.expose())),
+            ("ratchet_2", hx(k2.expose())),
+            ("mac", hx(&hmac(k2.expose(), &canonical(3, &some, &prev)))),
+        ];
+        let got: Vec<(&str, &str)> = got.iter().map(|(n, h)| (*n, h.as_str())).collect();
+        assert_eq!(got, GOLDEN_VECTORS);
+    }
+
+    #[test]
+    fn golden_stored_ledger_columns() {
+        // BIP-39 all-zero-entropy test phrase (public vector), so the ratchet root is fixed.
+        let phrase = RecoveryPhrase::parse(&format!("{}art", "abandon ".repeat(23))).unwrap();
+        let d = Dir(std::env::temp_dir().join(format!("ls-audit-golden-{}", std::process::id())));
+        let v = Vault::create(&d.0, b"pw", WEAK, true, &phrase).unwrap();
+        v.audit_append(&rec("ACCESS", "p/e/A")).unwrap();
+        v.audit_append(&AuditRecord {
+            session_id: None,
+            target: None,
+            ..rec("LOCK", "")
+        })
+        .unwrap();
+        v.audit_append(&rec("ROTATE", "p/e/B")).unwrap();
+        let got: Vec<(u64, String, String)> = v
+            .audit_list(10)
+            .unwrap()
+            .iter()
+            .map(|e| (e.seq, hx(&e.prev_hash), hx(&e.mac)))
+            .collect();
+        let want: Vec<(u64, String, String)> = GOLDEN_LEDGER
+            .iter()
+            .map(|(s, p, m)| (*s, p.to_string(), m.to_string()))
+            .collect();
+        assert_eq!(got, want);
+        assert_eq!(v.audit_verify(Some(&phrase)).unwrap().broken_at, None);
+    }
+
+    const GOLDEN_VECTORS: &[(&str, &str)] = &[
+        (
+            "canonical_some",
+            "6c6f636b736d6974682d61756469742d7631\
+             00000008000000000000000300000008000000006553f100\
+             0000000301733100000004\
+             0000002a000000080000000000000007\
+             000000142f7573722f6c6f63616c2f62696e2f736d697468\
+             000000026162000000064143434553530000000701702f652f4b30\
+             000000056c6561736500000005414c4c4f57\
+             000000201111111111111111111111111111111111111111111111111111111111111111",
+        ),
+        (
+            "canonical_none",
+            "6c6f636b736d6974682d61756469742d7631\
+             00000008000000000000000100000008000000006553f100\
+             000000010000000004\
+             0000002a000000080000000000000007\
+             000000142f7573722f6c6f63616c2f62696e2f736d697468\
+             00000002616200000006554e4c4f434b0000000100\
+             000000056c6561736500000005414c4c4f57\
+             000000200000000000000000000000000000000000000000000000000000000000000000",
+        ),
+        (
+            "row_hash",
+            "2e590baf529c1410a2adad7ef5b8431a76d86873ed1f1e5ed99cdda3aea9926e",
+        ),
+        (
+            "ratchet_1",
+            "ff4afd707212a9211a8df9e34ab936afeffc9f6483b9cbc71c7c0aede156abd3",
+        ),
+        (
+            "ratchet_2",
+            "42e44c47ce67e07a23710ba7056ab832dcd3d3ab32e76c404dc5e9868f407854",
+        ),
+        (
+            "mac",
+            "cf03054fb90bc7207b9f78f288dfda7aac6b7cdb429101898342142793c7cae1",
+        ),
+    ];
+    const GOLDEN_LEDGER: &[(u64, &str, &str)] = &[
+        (
+            1,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "010212b6739e9d2c6c1d12b99c57d29c0080d9c53a38aad14e043ec729f0b3cc",
+        ),
+        (
+            2,
+            "021f3952e2bf78c646c59131eeabda14581a9c257f03aeb0feda3a2cf45a6064",
+            "1c4cafd0c67284fd0d1fda427056464d8029ba39625531dfe65a2a00a2a9e141",
+        ),
+        (
+            3,
+            "9e7c43a763ba89c6071b7aac22ad416f87aaf2fea0c814312d4c288fed7dc88a",
+            "18fb5dad7d9ca38214d8ba2e6a4d20899ffdb03fd8b5a1daf1ace1ddcc56f81f",
+        ),
+    ];
 }

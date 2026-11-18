@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type {
   AuditEvent, AuditVerifyView, HttpTokenInfo, LeaseInfo, RelayInfo, SourceKind, StatusView,
 } from "@locksmith/api-types";
@@ -651,6 +651,71 @@ export function Agents(_: ScreenProps) {
               ))}
             </div>
           )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** The org's control-plane audit ledger (events plus chain status), read-only. */
+export function OrgAudit(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [status, setStatus] = useState<api.AuditStatus | null>(null);
+  const [events, setEvents] = useState<api.OrgAuditEvent[] | null>(null);
+  const [next, setNext] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const inflight = useRef(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    if (!client) return;
+    client.auditStatus().then(setStatus, (e) => setErr(msg(e)));
+    client.listAuditEvents().then((p) => { setEvents(p.items); setNext(p.next ?? null); }, (e) => setErr(msg(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const more = () => {
+    if (!client || inflight.current || !next) return;
+    inflight.current = true;
+    setLoadingMore(true);
+    client.listAuditEvents({ cursor: next }).then(
+      (p) => { setEvents((cur) => [...(cur ?? []), ...p.items]); setNext(p.next ?? null); setErr(""); },
+      (e) => setErr(msg(e)),
+    ).finally(() => { inflight.current = false; setLoadingMore(false); });
+  };
+  const v = status?.latest_verify;
+
+  return (
+    <section className="screen" aria-labelledby="h-org-audit">
+      <Head id="h-org-audit" title="Org audit" sub="The control plane's hash-chained ledger of relays and changes, newest first." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="doc">Connect a control plane on the Agents screen to see its audit ledger.</Empty> : (
+        <>
+          {status && (
+            <div className="card" role="region" aria-label="Chain status">
+              <p>Head seq {status.head_seq}. Latest checkpoint: {status.latest_checkpoint ? `seq ${status.latest_checkpoint.seq} at ${status.latest_checkpoint.at}` : "none yet"}.</p>
+              <p data-testid="verify-result">
+                {!v ? "Not verified yet." : v.ok ? `Verified OK at ${v.finished_at}.` : `Verification FAILED at ${v.finished_at}${v.broken_seq != null ? `, first broken seq ${v.broken_seq}` : ""}.`}
+              </p>
+            </div>
+          )}
+          {!events ? <Loading what="the org ledger" /> : events.length === 0 ? <Empty icon="doc">Nothing in the ledger yet.</Empty> : (
+            <div className="table-wrap">
+              <table className="grid">
+                <caption className="sr-only">Org audit events, newest first</caption>
+                <thead><tr><th className="num">Seq</th><th>Time</th><th>Kind</th><th>Actor</th><th>Target</th><th>Outcome</th></tr></thead>
+                <tbody>
+                  {events.map((e) => (
+                    <tr key={e.id}>
+                      <td className="num mono muted">{e.seq}</td><td className="mono nowrap">{e.at}</td><td className="strong">{e.kind}</td>
+                      <td className="mono">{e.actor}</td><td className="mono wrap">{breakable(e.target ?? "")}</td><td>{e.outcome}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {next && <button type="button" className="btn sm" disabled={loadingMore} onClick={more}>Load more</button>}
         </>
       )}
     </section>

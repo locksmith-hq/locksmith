@@ -2345,6 +2345,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "locksmith-audit"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "base64 0.22.1",
+ "clap",
+ "ed25519-dalek",
+ "hex",
+ "ls-audit",
+ "ls-pg-test",
+ "serde_json",
+ "sqlx-core",
+ "sqlx-postgres",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "locksmith-mcp"
 version = "0.0.1-alpha.4"
 dependencies = [
@@ -2380,6 +2398,22 @@ name = "log"
 version = "0.4.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
+
+[[package]]
+name = "ls-audit"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "ls-pg-test",
+ "proptest",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx-core",
+ "sqlx-postgres",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "ls-broker"
@@ -2421,8 +2455,10 @@ dependencies = [
  "http",
  "http-body-util",
  "jsonwebtoken",
+ "ls-audit",
  "ls-crypto",
  "ls-envelope",
+ "ls-pg-test",
  "ls-tenant-lint",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -2437,7 +2473,6 @@ dependencies = [
  "sqlx-core",
  "sqlx-postgres",
  "subtle",
- "testcontainers",
  "time",
  "tokio",
  "tower",
@@ -2449,6 +2484,7 @@ dependencies = [
  "utoipa",
  "utoipa-axum",
  "uuid",
+ "wiremock",
  "zeroize",
 ]
 
@@ -2524,8 +2560,10 @@ dependencies = [
  "bytes",
  "http-body-util",
  "jsonwebtoken",
+ "ls-audit",
  "ls-control-plane",
  "ls-envelope",
+ "ls-pg-test",
  "ls-proxy",
  "ls-redact",
  "reqwest",
@@ -2534,8 +2572,6 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
- "sqlx-postgres",
- "testcontainers",
  "time",
  "tokio",
  "toml",
@@ -2572,6 +2608,16 @@ dependencies = [
 [[package]]
 name = "ls-license"
 version = "0.0.1-alpha.4"
+
+[[package]]
+name = "ls-pg-test"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "sqlx-core",
+ "sqlx-postgres",
+ "testcontainers",
+ "tokio",
+]
 
 [[package]]
 name = "ls-platform"
@@ -2659,6 +2705,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hmac 0.12.1",
  "inventory",
+ "ls-audit",
  "ls-core",
  "ls-crypto",
  "ls-diag",

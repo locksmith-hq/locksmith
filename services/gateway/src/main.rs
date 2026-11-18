@@ -7,7 +7,7 @@ use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSett
 use ls_control_plane::telemetry;
 use ls_envelope::{BaoToken, OpenBaoTransit, WrapKeyId};
 use ls_gateway::app::{self, AppState};
-use ls_gateway::audit::PgAudit;
+use ls_gateway::audit::HttpAudit;
 use ls_gateway::auth::{AgentAuth, HttpJwks, JwksSettings};
 use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
@@ -59,8 +59,8 @@ async fn main() -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
-    // The gateway never migrates: the control plane owns the schema (it creates
-    // `gateway_audit`). It is ready while Postgres answers.
+    // The gateway never migrates: the control plane owns the schema. It is ready while Postgres
+    // answers. Relay audit goes to the control plane's ledger endpoint, not to this database.
     let database = Database::connect_lazy(options, PoolSettings::default());
     let readiness = Arc::new(DbReadiness::new());
     readiness.set_migrated();
@@ -115,9 +115,12 @@ async fn main() -> ExitCode {
     // Grants (S4 task 2.2): read through the internal endpoint with the service token, cached for
     // at most 10 s so a revocation takes effect within that time.
     let grants = Arc::new(GrantCache::new(
-        control_plane,
+        control_plane.clone(),
         GrantCacheSettings::default(),
     ));
+    // Audit (S5 task 3.1): relay events go to the org's ledger through the control plane's
+    // internal append endpoint, with the same service token.
+    let audit = Arc::new(HttpAudit::new(control_plane));
     let binding_count = config.bindings.bindings.len();
     let relay = Relay::new(
         auth,
@@ -125,7 +128,7 @@ async fn main() -> ExitCode {
         config.bindings,
         decryptor,
         Arc::new(SystemResolver),
-        Arc::new(PgAudit::new(database.clone())),
+        audit,
         RelayOptions::default(),
     );
 

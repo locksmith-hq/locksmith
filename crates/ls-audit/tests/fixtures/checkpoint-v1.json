@@ -1,0 +1,10 @@
+{
+  "comment": "Golden vector for ls_audit::CheckpointBody::message (domain tag locksmith-checkpoint-v1). Shared by ls-audit and the offline verifier (locksmith-audit). The message was cross-checked against an independent Python encoding. The signature is Ed25519 (RFC 8032) by a test-only key whose 32-byte seed is every byte 0x42; never a real key.",
+  "org_id": "0197c1f0-0000-7000-8000-0000000000a1",
+  "seq": 1000,
+  "hash": "ca9a902281bf312cc2706305a70aa9decb37c479dd1dc2f8548241b8922f9f28",
+  "at_micros": 1763400000000000,
+  "message": "6c6f636b736d6974682d636865636b706f696e742d7631000000100197c1f00000700080000000000000a10000000800000000000003e800000020ca9a902281bf312cc2706305a70aa9decb37c479dd1dc2f8548241b8922f9f2800000008000643cd8e98d000",
+  "ed25519_public": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+  "signature": "bf9ce76d62cff2a30bbbbfcae0a30c5ec4fb8aa57d519804c03a4681fa48f0f38e8750a0dd2422918edaaaedb22fa07e6aff8ddff384f98cc69cd5a5b1068907"
+}

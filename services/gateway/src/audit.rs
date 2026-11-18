@@ -1,18 +1,33 @@
-//! One audit row per relay attempt (S3 design decision 8), appended to `gateway_audit`.
+//! Relay audit events in the org's ledger (S5 design decisions 5 and 6).
 //!
-//! A record names who and where (agent id, secret id, version, caller, method, scheme, host, path)
-//! and what happened (outcome, upstream status). Refusals after authentication (no grant, expired
-//! grant, disallowed host) are audited too, with the agent id. It never holds the value, a header, a body or the query
-//! string. S5 moves this into the hash chain.
+//! The gateway appends through the control plane's `POST /internal/v1/audit/events` with the
+//! service token ([`HttpAudit`]), so each org has one chain. Per relay call:
+//! - a refusal before the attempt (no grant, grants unreadable, no binding or wrong origin,
+//!   private address) appends one `relay.denied` event;
+//! - an allowed call appends `relay.attempt` (outcome `pending`) before the material fetch and
+//!   key unwrap, and is refused with `503` if that append fails; after the upstream call (or a
+//!   failure after the attempt) it appends `relay.outcome` naming the attempt's id, retried up to
+//!   3 times. The control plane makes the outcome idempotent on that id.
+//!
+//! An event holds ids, closed codes, numbers and the upstream host only. The host is sent only
+//! once the URL's origin has matched the secret's binding (configuration, not caller input), so
+//! a refused caller's host never reaches the ledger. Nothing here holds the value, a header, a
+//! body, a path or the query string. `gateway_audit` is read-only legacy (migration 0009).
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use ls_control_plane::db::{Database, sql};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::decrypt::BoxFuture;
+use crate::decrypt::{BoxFuture, ControlPlane, Internal};
 
-/// What happened to one relay attempt. Stored as its [`Outcome::as_str`] form.
+/// Largest append response read (`{"id": ..., "seq": ...}` or a problem body).
+const MAX_APPEND_RESPONSE: usize = 16 * 1024;
+
+/// The append endpoint, relative to the control-plane base URL.
+const EVENTS_PATH: &str = "internal/v1/audit/events";
+
+/// What happened to one relay attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     /// The upstream answered and the redacted response was returned.
@@ -37,6 +52,9 @@ pub enum Outcome {
     UpstreamError,
     /// The response could not be scanned safely (encoding, size), so it was withheld.
     RedactionFailed,
+    /// The `relay.attempt` event could not be appended; refused before any unwrap. Never sent
+    /// to the ledger (the ledger was not reachable); logs and spans only.
+    AuditUnavailable,
 }
 
 impl Outcome {
@@ -54,122 +72,268 @@ impl Outcome {
             Self::UpstreamTimeout => "upstream_timeout",
             Self::UpstreamError => "upstream_error",
             Self::RedactionFailed => "redaction_failed",
+            Self::AuditUnavailable => "audit_unavailable",
+        }
+    }
+
+    /// A policy refusal, recorded as `relay.denied`.
+    pub fn is_denial(self) -> bool {
+        matches!(
+            self,
+            Self::NoGrant | Self::GrantsUnavailable | Self::Denied | Self::DeniedAddress
+        )
+    }
+
+    /// Whether the URL's origin matched the secret's binding before this outcome, so the host
+    /// is configuration rather than caller input and may be recorded.
+    pub fn origin_checked(self) -> bool {
+        !matches!(self, Self::NoGrant | Self::GrantsUnavailable | Self::Denied)
+    }
+}
+
+/// The kind of a relay event, with its outcome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventKind {
+    /// Before the material fetch and key unwrap; outcome `pending`.
+    Attempt,
+    /// After the upstream call or a failure after the attempt.
+    Outcome(Outcome),
+    /// A refusal before any attempt (`Outcome::is_denial`).
+    Denied(Outcome),
+}
+
+impl EventKind {
+    fn wire(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Attempt => ("relay.attempt", "pending"),
+            Self::Outcome(o) => ("relay.outcome", o.as_str()),
+            Self::Denied(o) => ("relay.denied", o.as_str()),
         }
     }
 }
 
-/// One `gateway_audit` row. Holds no secret material by construction: every field is an id, a
-/// name or a URL component the caller sent (never the query).
+/// The upstream method, when it is one the ledger names. Others are recorded without a method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Method {
+    Get,
+    Head,
+    Post,
+    Put,
+    Patch,
+    Delete,
+    Options,
+}
+
+impl Method {
+    pub fn from_http(m: &reqwest::Method) -> Option<Self> {
+        Some(match *m {
+            reqwest::Method::GET => Self::Get,
+            reqwest::Method::HEAD => Self::Head,
+            reqwest::Method::POST => Self::Post,
+            reqwest::Method::PUT => Self::Put,
+            reqwest::Method::PATCH => Self::Patch,
+            reqwest::Method::DELETE => Self::Delete,
+            reqwest::Method::OPTIONS => Self::Options,
+            _ => return None,
+        })
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Head => "HEAD",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+            Self::Options => "OPTIONS",
+        }
+    }
+}
+
+/// One relay event. Ids, codes, numbers and a binding-checked host: never a value, header,
+/// body, path or query string.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AuditRecord {
-    pub org_id: Uuid,
-    /// The agent whose token made the call (`sub` of the verified token).
+pub struct RelayEvent {
+    pub kind: EventKind,
+    /// The agent whose verified token made the call.
     pub agent_id: Uuid,
     pub secret_id: Uuid,
     pub version: u32,
-    pub caller: String,
-    pub method: String,
-    pub scheme: String,
-    /// `host` or `host:port` when the port is explicit.
-    pub host: String,
-    pub path: String,
-    pub outcome: Outcome,
-    /// Upstream HTTP status; `None` when no upstream response was received.
+    pub method: Option<Method>,
+    /// The upstream host (no port), set only when the origin matched the binding.
+    pub host: Option<String>,
+    /// The upstream port, when the URL names one and the host is set.
+    pub port: Option<u16>,
+    /// Upstream HTTP status, when a response was received.
     pub status: Option<u16>,
-    pub request_id: String,
+    /// The attempt this outcome closes (the attempt event's id).
+    pub attempt_id: Option<Uuid>,
 }
 
-/// The audit row could not be written. Carries nothing else.
+/// Why an append failed. Carries no response body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuditError;
+pub enum AuditError {
+    /// No answer, a timeout or a `5xx`: worth retrying (outcomes only; the control plane makes
+    /// them idempotent).
+    Unavailable,
+    /// The control plane refused the event or the token (`4xx`), or answered nonsense:
+    /// retrying the same request cannot help.
+    Rejected,
+}
 
 impl std::fmt::Display for AuditError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("audit record could not be written")
+        f.write_str(match self {
+            Self::Unavailable => "audit ledger unavailable",
+            Self::Rejected => "audit event refused",
+        })
     }
 }
 
 impl std::error::Error for AuditError {}
 
+/// Appends relay events. Returns the stored event's id (an attempt's id keys its outcome).
 pub trait AuditSink: Send + Sync {
-    fn record(&self, rec: AuditRecord) -> BoxFuture<'_, Result<(), AuditError>>;
+    fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
 }
 
-/// Writes to Postgres through the tenant transaction helper, as `locksmith_app` (INSERT only;
-/// RLS binds the row to the org).
-pub struct PgAudit {
-    db: Database,
+/// The wire body of `POST /internal/v1/audit/events` (`NewRelayEvent` in `openapi.json`).
+#[derive(Serialize)]
+struct WireEvent {
+    kind: &'static str,
+    outcome: &'static str,
+    agent_id: Uuid,
+    secret_id: Uuid,
+    version: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    method: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attempt_id: Option<Uuid>,
 }
 
-impl PgAudit {
-    pub fn new(db: Database) -> Self {
-        Self { db }
+#[derive(Deserialize)]
+struct Appended {
+    id: Uuid,
+}
+
+/// Appends through the control plane with the gateway service token (the org header is the
+/// gateway's org).
+pub struct HttpAudit {
+    control_plane: Arc<ControlPlane>,
+}
+
+impl HttpAudit {
+    pub fn new(control_plane: Arc<ControlPlane>) -> Self {
+        Self { control_plane }
     }
-}
 
-impl AuditSink for PgAudit {
-    fn record(&self, rec: AuditRecord) -> BoxFuture<'_, Result<(), AuditError>> {
-        Box::pin(async move {
-            let org = rec.org_id;
-            let version = i32::try_from(rec.version).map_err(|_| AuditError)?;
-            self.db
-                .with_org(org, move |c| {
-                    Box::pin(async move {
-                        sql::query(
-                            "INSERT INTO gateway_audit \
-                             (org_id, agent_id, secret_id, version, caller, method, scheme, host, \
-                              path, outcome, status, request_id) \
-                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-                        )
-                        .bind(rec.org_id)
-                        .bind(rec.agent_id)
-                        .bind(rec.secret_id)
-                        .bind(version)
-                        .bind(rec.caller)
-                        .bind(rec.method)
-                        .bind(rec.scheme)
-                        .bind(rec.host)
-                        .bind(rec.path)
-                        .bind(rec.outcome.as_str())
-                        .bind(rec.status.map(i32::from))
-                        .bind(rec.request_id)
-                        .execute(c)
-                        .await
-                        .map(|_| ())
-                    })
-                })
-                .await
-                .map_err(|_: sql::Error| AuditError)
+    async fn post(&self, ev: RelayEvent) -> Result<Uuid, AuditError> {
+        // Never a ledger outcome: the ledger was unreachable when it happened.
+        if let EventKind::Outcome(Outcome::AuditUnavailable)
+        | EventKind::Denied(Outcome::AuditUnavailable) = ev.kind
+        {
+            return Err(AuditError::Rejected);
+        }
+        let (kind, outcome) = ev.kind.wire();
+        let body = serde_json::to_vec(&WireEvent {
+            kind,
+            outcome,
+            agent_id: ev.agent_id,
+            secret_id: ev.secret_id,
+            version: ev.version,
+            method: ev.method.map(Method::as_str),
+            host: ev.host,
+            port: ev.port,
+            status: ev.status,
+            attempt_id: ev.attempt_id,
         })
+        .map_err(|_| AuditError::Rejected)?;
+        let (status, resp) = self
+            .control_plane
+            .internal_post_json(EVENTS_PATH, body, MAX_APPEND_RESPONSE)
+            .await
+            .map_err(|e| match e {
+                Internal::Unavailable => AuditError::Unavailable,
+                _ => AuditError::Rejected,
+            })?;
+        match status {
+            // 201 appended; 200 an outcome already stored for this attempt (a retry).
+            200 | 201 => serde_json::from_slice::<Appended>(&resp)
+                .map(|a| a.id)
+                .map_err(|_| AuditError::Rejected),
+            500..=599 => Err(AuditError::Unavailable),
+            _ => Err(AuditError::Rejected),
+        }
     }
 }
 
-/// In-memory sink for tests and local runs without Postgres. `fail` makes every write fail.
+impl AuditSink for HttpAudit {
+    fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        Box::pin(self.post(ev))
+    }
+}
+
+/// In-memory sink for unit tests. `fail` fails every append, `fail_attempts` every
+/// `relay.attempt`, `fail_outcomes_first` the first that many `relay.outcome` appends
+/// (`Unavailable`, so they are retried).
 #[derive(Default)]
 pub struct MemoryAudit {
-    pub records: Mutex<Vec<AuditRecord>>,
+    pub events: Mutex<Vec<(Uuid, RelayEvent)>>,
     pub fail: bool,
+    pub fail_attempts: bool,
+    pub fail_outcomes_first: Mutex<usize>,
+    /// Every append tried, failed ones included.
+    pub tries: Mutex<usize>,
 }
 
 impl MemoryAudit {
-    pub fn records(&self) -> Vec<AuditRecord> {
-        self.records
+    /// The stored events in order.
+    pub fn events(&self) -> Vec<RelayEvent> {
+        self.stored().into_iter().map(|(_, e)| e).collect()
+    }
+
+    /// The stored events with the ids the sink gave them.
+    pub fn stored(&self) -> Vec<(Uuid, RelayEvent)> {
+        self.events
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
+
+    pub fn tries(&self) -> usize {
+        *self.tries.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 impl AuditSink for MemoryAudit {
-    fn record(&self, rec: AuditRecord) -> BoxFuture<'_, Result<(), AuditError>> {
-        let result = if self.fail {
-            Err(AuditError)
-        } else {
-            self.records
+    fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        *self.tries.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        let result = {
+            let mut first = self
+                .fail_outcomes_first
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push(rec);
-            Ok(())
+                .unwrap_or_else(|e| e.into_inner());
+            let outcome = matches!(ev.kind, EventKind::Outcome(_));
+            if self.fail || (self.fail_attempts && ev.kind == EventKind::Attempt) {
+                Err(AuditError::Unavailable)
+            } else if outcome && *first > 0 {
+                *first -= 1;
+                Err(AuditError::Unavailable)
+            } else {
+                let id = Uuid::now_v7();
+                self.events
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push((id, ev));
+                Ok(id)
+            }
         };
         Box::pin(async move { result })
     }

@@ -1,0 +1,32 @@
+[package]
+name = "ls-audit"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# The Postgres ledger store (src/pg.rs). Off by default: the core stays pure and IO-free.
+postgres = ["dep:sqlx-core", "dep:sqlx-postgres", "uuid/v7"]
+
+# Pure chain core: no IO, permissive crates only (the offline verifier ships to customers).
+[dependencies]
+sha2 = "0.10"
+uuid = "1.29"
+serde_json = "1"
+# Checkpoint signature verification (S5 design decision 4; task 5.1 verifier). Pure: no IO.
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["alloc", "fast", "zeroize"] }
+# Hashes and signatures in the export's JSON Lines (task 5.1 reads them, 5.2 writes them).
+hex = "0.4"
+# Not the sqlx facade: it pulls sqlx-sqlite into resolution, which conflicts with ls-vault's
+# rusqlite (see crates/a0-spikes/Cargo.toml).
+sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "uuid"], optional = true }
+sqlx-postgres = { version = "0.9.0", default-features = false, features = ["uuid"], optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+ls-pg-test = { path = "../ls-pg-test" }
+tokio = { version = "1.54", features = ["macros", "rt-multi-thread", "time"] }

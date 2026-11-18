@@ -9,6 +9,7 @@
 //! rotation) and the short-lived agent token from `POST /v1/agent-tokens` (`agents.rs`).
 
 mod agents;
+mod audit;
 mod environments;
 mod extract;
 mod internal;
@@ -65,8 +66,11 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(agents::delete_grant))
         .routes(routes!(agents::mint_token))
         .routes(routes!(agents::jwks))
+        .routes(routes!(audit::list_events))
+        .routes(routes!(audit::status))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
+        .routes(routes!(internal::append_event))
 }
 
 /// SQL column list shared by projects, environments and secrets.

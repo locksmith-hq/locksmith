@@ -1,5 +1,6 @@
 //! `POST /v1/relay` (S3 task 3.3): decrypt a bound secret inside the gateway, inject it into
-//! one upstream request, return the redacted response and audit the attempt.
+//! one upstream request, return the redacted response and audit the call in the org's ledger
+//! (S5 task 3.1, [`crate::audit`]).
 //!
 //! Order of checks, each before the next step runs:
 //! 1. agent token ([`crate::auth`]: JWKS signature, audience, expiry, org) -> `401`, nothing
@@ -7,19 +8,23 @@
 //! 2. request shape -> `400`;
 //! 3. grant (S4 task 2.2): the agent's grants (cached at most 10 s, [`crate::grants::GrantCache`])
 //!    must hold an unexpired `relay` grant for the secret -> `403 no_grant`; grants that cannot
-//!    be read -> `502 grants_unavailable` (fail closed). Audited with the agent id;
+//!    be read -> `502 grants_unavailable` (fail closed);
 //! 4. binding for the secret and the target's origin -> `403 denied`;
-//! 5. DNS and address guard -> `403 denied_address` (still no fetch, no unwrap);
-//! 6. fetch material, unwrap DEK (cached), open the version. Nothing before this step touches
+//! 5. DNS and address guard -> `403 denied_address` (still no fetch, no unwrap). Refusals in
+//!    steps 3-5 append one `relay.denied` event with the agent id (the response stands even if
+//!    that append fails: nothing was decrypted);
+//! 6. append `relay.attempt` to the ledger; if that fails -> `503 audit_unavailable`, with no
+//!    material fetch, no unwrap and no upstream call (fail closed);
+//! 7. fetch material, unwrap DEK (cached), open the version. Nothing before this step touches
 //!    the material or the KMS;
-//! 7. render the binding's header template, send through a client pinned to the checked
+//! 8. render the binding's header template, send through a client pinned to the checked
 //!    addresses that follows no redirects;
-//! 8. read the response (identity encoding only, size-bounded), redact headers and body with
+//! 9. read the response (identity encoding only, size-bounded), redact headers and body with
 //!    `ls-redact` (plain, base64, URL, hex, JSON forms), re-check that nothing matches, and
 //!    withhold the response with `502` if any of that fails (fail closed);
-//! 9. append the audit row (every attempt after step 2, refusals included, with the agent id).
-//!    If the row cannot be written for a call that reached the upstream, the response is
-//!    withheld (`500`).
+//! 10. append `relay.outcome` naming the attempt, retried up to [`RelayOptions::outcome_retries`]
+//!     times (idempotent on the attempt id). If it still fails, a successful response is
+//!     withheld (`500 audit_failed`); the open attempt stays visible in the ledger.
 //!
 //! The value lives in `SecretBytes` / `Zeroizing` buffers and is dropped once the header and the
 //! redactor are built. Copies inside `http::HeaderValue`, hyper and rustls, and the redactor's
@@ -48,7 +53,7 @@ use url::Url;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::audit::{AuditRecord, AuditSink, Outcome};
+use crate::audit::{AuditSink, EventKind, Method, Outcome, RelayEvent};
 use crate::auth::AgentAuth;
 use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
@@ -97,6 +102,10 @@ pub struct RelayOptions {
     pub max_request_body: usize,
     /// Largest upstream response body read; a larger one is withheld (`502`).
     pub max_response_body: usize,
+    /// Retries of a failed `relay.outcome` append (design decision 5: 3).
+    pub outcome_retries: u32,
+    /// Wait before the first outcome retry; doubled for each further retry.
+    pub outcome_retry_backoff: Duration,
 }
 
 impl Default for RelayOptions {
@@ -106,13 +115,14 @@ impl Default for RelayOptions {
             timeout: Duration::from_secs(30),
             max_request_body: 1024 * 1024,
             max_response_body: 10 * 1024 * 1024,
+            outcome_retries: 3,
+            outcome_retry_backoff: Duration::from_millis(100),
         }
     }
 }
 
 /// Everything the `/v1` routes need. No `Debug`/`Clone`: it holds the decrypt path.
 pub struct Relay {
-    org_id: Uuid,
     auth: Arc<AgentAuth>,
     grants: Arc<dyn GrantSource>,
     bindings: Bindings,
@@ -134,7 +144,6 @@ impl Relay {
         options: RelayOptions,
     ) -> Self {
         Self {
-            org_id: bindings.org_id,
             auth,
             grants,
             bindings,
@@ -296,13 +305,68 @@ fn denied() -> Failure {
     Failure::new(Outcome::Denied, StatusCode::FORBIDDEN, "denied")
 }
 
-/// `host` or `host:port` when the URL names a non-default port.
-fn audit_host(url: &Url) -> String {
+/// `host` or `host:port` when the URL names a non-default port (span attribute only).
+fn span_host(url: &Url) -> String {
     let host = url.host_str().unwrap_or("-");
     match url.port() {
         Some(p) => format!("{host}:{p}"),
         None => host.to_owned(),
     }
+}
+
+/// What every event of one call shares. The host is recorded only when the outcome says the
+/// origin matched the binding ([`Outcome::origin_checked`]).
+struct CallAudit {
+    agent_id: Uuid,
+    secret_id: Uuid,
+    version: u32,
+    method: Option<Method>,
+    host: Option<String>,
+    port: Option<u16>,
+}
+
+impl CallAudit {
+    fn event(&self, kind: EventKind, status: Option<u16>, attempt_id: Option<Uuid>) -> RelayEvent {
+        let host_ok = match kind {
+            EventKind::Attempt => true,
+            EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
+        };
+        RelayEvent {
+            kind,
+            agent_id: self.agent_id,
+            secret_id: self.secret_id,
+            version: self.version,
+            method: self.method,
+            host: self.host.clone().filter(|_| host_ok),
+            port: self.port.filter(|_| host_ok),
+            status,
+            attempt_id,
+        }
+    }
+}
+
+/// Append the outcome of an attempt, retrying failures that may be transient. The control
+/// plane returns the stored event for a resent outcome, so a retry after a lost response does
+/// not append twice.
+async fn append_outcome(relay: &Relay, ev: RelayEvent) -> bool {
+    let mut wait = relay.options.outcome_retry_backoff;
+    for try_no in 0..=relay.options.outcome_retries {
+        match relay.audit.append(ev.clone()).await {
+            Ok(_) => return true,
+            Err(crate::audit::AuditError::Rejected) => {
+                tracing::error!("relay outcome event refused by the ledger");
+                return false;
+            }
+            Err(crate::audit::AuditError::Unavailable) => {
+                tracing::warn!(attempt = try_no + 1, "relay outcome event not appended");
+                if try_no < relay.options.outcome_retries {
+                    tokio::time::sleep(wait).await;
+                    wait = wait.saturating_mul(2);
+                }
+            }
+        }
+    }
+    false
 }
 
 /// The handler. See the module docs for the order of checks.
@@ -319,7 +383,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
         return error(StatusCode::BAD_REQUEST, "bad_request", &request_id);
     };
 
-    let host = audit_host(&req.url);
+    let host = span_host(&req.url);
     let span = tracing::info_span!(
         "relay",
         request_id = %request_id,
@@ -331,50 +395,80 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
         outcome = tracing::field::Empty,
         upstream.status = tracing::field::Empty,
     );
-    let mut record = AuditRecord {
-        org_id: relay.org_id,
+    let call = CallAudit {
         agent_id: agent.agent_id,
         secret_id: req.secret_id,
         version: req.version,
-        caller: agent.agent_id.to_string(),
-        method: req.method.as_str().to_owned(),
-        scheme: req.url.scheme().to_owned(),
-        host,
-        path: req.url.path().to_owned(),
-        outcome: Outcome::Ok,
-        status: None,
-        request_id: request_id.clone(),
+        method: Method::from_http(&req.method),
+        host: req.url.host_str().map(str::to_owned),
+        port: req.url.port(),
     };
 
     async move {
-        let result = run(&relay, agent.agent_id, req).await;
+        let mut attempt = None;
+        let result = run(&relay, &call, &mut attempt, req).await;
         let span = tracing::Span::current();
-        match &result {
-            Ok(resp) => {
-                record.status = Some(resp.status);
-            }
-            Err(f) => {
-                record.outcome = f.outcome;
-                record.status = f.upstream_status;
-            }
-        }
-        span.record("outcome", record.outcome.as_str());
-        if let Some(s) = record.status {
+        let (outcome, status) = match &result {
+            Ok(resp) => (Outcome::Ok, Some(resp.status)),
+            Err(f) => (f.outcome, f.upstream_status),
+        };
+        span.record("outcome", outcome.as_str());
+        if let Some(s) = status {
             span.record("upstream.status", s);
         }
-        let reached_upstream = record.status.is_some();
-        let audited = relay.audit.record(record).await;
-        if audited.is_err() {
-            tracing::error!("relay audit record could not be written");
-            if reached_upstream {
-                return error(
+        let outcome_recorded = match attempt {
+            Some(id) => {
+                append_outcome(
+                    &relay,
+                    call.event(EventKind::Outcome(outcome), status, Some(id)),
+                )
+                .await
+            }
+            None if outcome == Outcome::AuditUnavailable => {
+                tracing::error!("relay attempt event not appended; refused before unwrap");
+                true
+            }
+            None if outcome.is_denial() => {
+                // One try: the call is refused whether or not the event lands.
+                if relay
+                    .audit
+                    .append(call.event(EventKind::Denied(outcome), None, None))
+                    .await
+                    .is_err()
+                {
+                    tracing::error!("relay denied event not appended");
+                }
+                true
+            }
+            None => {
+                // Failed after the policy checks but before the attempt (DNS, client setup):
+                // nothing was decrypted; record it as an attempt and its outcome.
+                match relay
+                    .audit
+                    .append(call.event(EventKind::Attempt, None, None))
+                    .await
+                {
+                    Ok(id) => {
+                        append_outcome(
+                            &relay,
+                            call.event(EventKind::Outcome(outcome), status, Some(id)),
+                        )
+                        .await;
+                    }
+                    Err(_) => tracing::error!("relay attempt event not appended"),
+                }
+                true
+            }
+        };
+        match result {
+            Ok(_) if !outcome_recorded => {
+                tracing::error!("relay outcome event not appended; response withheld");
+                error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "audit_failed",
                     &request_id,
-                );
+                )
             }
-        }
-        match result {
             Ok(resp) => {
                 tracing::info!("relay completed");
                 let mut r = (StatusCode::OK, Json(resp)).into_response();
@@ -393,7 +487,13 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
     .await
 }
 
-async fn run(relay: &Relay, agent_id: Uuid, req: Parsed) -> Result<RelayResponse, Failure> {
+async fn run(
+    relay: &Relay,
+    call: &CallAudit,
+    attempt: &mut Option<Uuid>,
+    req: Parsed,
+) -> Result<RelayResponse, Failure> {
+    let agent_id = call.agent_id;
     // 3. Grant and its expiry: refused before the binding lookup, DNS, fetch or unwrap. The
     // expiry is re-checked here because the set may come from the cache.
     let grants = relay.grants.grants(agent_id).await.map_err(|_| {
@@ -443,7 +543,21 @@ async fn run(relay: &Relay, agent_id: Uuid, req: Parsed) -> Result<RelayResponse
             )
         })?;
 
-    // 6. Decrypt.
+    // 6. Attempt event before anything touches the material or the KMS (fail closed).
+    let id = relay
+        .audit
+        .append(call.event(EventKind::Attempt, None, None))
+        .await
+        .map_err(|_| {
+            Failure::new(
+                Outcome::AuditUnavailable,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "audit_unavailable",
+            )
+        })?;
+    *attempt = Some(id);
+
+    // 7. Decrypt.
     let value = relay
         .decryptor
         .decrypt(req.secret_id, req.version)
@@ -474,7 +588,7 @@ async fn run(relay: &Relay, agent_id: Uuid, req: Parsed) -> Result<RelayResponse
         ));
     }
 
-    // 7. Inject: the redactor and the header value are built, then the value is dropped.
+    // 8. Inject: the redactor and the header value are built, then the value is dropped.
     let redactor = Redactor::new(&[Secret::new(REDACTION_LABEL, value.expose())]);
     let header_name = HeaderName::from_bytes(binding.header.as_bytes()).map_err(|_| {
         Failure::new(
@@ -508,7 +622,7 @@ async fn run(relay: &Relay, agent_id: Uuid, req: Parsed) -> Result<RelayResponse
     let mut resp = sent.map_err(|e| upstream_failure(&e))?;
     let status = resp.status().as_u16();
 
-    // 8. Read (bounded), refuse encodings that cannot be scanned, redact, re-check.
+    // 9. Read (bounded), refuse encodings that cannot be scanned, redact, re-check.
     let encoded = resp
         .headers()
         .get_all(reqwest::header::CONTENT_ENCODING)
@@ -635,7 +749,7 @@ pub async fn route(
 mod tests {
     use super::*;
     use crate::app::{self, AppState};
-    use crate::audit::MemoryAudit;
+    use crate::audit::{HttpAudit, MemoryAudit};
     use crate::auth::testkit::StubJwks;
     use crate::auth::{AgentAuth, JwksSettings};
     use crate::decrypt::testkit::{key, seal};
@@ -649,8 +763,11 @@ mod tests {
     use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
     use http_body_util::BodyExt;
     use ls_control_plane::agent_token::{AUDIENCE, AgentClaims, AgentTokenSigner};
+    use ls_control_plane::auth::ServiceToken;
+    use ls_control_plane::db::{Database, PoolSettings, sql};
     use ls_control_plane::readiness::ReadyFlag;
     use ls_envelope::{BaoToken, OpenBaoTransit};
+    use secrecy::SecretString;
     use std::sync::Mutex;
     use tower::ServiceExt;
     use wiremock::matchers::{body_string_contains, header as has_header, method, path};
@@ -765,7 +882,14 @@ mod tests {
 
     struct Setup {
         bao_ok: bool,
+        /// Every append fails.
         audit_fails: bool,
+        /// Every `relay.attempt` append fails.
+        attempt_fails: bool,
+        /// The first this many `relay.outcome` appends fail.
+        outcome_fails_first: usize,
+        /// Replaces the in-memory sink (the ledger tests use the real control plane).
+        audit: Option<Arc<dyn AuditSink>>,
         /// TTL of the gateway's grant cache in front of [`StubGrants`].
         grant_ttl: Duration,
         options: RelayOptions,
@@ -776,12 +900,17 @@ mod tests {
             Self {
                 bao_ok: true,
                 audit_fails: false,
+                attempt_fails: false,
+                outcome_fails_first: 0,
+                audit: None,
                 grant_ttl: crate::grants::MAX_GRANT_TTL,
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
                     max_request_body: 64 * 1024,
                     max_response_body: 64 * 1024,
+                    outcome_retries: 3,
+                    outcome_retry_backoff: Duration::from_millis(1),
                 },
             }
         }
@@ -863,6 +992,8 @@ mod tests {
         );
         let audit = Arc::new(MemoryAudit {
             fail: setup.audit_fails,
+            fail_attempts: setup.attempt_fails,
+            fail_outcomes_first: Mutex::new(setup.outcome_fails_first),
             ..MemoryAudit::default()
         });
         let signer = signer();
@@ -889,13 +1020,17 @@ mod tests {
                 ..GrantCacheSettings::default()
             },
         );
+        let sink: Arc<dyn AuditSink> = match setup.audit {
+            Some(a) => a,
+            None => audit.clone(),
+        };
         let relay = Relay::new(
             auth,
             Arc::new(cache),
             bindings,
             decryptor,
             resolver.clone(),
-            audit.clone(),
+            sink,
             setup.options,
         );
         let app =
@@ -967,17 +1102,49 @@ mod tests {
             Self::hits(&self.bao).await
         }
 
+        /// The final outcome of each audited call: every `relay.outcome` and `relay.denied`
+        /// event, in order (attempts left out).
         fn outcomes(&self) -> Vec<&'static str> {
+            self.closing().iter().map(|(o, _)| o.as_str()).collect()
+        }
+
+        /// `(outcome, event)` for every `relay.outcome` and `relay.denied` event.
+        fn closing(&self) -> Vec<(Outcome, RelayEvent)> {
             self.audit
-                .records()
-                .iter()
-                .map(|r| r.outcome.as_str())
+                .events()
+                .into_iter()
+                .filter_map(|e| match e.kind {
+                    EventKind::Attempt => None,
+                    EventKind::Outcome(o) | EventKind::Denied(o) => Some((o, e)),
+                })
                 .collect()
         }
 
+        /// Every outcome closes the attempt before it, and every attempt is closed.
+        fn assert_attempts_closed(&self) {
+            let mut open = None;
+            for (id, e) in self.audit.stored() {
+                match e.kind {
+                    EventKind::Attempt => {
+                        assert!(open.is_none(), "attempt left open");
+                        open = Some(id);
+                    }
+                    EventKind::Outcome(_) => {
+                        assert_eq!(e.attempt_id, open.take(), "outcome names its attempt");
+                    }
+                    EventKind::Denied(o) => {
+                        assert!(o.is_denial());
+                        assert!(e.attempt_id.is_none());
+                    }
+                }
+            }
+            assert!(open.is_none(), "attempt left open");
+        }
+
         fn assert_audit_clean(&self) {
-            let text = format!("{:?}", self.audit.records());
-            assert_clean("audit records", text.as_bytes());
+            let text = format!("{:?}", self.audit.stored());
+            assert_clean("audit events", text.as_bytes());
+            self.assert_attempts_closed();
         }
     }
 
@@ -1027,20 +1194,36 @@ mod tests {
                 .any(|(n, v)| n == "x-upstream" && v == "yes")
         );
         assert_clean("caller response", &raw);
-        let rec = h.audit.records();
-        assert_eq!(rec.len(), 1);
-        let r = &rec[0];
+        // `relay.attempt` then `relay.outcome` naming it: ids, method, host and port, the
+        // upstream status; no path, query, header or body.
+        let ev = h.audit.stored();
+        assert_eq!(ev.len(), 2);
+        let port = Some(h.upstream.address().port());
+        let host = Some("upstream.test".to_owned());
+        let (attempt_id, attempt) = &ev[0];
         assert_eq!(
-            (r.outcome, r.status, r.version, r.method.as_str()),
-            (Outcome::Ok, Some(201), 1, "POST")
+            attempt,
+            &RelayEvent {
+                kind: EventKind::Attempt,
+                agent_id: AGENT,
+                secret_id: SECRET,
+                version: 1,
+                method: Some(Method::Post),
+                host: host.clone(),
+                port,
+                status: None,
+                attempt_id: None,
+            }
         );
         assert_eq!(
-            r.host,
-            format!("upstream.test:{}", h.upstream.address().port())
+            ev[1].1,
+            RelayEvent {
+                kind: EventKind::Outcome(Outcome::Ok),
+                status: Some(201),
+                attempt_id: Some(*attempt_id),
+                ..attempt.clone()
+            }
         );
-        assert_eq!(r.path, "/v1/charge", "no query string in the audit row");
-        assert_eq!(r.caller, AGENT.to_string(), "the audit row names the agent");
-        assert_eq!(r.agent_id, AGENT);
         h.assert_audit_clean();
         // DNS was answered by the stub (the pinned path), once.
         assert_eq!(
@@ -1173,11 +1356,21 @@ mod tests {
         assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
         assert_eq!(Harness::hits(&h.upstream).await, 0, "no upstream call");
         let outcomes = h.outcomes();
-        assert_eq!(outcomes.len(), 7, "every refused attempt is audited");
+        assert_eq!(outcomes.len(), 7, "every refused call is audited");
         assert_eq!(outcomes.iter().filter(|o| **o == "denied").count(), 6);
         assert_eq!(outcomes.last(), Some(&"denied_address"));
-        assert!(h.audit.records().iter().all(|r| r.status.is_none()));
-        assert!(h.audit.records().iter().all(|r| r.agent_id == AGENT));
+        let ev = h.audit.events();
+        assert_eq!(ev.len(), 7, "a `relay.denied` event each, no attempt");
+        assert!(
+            ev.iter()
+                .all(|e| matches!(e.kind, EventKind::Denied(_)) && e.status.is_none())
+        );
+        assert!(ev.iter().all(|e| e.agent_id == AGENT));
+        // A host the binding did not match is caller input and is not recorded; the binding's
+        // own host (refused by the address guard) is.
+        assert!(ev[..6].iter().all(|e| e.host.is_none() && e.port.is_none()));
+        assert_eq!(ev[6].host.as_deref(), Some("internal.test"));
+        h.assert_audit_clean();
     }
 
     /// Spec "Redirect to another host": not followed, credential not resent.
@@ -1292,7 +1485,7 @@ mod tests {
         assert_eq!(h.kms_calls().await, 0, "no KMS call");
         assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
         assert_eq!(Harness::hits(&h.upstream).await, 0, "no upstream call");
-        assert!(h.audit.records().is_empty());
+        assert!(h.audit.events().is_empty());
     }
 
     async fn get_grants(h: &Harness, token: Option<&str>) -> (StatusCode, Vec<u8>) {
@@ -1473,13 +1666,12 @@ mod tests {
         assert!(String::from_utf8_lossy(&body).contains("grants_unavailable"));
         assert_eq!(h.kms_calls().await, 0);
         assert_eq!(Harness::hits(&h.cp).await, 0);
-        let rec = h.audit.records();
+        let ev = h.audit.events();
         assert_eq!(
-            rec.iter()
-                .map(|r| (r.outcome, r.agent_id))
-                .collect::<Vec<_>>(),
-            [(Outcome::GrantsUnavailable, AGENT)]
+            ev.iter().map(|e| (e.kind, e.agent_id)).collect::<Vec<_>>(),
+            [(EventKind::Denied(Outcome::GrantsUnavailable), AGENT)]
         );
+        assert!(ev[0].host.is_none());
     }
 
     /// Spec "No grant" / "Caller without a grant": `403`, no material fetch, no KMS decrypt, no
@@ -1500,12 +1692,18 @@ mod tests {
         assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
         assert_eq!(Harness::hits(&h.upstream).await, 0, "no upstream call");
         assert!(h.resolver.lookups.lock().unwrap().is_empty(), "no DNS");
-        let rec = h.audit.records();
-        assert_eq!(rec.len(), 1, "the denial is audited");
-        let r = &rec[0];
+        let ev = h.audit.events();
+        assert_eq!(ev.len(), 1, "the denial is audited, no attempt");
+        let e = &ev[0];
         assert_eq!(
-            (r.outcome, r.agent_id, r.secret_id, r.status),
-            (Outcome::NoGrant, AGENT, SECRET, None)
+            (e.kind, e.agent_id, e.secret_id, e.status, e.host.as_deref()),
+            (
+                EventKind::Denied(Outcome::NoGrant),
+                AGENT,
+                SECRET,
+                None,
+                None
+            )
         );
         h.assert_audit_clean();
     }
@@ -1551,7 +1749,7 @@ mod tests {
             "no second upstream call"
         );
         assert_eq!(h.outcomes(), ["ok", "no_grant"]);
-        assert!(h.audit.records().iter().all(|r| r.agent_id == AGENT));
+        assert!(h.audit.events().iter().all(|e| e.agent_id == AGENT));
     }
 
     /// A revoked grant stops working once the cached set is older than the cache TTL, even with
@@ -1589,7 +1787,7 @@ mod tests {
             "no second upstream call"
         );
         assert_eq!(h.outcomes(), ["ok", "no_grant"]);
-        assert!(h.audit.records().iter().all(|r| r.agent_id == AGENT));
+        assert!(h.audit.events().iter().all(|e| e.agent_id == AGENT));
         h.assert_audit_clean();
     }
 
@@ -1637,7 +1835,8 @@ mod tests {
             assert_clean(p, &raw);
         }
         assert_eq!(h.outcomes(), ["redaction_failed", "redaction_failed"]);
-        assert!(h.audit.records().iter().all(|r| r.status == Some(200)));
+        assert!(h.closing().iter().all(|(_, e)| e.status == Some(200)));
+        h.assert_audit_clean();
         // The relay asked for an unencoded response.
         let reqs = h.upstream.received_requests().await.unwrap();
         assert!(reqs.iter().all(|r| {
@@ -1698,12 +1897,67 @@ mod tests {
         h.assert_audit_clean();
     }
 
-    /// The response is withheld when the audit row cannot be written for a call that reached the
-    /// upstream; a refusal is still a refusal.
+    /// Spec "Ledger unavailable": the attempt cannot be appended, so the call is refused with
+    /// `503` before any material fetch, unwrap or upstream call. A refusal is still a refusal.
     #[tokio::test]
-    async fn audit_failure_withholds_the_response() {
+    async fn attempt_append_failure_is_503_before_unwrap() {
+        for setup in [
+            Setup {
+                attempt_fails: true,
+                ..Setup::default()
+            },
+            Setup {
+                audit_fails: true,
+                ..Setup::default()
+            },
+        ] {
+            let h = harness(setup).await;
+            Mock::given(method("GET"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("fine"))
+                .mount(&h.upstream)
+                .await;
+            let (status, raw) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+            assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+            assert!(String::from_utf8_lossy(&raw).contains("\"audit_unavailable\""));
+            assert_eq!(h.kms_calls().await, 0, "no KMS decrypt call");
+            assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
+            assert_eq!(Harness::hits(&h.upstream).await, 0, "no upstream call");
+            assert!(
+                h.audit
+                    .events()
+                    .iter()
+                    .all(|e| e.kind != EventKind::Attempt)
+            );
+            let (status, _) = h.relay_get(SECRET, "http://evil.test/x").await;
+            assert_eq!(status, StatusCode::FORBIDDEN);
+        }
+    }
+
+    /// The outcome is retried (3 times) and lands once; past the retries a successful response
+    /// is withheld and the attempt stays open in the ledger.
+    #[tokio::test]
+    async fn outcome_append_is_retried_then_withholds() {
         let h = harness(Setup {
-            audit_fails: true,
+            outcome_fails_first: 3,
+            ..Setup::default()
+        })
+        .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("fine"))
+            .mount(&h.upstream)
+            .await;
+        let (status, _) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+        assert_eq!(status, StatusCode::OK, "third retry succeeds");
+        assert_eq!(
+            h.audit.tries(),
+            1 + 4,
+            "attempt, then outcome tried 4 times"
+        );
+        assert_eq!(h.outcomes(), ["ok"]);
+        h.assert_audit_clean();
+
+        let h = harness(Setup {
+            outcome_fails_first: 4,
             ..Setup::default()
         })
         .await;
@@ -1713,9 +1967,14 @@ mod tests {
             .await;
         let (status, raw) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(String::from_utf8_lossy(&raw).contains("audit_failed"));
         assert!(!String::from_utf8_lossy(&raw).contains("fine"));
-        let (status, _) = h.relay_get(SECRET, "http://evil.test/x").await;
-        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(h.audit.tries(), 1 + 4, "no fifth outcome try");
+        assert_eq!(
+            h.audit.events().iter().map(|e| e.kind).collect::<Vec<_>>(),
+            [EventKind::Attempt],
+            "the attempt stays open"
+        );
     }
 
     #[tokio::test]
@@ -1809,5 +2068,262 @@ mod tests {
             "capture saw the relay span"
         );
         assert_clean("trace logs", &logs);
+    }
+
+    // S5 task 3.2: the relay against the real control plane and its Postgres ledger.
+
+    /// Test-only service token shared by the gateway and the in-process control plane.
+    const SERVICE_TOKEN: &str = "test-only-gateway-service-token-0123456789";
+
+    /// A migrated `postgres:18` (ls-pg-test; needs Docker) with [`ORG`] created, and the control
+    /// plane serving it on a local port with [`SERVICE_TOKEN`].
+    struct Ledger {
+        pg: ls_pg_test::Pg,
+        db: Database,
+        url: Url,
+        server: tokio::task::JoinHandle<()>,
+    }
+
+    impl Ledger {
+        async fn start() -> Self {
+            let pg = ls_pg_test::Pg::start().await;
+            ls_control_plane::migrate::run(pg.bootstrap())
+                .await
+                .expect("migrate");
+            let mut admin = pg.admin().await;
+            sql::query("INSERT INTO orgs (id, name) VALUES ($1, 'ledger-org')")
+                .bind(ORG)
+                .execute(&mut admin)
+                .await
+                .unwrap();
+            let db = Database::connect_lazy(pg.app(), PoolSettings::default());
+            let state = ls_control_plane::app::AppState::new(
+                false,
+                Arc::new(ReadyFlag::new(true)),
+                db.clone(),
+            )
+            .with_service_token(ServiceToken::new(SecretString::from(SERVICE_TOKEN)));
+            let app = ls_control_plane::app::build(state);
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}/", listener.local_addr().unwrap())
+                .parse()
+                .unwrap();
+            let server = tokio::spawn(async move {
+                let _ = axum::serve(listener, app).await;
+            });
+            Self {
+                pg,
+                db,
+                url,
+                server,
+            }
+        }
+
+        fn sink(&self) -> Arc<dyn AuditSink> {
+            http_sink(self.url.clone())
+        }
+
+        /// [`ORG`]'s ledger as the app role (RLS applies).
+        async fn records(&self) -> Vec<ls_audit::Record> {
+            self.db
+                .with_org(ORG, |c| {
+                    Box::pin(async move { ls_audit::pg::records_in_tx(c, ORG).await })
+                })
+                .await
+                .unwrap()
+        }
+
+        /// `gateway_audit` rows in every org, as the bootstrap superuser (no RLS).
+        async fn legacy_rows(&self) -> i64 {
+            let mut admin = self.pg.admin().await;
+            sql::query_scalar("SELECT count(*) FROM gateway_audit")
+                .fetch_one(&mut admin)
+                .await
+                .unwrap()
+        }
+
+        /// Every stored ledger row as text, as the bootstrap superuser.
+        async fn ledger_text(&self) -> String {
+            let mut admin = self.pg.admin().await;
+            let text: Option<String> =
+                sql::query_scalar("SELECT string_agg(t::text, E'\\n') FROM audit_events t")
+                    .fetch_one(&mut admin)
+                    .await
+                    .unwrap();
+            text.unwrap_or_default()
+        }
+    }
+
+    impl Drop for Ledger {
+        fn drop(&mut self) {
+            self.server.abort();
+        }
+    }
+
+    fn http_sink(base: Url) -> Arc<dyn AuditSink> {
+        Arc::new(HttpAudit::new(Arc::new(
+            ControlPlane::new(base, ORG, SERVICE_TOKEN.to_owned().into()).unwrap(),
+        )))
+    }
+
+    fn attr<'a>(r: &'a ls_audit::Record, key: &str) -> Option<&'a str> {
+        r.attrs
+            .as_ref()?
+            .entries()
+            .iter()
+            .find(|(k, _, _)| k == key)
+            .map(|(_, _, v)| v.as_str())
+    }
+
+    /// Spec "Audit events per call": an allowed call appends `relay.attempt` and
+    /// `relay.outcome` (`ok`), a refused call appends `relay.denied`, the chain is intact,
+    /// `gateway_audit` gains no rows and no event holds the canary.
+    #[tokio::test]
+    async fn relay_events_land_in_the_ledger() {
+        let l = Ledger::start().await;
+        let h = harness(Setup {
+            audit: Some(l.sink()),
+            ..Setup::default()
+        })
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/charge"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(injected()))
+            .mount(&h.upstream)
+            .await;
+        let (status, raw) = h
+            .relay_get(SECRET, &format!("{}/v1/charge?q=1", h.origin()))
+            .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_clean("allowed response", &raw);
+        let evil = format!("http://{}.evil.test/x", hex(VALUE));
+        let (status, _) = h.relay_get(SECRET, &evil).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        let rows = l.records().await;
+        let got: Vec<(&str, &str)> = rows
+            .iter()
+            .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("relay.attempt", "pending"),
+                ("relay.outcome", "ok"),
+                ("relay.denied", "denied"),
+            ]
+        );
+        for r in &rows {
+            assert_eq!(r.actor, format!("agent:{AGENT}"));
+            assert_eq!(r.target.as_deref(), Some(&*format!("secret:{SECRET}")));
+            assert_eq!(attr(r, "version"), Some("1"));
+            assert_eq!(attr(r, "method"), Some("get"));
+        }
+        let port = h.upstream.address().port().to_string();
+        assert_eq!(attr(&rows[0], "host"), Some("upstream.test"));
+        assert_eq!(attr(&rows[0], "port"), Some(port.as_str()));
+        assert_eq!(attr(&rows[1], "status"), Some("200"));
+        let attempt_id = rows[0].id.to_string();
+        assert_eq!(attr(&rows[1], "attempt_id"), Some(attempt_id.as_str()));
+        assert_eq!(
+            attr(&rows[2], "host"),
+            None,
+            "a refused host is not recorded"
+        );
+        let walk = ls_audit::verify(rows.iter().map(ls_audit::Record::link), &[]);
+        assert!(walk.ok(), "{walk:?}");
+
+        assert_eq!(l.legacy_rows().await, 0, "no legacy rows");
+        let text = l.ledger_text().await;
+        assert!(
+            !text.contains("evil"),
+            "no caller-chosen host in the ledger"
+        );
+        assert_clean("ledger", text.as_bytes());
+    }
+
+    /// Spec "Ledger unavailable": the append endpoint is unreachable or answers `5xx`, so the
+    /// relay is `503` with no KMS decrypt call, no material fetch and no upstream request.
+    #[tokio::test]
+    async fn unreachable_ledger_is_503_before_unwrap() {
+        let failing = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&failing)
+            .await;
+        let dead = {
+            let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            format!("http://{}/", l.local_addr().unwrap())
+        };
+        for base in [dead, failing.uri()] {
+            let h = harness(Setup {
+                audit: Some(http_sink(base.parse().unwrap())),
+                ..Setup::default()
+            })
+            .await;
+            Mock::given(method("GET"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("fine"))
+                .mount(&h.upstream)
+                .await;
+            let (status, raw) = h.relay_get(SECRET, &format!("{}/x", h.origin())).await;
+            assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{base}");
+            assert!(String::from_utf8_lossy(&raw).contains("\"audit_unavailable\""));
+            assert_clean("503 response", &raw);
+            assert_eq!(h.kms_calls().await, 0, "no KMS decrypt call");
+            assert_eq!(Harness::hits(&h.cp).await, 0, "no material fetch");
+            assert_eq!(Harness::hits(&h.upstream).await, 0, "no upstream request");
+        }
+        assert_eq!(
+            Harness::hits(&failing).await,
+            1,
+            "the attempt is tried once, not retried"
+        );
+    }
+
+    /// The outcome is idempotent on its attempt id through the real endpoint: a resend returns
+    /// the stored event, a different outcome for the same attempt is refused, an outcome
+    /// without an attempt id is refused.
+    #[tokio::test]
+    async fn outcome_resend_is_idempotent() {
+        let l = Ledger::start().await;
+        let sink = l.sink();
+        let base = RelayEvent {
+            kind: EventKind::Attempt,
+            agent_id: AGENT,
+            secret_id: SECRET,
+            version: 1,
+            method: Some(Method::Get),
+            host: Some("upstream.test".to_owned()),
+            port: None,
+            status: None,
+            attempt_id: None,
+        };
+        let attempt = sink.append(base.clone()).await.unwrap();
+        let outcome = RelayEvent {
+            kind: EventKind::Outcome(Outcome::Ok),
+            status: Some(200),
+            attempt_id: Some(attempt),
+            ..base.clone()
+        };
+        let first = sink.append(outcome.clone()).await.unwrap();
+        let again = sink.append(outcome.clone()).await.unwrap();
+        assert_eq!(first, again, "a resend returns the stored outcome");
+        let other = RelayEvent {
+            status: Some(500),
+            ..outcome.clone()
+        };
+        assert_eq!(
+            sink.append(other).await,
+            Err(crate::audit::AuditError::Rejected)
+        );
+        let unkeyed = RelayEvent {
+            attempt_id: None,
+            ..outcome
+        };
+        assert_eq!(
+            sink.append(unkeyed).await,
+            Err(crate::audit::AuditError::Rejected)
+        );
+        assert_eq!(l.records().await.len(), 2, "one attempt, one outcome");
     }
 }

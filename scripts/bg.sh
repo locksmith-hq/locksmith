@@ -13,6 +13,12 @@ case "$cmd" in
   start)
     t="${3:?timeout seconds}"; shift 3; [ "${1:-}" = "--" ] && shift
     rm -f "$rc"
+    # Low disk: target/ filled a worker's disk mid-run twice (2026-11-18). Free it only when no cargo runs.
+    free_gb() { df -Pk . | awk 'NR==2{print int($4/1048576)}'; }
+    if [ "$(free_gb)" -lt "${BG_MIN_FREE_GB:-8}" ] && ! pgrep -x cargo >/dev/null; then
+      rm -rf target/debug/incremental; [ "$(free_gb)" -lt "${BG_MIN_FREE_GB:-8}" ] && cargo clean -q
+      echo "bg: low disk, freed target/: $(free_gb) GB free"
+    fi
     # No stdin: a command that reads it (a stray `cat`) hung a worker run for 30 min.
     ( s=$(date +%s); timeout -s KILL "$t" "$@" </dev/null >"$log" 2>&1; c=$?
       echo "$name $(( $(date +%s) - s )) $c" >>/tmp/bg-times; echo $c >"$rc" ) </dev/null >/dev/null 2>&1 &

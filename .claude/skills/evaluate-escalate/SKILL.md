@@ -12,7 +12,7 @@ description: The implement → independent evaluate → escalate-one-tier loop f
 
 You may implement small tasks yourself (`self: true` in run-log); step 3 still applies.
 
-Run every implementer and evaluator subagent in the foreground: never `run_in_background`, and never end your turn while a subagent runs. A cloud run stops when your turn ends, so unpushed work is lost (worker A, 2026-11-18 12:06).
+Cloud subagents always run async ("Async agent launched"): end the turn with one status line; the hand-back resumes you. No Monitor or sleep heartbeats. Never end a turn while only a bg.sh job runs: poll `bg.sh wait`.
 
 ## Loop
 1. **Implement.** Give the implementer:

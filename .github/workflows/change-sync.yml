@@ -4,18 +4,14 @@ name: change-sync
 # status:* label, board Status), a milestone per phase, a sub-issue per task, blocked-by links. Hygiene only:
 # no build or test, seconds of Actions time.
 on:
+  # Actions minutes (#216 follow-up): per-event triggers fired ~25 runs/hour (374 min in 7 days).
+  # The board now catches up hourly; wake-agents, not this workflow, wakes the routines.
   push:
-    branches: [main, "claude/change-*"]
+    branches: [main]
     paths: ["openspec/**", "docs/roadmap.md"]
-  issues:
-    types: [labeled, unlabeled, closed, reopened]
-  issue_comment:
-    types: [created]
-  pull_request:
-    types: [opened, closed, labeled, unlabeled]
   workflow_dispatch:
   schedule:
-    - cron: "15 3 * * *"   # daily: Target-date forecasts move with the measured pace
+    - cron: "15 * * * *"   # hourly: locks, PR labels, change-branch ticks and Target-date forecasts
 
 permissions:
   contents: read

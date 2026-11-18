@@ -29,8 +29,8 @@ Take candidates oldest first, at most 4 per run. A failed candidate does not sto
 
    If a gate fails:
    - **Gate 6, review still running:** move on; don't wait. merge-on-green merges it when the review passes; a `review-failed` label wakes the event worker to fix it.
-   - **Gate 6 FAIL:** fix the findings with the `evaluate-escalate` skill, then push once. The push triggers a new review.
-   - **Gate 3 (conflicts):** several PRs are open at once, so this is routine. Lock the change (`run-lock.sh acquire <you> <id>`), merge `origin/main` into the branch, and resolve:
+   - **Gate 6 FAIL:** lock the change (as for gate 3; busy: move on), fix the findings with the `evaluate-escalate` skill, push once and release. The push triggers a new review.
+   - **Gate 3 (conflicts):** lock the change (`run-lock.sh acquire <you> <id>`), merge `origin/main` into the branch, and resolve:
      - `Cargo.lock`, `package-lock.json`: take main's, then rerun `cargo check` / `npm i`.
      - Workspace member lists, `justfile` recipes, roadmap rows: keep both sides.
      - Code: keep both behaviours; if they truly conflict, the later PR adapts.

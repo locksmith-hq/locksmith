@@ -10,6 +10,10 @@ set -uo pipefail
 repo=locksmith-hq/locksmith
 ttl="${RUN_LOCK_TTL:-5400}"  # 90 min: a worker run (about 40 min of tasks plus just ci and evaluation) must not outlive its lock
 cmd="${1:-}"; me="${2:-}"; change="${3:-}"
+# Agents shorten <holder> (four sessions were all `worker-012vq` on 2026-11-18, so `acquire` told a
+# second session "already held" and it worked on another session's change). Add the real session id.
+sid=$(env | grep -E '^CLAUDE_CODE_[A-Z_]*SESSION[A-Z_]*_ID=' | head -1 | cut -d= -f2- || true)
+[ -n "$me" ] && [ -n "$sid" ] && [ "$cmd" != holder ] && me="${me%%@*}@$sid"
 [ -n "$cmd" ] && [ -n "$me" ] && [ -n "$change" ] || { echo "usage: run-lock.sh acquire|release|holder <holder> <change-id>" >&2; exit 2; }
 
 if [ "$cmd" = acquire ]; then issue=$(bash "$(dirname "$0")/change-issue.sh" "$change") || exit 1

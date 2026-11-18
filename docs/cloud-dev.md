@@ -30,7 +30,7 @@ Create these at claude.ai/code → environment selector → New environment.
   - ghcr.io is on the documented allowlist, but **it returned 403 in practice** (first worker run, 2026-11-16). Use Docker Hub images instead, for example `openbao/openbao:2.7.2`.
   - github.com, including release assets, and Ubuntu apt
 - **Extra allowed domains:** none for now.
-- **Environment variables:** `BASH_MAX_TIMEOUT_MS=600000`, `CARGO_TERM_COLOR=never`. **No secrets here.** Environment variables are readable by the model and by any command it runs.
+- **Environment variables:** `BASH_MAX_TIMEOUT_MS=600000`, `CARGO_TERM_COLOR=never`. **No secrets here,** with one exception the owner accepted on 2026-11-18: the agent GitHub App keys (see "Agent identities"). Environment variables are readable by the model and by any command it runs.
 - **Setup script:** a short bootstrap (pasted 2026-11-16) that finds the cloned repo and runs [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh), falling back to a built-in copy if the repo isn't present yet. Changes merged to that file apply without re-pasting. It installs build dependencies, `just`, the pinned toolchain, a prebuilt `cargo-nextest`, `gitleaks` and `cargo-deny` (`scripts/ci-tools.sh`) and `openspec`. It no longer pre-pulls compose images (that blew the 5-minute cache budget and hung the lead run on 2026-11-17); `just up` pulls them on demand.
 - **Starting the stack:** each session starts it with `just up`, which the F0 docs tell the agent to run. A SessionStart hook can automate this once F0 lands. **[test]** Whether Docker in the VM runs the full stack (lgtm needs about 1 to 2 GB RAM).
 
@@ -136,6 +136,26 @@ Except the workers (events, plus every 4 hours, 24/7), routines avoid peak hours
 GitHub triggers (web UI only; one per routine): the API stores filters as `filter.clauses[]` of `{field, operator, values}` with fields like `pr.author`, `pr.labels`, `pr.base_branch`, `pr.draft` and operators like `FILTER_OP_IN`, but `RemoteTrigger` cannot list or delete triggers. Not available as triggers: issue comments, CI results. The review stays in GitHub Actions because gate 6 trusts only the Claude bot identity; agents act as `tomer555` and could forge a routine's verdict.
 
 Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.
+
+## Agent identities (GitHub Apps)
+Each persona is a private GitHub App owned by `locksmith-hq`, installed only on this repo, with webhooks off. Avatars are in `docs/agents/avatars/`.
+
+| Persona | App | Routine | Access |
+|---|---|---|---|
+| Linus | `locksmith-linus` | Lead | code, PRs, issues, workflows (write) |
+| Alfie | `locksmith-alfie` | Worker A | code, PRs, issues (write) |
+| Josie | `locksmith-josie` | Worker B | code, PRs, issues (write) |
+| Harriet | `locksmith-harriet` | Worker (events) | code, PRs, issues (write) |
+| Walt | `locksmith-walt` | PM (no routine yet) | PRs, issues (write); code (read) |
+
+How a run becomes its persona: the routine prompt names the persona, and `scripts/agent-start.sh <kind> <persona>` calls `scripts/agent-identity.sh`. That script mints a one-hour installation token from `AGENT_APP_KEY_<PERSONA>`, sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If the key is missing or the token is not accepted, it prints `WARN identity` and the run continues as the owner account.
+
+Owner setup:
+1. On `locksmith-dev` and `locksmith-research`, add one environment variable per persona used there: `AGENT_APP_KEY_ALFIE` and so on. The value is the base64 of that app's private key file in one line.
+2. Add the persona to each routine prompt, for example "Your persona is alfie."
+3. Add the `locksmith-*[bot]` logins to the author filter of the GitHub triggers (`Worker (events)` and `Lead`), next to `tomer555`.
+
+Accepted risk: the model can read these keys. Each key reaches only this repo with the access above, and is revoked in the app's settings page.
 
 ## Escalation ladder
 

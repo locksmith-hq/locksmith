@@ -12,3 +12,5 @@ dist/
 
 # Leak-test canaries (just canary new)
 infra/compose/.canaries
+# Audit checkpoint verifier config written by `just up` (public keys of the local stack only)
+infra/compose/.audit-verifier.json

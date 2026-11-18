@@ -54,8 +54,10 @@ desktop-install:
 # Dev values come from infra/compose/.env.example. Export OPENBAO_IMAGE etc. in the shell to override.
 compose := "docker compose -f infra/compose/compose.yaml --env-file infra/compose/.env.example"
 
+# `up` also writes the audit checkpoint public key to the verifier config (S5 task 4.1).
 up:
     {{compose}} up -d --wait
+    bash scripts/audit-verifier-config.sh
 
 down:
     {{compose}} down

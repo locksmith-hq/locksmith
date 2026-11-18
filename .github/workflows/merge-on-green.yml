@@ -1,15 +1,16 @@
 name: merge-on-green
 
-# Merges every open PR in this repo the moment its CI is green (owner 2026-11-18), with no agent run and no
-# label or review needed (docs/agents/merge.md). Fork PRs never reach here. Fires when `ci` finishes on a PR,
-# runs scripts/merge-gate.sh from main with MERGE_ON_GREEN=1 (not draft, no `hold` label, tasks complete,
-# task guard, mergeable, all checks green) and merges that exact SHA. Budget: ~1 billed Linux minute per run.
+# Merges open PRs the moment their gates pass, with no agent run (docs/agents/merge.md). Fork PRs never reach here.
+# Fires when `ci` or `claude-review` finishes on a PR and runs scripts/merge-gate.sh from main with MERGE_ON_GREEN=1:
+# - owner (non-claude/*) branches: no label or review; merges once tasks are complete and CI is green (owner 2026-11-18);
+# - agent (claude/*) branches: the full gate, so they merge only after ready-to-merge and a claude-review PASS.
+# Budget: ~1 billed Linux minute per run.
 # workflow_run always uses this file from main, so a PR cannot change what runs here.
 # Merging needs GH_AUTOMATION_TOKEN (Contents and Pull requests: write): a merge made with GITHUB_TOKEN
 # would not trigger main's ci or change-sync.
 on:
   workflow_run:
-    workflows: [ci]
+    workflows: [ci, claude-review]
     types: [completed]
 
 permissions:

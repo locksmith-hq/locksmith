@@ -16,9 +16,11 @@ state=$(jq -r .state <<<"$pr"); draft=$(jq -r .draft <<<"$pr")
 head_ref=$(jq -r .head.ref <<<"$pr"); sha=$(jq -r .head.sha <<<"$pr")
 [ "$state" = open ] || fail "PR is $state"
 [ "$draft" = false ] || fail "PR is a draft (cloud runs cannot un-draft; needs owner)"
-# MERGE_ON_GREEN=1 (merge-on-green workflow, owner 2026-11-18): any branch, no label, and gates 5-6 skipped,
-# so every open PR merges once it is complete and CI is green. The worker runs the full gate.
-on_green=${MERGE_ON_GREEN:-0}
+# MERGE_ON_GREEN=1 (merge-on-green workflow, owner 2026-11-18): a non-agent branch needs no label and skips
+# gates 5-6, so it merges once complete and CI is green. Agent (claude/*) PRs always run the full gate:
+# ready-to-merge label plus a claude-review PASS, so they never merge before review.
+on_green=0
+[ "${MERGE_ON_GREEN:-0}" = 1 ] && [[ "$head_ref" != claude/* ]] && on_green=1
 if [ "$on_green" != 1 ]; then
   [[ "$head_ref" == claude/* ]] || fail "head $head_ref is not a claude/* branch"
   jq -e '.labels[]|select(.name=="ready-to-merge")' <<<"$pr" >/dev/null || fail "no ready-to-merge label"
@@ -32,7 +34,7 @@ if ! { git fetch -q origin main "$head_ref" && git checkout -q --detach "$sha"; 
 # when the PR touches nothing outside openspec/changes/.
 planning_only=false
 # Owner branches under MERGE_ON_GREEN get the same exemption (an owner may add a change plan).
-if { [[ "$head_ref" == claude/planning-* ]] || { [ "$on_green" = 1 ] && [[ "$head_ref" != claude/* ]]; }; } && ! git diff --name-only origin/main...HEAD | grep -qv '^openspec/changes/'; then
+if { [[ "$head_ref" == claude/planning-* ]] || [ "$on_green" = 1 ]; } && ! git diff --name-only origin/main...HEAD | grep -qv '^openspec/changes/'; then
   planning_only=true
 fi
 $planning_only || for f in $(git diff --name-only origin/main...HEAD -- 'openspec/changes/*/tasks.md'); do

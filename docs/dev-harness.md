@@ -47,3 +47,5 @@ The postgres DSN uses `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` fro
 - List: `curl -H 'X-Locksmith-Dev-Org: <uuid>' localhost:8080/v1/projects`; contract: `curl localhost:8080/openapi.json`; readiness: `curl localhost:8080/readyz`.
 - Traces: Grafana datasource proxy, e.g. `curl -s 'localhost:3000/api/datasources/proxy/uid/tempo/api/search?tags=service.name%3Dlocksmith-api'` (or the `grafana` MCP). Logs: Loki `{service_name="locksmith-api"}`.
 - Leak check after tests that use a canary: `just leak-scan`.
+
+Per-component test commands: [testing.md](testing.md).

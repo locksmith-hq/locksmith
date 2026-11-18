@@ -28,6 +28,9 @@ done < <(for w in .github/workflows/*.yml; do
     j && /^    timeout-minutes:/{t=1} END{if (job && !t) print f": "job}' "$w"
 done)
 
+# docs/testing.md must have a row per component directory.
+bash scripts/test-recipes-check.sh || fail=1
+
 if [ "$fail" -ne 0 ]; then
   echo "tree-check: FAILED" >&2
   exit 1

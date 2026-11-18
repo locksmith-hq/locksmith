@@ -38,4 +38,4 @@ Close each `for-lead` issue with what you did.
 Quality work never adds `needs-rescue` or `needs-owner`.
 
 ## Ship
-Run `just ci`. Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); mark ready (`merge-queue` skill). Use the `run-log` skill; outcome `rescued`, `learned`, `reviewed` or `idle`.
+Run `just ci`. Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); mark it ready with the `merge-queue` skill: not a draft, plus the `ready-to-merge` label. Without the label it never merges. Use the `run-log` skill; outcome `rescued`, `learned`, `reviewed` or `idle`.

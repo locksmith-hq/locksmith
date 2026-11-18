@@ -4,8 +4,9 @@
 #   agent-identity.sh token             prints a valid installation token (cached, re-minted after 50 minutes)
 #   agent-identity.sh credential get    git credential helper
 #   agent-identity.sh selftest          offline checks
-# The app key comes from the environment as AGENT_APP_KEY_<PERSONA> (base64 of the PEM), or on macOS from the login
-# Keychain item "locksmith-agent-<persona>" (same base64). Never print it or the token.
+# In the cloud the app's auth on the token request is added by a network secret, so the key never enters the VM.
+# Locally the key comes from AGENT_APP_KEY_<PERSONA> (base64 of the PEM) or, on macOS, the login Keychain item
+# "locksmith-agent-<persona>" (same base64). Never print it or the token.
 set -uo pipefail
 repo=locksmith-hq/locksmith
 state="${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}"
@@ -30,7 +31,7 @@ jwt() { # <app_id> <pem-file>
   printf '%s.%s.%s' "$h" "$p" "$(printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -sign "$2" | b64url)"
 }
 token() {
-  local persona row app inst _ var key pem t resp code
+  local persona row app inst _ var key pem auth=() t resp code
   persona=$(cat "$state/persona" 2>/dev/null) || return 1
   if [ -f "$state/token" ] && [ $(($(date +%s) - $(cat "$state/minted" 2>/dev/null || echo 0))) -lt 3000 ]; then
     cat "$state/token"; return 0
@@ -41,16 +42,18 @@ token() {
   # Each failure records its cause in $state/why, so the WARN line says what to fix.
   key="${!var:-}"
   [ -n "$key" ] || ! command -v security >/dev/null || key=$(security find-generic-password -s "locksmith-agent-$persona" -w 2>/dev/null)
-  [ -n "$key" ] || { why "$var is not set in this environment (nor Keychain item locksmith-agent-$persona)"; return 1; }
-  pem=$(umask 077 && mktemp) || return 1
-  printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
-  grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
-  resp=$(curl -sS -w '\n%{http_code}' -X POST -H "Authorization: Bearer $(jwt "$app" "$pem")" -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null) || { rm -f "$pem"; why "cannot reach api.github.com (curl exit $?)"; return 1; }
-  rm -f "$pem"
+  if [ -n "$key" ]; then # no key: send no auth and let the network secret add it
+    pem=$(umask 077 && mktemp) || return 1
+    printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
+    grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
+    auth=(-H "Authorization: Bearer $(jwt "$app" "$pem")")
+    rm -f "$pem"
+  fi
+  resp=$(curl -sS -w '\n%{http_code}' -X POST ${auth[@]+"${auth[@]}"} -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null) || { why "cannot reach api.github.com (curl exit $?)"; return 1; }
   code=${resp##*$'\n'}
   t=$(jq -r '.token // empty' <<<"${resp%$'\n'*}" 2>/dev/null)
-  [ -n "$t" ] || { why "GitHub answered HTTP $code to the token request: $(jq -r '.message // "no message"' <<<"${resp%$'\n'*}" 2>/dev/null | head -c 120)"; return 1; }
+  [ -n "$t" ] || { why "GitHub answered HTTP $code to the token request$([ -n "$key" ] || echo " (no key here: is the network secret for installation $inst set?)"): $(jq -r '.message // "no message"' <<<"${resp%$'\n'*}" 2>/dev/null | head -c 120)"; return 1; }
   (umask 077 && printf '%s' "$t" >"$state/token" && date +%s >"$state/minted")
   printf '%s' "$t"
 }
@@ -117,8 +120,6 @@ selftest() {
   ids alfie >/dev/null || { echo "selftest: persona table"; exit 1; }
   if ids nobody >/dev/null 2>&1; then echo "selftest: unknown persona accepted"; exit 1; fi
   state="$d/s"; mkdir "$state"; printf alfie >"$state/persona"
-  if (unset AGENT_APP_KEY_ALFIE; token >/dev/null 2>&1); then echo "selftest: token without a key"; exit 1; fi
-  grep -q 'AGENT_APP_KEY_ALFIE is not set' "$state/why" || { echo "selftest: missing-key cause not recorded"; exit 1; }
   if (AGENT_APP_KEY_ALFIE=$(printf 'not a key' | openssl base64 -A) token >/dev/null 2>&1); then echo "selftest: token from a bad key"; exit 1; fi
   grep -q 'not the base64 of a private key' "$state/why" || { echo "selftest: bad-key cause not recorded"; exit 1; }
   # the shim adds the token only inside its checkout

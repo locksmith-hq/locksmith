@@ -24,6 +24,9 @@ bash scripts/ci-tools.sh || true
 npm i -g @fission-ai/openspec || true
 [ -f package-lock.json ] && npm ci --no-audit --no-fund || true
 
+# The one place a run switches to its persona's GitHub App (AGENT_PERSONA); agent-start.sh only checks it.
+[ -n "${AGENT_PERSONA:-}" ] && bash scripts/agent-identity.sh setup "$AGENT_PERSONA" || true
+
 # No Docker here: starting dockerd and pulling ~2 GB of images blew the 5-minute cache budget
 # (lead run 2026-11-17 hung in setup). `just up` pulls images on demand.
 exit 0

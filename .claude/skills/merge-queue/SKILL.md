@@ -9,7 +9,7 @@ description: Mark Locksmith PRs ready-to-merge (with the archive inside), fix re
 When the last task is ticked and verified, or an archive, lead or research PR is complete:
 0. If this PR ticks a change's last task, archive the change in this same PR first: `archive-change` steps 2–4 on this branch.
 1. Make sure the PR is not a draft. Always create PRs with `-F draft=false`.
-2. Add the `ready-to-merge` label.
+2. Remove the `in-progress` label and add `ready-to-merge`.
 3. Comment a summary: what changed (3 lines), how it was verified, and the risks. Every merge is a merge commit, so it can be undone with `git revert -m 1 <sha>`.
 
 Never mark a PR ready while a `needs-rescue` issue is open for that change.

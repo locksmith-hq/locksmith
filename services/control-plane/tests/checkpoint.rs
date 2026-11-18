@@ -447,3 +447,66 @@ async fn job_rows_follow_the_first_append_and_stay_append_only() {
         .unwrap();
     assert_eq!(a_sees, 1, "org a sees its own checkpoint only");
 }
+
+/// Live check against `just up` (S5 tasks 4.1 and 4.2 together): the job signs through the real
+/// OpenBao with the sign-only dev token, and the signature verifies under the public key that
+/// `just up` wrote to the verifier config. Skips without OpenBao or the config, unless
+/// `LS_REQUIRE_KMS=1`. Env: `OPENBAO_ADDR`, `OPENBAO_AUDIT_CHECKPOINT_TOKEN` (dev-only defaults)
+/// and `LOCKSMITH_AUDIT_VERIFIER_CONFIG` (default `infra/compose/.audit-verifier.json`).
+#[tokio::test]
+async fn live_openbao_checkpoint_verifies_under_the_just_up_public_key() {
+    let addr = std::env::var("OPENBAO_ADDR").unwrap_or_else(|_| "http://127.0.0.1:8200".into());
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let config = std::env::var("LOCKSMITH_AUDIT_VERIFIER_CONFIG")
+        .map(|p| root.join(p))
+        .unwrap_or_else(|_| root.join("infra/compose/.audit-verifier.json"));
+    let hostport = addr.trim_start_matches("http://").trim_end_matches('/');
+    let up = tokio::net::TcpStream::connect(hostport).await.is_ok() && config.exists();
+    if !up {
+        assert!(
+            std::env::var("LS_REQUIRE_KMS").as_deref() != Ok("1"),
+            "OpenBao or the verifier config missing and LS_REQUIRE_KMS=1"
+        );
+        eprintln!(
+            "skipping: OpenBao or {} missing (run `just up`)",
+            config.display()
+        );
+        return;
+    }
+    let keys: Value = serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+
+    let pg = common::Pg::migrated().await;
+    let db = pg.app_db(PoolSettings::default());
+    // Dev-only token default from infra/compose/.env.example.
+    let token = std::env::var("OPENBAO_AUDIT_CHECKPOINT_TOKEN")
+        .unwrap_or_else(|_| "dev-only-audit-checkpoint".into());
+    let live: Arc<dyn CheckpointSigner> =
+        Arc::new(TransitSigner::new(&addr, "audit-checkpoint", BaoToken::new(token)).unwrap());
+    let f = Fixture {
+        pg,
+        db: db.clone(),
+        openbao: fake_openbao().await,
+    };
+    let org = f.org().await;
+    f.append(org, 2).await;
+    let job = CheckpointJob::new(db, live, schedule(2, Duration::from_secs(3600)));
+    assert_eq!(job.run_pass().await.unwrap(), report(1, 1, 0));
+    let cps = f.ledger(org).await.1;
+    let cp = &cps[0];
+    let public = keys["checkpoint_keys"][&cp.key_id]
+        .as_str()
+        .unwrap_or_else(|| panic!("{} not in the verifier config", cp.key_id));
+    let public: [u8; 32] = B64.decode(public).unwrap().try_into().unwrap();
+    let vk = VerifyingKey::from_bytes(&public).unwrap();
+    assert!(
+        vk.verify_strict(&cp.body.message(), &cp.signature).is_ok(),
+        "signature does not verify under {}; was OpenBao restarted after `just up`?",
+        config.display()
+    );
+    let other = SigningKey::from_bytes(&OTHER_SEED).verifying_key();
+    assert!(
+        other
+            .verify_strict(&cp.body.message(), &cp.signature)
+            .is_err()
+    );
+}

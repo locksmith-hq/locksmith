@@ -8,7 +8,6 @@ use ls_crypto::kdf::{KdfParams, hkdf, label};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use crate::Error;
@@ -94,11 +93,10 @@ pub fn write(dir: &Path, body: &Body, vk: &SecretKey32) -> Result<(), Error> {
         mac,
     });
     let tmp = dir.join("vault.header.tmp");
-    let mut f = std::fs::OpenOptions::new()
+    let mut f = ls_core::private_open_options()
         .write(true)
         .create(true)
         .truncate(true)
-        .mode(0o600)
         .open(&tmp)?;
     f.write_all(&bytes)?;
     f.sync_all()?;

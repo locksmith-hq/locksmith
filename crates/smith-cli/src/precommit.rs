@@ -27,10 +27,14 @@ pub fn apply(root: &Path, c: &Change) -> std::io::Result<()> {
         std::fs::create_dir_all(d)?;
     }
     std::fs::write(&f, &c.after)?;
+    // Windows has no exec bit; git runs hooks there regardless.
+    #[cfg(unix)]
     if c.exec {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o755))?;
     }
+    #[cfg(not(unix))]
+    let _ = c.exec;
     Ok(())
 }
 

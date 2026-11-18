@@ -24,7 +24,13 @@ allow = [
 ]
 
 [bans]
-deny = [{ name = "openssl" }, { name = "openssl-sys" }]
+deny = [
+  { name = "openssl" },
+  # openssl-sys is allowed only as libsqlite3-sys's libcrypto for SQLCipher on
+  # Windows (ls-vault enables bundled-sqlcipher-vendored-openssl under
+  # cfg(windows) only); any other crate that pulls it in is still rejected.
+  { name = "openssl-sys", wrappers = ["libsqlite3-sys"] },
+]
 
 [sources]
 unknown-registry = "deny"

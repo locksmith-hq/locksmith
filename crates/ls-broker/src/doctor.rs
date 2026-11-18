@@ -30,7 +30,6 @@ fn running() -> Outcome {
 }
 
 fn socket_perms_at(runtime: &Path, socket: &Path) -> Outcome {
-    use std::os::unix::fs::PermissionsExt;
     if !runtime.exists() {
         return Outcome::skip(format!("{} not created yet", runtime.display()));
     }
@@ -49,11 +48,20 @@ fn socket_perms_at(runtime: &Path, socket: &Path) -> Outcome {
             );
         }
     }
+    #[cfg(not(unix))]
+    {
+        // No socket file: the named pipe carries its own current-user-only DACL (ls-ipc).
+        let _ = socket;
+        Outcome::ok("runtime directory is private; the daemon pipe is current-user only")
+    }
+    #[cfg(unix)]
     match std::fs::metadata(socket) {
-        Ok(m) if m.permissions().mode() & 0o077 != 0 => Outcome::fail(
-            "daemon socket is accessible to other users",
-            format!("chmod 600 '{}'", socket.display()),
-        ),
+        Ok(m) if std::os::unix::fs::PermissionsExt::mode(&m.permissions()) & 0o077 != 0 => {
+            Outcome::fail(
+                "daemon socket is accessible to other users",
+                format!("chmod 600 '{}'", socket.display()),
+            )
+        }
         Ok(_) => Outcome::ok("runtime directory and daemon socket are private to the current user"),
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             Outcome::ok("runtime directory is private (0700)")

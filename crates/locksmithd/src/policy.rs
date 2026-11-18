@@ -7,7 +7,6 @@ use ls_proxy::http::valid_host_pattern;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "agent-policy.toml";
@@ -85,7 +84,17 @@ pub fn check_path(path: &Path, uid: u32) -> Result<(), String> {
         ));
     }
     let pmd = std::fs::metadata(&parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    for (what, m) in [(p.to_string(), &md), (parent.display().to_string(), &pmd)] {
+    owner_only_writable(
+        [(p.to_string(), &md), (parent.display().to_string(), &pmd)],
+        uid,
+    )
+}
+
+/// Each entry is owned by `uid` and not writable by group or others.
+#[cfg(unix)]
+fn owner_only_writable(entries: [(String, &std::fs::Metadata); 2], uid: u32) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    for (what, m) in entries {
         if m.uid() != uid {
             return Err(format!(
                 "{what} is owned by uid {}, not the current user (uid {uid})",
@@ -100,6 +109,17 @@ pub fn check_path(path: &Path, uid: u32) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// No owner/ACL check off Unix yet (Windows: x1 task 2.2): refuse, so agent-started sessions
+/// stay off rather than trust a policy file an agent might have written.
+#[cfg(not(unix))]
+fn owner_only_writable(entries: [(String, &std::fs::Metadata); 2], uid: u32) -> Result<(), String> {
+    let _ = uid;
+    Err(format!(
+        "cannot verify who may write {}: policy ownership checks are not implemented on this OS yet",
+        entries[0].0
+    ))
 }
 
 /// Check the path, then parse and validate the policy.

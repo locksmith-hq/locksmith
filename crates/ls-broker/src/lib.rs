@@ -83,10 +83,22 @@ impl Manifest {
     }
 
     fn matched(&self, peer: &Peer) -> Option<&(Pin, Role, PathBuf)> {
-        if peer.uid != ls_platform::current_uid() {
+        if !same_user(peer) {
             return None;
         }
         self.entries.iter().find(|(d, _, _)| peer.runs_pin(d))
+    }
+}
+
+/// True when `peer` runs as the daemon's own OS user. Off Unix no peer is attested yet
+/// (`Peer::of` always errors there), so this fails closed.
+fn same_user(peer: &Peer) -> bool {
+    #[cfg(unix)]
+    return peer.uid == ls_platform::current_uid();
+    #[cfg(not(unix))]
+    {
+        let _ = peer;
+        false
     }
 }
 

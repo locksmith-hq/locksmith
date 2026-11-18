@@ -43,11 +43,49 @@ pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// `OpenOptions` for a file only the current user may read or write: mode 0600 on Unix. On
+/// Windows the file inherits its directory's ACL for now; x1 task 2.2 adds an owner-only ACL
+/// (checks that need privacy fail closed there until then).
+pub fn private_open_options() -> std::fs::OpenOptions {
+    #[allow(unused_mut)]
+    let mut o = std::fs::OpenOptions::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    o
+}
+
+/// Restrict an existing file to the current user: chmod 0600 on Unix. On Windows a no-op until
+/// x1 task 2.2 (see [`private_open_options`]).
+pub fn make_file_private(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
+
 /// True when the directory is not accessible to group or others.
 #[cfg(unix)]
 pub fn is_private_dir(path: &Path) -> io::Result<bool> {
     use std::os::unix::fs::PermissionsExt;
     Ok(std::fs::metadata(path)?.permissions().mode() & 0o077 == 0)
+}
+
+/// No ACL check exists off Unix yet (Windows: x1 task 2.2), so privacy cannot be confirmed and
+/// callers that require it refuse (fail closed).
+#[cfg(not(unix))]
+pub fn is_private_dir(path: &Path) -> io::Result<bool> {
+    let _ = path;
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "directory privacy check is not implemented on this OS yet",
+    ))
 }
 
 #[cfg(test)]

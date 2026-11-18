@@ -299,14 +299,19 @@ fn trust_state_path(cfg: &Path) -> PathBuf {
     cfg.join("http").join("ca-trust")
 }
 
+/// Write `body` to `path` with Unix `mode`. Windows: the file inherits its directory's ACL until
+/// x1 task 2.2 adds an owner-only one.
 fn write_file(path: &Path, body: &[u8], mode: u32) -> Result<(), Fail> {
-    use std::os::unix::fs::OpenOptionsExt;
     let io = |e: std::io::Error| fail(ExitCode::Failure, format!("{}: {e}", path.display()));
-    let mut f = std::fs::OpenOptions::new()
+    let mut o = std::fs::OpenOptions::new();
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut o, mode);
+    #[cfg(not(unix))]
+    let _ = mode;
+    let mut f = o
         .write(true)
         .create(true)
         .truncate(true)
-        .mode(mode)
         .open(path)
         .map_err(io)?;
     std::io::Write::write_all(&mut f, body).map_err(io)
@@ -349,7 +354,10 @@ fn linux_store() -> Option<(&'static str, &'static [&'static str])> {
 
 /// `sudo` unless already root; asks first unless `yes`.
 fn privileged(cmds: &[Vec<String>], yes: bool) -> Result<(), Fail> {
+    #[cfg(unix)]
     let root = ls_platform::current_uid() == 0;
+    #[cfg(not(unix))]
+    let root = false;
     let shown: Vec<String> = cmds
         .iter()
         .map(|c| format!("{}{}", if root { "" } else { "sudo " }, c.join(" ")))

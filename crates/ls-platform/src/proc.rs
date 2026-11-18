@@ -5,7 +5,9 @@
 //! distinguishable; on Linux a pidfd additionally pins the process while we read its /proc entry.
 
 use std::io;
+#[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
@@ -109,6 +111,7 @@ impl Peer {
     }
 
     /// Kernel identity of the process connected on `s`. Errors when the kernel cannot say.
+    #[cfg(unix)]
     pub fn of(s: &UnixStream) -> io::Result<Peer> {
         #[cfg(target_os = "linux")]
         return linux::peer(s.as_raw_fd());
@@ -121,6 +124,17 @@ impl Peer {
                 "peer attestation is not supported on this OS",
             ))
         }
+    }
+
+    /// No process attestation exists for this OS yet (Windows: x1 task 2.1 makes it compile
+    /// only), so no peer is ever attested: every caller is refused. The named-pipe transport
+    /// still enforces same-user access on its own (ls-ipc `transport::windows`).
+    #[cfg(not(unix))]
+    pub fn of<S>(_s: &S) -> io::Result<Peer> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "peer attestation is not supported on this OS",
+        ))
     }
 }
 
@@ -214,6 +228,7 @@ fn hop(pid: u32) -> io::Result<ProcInfo> {
 
 /// File identity used to skip re-hashing an unchanged pinned binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub struct FileId {
     dev: u64,
     ino: u64,
@@ -223,6 +238,7 @@ pub struct FileId {
 }
 
 impl FileId {
+    #[cfg(unix)]
     fn of(m: &std::fs::Metadata) -> FileId {
         use std::os::unix::fs::MetadataExt;
         FileId {
@@ -246,9 +262,14 @@ pub struct Pin {
 /// Pin the binary at `path`. The identity is kept only if the file did not change while it
 /// was being hashed.
 pub fn pin(path: &std::path::Path) -> io::Result<Pin> {
-    let before = std::fs::metadata(path).map(|m| FileId::of(&m)).ok();
+    // No stable file identity off Unix: always hash.
+    #[cfg(unix)]
+    let id = |p: &std::path::Path| std::fs::metadata(p).map(|m| FileId::of(&m)).ok();
+    #[cfg(not(unix))]
+    let id = |_: &std::path::Path| None::<FileId>;
+    let before = id(path);
     let digest = file_digest(path)?;
-    let after = std::fs::metadata(path).map(|m| FileId::of(&m)).ok();
+    let after = id(path);
     Ok(Pin {
         digest,
         id: before.filter(|b| Some(*b) == after),
@@ -287,6 +308,7 @@ pub fn has_pidfd() -> bool {
 }
 
 /// Send `fds` with a one-byte payload over `s` (SCM_RIGHTS).
+#[cfg(unix)]
 pub fn send_fds(s: &UnixStream, fds: &[RawFd]) -> io::Result<()> {
     let mut byte = [0u8; 1];
     let mut iov = libc::iovec {
@@ -334,6 +356,7 @@ pub fn send_fds(s: &UnixStream, fds: &[RawFd]) -> io::Result<()> {
 }
 
 /// Receive up to `max` fds sent with [`send_fds`]. Each returned fd is owned (closed on drop).
+#[cfg(unix)]
 pub fn recv_fds(s: &UnixStream, max: usize) -> io::Result<Vec<OwnedFd>> {
     let mut byte = [0u8; 1];
     let mut iov = libc::iovec {
@@ -665,7 +688,7 @@ mod macho {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

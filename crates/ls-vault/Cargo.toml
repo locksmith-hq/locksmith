@@ -20,3 +20,9 @@ inventory = "0.3"
 rusqlite = { version = "0.42", features = ["bundled-sqlcipher"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
+
+# Windows has no system libcrypto for SQLCipher: build OpenSSL from source (openssl-src) there only.
+# Same SQLCipher codec as Linux, so the on-disk format does not change. deny.toml lets openssl-sys
+# in only through libsqlite3-sys (x1-apps-all-platforms design.md).
+[target.'cfg(windows)'.dependencies]
+rusqlite = { version = "0.42", features = ["bundled-sqlcipher-vendored-openssl"] }

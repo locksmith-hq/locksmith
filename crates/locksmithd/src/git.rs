@@ -136,12 +136,10 @@ pub fn write_include(port: u16) -> std::io::Result<()> {
     ls_core::ensure_private_dir(&dir())?;
     let tmp = dir().join(".forwarder.gitconfig.tmp");
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
+        let mut f = ls_core::private_open_options()
             .write(true)
             .create(true)
             .truncate(true)
-            .mode(0o600)
             .open(&tmp)?;
         std::io::Write::write_all(&mut f, render_include(port, &hosts(), &smith).as_bytes())?;
     }

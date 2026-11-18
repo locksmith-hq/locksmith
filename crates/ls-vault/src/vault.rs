@@ -9,7 +9,6 @@ use ls_crypto::recovery::RecoveryPhrase;
 use ls_crypto::wrap::{self, WRAP_PASSPHRASE};
 use ls_crypto::{CryptoError, SecretBytes, SecretKey32};
 use rusqlite::{Connection, OptionalExtension, params};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 pub const DB_FILE: &str = "vault.db";
@@ -162,8 +161,24 @@ fn check_name(kind: &str, n: &str) -> Result<()> {
 
 /// Refuses when the vault dir or any file in it is accessible to group or other, is owned by
 /// another user, or (for entries inside the dir) is a symlink that could redirect vault I/O.
+/// Off Unix there is no ACL check yet (Windows: x1 task 2.2), so an existing vault dir is refused.
+#[cfg(not(unix))]
 pub fn check_perms(dir: &Path) -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
+    match std::fs::metadata(dir) {
+        Ok(_) => Err(Error::Perms(format!(
+            "cannot verify that {} is private: vault permission checks are not implemented on this OS yet",
+            dir.display()
+        ))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Refuses when the vault dir or any file in it is accessible to group or other, is owned by
+/// another user, or (for entries inside the dir) is a symlink that could redirect vault I/O.
+#[cfg(unix)]
+pub fn check_perms(dir: &Path) -> Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
     let uid = ls_platform::current_uid();
     let not_owned = |p: &Path, owner: u32| {
         Error::Perms(format!(
@@ -214,11 +229,10 @@ pub fn exists(dir: &Path) -> bool {
 }
 
 fn private_file(p: &Path) -> Result<()> {
-    std::fs::OpenOptions::new()
+    ls_core::private_open_options()
         .write(true)
         .create(true)
         .truncate(false)
-        .mode(0o600)
         .open(p)?;
     Ok(())
 }
@@ -247,7 +261,7 @@ fn migrate(conn: &mut Connection, db_path: &Path, migrations: &[&str]) -> Result
         name.push(format!(".bak-{}", now()));
         let bak = PathBuf::from(name);
         std::fs::copy(db_path, &bak)?;
-        std::fs::set_permissions(&bak, std::fs::Permissions::from_mode(0o600))?;
+        ls_core::make_file_private(&bak)?;
     }
     for (i, sql) in migrations.iter().enumerate().skip(cur as usize) {
         let tx = conn.transaction()?;
@@ -723,6 +737,7 @@ impl Vault {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     const WEAK: KdfParams = KdfParams {
         m_kib: 64,

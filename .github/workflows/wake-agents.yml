@@ -1,9 +1,12 @@
 name: wake-agents
 
-# Wakes the "Locksmith worker (events)" routine for the two signals routines can't subscribe to:
-# the owner replying on a needs-owner issue, and CI failing on main. The call is only a wake-up:
-# the worker still decides from worker-has-work.sh. Seconds of Actions time; skipped jobs cost nothing.
-# Needs the ROUTINE_FIRE_TOKEN secret (the routine's API trigger token, web UI only).
+# Wakes routines for the signals they can't subscribe to. CI failing on main and an owner approval
+# on a needs-owner issue wake the "Locksmith worker (events)" routine; any other owner reply there
+# (a demand, a change of plan, a question) wakes the Opus lead, which discusses it on the issue
+# until the owner approves (scripts/owner-replies.sh classifies). The call is only a wake-up: the
+# woken agent still decides from its own checks. Seconds of Actions time; skipped jobs cost nothing.
+# Secrets are the routines' API trigger tokens (web UI only): ROUTINE_FIRE_TOKEN (worker events),
+# LEAD_FIRE_TOKEN (lead).
 on:
   issue_comment:
     types: [created]
@@ -28,15 +31,32 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-24.04
     timeout-minutes: 2
+    permissions:
+      contents: read
     steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'issue_comment'
+        with:
+          sparse-checkout: scripts/owner-replies.sh
+          sparse-checkout-cone-mode: false
       - env:
-          TOKEN: ${{ secrets.ROUTINE_FIRE_TOKEN }}
-          REASON: ${{ github.event_name == 'workflow_run' && 'main CI failed' || 'owner replied on a needs-owner issue' }}
+          WORKER_TOKEN: ${{ secrets.ROUTINE_FIRE_TOKEN }}
+          LEAD_TOKEN: ${{ secrets.LEAD_FIRE_TOKEN }}
+          BODY: ${{ github.event.comment.body }}
+          ISSUE: ${{ github.event.issue.number }}
         run: |
-          if [ -z "$TOKEN" ]; then echo "::warning::ROUTINE_FIRE_TOKEN not set; hourly workers will pick this up"; exit 0; fi
-          curl -fsS -X POST https://api.anthropic.com/v1/claude_code/routines/trig_01JUGABHdyZuNMJSYdEKSfJx/fire \
-            -H "Authorization: Bearer $TOKEN" \
+          if [ "$GITHUB_EVENT_NAME" = workflow_run ]; then
+            who=worker; trig=trig_01JUGABHdyZuNMJSYdEKSfJx; token=$WORKER_TOKEN; reason="main CI failed"
+          elif [ "$(printf '%s' "$BODY" | bash scripts/owner-replies.sh -)" = approval ]; then
+            who=worker; trig=trig_01JUGABHdyZuNMJSYdEKSfJx; token=$WORKER_TOKEN; reason="owner approved on #$ISSUE"
+          else
+            who=lead; trig=trig_01QEJR9b7UBh6XeiCeAa7cv1; token=$LEAD_TOKEN; reason="owner demand on #$ISSUE: answer it on the issue (lead.md step 0)"
+          fi
+          echo "waking $who: $reason"
+          if [ -z "$token" ]; then echo "::warning::no fire token for $who; its schedule will pick this up"; exit 0; fi
+          curl -fsS -X POST "https://api.anthropic.com/v1/claude_code/routines/$trig/fire" \
+            -H "Authorization: Bearer $token" \
             -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
             -H "anthropic-version: 2023-06-01" \
             -H "Content-Type: application/json" \
-            -d "{\"text\": \"wake-up: $REASON\"}" -o /dev/null -w '%{http_code}\n'
+            -d "$(jq -n --arg t "wake-up: $reason" '{text: $t}')" -o /dev/null -w '%{http_code}\n'

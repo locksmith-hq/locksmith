@@ -36,7 +36,11 @@ if command -v node >/dev/null; then say OK node "$(node --version)"; else say FA
 if command -v openspec >/dev/null; then say OK openspec; else say WARN openspec "missing: npm i -g @fission-ai/openspec"; fi
 
 # npm deps (test-web needs them; npm ci takes minutes, so run it in the background)
-if [ -d node_modules ]; then say OK node_modules; else say WARN node_modules "missing: run 'npm ci' in the background before just ci"; fi
+# Stale = package-lock.json changed after the last install (npm writes node_modules/.package-lock.json):
+# the cached VM image predates new workspace packages, which broke web lint in 3 runs on 2026-11-18.
+if [ ! -d node_modules ]; then say WARN node_modules "missing: run 'npm ci' in the background before just ci"
+elif [ package-lock.json -nt node_modules/.package-lock.json ]; then say WARN node_modules "stale (package-lock.json is newer): run 'npm ci' in the background before just ci"
+else say OK node_modules; fi
 
 # container registries (ghcr.io returned 403 in the Claude cloud sandbox on 2026-11-16)
 for r in https://registry-1.docker.io/v2/ https://ghcr.io/v2/; do

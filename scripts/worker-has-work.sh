@@ -14,6 +14,12 @@ n=$(gh api "repos/$repo/issues?labels=ready-to-merge&state=open" -q length)
 c=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&per_page=1" -q '.workflow_runs[0].conclusion // ""')
 [ "$c" = failure ] && work+=("main CI is red")
 
+# Open change PRs whose latest ci run failed (worker.md step 0 fixes them first)
+for b in $(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[].head.ref|select(startswith("claude/change-"))'); do
+  r=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=$b&per_page=1" -q '.workflow_runs[0].conclusion // ""')
+  [ "$r" = failure ] && work+=("CI is red on $b")
+done
+
 # Changes a worker may take now (dependency-aware, not parked, not claimed), and finished ones to archive.
 status=$(bash "$(dirname "$0")/change-status.sh")
 while IFS=$'\t' read -r id state _; do

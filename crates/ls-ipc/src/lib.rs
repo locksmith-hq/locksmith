@@ -39,7 +39,7 @@ pub fn socket_path() -> PathBuf {
 pub mod desktop;
 pub mod transport;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use transport::{DefaultListener, DefaultTransport};
 pub use transport::{Listener, Transport};
 
@@ -582,7 +582,6 @@ impl<T: Transport> Client<T> {
 mod tests {
     use super::*;
     use ciborium::Value;
-    use std::os::unix::net::UnixStream;
 
     /// One instance of every response variant. The match below fails to compile when a variant
     /// is added without extending this list, so the schema test cannot silently miss one.
@@ -930,7 +929,7 @@ mod tests {
 
     #[test]
     fn frames_roundtrip() {
-        let (mut a, mut b) = UnixStream::pair().unwrap();
+        let (mut b, mut a) = std::io::pipe().unwrap(); // portable: also runs on Windows
         for r in every_response() {
             write_frame(&mut a, &r).unwrap();
             match read_frame::<Response>(&mut b).unwrap() {
@@ -976,7 +975,7 @@ mod tests {
 
     #[test]
     fn other_version_and_oversize_frames_are_rejected() {
-        let (mut a, mut b) = UnixStream::pair().unwrap();
+        let (mut b, mut a) = std::io::pipe().unwrap(); // portable: also runs on Windows
         let mut buf = vec![0u8; 4];
         ciborium::into_writer(
             &Envelope {
@@ -999,7 +998,7 @@ mod tests {
 
     #[test]
     fn garbage_is_an_error_not_a_panic() {
-        let (mut a, mut b) = UnixStream::pair().unwrap();
+        let (mut b, mut a) = std::io::pipe().unwrap(); // portable: also runs on Windows
         a.write_all(&3u32.to_be_bytes()).unwrap();
         a.write_all(b"\xff\x00\x13").unwrap();
         assert!(read_frame::<Request>(&mut b).is_err());

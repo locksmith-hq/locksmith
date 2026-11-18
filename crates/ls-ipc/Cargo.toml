@@ -15,6 +15,17 @@ serde = { version = "1", features = ["derive"] }
 zeroize = "1"
 ts-rs = { version = "12", optional = true }
 
+# Windows named-pipe transport (x1 task 1.3; spike 1.1 chose tokio pipes plus windows-sys).
+[target.'cfg(windows)'.dependencies]
+tokio = { version = "1.54", features = ["net", "rt-multi-thread", "time"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+
 [dev-dependencies]
 # Tests only: the daemon's own peer attestation, for the foreign-peer test over the transport.
 ls-platform = { path = "../ls-platform" }

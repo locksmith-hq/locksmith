@@ -148,12 +148,15 @@ Each persona is a private GitHub App owned by `locksmith-hq`, installed only on 
 | Harriet | `locksmith-harriet` | Worker (events) | code, PRs, issues (write) |
 | Walt | `locksmith-walt` | PM (no routine yet) | PRs, issues (write); code (read) |
 
-How a run becomes its persona: the routine prompt names the persona, and `scripts/agent-start.sh <kind> <persona>` calls `scripts/agent-identity.sh`. That script mints a one-hour installation token from `AGENT_APP_KEY_<PERSONA>`, sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If the key is missing or the token is not accepted, it prints `WARN identity` and the run continues as the owner account.
+How a run becomes its persona: the routine prompt names the persona, and `scripts/agent-start.sh <kind> <persona>` calls `scripts/agent-identity.sh`. That script mints a one-hour installation token from `AGENT_APP_KEY_<PERSONA>`, sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If the key is missing or the token is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
 
 Owner setup:
 1. On `locksmith-dev` and `locksmith-research`, add one environment variable per persona used there: `AGENT_APP_KEY_ALFIE` and so on. The value is the base64 of that app's private key file in one line.
 2. Add the persona to each routine prompt, for example "Your persona is alfie."
 3. Add the `locksmith-*[bot]` logins to the author filter of the GitHub triggers (`Worker (events)` and `Lead`), next to `tomer555`.
+
+On the owner's Mac (the local lead runs as Linus): the key lives in the login Keychain, not the environment, and the lead runs in its own clone, `~/locksmith-lead-local`, because setup rewrites that clone's git config. The `gh` shim adds the token only inside that clone, so the owner's own `gh` is unchanged. One-time setup:
+`security add-generic-password -a "$USER" -s locksmith-agent-linus -w "$(openssl base64 -A -in <linus key>.pem)"` and `git clone https://github.com/locksmith-hq/locksmith.git ~/locksmith-lead-local`.
 
 Accepted risk: the model can read these keys. Each key reaches only this repo with the access above, and is revoked in the app's settings page.
 

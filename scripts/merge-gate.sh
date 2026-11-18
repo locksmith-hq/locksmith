@@ -16,9 +16,13 @@ state=$(jq -r .state <<<"$pr"); draft=$(jq -r .draft <<<"$pr")
 head_ref=$(jq -r .head.ref <<<"$pr"); sha=$(jq -r .head.sha <<<"$pr")
 [ "$state" = open ] || fail "PR is $state"
 [ "$draft" = false ] || fail "PR is a draft (cloud runs cannot un-draft; needs owner)"
-# The worker merges only agent branches; the merge-on-green workflow (MERGE_ANY_BRANCH=1) merges any branch.
-[[ "$head_ref" == claude/* || "${MERGE_ANY_BRANCH:-0}" = 1 ]] || fail "head $head_ref is not a claude/* branch"
-jq -e '.labels[]|select(.name=="ready-to-merge")' <<<"$pr" >/dev/null || fail "no ready-to-merge label"
+# MERGE_ON_GREEN=1 (merge-on-green workflow, owner 2026-11-18): any branch, no label, and gates 5-6 skipped,
+# so every open PR merges once it is complete and CI is green. The worker runs the full gate.
+on_green=${MERGE_ON_GREEN:-0}
+if [ "$on_green" != 1 ]; then
+  [[ "$head_ref" == claude/* ]] || fail "head $head_ref is not a claude/* branch"
+  jq -e '.labels[]|select(.name=="ready-to-merge")' <<<"$pr" >/dev/null || fail "no ready-to-merge label"
+fi
 jq -e '.labels[]|select(.name=="hold")' <<<"$pr" >/dev/null && fail "owner hold label"
 
 if ! { git fetch -q origin main "$head_ref" && git checkout -q --detach "$sha"; }; then fail "cannot check out $sha"; fi
@@ -27,7 +31,8 @@ if ! { git fetch -q origin main "$head_ref" && git checkout -q --detach "$sha"; 
 # Planning PRs (#112) add or fix a change's plan, so its tasks are open by design; exempt only
 # when the PR touches nothing outside openspec/changes/.
 planning_only=false
-if [[ "$head_ref" == claude/planning-* ]] && ! git diff --name-only origin/main...HEAD | grep -qv '^openspec/changes/'; then
+# Owner branches under MERGE_ON_GREEN get the same exemption (an owner may add a change plan).
+if { [[ "$head_ref" == claude/planning-* ]] || { [ "$on_green" = 1 ] && [[ "$head_ref" != claude/* ]]; }; } && ! git diff --name-only origin/main...HEAD | grep -qv '^openspec/changes/'; then
   planning_only=true
 fi
 $planning_only || for f in $(git diff --name-only origin/main...HEAD -- 'openspec/changes/*/tasks.md'); do
@@ -51,6 +56,7 @@ jq -e 'all(.[]; .s=="completed")' <<<"$runs" >/dev/null || fail "4 ci: checks st
 jq -e 'all(.[]; .c=="success" or .c=="skipped" or .c=="neutral")' <<<"$runs" >/dev/null || fail "4 ci: $(jq -r '[.[]|select(.c!="success" and .c!="skipped" and .c!="neutral")|.n]|join(",")' <<<"$runs") not green"
 jq -e 'any(.[]; .n=="hygiene" and .c=="success")' <<<"$runs" >/dev/null || fail "4 ci: hygiene did not succeed"
 echo "ok 4 ci-green"
+[ "$on_green" = 1 ] && { echo "GATE PASS $sha"; exit 0; }
 # 5 no protected files
 prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude/settings.json .claude/settings.local.json .claude/agents .claude/skills/merge-queue .claude/skills/merge-review 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh AGENTS.md CLAUDE.md openspec/config.yaml docs/agents/common.md docs/agents/merge.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh)
 [ -z "$prot" ] || fail "5 protected files changed: ${prot//$'\n'/ }"

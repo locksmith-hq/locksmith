@@ -4302,6 +4302,7 @@ checksum = "149309498a5f7334b12ddae0cad8aba81ce785fe91755068867e017cf98fee46"
 name = "smith-cli"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "base64 0.22.1",
  "clap",
  "clap_complete",
  "inventory",
@@ -4319,12 +4320,19 @@ dependencies = [
  "portable-pty",
  "rcgen",
  "regex",
+ "reqwest",
  "rpassword",
+ "rustls",
+ "rustls-platform-verifier",
+ "secrecy",
  "semver",
  "serde",
  "serde_json",
  "signal-hook",
+ "tokio",
  "toml",
+ "url",
+ "wiremock",
  "zeroize",
 ]
 

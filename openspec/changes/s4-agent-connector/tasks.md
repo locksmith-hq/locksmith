@@ -11,7 +11,7 @@
 - [x] 2.3 Verify: `cargo nextest run -p ls-gateway` covers forged, expired and wrong-audience tokens, no grant makes no decrypt call, revoked grant stops within the cache TTL.
 
 ## 3. smith and MCP remote mode [sonnet]
-- [ ] 3.1 `smith login --agent`, `smith grants`, `smith relay` against the gateway; token kept in a 0600 state file; output redacted.
+- [x] 3.1 `smith login --agent`, `smith grants`, `smith relay` against the gateway; token kept in a 0600 state file; output redacted.
 - [ ] 3.2 `locksmith-mcp` tools `list_grants` and `relay_request` using the remote backend; local-vault behaviour unchanged.
 - [ ] 3.3 Verify: `cargo nextest run -p smith-cli -p locksmith-mcp`.
 

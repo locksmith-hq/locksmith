@@ -9,6 +9,7 @@ mod agents;
 mod audit_cmds;
 mod aws_cmd;
 mod binding;
+mod connector;
 mod daemon_vault;
 mod db_cmd;
 mod doctor_m4;
@@ -141,6 +142,12 @@ enum Cmd {
         #[command(subcommand)]
         cmd: audit_cmds::AuditCmd,
     },
+    /// Log in to the Locksmith gateway as an agent (`--agent`); keeps only a short-lived token.
+    Login(connector::LoginArgs),
+    /// List the secrets this agent may use through the gateway (names and hosts, never values).
+    Grants,
+    /// Call an upstream through the gateway, which injects the granted secret; output is redacted.
+    Relay(connector::RelayArgs),
     /// Print a shell completion script.
     Completions { shell: clap_complete::Shell },
     /// Manage the Locksmith installation itself.
@@ -215,6 +222,9 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
             })
         }
         Some(Cmd::Init { binding_only, yes }) => init_cmd::run(&ro, binding_only, yes),
+        Some(Cmd::Login(a)) => connector::login(cli.json, a),
+        Some(Cmd::Grants) => connector::grants(cli.json),
+        Some(Cmd::Relay(a)) => connector::relay(cli.json, a),
         Some(Cmd::Hook { agent, event }) => hook_cmd::run(&agent, &event),
         Some(Cmd::Scan(a)) => scan_cmd::run(&ro, a),
         Some(Cmd::Git { cmd }) => git_cmd::run(cli.json, cmd),

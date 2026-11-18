@@ -42,3 +42,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.3 - done
 - Verified: `cargo nextest run -p ls-gateway` -> 56 passed; `just ci` -> 558 passed, 4 skipped, exit 0; Opus evaluator PASS (auth.rs forged/expired/wrong-aud/wrong-org, relay no-grant zero KMS calls, revoked-grant within TTL)
 - Notes for next session: next is 3.1 (smith CLI login/grants/relay against gateway). Evaluator nits still open: log GrantError kind in relay.rs (~515); design.md decision 4 says "secret binding id" but code uses secret_id; cache retain per miss under mutex. Grant cache holds empty lists up to 10 s, so connector-smoke (5.1) must create the grant before first call or wait ~10 s. Alg none/HS256 test asserts only that some error is returned.
+
+## 2026-11-18 worker
+- Task: 3.1 - done
+- Verified: `cargo nextest run -p smith-cli` -> 125 passed; `just ci` exit 0; Sonnet evaluator PASS (request shapes match gateway/control-plane, 0600 state file, no secret in argv/output/state, wiremock integration tests)
+- Notes for next session: task 3.2 (locksmith-mcp `list_grants`/`relay_request` remote backend; reuse connector.rs state/redaction logic from smith-cli, maybe factor shared code). Evaluator nits: enrollment secret JSON passes through a non-zeroized Vec/String; consider rejecting Authorization/Cookie in `relay -H`; redaction matches only the exact token string. Earlier nits still open (GrantError kind logging in relay.rs, design.md decision 4 wording).

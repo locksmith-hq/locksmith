@@ -62,3 +62,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 4.2 - done (4.3 not ticked)
 - Verified: desktop `npx vitest run` -> 23 passed, web 5 passed; `npm run lint` and `npm run build` ok; `just ci` exit 0. `just apps-build` fails in this VM: gdk-3.0.pc missing (no GTK dev libs), so the Tauri build is unverified. No independent evaluator run (Sonnet implementer only).
 - Notes for next session: control-plane client moved to shared package `packages/control-plane-client` (web imports it). Desktop Agents tab calls control plane via fetch (URL + org id in localStorage; CSP connect-src now allows loopback). The control plane has NO CORS layer, so desktop fetch from the webview will fail until CORS is added for the tauri origin or the calls move to a Rust command (needs a decision/Opus-tier since it is the auth service). Tick 4.3 on a machine that can run `just apps-build`.
+
+## 2026-11-18 worker
+- Task: 4.3 - done
+- Verified: `npm run lint` (all workspaces) and `just apps-build` (web + Tauri desktop debug build) exit 0 after `apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev` and `npm i` (stale workspace link for control-plane-client). `just ci` not rerun after merging main.
+- Notes for next session: next is 5.1 (compose wiring, `just connector-smoke`; needs `just up`). Desktop CORS gap from 4.2 still open.

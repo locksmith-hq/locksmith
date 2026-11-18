@@ -18,7 +18,7 @@
 ## 4. Console and desktop surface [sonnet]
 - [x] 4.1 Web page listing agents and grants with create/revoke; types generated from `openapi.json`.
 - [x] 4.2 `apps/desktop` agents and grants view (reads the same API through the Tauri frontend; list, create, revoke).
-- [ ] 4.3 Verify: `npm run lint` and `just apps-build` (web and desktop).
+- [x] 4.3 Verify: `npm run lint` and `just apps-build` (web and desktop).
 
 ## 5. Demo and e2e [sonnet]
 - [ ] 5.1 Compose wiring and `just connector-smoke`: register agent, grant a canary secret, relay to the mock upstream through `smith` and the MCP tool; assert upstream saw it, the agent did not.

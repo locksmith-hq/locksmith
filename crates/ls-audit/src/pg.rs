@@ -17,7 +17,9 @@ use sqlx_core::query_as::query_as;
 use sqlx_postgres::{PgConnection, PgPool};
 use uuid::Uuid;
 
+use crate::checkpoint::{CheckpointBody, SignedCheckpoint};
 use crate::event::{Event, Record, StoredAttrs};
+use crate::verifier::OrgReport;
 use crate::{Checkpoint, Hash};
 
 pub use sqlx_core::error::Error;
@@ -239,4 +241,111 @@ pub async fn checkpoints_in_tx(
             })
         })
         .collect()
+}
+
+/// Every org with any ledger state (a head, an event or a checkpoint) visible in this
+/// transaction, in id order. The verifier role (BYPASSRLS) sees all orgs.
+pub async fn ledger_orgs_in_tx(conn: &mut PgConnection) -> Result<Vec<Uuid>, Error> {
+    let rows: Vec<(Uuid,)> = query_as(
+        "SELECT org_id FROM audit_heads
+         UNION SELECT org_id FROM audit_events
+         UNION SELECT org_id FROM audit_checkpoints
+         ORDER BY 1",
+    )
+    .fetch_all(conn)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
+/// `(seq, hash, at_micros, key_id, signature)` of an `audit_checkpoints` row.
+type CheckpointRow = (i64, Vec<u8>, i64, String, Vec<u8>);
+
+/// The checkpoints stored for `org_id` with their key ids and signatures, in `seq` order
+/// (S5 task 5.1: the verifier checks each signature before trusting it).
+pub async fn signed_checkpoints_in_tx(
+    conn: &mut PgConnection,
+    org_id: Uuid,
+) -> Result<Vec<SignedCheckpoint>, Error> {
+    let rows: Vec<CheckpointRow> = query_as(
+        "SELECT seq, hash, (extract(epoch FROM at) * 1000000)::bigint, key_id, signature
+         FROM audit_checkpoints WHERE org_id = $1 ORDER BY seq",
+    )
+    .bind(org_id)
+    .fetch_all(conn)
+    .await?;
+    rows.into_iter()
+        .map(|(seq, hash, at_micros, key_id, signature)| {
+            Ok(SignedCheckpoint {
+                body: CheckpointBody {
+                    org_id,
+                    seq: to_seq(seq)?,
+                    hash: to_hash(&hash)?,
+                    at_micros,
+                },
+                key_id,
+                signature: <[u8; 64]>::try_from(signature.as_slice()).map_err(|_| {
+                    Error::Decode("audit checkpoint signature is not 64 bytes".into())
+                })?,
+            })
+        })
+        .collect()
+}
+
+/// How a verify run read the ledger (`audit_verify_runs.mode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerifyMode {
+    Db,
+    Dir,
+}
+
+impl VerifyMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Db => "db",
+            Self::Dir => "dir",
+        }
+    }
+}
+
+/// Record one org's verify result in `audit_verify_runs`, in its own transaction bound to that
+/// org (the verifier role's INSERT policy admits only the bound org). `broken_seq` and
+/// `break_kind` are [`OrgReport::first_break`]; `truncated_at` is the last `seq` present when
+/// the chain ends before a checkpoint.
+pub async fn record_verify_run(
+    conn: &mut PgConnection,
+    mode: VerifyMode,
+    started_at_micros: i64,
+    report: &OrgReport,
+) -> Result<Uuid, Error> {
+    use sqlx_core::connection::Connection;
+
+    let first = report.first_break();
+    let mut tx = conn.begin().await?;
+    bind_org(&mut tx, report.org_id).await?;
+    let (id,): (Uuid,) = query_as(
+        "INSERT INTO audit_verify_runs
+             (org_id, mode, started_at, ok, events, checkpoints, broken_seq, break_kind,
+              truncated_at)
+         VALUES ($1, $2, 'epoch'::timestamptz + $3 * interval '1 microsecond', $4, $5, $6, $7,
+                 $8, $9)
+         RETURNING id",
+    )
+    .bind(report.org_id)
+    .bind(mode.as_str())
+    .bind(started_at_micros)
+    .bind(report.ok())
+    .bind(to_i64(report.events)?)
+    .bind(to_i64(report.checkpoints)?)
+    .bind(first.map(|b| to_i64(b.seq)).transpose()?)
+    .bind(first.map(|b| b.kind.as_str()))
+    .bind(report.truncated.map(|t| to_i64(t.last_seq)).transpose()?)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+/// The current time in Unix microseconds (for `started_at`).
+pub fn now_unix_micros() -> i64 {
+    now_micros()
 }

@@ -72,6 +72,15 @@ impl CheckpointBody {
     }
 }
 
+/// A stored checkpoint: the body, the signing key's id (`<name>:<version>`, e.g.
+/// `audit-checkpoint:1`) and the Ed25519 signature over [`CheckpointBody::message`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedCheckpoint {
+    pub body: CheckpointBody,
+    pub key_id: String,
+    pub signature: [u8; 64],
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -15,15 +15,21 @@
 //! only). [`checkpoint`] defines the bytes a signed checkpoint signs (domain tag
 //! `locksmith-checkpoint-v1`). The `postgres` feature adds [`pg`], the Postgres store with the
 //! transactional append; without it the crate stays pure.
+//!
+//! [`verifier`] checks one org's records against its signed checkpoints under a set of public
+//! keys (task 5.1), and [`export`] defines the JSON Lines an export directory holds, so the
+//! offline verifier and the exporter read and write the same format.
 
 use sha2::{Digest, Sha256};
 
 pub mod checkpoint;
 pub mod event;
+pub mod export;
 #[cfg(feature = "postgres")]
 pub mod pg;
+pub mod verifier;
 
-pub use checkpoint::{CHECKPOINT_DOMAIN, CheckpointBody};
+pub use checkpoint::{CHECKPOINT_DOMAIN, CheckpointBody, SignedCheckpoint};
 pub use event::{
     Actor, AttrTag, AttrValue, Attrs, Code, Event, Host, InvalidIdentifier, Record, StoredAttrs,
     Target, attr, kind, outcome,
@@ -151,6 +157,18 @@ pub enum BreakKind {
     Hash,
     /// The row hash does not match a trusted checkpoint at this `seq`.
     Checkpoint,
+}
+
+impl BreakKind {
+    /// The stored and printed name (`audit_verify_runs.break_kind`).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Sequence => "sequence",
+            Self::Link => "link",
+            Self::Hash => "hash",
+            Self::Checkpoint => "checkpoint",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

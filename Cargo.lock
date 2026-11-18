@@ -2345,6 +2345,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "locksmith-audit"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "base64 0.22.1",
+ "clap",
+ "ed25519-dalek",
+ "hex",
+ "ls-audit",
+ "ls-pg-test",
+ "serde_json",
+ "sqlx-core",
+ "sqlx-postgres",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "locksmith-mcp"
 version = "0.0.1-alpha.4"
 dependencies = [

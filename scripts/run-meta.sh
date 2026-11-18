@@ -58,8 +58,19 @@ EOF
     # One fenced block, never nested: agent fields (2-space indented YAML) come on stdin.
     echo '```yaml'
     "$0" report
-    if [ ! -t 0 ]; then sed '/^```/d'; fi
+    fields=""; if [ ! -t 0 ]; then fields=$(sed '/^```/d'); printf '%s\n' "$fields"; fi
     echo '```'
+    # evaluate-escalate step 4: never tick with `evaluator: n/a` (6 worker runs did on 2026-11-17/18).
+    if grep -qE '^ *evaluator: *n/a' <<<"$fields"; then
+      since=$(sed -n 's/^START_EPOCH=//p' "$state" 2>/dev/null || true)
+      ticks=$( { git log --since="@${since:-$(date -u +%s)}" --no-merges -p -- '*tasks.md'; git diff HEAD -- '*tasks.md'; } 2>/dev/null | grep -c '^+.*\[x\]' || true)
+      if [ "${ticks:-0}" -gt 0 ]; then echo "run-meta: WARN evaluator: n/a but this run ticked $ticks task(s): run the evaluator (evaluate-escalate step 3) or untick before you push" >&2; fi
+    fi
+    # worker.md step 6: 3 worker runs on 2026-11-18 were asked to plan and ended without planning.
+    if grep -q '^KIND=worker' "$state" 2>/dev/null; then
+      asked=$(bash "$(dirname "$0")/worker-has-work.sh" 2>/dev/null || true)
+      if grep -q 'plan the next one' <<<"$asked"; then echo "run-meta: WARN planning is still asked and no planning PR is open: do worker.md step 6 before you finish" >&2; fi
+    fi
     ;;
   *) echo "usage: $0 start <kind> | report | block < agent-fields" >&2; exit 2 ;;
 esac

@@ -1,12 +1,12 @@
 ---
 name: run-log
-description: End-of-run logging for Locksmith scheduled agents — the run-metadata block, friction entries, the change's progress.md entry, and the agent-log issue comment. Use before the final push of every non-idle run, including parked, red-main and owner-blocked exits.
+description: End-of-run logging for Locksmith scheduled agents — the run-metadata block, friction entries, the change's progress.md entry, and the agent-log issue comment. Use before the final push of every run, including idle, parked, red-main and owner-blocked exits.
 ---
 
 # Run log
 
 ## 1. progress.md entry
-Append one entry to `openspec/changes/<id>/progress.md`, even if the run failed. The file is append-only. Use this format:
+Append one entry to `openspec/changes/<id>/progress.md` (append-only), even if the run failed. Use this format:
 ```
 ## <UTC date time> <worker|lead|review>
 - Task: <id> - <done|failed|blocked|ci-fix>
@@ -15,7 +15,7 @@ Append one entry to `openspec/changes/<id>/progress.md`, even if the run failed.
 ```
 
 ## 2. Metadata block
-Build the block with the script, passing only your own fields on stdin:
+Build the block after your last commit and before the push (fix any `WARN` first), passing only your own fields on stdin:
 ```
 bash scripts/run-meta.sh block <<'EOF'
   orchestrator: <model>
@@ -32,7 +32,17 @@ bash scripts/run-meta.sh block <<'EOF'
     - {what: "<anything that cost more than about 2 min>", lost_s: <n>, fix_idea: "<one line>"}
 EOF
 ```
-The script prints one complete fenced block, so don't wrap it in another fence. Take subagent numbers from each Agent result's usage, and write `unknown` instead of guessing. Never put secrets in it.
+It prints one complete fenced block: don't wrap it. Take subagent numbers from each Agent result's usage; never guess (`unknown`). Never put secrets in it.
 
 ## 3. agent-log comment
-Post one comment on the open issue labelled `agent-log`: first the line `<!-- agent -->`, then 1–3 lines of summary, then the block. Every comment you post anywhere starts with `<!-- agent -->`. Use `gh api repos/locksmith-hq/locksmith/issues/<n>/comments -f body=...`, because `gh issue` is blocked in cloud runs.
+Post one comment on the open issue labelled `agent-log`: first the line `<!-- agent -->`, then 1–3 lines of summary, then the activity list below, then the block.
+
+Every run posts one, idle runs included. The activity list records everything this run changed, one line each with a link, and `none` for an empty heading:
+```
+**Activity**
+- Commits: <short sha> <subject> (branch), from `git log <base_sha>..HEAD` on each branch you pushed
+- Comments: <PR/issue link>: <one-line gist>
+- PRs: <link> opened|pushed|labelled <label>|merged|closed: <why>
+- Issues: <link> opened|edited|retitled|labelled|closed: <what>
+```
+Track these as you go. All agents post as the owner account, so GitHub cannot tell your actions from another run's. Every comment you post anywhere starts with `<!-- agent -->`. Use `gh api repos/locksmith-hq/locksmith/issues/<n>/comments -f body=...`, because `gh issue` is blocked in cloud runs.

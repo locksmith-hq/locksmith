@@ -13,6 +13,12 @@ case "$cmd" in
   start)
     t="${3:?timeout seconds}"; shift 3; [ "${1:-}" = "--" ] && shift
     rm -f "$rc"
+    # Low disk: target/ filled a worker's disk mid-run twice (2026-11-18). Free it only when no cargo runs.
+    free_gb() { df -Pk . | awk 'NR==2{print int($4/1048576)}'; }
+    if [ "$(free_gb)" -lt "${BG_MIN_FREE_GB:-8}" ] && ! pgrep -x cargo >/dev/null; then
+      rm -rf target/debug/incremental; [ "$(free_gb)" -lt "${BG_MIN_FREE_GB:-8}" ] && cargo clean -q
+      echo "bg: low disk, freed target/: $(free_gb) GB free"
+    fi
     # No stdin: a command that reads it (a stray `cat`) hung a worker run for 30 min.
     ( s=$(date +%s); timeout -s KILL "$t" "$@" </dev/null >"$log" 2>&1; c=$?
       echo "$name $(( $(date +%s) - s )) $c" >>/tmp/bg-times; echo $c >"$rc" ) </dev/null >/dev/null 2>&1 &
@@ -27,7 +33,7 @@ case "$cmd" in
     while [ ! -f "$rc" ] && [ "$waited" -lt "$max" ]; do sleep 5; waited=$((waited+5)); done
     tail -n 30 "$log" 2>/dev/null
     if [ -f "$rc" ]; then code=$(cat "$rc"); note=""; [ "$code" = 137 ] && note=" (killed by timeout)"; echo "bg: $name exited ${code}${note}"; exit "$code"
-    else echo "bg: $name still running after ${max}s (check again later)"; exit 124; fi
+    else echo "bg: $name still running after ${max}s (wait again in a NEW Bash call: a loop of waits passes the 120 s tool limit)"; exit 124; fi
     ;;
   *) echo "usage: bg.sh start|wait|status <name> ..." >&2; exit 2 ;;
 esac

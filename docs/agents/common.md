@@ -42,9 +42,8 @@ Never raise one for progress or retryable failures.
 ## Hard rules
 - **Branches.** Push only to `claude/*` branches. Never push to main, force-push, or delete branches or tags.
 - **PRs.**
-  - Never open draft PRs: always pass `-F draft=false`.
-  - Agents never merge; the `merge-on-green` workflow does (`merge.md`).
-  - Never approve PRs.
+  - Open non-draft (`-F draft=false`), labelled `in-progress` until marked ready.
+  - Never merge (`merge-on-green` does, `merge.md`) or approve PRs.
 - **Before pushing,** confirm the branch's PR isn't merged or closed. If it is, start a new branch from origin/main.
 - **tasks.md.** Only flip checkboxes, and only after the task is verified. Never edit task text; `scripts/check-task-edits.sh` enforces this.
 - **Protected files** (guard-enforced). Agent branches never change:

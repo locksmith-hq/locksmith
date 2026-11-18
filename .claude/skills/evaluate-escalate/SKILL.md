@@ -12,6 +12,8 @@ description: The implement → independent evaluate → escalate-one-tier loop f
 
 You may implement small tasks yourself (`self: true` in run-log); step 3 still applies.
 
+Cloud subagents always run async ("Async agent launched"): end the turn with one status line; the hand-back resumes you. No Monitor or sleep heartbeats. Never end a turn while only a bg.sh job runs: poll `bg.sh wait`.
+
 ## Loop
 1. **Implement.** Give the implementer:
    - the exact task text, the design excerpt, the files and the verification command;

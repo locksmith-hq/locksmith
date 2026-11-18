@@ -5,7 +5,7 @@ description: Start of every scheduled Locksmith agent run. Runs preflight (docke
 
 # Run start
 
-1. Run `bash scripts/agent-start.sh <kind> [persona]`, where `<kind>` is one of worker, lead, review, health or research. If your routine prompt names a persona (linus, alfie, josie, harriet or walt), pass it: the run then acts as that GitHub App. A `FAIL identity` line means the identity could not be set up: stop the run, do no work, push nothing, and report the line in your final message. Never work around it, for example by running without the persona.
+1. Run `bash scripts/agent-start.sh <kind> [persona]`, where `<kind>` is one of worker, lead, review, health or research. If your routine prompt names a persona (linus, alfie, josie, harriet or walt), pass it: the script checks the run already acts as that GitHub App (the environment's setup script switched it). A `FAIL identity` line means it does not: stop the run, do no work, push nothing, and report the line in your final message. Never work around it, for example by running without the persona.
    - It prints one line per check: `OK`, `FIXED`, `WARN` or `FAIL`.
    - Fix every `FAIL` before doing real work.
    - Record each `WARN` or `FAIL` line, and each `FIXED` except docker (expected), as `friction` (format: `run-log` skill).

@@ -1,6 +1,6 @@
 [package]
 name = "locksmith-audit"
-description = "The audit ledger CLI: verify the per-org hash chain and its signed checkpoints, from the database or offline from an export (S5)."
+description = "The audit ledger CLI: verify the per-org hash chain and its signed checkpoints, from the database or offline from an export, and export it to a file sink (S5)."
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -24,10 +24,11 @@ tokio = { version = "1.54", features = ["rt", "macros"] }
 # Not the sqlx facade (it pulls sqlx-sqlite; see crates/a0-spikes/Cargo.toml).
 sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "uuid"] }
 sqlx-postgres = { version = "0.9.0", default-features = false, features = ["uuid"] }
+# Atomic writes in the file sink: temp file in the target directory, fsync, rename (task 5.2).
+tempfile = "3.27"
 
 [dev-dependencies]
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["alloc", "fast", "zeroize"] }
 hex = "0.4"
 ls-pg-test = { path = "../ls-pg-test" }
-tempfile = "3.27"
 tokio = { version = "1.54", features = ["macros", "rt-multi-thread", "time"] }

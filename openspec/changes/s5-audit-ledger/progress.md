@@ -63,3 +63,10 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Done: new crate `crates/locksmith-audit` (verify --db/--dir/--json, exit 0/1/2); pure logic in `ls-audit` (verifier.rs, export.rs line format for 5.2 to reuse, SignedCheckpoint).
 - Open (nits): (1) undecodable rows under --db exit 2 without org/seq or run row; (2) a mid-run error records no verify rows; (3) --database-url shows in ps, prefer the env var; (4) --dir silently skips non-UUID dirs; (5) --db does not compare audit_heads.seq with last event seq; (6) --checkpoints-from not yet implemented (belongs to 5.3); (7) --dir runs are not recorded.
 - Notes for next session: 5.2 export must use `ls-audit::export` so exporter and verifier agree; then 5.3 (just recipes, tamper test, --checkpoints-from). Build with CARGO_INCREMENTAL=0.
+
+## 2026-11-18 worker (josie)
+- Task: 5.2 - done
+- Verified: `cargo nextest run -p ls-audit -p locksmith-audit` 66 passed; fmt and clippy clean; evaluator (Opus) PASS
+- Done: `locksmith-audit export --dir` behind an `AuditSink` trait (`FileSink`): per-org JSON Lines via `ls_audit::export`, checkpoints.jsonl, cursor as commit point, temp+fsync+rename, lock file, crash recovery, `check_batch` refuses overlap or rewritten history.
+- Open (nits): (1) cursor is per org at `<org_id>/cursor.json`; 5.3 and 7.1 must use that path. (2) `verify --dir` ignores the cursor, so an uncommitted tail from a crashed export is verified until the next export cleans it. (3) `check_batch` does not compare a checkpoint's hash to the exported event. (4) one long read-only transaction across all orgs. (5) tail deletion in the DB is not reported by export (verify and 5.3 tamper test cover it).
+- Notes for next session: 5.3 next (just audit-verify/audit-export/audit-tamper-test, `--checkpoints-from`). Build with CARGO_INCREMENTAL=0.

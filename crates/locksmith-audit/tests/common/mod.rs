@@ -1,6 +1,8 @@
 //! Shared test helpers: a synthetic ledger, test-only signing keys and a runner for the binary.
 #![allow(dead_code)]
 
+pub mod pg;
+
 use std::path::Path;
 use std::process::{Command, Output};
 

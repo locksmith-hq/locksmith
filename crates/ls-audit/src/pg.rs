@@ -191,13 +191,26 @@ type Row = (
 /// Every event of `org_id` visible in this transaction, in `seq` order. A row whose attributes
 /// do not parse is returned with `attrs: None`, so verify reports it as a hash break.
 pub async fn records_in_tx(conn: &mut PgConnection, org_id: Uuid) -> Result<Vec<Record>, Error> {
+    records_after_in_tx(conn, org_id, 0, None).await
+}
+
+/// The events of `org_id` with `seq > after`, in `seq` order, at most `limit` of them (all when
+/// `None`). The exporter reads in batches from its cursor (S5 task 5.2).
+pub async fn records_after_in_tx(
+    conn: &mut PgConnection,
+    org_id: Uuid,
+    after: u64,
+    limit: Option<u64>,
+) -> Result<Vec<Record>, Error> {
     let rows: Vec<Row> = query_as(
         "SELECT org_id, seq, id,
                 (extract(epoch FROM at) * 1000000)::bigint,
                 kind, actor, target, outcome, attrs::text, prev_hash, hash
-         FROM audit_events WHERE org_id = $1 ORDER BY seq",
+         FROM audit_events WHERE org_id = $1 AND seq > $2 ORDER BY seq LIMIT $3",
     )
     .bind(org_id)
+    .bind(to_i64(after)?)
+    .bind(limit.map(to_i64).transpose()?)
     .fetch_all(conn)
     .await?;
     rows.into_iter()
@@ -266,11 +279,24 @@ pub async fn signed_checkpoints_in_tx(
     conn: &mut PgConnection,
     org_id: Uuid,
 ) -> Result<Vec<SignedCheckpoint>, Error> {
+    signed_checkpoints_between_in_tx(conn, org_id, 0, u64::MAX).await
+}
+
+/// The signed checkpoints of `org_id` with `after < seq <= up_to`, in `seq` order (S5 task 5.2:
+/// the exporter writes the checkpoints its exported events cover).
+pub async fn signed_checkpoints_between_in_tx(
+    conn: &mut PgConnection,
+    org_id: Uuid,
+    after: u64,
+    up_to: u64,
+) -> Result<Vec<SignedCheckpoint>, Error> {
     let rows: Vec<CheckpointRow> = query_as(
         "SELECT seq, hash, (extract(epoch FROM at) * 1000000)::bigint, key_id, signature
-         FROM audit_checkpoints WHERE org_id = $1 ORDER BY seq",
+         FROM audit_checkpoints WHERE org_id = $1 AND seq > $2 AND seq <= $3 ORDER BY seq",
     )
     .bind(org_id)
+    .bind(to_i64(after)?)
+    .bind(i64::try_from(up_to).unwrap_or(i64::MAX))
     .fetch_all(conn)
     .await?;
     rows.into_iter()

@@ -1,4 +1,5 @@
-//! `locksmith-audit`: verify the audit ledger (S5 design decision 8, task 5.1).
+//! `locksmith-audit`: verify the audit ledger (S5 design decision 8, task 5.1) and export it to
+//! a file sink ([`export`], [`sink`]; design decision 7, task 5.2).
 //!
 //! - [`verify_db`] walks every org in Postgres as the `audit_verifier` role (SELECT and
 //!   BYPASSRLS) in one read-only snapshot, then records one `audit_verify_runs` row per org.
@@ -29,7 +30,10 @@ use sqlx_core::query::query;
 use sqlx_postgres::{PgConnectOptions, PgConnection};
 use uuid::Uuid;
 
-/// A failure to run verify at all (as opposed to a ledger that fails verification).
+pub mod export;
+pub mod sink;
+
+/// A failure to run verify or export at all (as opposed to a ledger that fails verification).
 #[derive(Debug)]
 pub enum Error {
     Config(String),
@@ -49,7 +53,7 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-fn db_err(context: &str) -> impl Fn(sqlx_core::error::Error) -> Error + '_ {
+pub(crate) fn db_err(context: &str) -> impl Fn(sqlx_core::error::Error) -> Error + '_ {
     // sqlx errors carry SQLSTATE messages and IO errors, never the connection password.
     move |e| Error::Db(format!("{context}: {e}"))
 }

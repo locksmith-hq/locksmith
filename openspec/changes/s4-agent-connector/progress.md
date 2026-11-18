@@ -37,3 +37,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.2 - done
 - Verified: `cargo nextest run -p ls-gateway -p ls-control-plane` -> 130 passed; `just ci` green; Opus evaluator PASS (9194dc4)
 - Notes for next session: task 2.3 (verify: forged/expired/wrong-aud token tests, revoke within TTL - mostly covered; confirm and tick). Grant cache holds empty lists up to 10 s, so connector-smoke (5.1) must create the grant before the agent's first call or wait ~10 s. Evaluator nits: log the GrantError kind in relay.rs (~515); design.md decision 4 says "secret binding id" but code uses secret_id; cache `retain` per miss under mutex.
+
+## 2026-11-18 04:29 UTC worker
+- Task: 2.3 - done
+- Verified: `cargo nextest run -p ls-gateway` -> 56 passed; `just ci` -> 558 passed, 4 skipped, exit 0; Opus evaluator PASS (auth.rs forged/expired/wrong-aud/wrong-org, relay no-grant zero KMS calls, revoked-grant within TTL)
+- Notes for next session: next is 3.1 (smith CLI login/grants/relay against gateway). Evaluator nits still open: log GrantError kind in relay.rs (~515); design.md decision 4 says "secret binding id" but code uses secret_id; cache retain per miss under mutex. Grant cache holds empty lists up to 10 s, so connector-smoke (5.1) must create the grant before first call or wait ~10 s. Alg none/HS256 test asserts only that some error is returned.

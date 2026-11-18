@@ -56,3 +56,10 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Done: `ls-audit` checkpoint bytes (`locksmith-checkpoint-v1`, golden vector `tests/fixtures/checkpoint-v1.json`); `ls-envelope` `TransitSigner`; control-plane checkpoint job (migration 0010 `audit_checkpoint_jobs`, SKIP LOCKED, 1000 events or 60 s); `openbao-init.sh` key, policy and token; `just up` writes `infra/compose/.audit-verifier.json`.
 - Open (evaluator nits): (1) 0010 `job_claim_*` policies use `USING true`; harden to `current_org_id() IS NULL`. (2) `db.rs` `without_org` doc no longer true for the jobs table. (3) check `rows_affected() == 1` on the `checked_at` update. (4) the job holds a pooled connection during the OpenBao call. (5) dev OpenBao is in-memory, so a restart makes older checkpoints unverifiable. (6) the control plane cannot verify a signature before storing it; 5.1 will catch it.
 - Notes for next session: group 5 (`locksmith-audit` verify/export CLI) next; the disk filled once, so build with `CARGO_INCREMENTAL=0` and clear `target/` if needed.
+
+## 2026-11-18 16:55 worker (josie)
+- Task: 5.1 - done
+- Verified: `just ci` -> green (664 tests); `cargo nextest run -p ls-audit` 38 passed, `-p locksmith-audit` 14 passed (live postgres:18 --db tests); evaluator (Opus) PASS on 0c43c2f
+- Done: new crate `crates/locksmith-audit` (verify --db/--dir/--json, exit 0/1/2); pure logic in `ls-audit` (verifier.rs, export.rs line format for 5.2 to reuse, SignedCheckpoint).
+- Open (nits): (1) undecodable rows under --db exit 2 without org/seq or run row; (2) a mid-run error records no verify rows; (3) --database-url shows in ps, prefer the env var; (4) --dir silently skips non-UUID dirs; (5) --db does not compare audit_heads.seq with last event seq; (6) --checkpoints-from not yet implemented (belongs to 5.3); (7) --dir runs are not recorded.
+- Notes for next session: 5.2 export must use `ls-audit::export` so exporter and verifier agree; then 5.3 (just recipes, tamper test, --checkpoints-from). Build with CARGO_INCREMENTAL=0.

@@ -21,7 +21,7 @@
 - [x] 4.3 Verify: `cargo nextest run -p ls-control-plane` covers a checkpoint created at the threshold, a signature that verifies with `ed25519-dalek` under the published key, and a signature that fails under another key.
 
 ## 5. Verify and export CLI [opus]
-- [ ] 5.1 `locksmith-audit verify --db` (verifier role) and `--dir` (offline, public key only), with `--json` output; results are recorded in `audit_verify_runs`; it exits non-zero with the org and first broken seq.
+- [x] 5.1 `locksmith-audit verify --db` (verifier role) and `--dir` (offline, public key only), with `--json` output; results are recorded in `audit_verify_runs`; it exits non-zero with the org and first broken seq.
 - [ ] 5.2 `locksmith-audit export` to the file sink (JSON Lines per org, checkpoints, cursor, temp file plus rename plus fsync) behind an `AuditSink` trait; incremental, never writes an event twice.
 - [ ] 5.3 `just audit-verify` (runs `verify --db --checkpoints-from` the export directory), `just audit-export`, and `just audit-tamper-test`; the tamper test runs as the owner role: edit a field, delete a row, swap two seqs, truncate past a checkpoint, edit an exported line, and the strongest case: rewrite one event, recompute every later hash, and delete the `audit_checkpoints` rows. Each must fail verify, the last with the export's checkpoints present; the untouched ledger must pass.
 - [ ] 5.4 Verify: `cargo nextest run -p ls-audit` and `just up && just audit-tamper-test`.

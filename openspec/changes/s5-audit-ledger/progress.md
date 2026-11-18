@@ -32,3 +32,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Done: `services/control-plane/src/audit.rs`; agent create/rotate/delete and grant create/revoke append in the same `with_org` tx; `POST /internal/v1/audit/events` behind the service token (closed enums, `Host::parse`, kind/outcome pairing); openapi.json and TS schema regenerated; `ls-audit` `postgres` feature now enabled by control-plane.
 - Open: (1) deleting a secret cascades grants without a `grant.revoked` event (S2 route, consider a `secret.deleted` event); (2) outcome-retry idempotency on attempt id is still for 3.1/design.md; (3) `host` is the one non-closed attribute (host-name-shaped strings pass); (4) agent delete counts grants with a separate SELECT before DELETE, so lock the agent row for an exact count; (5) dev auth actor is `Service("dev_auth")` until T1 gives `Actor::User`.
 - Notes for next session: 2.4 verify, then 3.1 with the gateway `AuditSink` swap; land the `gateway_audit` revoke migration with 3.1 and tick 2.1 then.
+
+## 2026-11-18 14:11 worker
+- Task: 2.4 - done
+- Verified: `cargo nextest run -p ls-audit --features postgres -p ls-control-plane` -> 104 passed (50 concurrent appends, app-role UPDATE/DELETE refused, RLS and cross-org isolation, 401 without service token, no canary in stored events)
+- Notes for next session: 3.1 next ([opus], audit path): swap the gateway `AuditSink` (relay.rs) to call POST /internal/v1/audit/events, 503 fail-closed before unwrap, 3 outcome retries with an idempotency key on attempt id; add the rollback note to design.md first. Land the `gateway_audit` INSERT revoke migration with 3.1 and tick 2.1 then. Also open: secret.deleted event for cascaded grants.

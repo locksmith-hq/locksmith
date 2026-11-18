@@ -2,9 +2,9 @@
 
 ## 1. Spike and IPC trait [opus]
 - [ ] 1.1 Spike: compare `interprocess` and tokio named pipes for a round trip plus peer SID check; record versions, licences, last-release dates and the choice in design.md and progress.md.
-- [ ] 1.2 Introduce a transport trait in `ls-ipc` with the existing Unix implementation behind it; the public API is unchanged.
+- [x] 1.2 Introduce a transport trait in `ls-ipc` with the existing Unix implementation behind it; the public API is unchanged.
 - [ ] 1.3 Add the `cfg(windows)` named-pipe implementation with a current-user-only DACL and the SID peer check.
-- [ ] 1.4 Verify: `cargo nextest run -p ls-ipc` passes on Linux, including round trip and foreign-peer tests via the trait.
+- [x] 1.4 Verify: `cargo nextest run -p ls-ipc` passes on Linux, including round trip and foreign-peer tests via the trait.
 
 ## 2. Windows builds for secret-touching crates [opus]
 - [ ] 2.1 Make `ls-vault` (SQLCipher with vendored OpenSSL), `ls-broker`, `smith-cli` and `locksmithd` compile under `cfg(windows)`, using the transport trait; no change to crypto or on-disk formats.

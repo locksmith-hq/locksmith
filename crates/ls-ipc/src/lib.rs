@@ -7,7 +7,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroize;
 
@@ -38,6 +37,11 @@ pub fn socket_path() -> PathBuf {
 }
 
 pub mod desktop;
+pub mod transport;
+
+#[cfg(unix)]
+pub use transport::{DefaultListener, DefaultTransport};
+pub use transport::{Listener, Transport};
 
 /// Passphrase sent client → daemon for unlock (also the secret value of `SecretPut`). Zeroized on drop; no Debug/Display/Clone.
 pub struct Passphrase(Vec<u8>);
@@ -528,21 +532,29 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
     out
 }
 
-/// A blocking client connection to the daemon.
-pub struct Client {
-    pub stream: UnixStream,
+/// A blocking client connection to the daemon over transport `T` (the host OS transport by
+/// default, so `Client` alone is a client over [`DefaultTransport`]).
+pub struct Client<T: Transport = DefaultTransport> {
+    pub stream: T,
 }
 
 impl Client {
     pub fn connect(path: &Path) -> io::Result<Client> {
-        Ok(Client {
-            stream: UnixStream::connect(path)?,
-        })
+        Self::connect_via(path)
     }
 
     /// Connect to the per-user daemon at [`socket_path`].
     pub fn connect_default() -> io::Result<Client> {
         Self::connect(&socket_path())
+    }
+}
+
+impl<T: Transport> Client<T> {
+    /// Connect over an explicit transport.
+    pub fn connect_via(path: &Path) -> io::Result<Self> {
+        Ok(Client {
+            stream: T::connect(path)?,
+        })
     }
 
     pub fn send(&mut self, req: &Request) -> io::Result<()> {
@@ -570,6 +582,7 @@ impl Client {
 mod tests {
     use super::*;
     use ciborium::Value;
+    use std::os::unix::net::UnixStream;
 
     /// One instance of every response variant. The match below fails to compile when a variant
     /// is added without extending this list, so the schema test cannot silently miss one.

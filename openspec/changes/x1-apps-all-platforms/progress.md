@@ -30,3 +30,8 @@
 - Task: 1.1 - blocked (spike recorded, not ticked)
 - Verified: openspec validate x1-apps-all-platforms -> valid; no independent evaluator run, because the runtime round trip could not execute on Linux
 - Notes for next session: x86_64-pc-windows-gnu target and gcc-mingw-w64 install fine in the VM (rustup target add; apt-get install gcc-mingw-w64-x86-64), so Windows code can be cross-checked. 1.2 (transport trait in ls-ipc, Unix impl only) needs no Windows host and can proceed next; tick 1.1 only after 4.2 runs the pipe round trip on a Windows runner or the owner accepts the compile-only spike. deny.toml bans openssl-sys, which clashes with vendored OpenSSL for SQLCipher on Windows (task 2.1): decide before 2.1.
+
+## 2026-11-18 worker
+- Task: 1.2, 1.4 - done
+- Verified: `just ci` -> exit 0; `cargo nextest run -p ls-ipc` -> 14 passed (6 new in tests/transport.rs, foreign-peer test ran as root); independent Opus evaluator PASS
+- Notes for next session: `Transport`/`Listener` traits in crates/ls-ipc/src/transport.rs, `Client<T = DefaultTransport>`; no new non-dev deps. The peer-uid check still lives in ls_platform + ls_broker, not ls-ipc: 1.3 should add peer identity to the trait and move the Unix check behind it, and the foreign-peer test should then exercise the shipped check (it skips silently when not root). locksmithd still binds UnixListener directly: switch to Listener::bind in 2.1. 1.1 stays unticked (compile-only spike). Next: 1.3 (Opus).

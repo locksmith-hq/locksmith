@@ -2564,6 +2564,7 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "ciborium",
  "ls-core",
+ "ls-platform",
  "serde",
  "ts-rs",
  "zeroize",

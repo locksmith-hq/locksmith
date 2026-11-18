@@ -15,6 +15,10 @@ serde = { version = "1", features = ["derive"] }
 zeroize = "1"
 ts-rs = { version = "12", optional = true }
 
+[dev-dependencies]
+# Tests only: the daemon's own peer attestation, for the foreign-peer test over the transport.
+ls-platform = { path = "../ls-platform" }
+
 [features]
 # TypeScript bindings for packages/api-types (desktop app); off in the normal build.
 ts = ["dep:ts-rs"]

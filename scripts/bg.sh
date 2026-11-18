@@ -27,7 +27,7 @@ case "$cmd" in
     while [ ! -f "$rc" ] && [ "$waited" -lt "$max" ]; do sleep 5; waited=$((waited+5)); done
     tail -n 30 "$log" 2>/dev/null
     if [ -f "$rc" ]; then code=$(cat "$rc"); note=""; [ "$code" = 137 ] && note=" (killed by timeout)"; echo "bg: $name exited ${code}${note}"; exit "$code"
-    else echo "bg: $name still running after ${max}s (check again later)"; exit 124; fi
+    else echo "bg: $name still running after ${max}s (wait again in a NEW Bash call: a loop of waits passes the 120 s tool limit)"; exit 124; fi
     ;;
   *) echo "usage: bg.sh start|wait|status <name> ..." >&2; exit 2 ;;
 esac

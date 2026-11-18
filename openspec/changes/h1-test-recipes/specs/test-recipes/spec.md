@@ -23,9 +23,13 @@ The repository SHALL provide `just test <name>`, where `<name>` is a component d
 - **WHEN** a developer runs `just test control-plane`
 - **THEN** it runs `cargo nextest run -p ls-control-plane` and exits with its status
 
-#### Scenario: An npm workspace runs its own tests
-- **WHEN** a developer runs `just test web`
-- **THEN** it runs `npm test` in the `apps/web` workspace
+#### Scenario: An npm workspace with a test script runs it
+- **WHEN** a developer runs `just test <name>` for an npm workspace that has a `test` script
+- **THEN** it runs `npm test --workspace <dir>` and exits with its status
+
+#### Scenario: A workspace without tests names its covering recipe
+- **WHEN** a developer runs `just test web`, and `apps/web` has no `test` script and no tests
+- **THEN** its row says it is covered by `just test-web` (build plus the root `npm test`, which skips workspaces without a `test` script), and the recipe prints that and runs it
 
 #### Scenario: A component covered elsewhere runs the covering tests
 - **WHEN** a developer runs `just test` on a component whose row names a covering component

@@ -32,3 +32,19 @@
 
 ## Risks
 Large pushes and timeouts (bound request and idle timeouts); gateway memory (a streaming test asserts the bound); credential in `Authorization` echoed by a hostile upstream (redaction of headers).
+
+## Contract: `GitBinding` and the route (task 1.1)
+The gateway has no OpenAPI document, so the contract is this section and `services/gateway/src/git.rs`.
+
+Route: `GET /git/{host}/{owner}/{repo}[.git]/info/refs?service=git-upload-pack|git-receive-pack`, `POST /git/{host}/{owner}/{repo}[.git]/git-upload-pack` and `.../git-receive-pack`. Anything else is denied before any credential is read.
+
+Bindings file (TOML, beside `[[binding]]`):
+```toml
+[[git_binding]]
+secret_id = "0197c1f0-0000-7000-8000-000000000003"
+host = "github.com"          # exact, lowercase, no scheme or port
+repo_prefix = "acme/widgets" # "owner" (all its repos) or "owner/repo"
+services = ["fetch"]         # fetch = git-upload-pack, push = git-receive-pack
+# allow_private_hosts = true # local test fixture only
+```
+Ledger events: `git.fetch`, `git.push`, and a denial event; no credential or pack data. `GitBinding::authorize` is the pure check (path allow-list, host and repository, service) that runs first.

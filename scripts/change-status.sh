@@ -65,6 +65,7 @@ ids=$( { grep -oE '`[a-z][0-9]+-[a-z0-9-]+`' docs/roadmap.md | tr -d '`'; ls ope
 blockers=""
 # One line per open blocker issue: "<number> <kind> <title and body on one line>"; kind is owner (escalated
 # rescue: both labels), rescue, or gate (needs-owner only).
+# shellcheck disable=SC2016 # jq variables
 [ "${OFFLINE:-0}" = 1 ] || blockers=$(gh api "repos/$repo/issues?state=open&per_page=100" \
   -q '.[]|select(any(.labels[]; .name=="needs-owner" or .name=="needs-rescue"))
     |(any(.labels[]; .name=="needs-owner")) as $o | (any(.labels[]; .name=="needs-rescue")) as $r

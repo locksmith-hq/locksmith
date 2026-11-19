@@ -2672,6 +2672,7 @@ dependencies = [
  "aho-corasick",
  "base64 0.22.1",
  "criterion",
+ "data-encoding",
  "inventory",
  "ls-diag",
  "proptest",

@@ -1,8 +1,8 @@
 # Tasks: D1 Git delegation
 
 ## 1. Contract [sonnet]
-- [ ] 1.1 Add the `/git/{host}/{owner}/{repo}/...` route description to the gateway OpenAPI (if any) and a `GitBinding` shape (host, repo prefix, allowed services) with fixture data and docs in design.md.
-- [ ] 1.2 Verify: `cargo nextest run -p ls-gateway git_binding` passes.
+- [x] 1.1 Add the `/git/{host}/{owner}/{repo}/...` route description to the gateway OpenAPI (if any) and a `GitBinding` shape (host, repo prefix, allowed services) with fixture data and docs in design.md.
+- [x] 1.2 Verify: `cargo nextest run -p ls-gateway git_binding` passes.
 
 ## 2. Streaming route [sonnet]
 - [ ] 2.1 `services/gateway/src/git.rs`: path allow-list (info/refs, upload-pack, receive-pack), service-to-grant mapping, binding and egress check before any decrypt.

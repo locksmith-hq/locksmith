@@ -220,6 +220,10 @@ services = ["fetch", "push"]
             Err(GitDenied::NotBound)
         );
         assert_eq!(
+            one.authorize("github.com", "acme/widgets.git.git/info/refs", q, false),
+            Err(GitDenied::NotBound)
+        );
+        assert_eq!(
             one.authorize("github.com", "acme/widgets/git-receive-pack", None, true),
             Err(GitDenied::ServiceNotAllowed)
         );
@@ -245,6 +249,22 @@ services = ["fetch", "push"]
                 false,
             ),
             ("acme/widgets", None, false),
+            (
+                "acme/widgets/info/refs/",
+                Some("service=git-upload-pack"),
+                false,
+            ),
+            (
+                "acme/%2e%2e/info/refs",
+                Some("service=git-upload-pack"),
+                false,
+            ),
+            (
+                "acme/.git/info/refs",
+                Some("service=git-upload-pack"),
+                false,
+            ),
+            ("acme//info/refs", Some("service=git-upload-pack"), false),
             ("acme", None, false),
             ("api/v3/repos/acme/widgets", None, false),
         ] {
@@ -253,6 +273,13 @@ services = ["fetch", "push"]
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn git_binding_rejects_duplicate_secret_id() {
+        let one = "[[git_binding]]\nsecret_id = \"0197c1f0-0000-7000-8000-000000000003\"\nhost = \"github.com\"\nrepo_prefix = \"a\"\nservices = [\"fetch\"]\n";
+        let toml = format!("org_id = \"0197c1f0-0000-7000-8000-000000000001\"\n{one}{one}");
+        assert!(Bindings::parse(&toml).is_err());
     }
 
     #[test]

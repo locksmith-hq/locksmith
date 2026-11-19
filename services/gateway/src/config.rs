@@ -122,9 +122,16 @@ impl Bindings {
 
     fn validate(&self) -> Result<(), ConfigError> {
         let mut seen = HashSet::new();
+        let mut git_seen = HashSet::new();
         for (index, g) in self.git_bindings.iter().enumerate() {
             g.validate()
                 .map_err(|field| ConfigError::Binding { index, field })?;
+            if !git_seen.insert(g.secret_id) {
+                return Err(ConfigError::Binding {
+                    index,
+                    field: "git_binding.secret_id",
+                });
+            }
         }
         for (index, b) in self.bindings.iter().enumerate() {
             let bad = |field| ConfigError::Binding { index, field };

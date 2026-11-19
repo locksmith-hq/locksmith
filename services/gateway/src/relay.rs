@@ -496,7 +496,8 @@ async fn run(
     let agent_id = call.agent_id;
     // 3. Grant and its expiry: refused before the binding lookup, DNS, fetch or unwrap. The
     // expiry is re-checked here because the set may come from the cache.
-    let grants = relay.grants.grants(agent_id).await.map_err(|_| {
+    let grants = relay.grants.grants(agent_id).await.map_err(|e| {
+        tracing::warn!(reason = e.as_str(), "agent grants could not be read");
         Failure::new(
             Outcome::GrantsUnavailable,
             StatusCode::BAD_GATEWAY,

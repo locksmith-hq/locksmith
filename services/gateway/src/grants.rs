@@ -67,6 +67,17 @@ pub enum GrantError {
     BadResponse,
 }
 
+impl GrantError {
+    /// Stable, secret-free label for logs.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Denied => "denied",
+            Self::Unavailable => "unavailable",
+            Self::BadResponse => "bad_response",
+        }
+    }
+}
+
 /// Reads an agent's unexpired grants.
 pub trait GrantSource: Send + Sync {
     fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>>;
@@ -184,8 +195,15 @@ impl GrantCache {
             return;
         }
         let mut map = self.lock();
-        map.retain(|_, e| self.fresh(e, now));
-        while map.len() >= self.settings.max_entries {
+        // Expiry sweep only when the map is full and would otherwise evict (not on every
+        // miss): below the bound an insert stays O(1) under the mutex, and at the bound the
+        // eviction already scans the map. Stale entries below the bound are never served
+        // ([`Self::get_at`] checks freshness) and are dropped on their next read or the next
+        // sweep. Refreshing an agent already in the map replaces it and evicts nothing.
+        if map.len() >= self.settings.max_entries && !map.contains_key(&agent_id) {
+            map.retain(|_, e| self.fresh(e, now));
+        }
+        while map.len() >= self.settings.max_entries && !map.contains_key(&agent_id) {
             let oldest = map.iter().min_by_key(|(_, e)| e.fetched).map(|(k, _)| *k);
             match oldest {
                 Some(k) => {
@@ -263,8 +281,8 @@ async fn list(relay: &Relay, headers: &HeaderMap, request_id: &str) -> Response 
     let _entered = span.enter();
     let grants = match read {
         Ok(g) => g,
-        Err(_) => {
-            tracing::warn!("agent grants could not be read");
+        Err(e) => {
+            tracing::warn!(reason = e.as_str(), "agent grants could not be read");
             return error(StatusCode::BAD_GATEWAY, "grants_unavailable", request_id);
         }
     };
@@ -491,6 +509,40 @@ mod tests {
         let now = t0 + Duration::from_millis(3);
         assert_eq!(c.get_at(a, now), None, "oldest evicted");
         assert!(c.get_at(b, now).is_some() && c.get_at(d, now).is_some());
+    }
+
+    #[test]
+    fn cache_sweeps_expired_entries_only_when_full() {
+        let c = GrantCache::new(
+            Arc::new(testkit::StubGrants::default()),
+            GrantCacheSettings {
+                ttl: MAX_GRANT_TTL,
+                max_entries: 3,
+            },
+        );
+        let t0 = Instant::now();
+        let (a, b, d, e) = (
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+        );
+        c.insert_at(a, Vec::new(), t0);
+        c.insert_at(b, Vec::new(), t0 + Duration::from_secs(5));
+        // `a` is stale but the map is below the bound: no sweep, and it is never served.
+        let later = t0 + MAX_GRANT_TTL + Duration::from_secs(1);
+        c.insert_at(d, Vec::new(), later);
+        assert_eq!(c.lock().len(), 3, "no sweep below the bound");
+        // Full: the sweep drops only the stale `a`; the fresh `b` and `d` survive.
+        c.insert_at(e, Vec::new(), later);
+        assert_eq!(c.lock().len(), 3);
+        assert!(!c.lock().contains_key(&a), "stale entry swept");
+        for k in [b, d, e] {
+            assert!(c.get_at(k, later).is_some());
+        }
+        // Refreshing an agent already in a full map evicts nothing.
+        c.insert_at(e, Vec::new(), later);
+        assert_eq!(c.lock().len(), 3);
     }
 
     #[tokio::test]

@@ -229,6 +229,7 @@ async fn new_enrollment(
 #[utoipa::path(
     post,
     path = "/v1/agents",
+    operation_id = "create_agent",
     tag = "agents",
     summary = "Register an agent; returns its enrollment secret once",
     request_body = NewAgent,
@@ -289,6 +290,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/v1/agents",
+    operation_id = "list_agents",
     tag = "agents",
     summary = "List agents",
     params(PageParams),
@@ -327,6 +329,7 @@ pub async fn list(
 #[utoipa::path(
     get,
     path = "/v1/agents/{agent_id}",
+    operation_id = "get_agent",
     tag = "agents",
     summary = "Get an agent",
     params(("agent_id" = Uuid, Path, description = "Agent id")),
@@ -363,6 +366,7 @@ pub async fn get_one(
 #[utoipa::path(
     delete,
     path = "/v1/agents/{agent_id}",
+    operation_id = "delete_agent",
     tag = "agents",
     summary = "Delete an agent and revoke all its grants",
     description = "Tokens already minted stay valid until they expire (at most 15 minutes), but every relay is refused because the agent has no grants.",
@@ -411,6 +415,7 @@ pub async fn delete(
 #[utoipa::path(
     post,
     path = "/v1/agents/{agent_id}/enrollment-secret",
+    operation_id = "rotate_agent_enrollment_secret",
     tag = "agents",
     summary = "Replace an agent's enrollment secret; returns the new one once",
     description = "The previous enrollment secret stops working immediately. Tokens already minted stay valid until they expire.",
@@ -465,6 +470,7 @@ pub async fn rotate_enrollment(
 #[utoipa::path(
     post,
     path = "/v1/agents/{agent_id}/grants",
+    operation_id = "create_agent_grant",
     tag = "agents",
     summary = "Grant an agent relay use of a secret",
     params(("agent_id" = Uuid, Path, description = "Agent id")),
@@ -555,6 +561,7 @@ fn grant_conflict(e: sql::Error) -> ApiError {
 #[utoipa::path(
     get,
     path = "/v1/agents/{agent_id}/grants",
+    operation_id = "list_agent_grants",
     tag = "agents",
     summary = "List an agent's grants (including expired ones)",
     params(("agent_id" = Uuid, Path, description = "Agent id"), PageParams),
@@ -601,6 +608,7 @@ pub async fn list_grants(
 #[utoipa::path(
     delete,
     path = "/v1/agents/{agent_id}/grants/{grant_id}",
+    operation_id = "delete_agent_grant",
     tag = "agents",
     summary = "Revoke a grant",
     description = "The gateway caches grants for at most 10 seconds; the revocation takes effect within that window.",
@@ -644,6 +652,7 @@ pub async fn delete_grant(
 #[utoipa::path(
     post,
     path = "/v1/agent-tokens",
+    operation_id = "create_agent_token",
     tag = "agents",
     summary = "Exchange an enrollment secret for a short-lived agent token",
     description = "Returns an EdDSA JWT valid for 15 minutes with audience `gateway`, verifiable with the keys at `/.well-known/jwks.json`. Any invalid, unknown or replaced enrollment secret is the same `401`.",
@@ -768,6 +777,7 @@ async fn mint(state: &AppState, input: AgentTokenRequest) -> Result<MintedToken,
 #[utoipa::path(
     get,
     path = "/.well-known/jwks.json",
+    operation_id = "get_jwks",
     tag = "agents",
     summary = "Public keys that verify agent tokens (JWKS)",
     description = "Ed25519 public keys (RFC 8037). Verifiers select a key by the token's `kid`. Empty when token signing is not configured.",

@@ -78,6 +78,32 @@ fn openapi_snapshot_matches_committed_file() {
     }
 }
 
+/// Issue #246: every operation has an explicit, unique `<verb>_<resource>` operationId, so
+/// generated clients never collide (utoipa otherwise uses the handler fn name, e.g. `list`).
+#[test]
+fn operation_ids_are_present_and_unique() {
+    let spec: Value = serde_json::from_str(&generated()).unwrap();
+    let mut seen = std::collections::BTreeMap::new();
+    for (path, item) in spec["paths"].as_object().unwrap() {
+        for (method, op) in item.as_object().unwrap() {
+            let id = op["operationId"]
+                .as_str()
+                .unwrap_or_else(|| panic!("{method} {path} has no operationId"));
+            assert!(
+                id.contains('_')
+                    && id
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'),
+                "{method} {path}: operationId `{id}` is not snake_case <verb>_<resource>"
+            );
+            if let Some(prev) = seen.insert(id.to_owned(), format!("{method} {path}")) {
+                panic!("operationId `{id}` used by both {prev} and {method} {path}");
+            }
+        }
+    }
+    assert!(!seen.is_empty());
+}
+
 /// Only the version-write request body may carry `value`, and it must be a write-only string;
 /// no other schema (in particular no response) has a value field.
 #[test]

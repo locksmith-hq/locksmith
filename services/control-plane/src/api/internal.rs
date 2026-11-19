@@ -56,6 +56,7 @@ pub struct SecretVersionMaterial {
 #[utoipa::path(
     get,
     path = "/internal/v1/secrets/{secret_id}/versions/{version}/material",
+    operation_id = "get_secret_version_material",
     tag = "internal",
     summary = "Fetch the encrypted material of a secret version (gateway only; no plaintext)",
     params(
@@ -141,6 +142,7 @@ pub struct AgentGrantSet {
 #[utoipa::path(
     get,
     path = "/internal/v1/agents/{agent_id}/grants",
+    operation_id = "get_internal_agent_grants",
     tag = "internal",
     summary = "List an agent's unexpired grants (gateway only)",
     description = "The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`.",
@@ -383,6 +385,7 @@ pub struct AppendedEvent {
 #[utoipa::path(
     post,
     path = "/internal/v1/audit/events",
+    operation_id = "append_audit_event",
     tag = "internal",
     summary = "Append a relay event to the org's audit ledger (gateway only)",
     description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",

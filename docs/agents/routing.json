@@ -1,0 +1,14 @@
+{
+  "_doc": "Who asks whom (owner-only; scripts/route.sh reads it, wake-agents fires the routines). A role's logins are its GitHub accounts; while agent identities are paused, agents post as the owner and a `<!-- role: x -->` marker names the role. A channel is an issue label. from/to: who may open it and who is woken; on_reply: who is woken when the owner comments; on_close: who is woken when it closes. A debate channel alternates between two roles, each gets at most `turns` turns, then `escalate_to` takes it to the owner. Add a role or channel here, plus its secret in wake-agents.yml.",
+  "roles": {
+    "owner":  { "logins": ["tomer555"] },
+    "lead":   { "logins": ["locksmith-linus[bot]"], "trigger": "trig_01QEJR9b7UBh6XeiCeAa7cv1", "secret": "LEAD_FIRE_TOKEN" },
+    "worker": { "logins": ["locksmith-alfie[bot]", "locksmith-josie[bot]", "locksmith-harriet[bot]"], "trigger": "trig_01JUGABHdyZuNMJSYdEKSfJx", "secret": "ROUTINE_FIRE_TOKEN" },
+    "pm":     { "logins": ["locksmith-walt[bot]"], "trigger": "", "secret": "PM_FIRE_TOKEN" }
+  },
+  "channels": {
+    "needs-rescue": { "from": ["worker"], "to": "lead", "on_close": "worker" },
+    "needs-owner":  { "from": ["lead"], "to": "owner", "on_reply": "lead", "on_close": "worker" },
+    "debate":       { "between": ["pm", "lead"], "turns": 3, "escalate_to": "lead" }
+  }
+}

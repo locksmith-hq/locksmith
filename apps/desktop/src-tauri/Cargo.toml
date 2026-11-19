@@ -22,6 +22,11 @@ ls-ipc = { path = "../../../crates/ls-ipc" }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 serde = { version = "1", features = ["derive"] }
 zeroize = "1"
+secrecy = "0.10"
+# Human sign-in (T1 6.2): PKCE auth-code flow, system browser, OS keystore (design decisions 4, 5).
+oauth2 = { version = "5", default-features = false, features = ["ureq"] }
+open = "5"
+keyring = { version = "3.6", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -50,3 +55,5 @@ gtk = "0.18"
 
 [dev-dependencies]
 serde_json = "1"
+sha2 = "0.10"
+base64 = "0.22"

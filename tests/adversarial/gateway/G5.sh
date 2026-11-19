@@ -112,7 +112,8 @@ A, B = ids["a"], ids["b"]
 
 
 def bearer_of(path):
-    return open(path).read().strip().partition(":")[2].strip()
+    v = open(path).read().strip().partition(":")[2].strip()
+    return v[len("Bearer "):] if v.startswith("Bearer ") else v
 
 
 agent_auth = bearer_of(agent_hdr)
@@ -322,7 +323,7 @@ else:
 # --- malformed, cross-org and auth probes, generated from the document ---
 BAD_IDS = [("not-uuid", "not-a-uuid"), ("nil", "00000000-0000-0000-0000-000000000000"),
            ("nul", "%00"), ("dots", "..%2F..%2Finternal"), ("long", "1" * 300),
-           ("braced", "%7B" + A["secret"] + "%7D")]
+           ("braced", "%7B" + str(uuid.uuid4()) + "%7D")]  # braced UUIDs parse, so use an id that does not exist
 BAD_QUERY = [("limit-abc", "limit=abc", "4xx"), ("cursor-junk", "cursor=%21%21", "4xx"),
              ("cursor-short", "cursor=AAAA", "4xx"), ("unknown", "zz=1", "4xx"),
              ("limit-0", "limit=0", "4xx"), ("limit-big", "limit=100000", "4xx")]

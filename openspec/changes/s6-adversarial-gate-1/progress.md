@@ -54,3 +54,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.5 - blocked (G5.sh written, not yet run against a live stack, so not ticked)
 - Verified: `just ci` (after merging main) -> green; `bash -n G5.sh`, `run.sh selftest`, `run.sh gateway G5` -> SKIP without stack; dry run against stub openapi server -> 605 calls, canary absent
 - Notes for next session: run `just up && just api` then `ADVERSARIAL_REQUIRE_ALL=1 bash tests/adversarial/run.sh gateway G5`, fix any probe listed in results.txt, run the Opus evaluator, then tick 3.5. Unverified expectations: cross-org path ids return exactly 404; limit/cursor bad values 4xx; gateway /v1/grants 401 for non-JWT bearer; deleting a scratch secret with versions returns 2xx; export time on large dev DB.
+
+## 2026-11-19 worker
+- Task: 3.5 - done
+- Verified: live `ADVERSARIAL_REQUIRE_ALL=1 bash tests/adversarial/run.sh gateway G5` -> PASS (605 calls); first live run had 14 failures, all test bugs (bearer_of kept the "Bearer " prefix; braced real UUID parses as the same id, so the probe now uses a random braced id); Opus evaluator PASS; `just ci` -> exit 0
+- Notes for next session: 3.6 (G6 token abuse) next, then 3.7. Stack was brought up with `just up && just api`.

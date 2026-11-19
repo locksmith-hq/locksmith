@@ -126,6 +126,7 @@ Except the workers (events, plus every 4 hours, 24/7), routines avoid peak hours
 |---|---|---|---|---|
 | [Worker A](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | every 2 hours at :05 on even UTC hours, 24/7 (owner 2026-11-18) | claims one ready change at a time (per-change lock on its tracking issue), parks blocked ones and takes the next; non-draft PR per change. Several workers may run at once |
 | [Worker B](https://claude.ai/code/routines/trig_0157sQMWva4JP97dc6DqkPEM) | Sonnet 5.5 (same prompt as Worker A) | `locksmith-dev` | every 2 hours at :05 on odd UTC hours (owner 2026-11-18; replaces the deleted disabled Worker B) | same as Worker A; the two alternate, so a worker starts every hour |
+| [Worker C](https://claude.ai/code/routines/trig_013QMkh2C8t7h3z2AL3YvAXH) | Sonnet 5.5 (same prompt as Worker A) | `locksmith-dev` | every 2 hours at :35 on even UTC hours (owner 2026-11-19) | same as Worker A; a third worker between A and B |
 | [Worker (events)](https://claude.ai/code/routines/trig_01JUGABHdyZuNMJSYdEKSfJx) | Sonnet 5.5 (worker prompt, checks out `origin/main` first) | `locksmith-dev` | GitHub: PR labeled, labels `review-passed`/`review-failed` (set by `claude-review.yml` from the verdict), author `tomer555`, base `main`, not draft. API: `wake-agents.yml` fires it when a `needs-owner` issue is closed or main CI fails (secret `ROUTINE_FIRE_TOKEN`) | merges or fixes a PR the moment its review verdict lands, applies owner replies and fixes red main within minutes. Events only wake it: `worker-has-work.sh` decides, so dropped or duplicate events are harmless |
 | [Daily summary](https://claude.ai/code/routines/trig_01E29QPqddtqyaTR1FUjLKxT) | Haiku 5.5 | Default | daily 17:30 | updates the one daily-summary Artifact and sends a push; read-only, REST API only (GraphQL is blocked in cloud sessions) |
 | [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Sat 10:35 (after the Saturday 10:00 weekly reset) | re-verify finished work, quality review, write the next change |
@@ -138,23 +139,24 @@ GitHub triggers (web UI only; one per routine): the API stores filters as `filte
 Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.
 
 ## Agent identities (GitHub Apps)
-Each persona is a private GitHub App owned by `locksmith-hq`, installed only on this repo, with webhooks off. Avatars are in `docs/agents/avatars/`.
+Agents are named by role (Worker A, B, C, Worker (events), PM, Lead). Each role has a private GitHub App owned by `locksmith-hq`, installed only on this repo, with webhooks off. Avatars are in `docs/agents/avatars/`.
 
-| Persona | App | Routine | Access |
-|---|---|---|---|
-| Linus | `locksmith-linus` | Lead | code, PRs, issues, workflows (write) |
-| Alfie | `locksmith-alfie` | Worker A | code, PRs, issues (write) |
-| Josie | `locksmith-josie` | Worker B | code, PRs, issues (write) |
-| Harriet | `locksmith-harriet` | Worker (events) | code, PRs, issues (write) |
-| Walt | `locksmith-walt` | PM (no routine yet) | PRs, issues (write); code (read) |
+| Routine | App (old slug, until renamed) | Access |
+|---|---|---|
+| Lead | `locksmith-linus` | code, PRs, issues, workflows (write) |
+| Worker A | `locksmith-alfie` | code, PRs, issues (write) |
+| Worker B | `locksmith-josie` | code, PRs, issues (write) |
+| Worker C | none yet | code, PRs, issues (write) |
+| Worker (events) | `locksmith-harriet` | code, PRs, issues (write) |
+| PM | `locksmith-walt` | PRs, issues (write); code (read) |
 
 **Paused (2026-11-18):** runs act as the owner account. `cloud-setup.sh` no longer calls `agent-identity.sh setup` and `agent-start.sh` no longer checks the identity, because the installation-token mint was not working yet. The text below describes the design to restore.
 
-How a run becomes its persona: each persona has its own cloud environment (`locksmith-dev` is Alfie, `locksmith-josie`, `locksmith-harriet`, `locksmith-lead` is Linus, `locksmith-walt`) with `AGENT_PERSONA=<persona>`. The setup script (`scripts/cloud-setup.sh`) calls `scripts/agent-identity.sh setup` once, and `scripts/agent-start.sh` only checks the git author is the persona's bot, failing the run otherwise. That script mints a one-hour installation token (in the cloud the environment's network secret adds the app's auth to that request; locally it signs with `AGENT_APP_KEY_<PERSONA>` or the Keychain key), sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If no token comes back or it is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
+How a run takes its app identity: each routine has its own cloud environment (`locksmith-dev` for Workers A and C, `locksmith-josie` for B, `locksmith-harriet` for events, `locksmith-lead`, `locksmith-walt` for the PM) with `AGENT_PERSONA=<persona>`. The setup script (`scripts/cloud-setup.sh`) calls `scripts/agent-identity.sh setup` once, and `scripts/agent-start.sh` only checks the git author is the persona's bot, failing the run otherwise. That script mints a one-hour installation token (in the cloud the environment's network secret adds the app's auth to that request; locally it signs with `AGENT_APP_KEY_<PERSONA>` or the Keychain key), sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If no token comes back or it is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
 
 Owner setup:
-1. In each persona's environment, replace the `REPLACE_ME` value of the network secret on `api.github.com/app/installations/`. Never put app keys in environment variables.
-2. Run each persona's routine in its own environment.
+1. In each routine's environment, replace the `REPLACE_ME` value of the network secret on `api.github.com/app/installations/`. Never put app keys in environment variables.
+2. Run each routine in its own environment.
 3. Add the `locksmith-*[bot]` logins to the author filter of the GitHub triggers (`Worker (events)` and `Lead`), next to `tomer555`.
 
 On the owner's Mac, the **optimizer** (`docs/agents/optimizer.md`, desktop scheduled task, 07:00 and 20:00, replaced the local lead 2026-11-19) runs as the owner in its own worktree `~/locksmith-optimizer`, detached at `origin/main`. It is the only agent that reads routine run logs (`RemoteTrigger`); it audits the schedules, agent communication and run efficiency, fixes repo causes in a `claude/optimizer-*` PR, and may only edit routine prompts; other routine changes go to the owner as `needs-owner`.

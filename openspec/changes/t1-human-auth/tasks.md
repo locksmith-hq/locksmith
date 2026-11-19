@@ -1,10 +1,10 @@
 # Tasks: T1 human authentication
 
 ## 1. JWT verification [sonnet]
-- [ ] 1.1 Re-check `jsonwebtoken` against `openidconnect` and `axum-oidc` (maintenance, licence) and record the result in design.md "OSS used"; add the chosen dependency.
-- [ ] 1.2 JWKS cache (single-flight refresh, minimum interval, `kid` lookup) with unit tests against a local mock issuer.
-- [ ] 1.3 `OrgBinding` extractor verifies issuer, audience, expiry and the algorithm allow-list; uniform `401` without a reason; spans `verify_jwt` without token content.
-- [ ] 1.4 Verify: `cargo nextest run -p ls-control-plane auth` including forged, `none`, wrong-audience, expired and rotated-key tokens.
+- [x] 1.1 Re-check `jsonwebtoken` against `openidconnect` and `axum-oidc` (maintenance, licence) and record the result in design.md "OSS used"; add the chosen dependency.
+- [x] 1.2 JWKS cache (single-flight refresh, minimum interval, `kid` lookup) with unit tests against a local mock issuer.
+- [x] 1.3 `OrgBinding` extractor verifies issuer, audience, expiry and the algorithm allow-list; uniform `401` without a reason; spans `verify_jwt` without token content.
+- [x] 1.4 Verify: `cargo nextest run -p ls-control-plane auth` including forged, `none`, wrong-audience, expired and rotated-key tokens.
 
 ## 2. Dev header gating [sonnet]
 - [ ] 2.1 `dev_auth` config default off; release builds refuse to start with it on without `LOCKSMITH_ALLOW_DEV_AUTH`; update existing tests and `just api` to opt in.

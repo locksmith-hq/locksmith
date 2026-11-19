@@ -25,8 +25,8 @@
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| jsonwebtoken | MIT | lockfile version **[verify at apply]** | **[verify]** | JWT verification | not AGPL |
-| reqwest (workspace) | MIT/Apache-2.0 | workspace | n/a | JWKS fetch | not AGPL |
+| jsonwebtoken | MIT | 12.0.0 (lockfile; `rust_crypto` backend) | 2026-11-13 | JWT verification | not AGPL |
+| reqwest | MIT OR Apache-2.0 | 0.13.5 (lockfile; rustls, no default features) | 2026-09-08 | JWKS fetch | not AGPL |
 | keyring | MIT/Apache-2.0 | **[verify]** | **[verify]** | desktop token storage | not AGPL |
 | Keycloak | Apache-2.0 | **[verify]** | **[verify]** | local issuer, compose only, not shipped | not AGPL |
 | openid-client or oidc-client-ts (web) | MIT / Apache-2.0 | **[verify]** | **[verify]** | PKCE flow in `apps/web` | not AGPL |

@@ -73,9 +73,9 @@ async fn spans_carry_route_status_and_org_but_no_request_data() {
     let header_marker = format!("HEADERMARKER{}", Uuid::new_v4().simple());
     let body_marker = format!("BODYMARKER{}", Uuid::new_v4().simple());
     let res = app
+        .clone()
         .oneshot(
             Request::patch(format!("/v1/projects/{project}"))
-                .header("authorization", format!("Bearer {auth_marker}"))
                 .header("x-locksmith-dev-org", org.to_string())
                 .header("x-extra", &header_marker)
                 .header("content-type", "application/json")
@@ -85,6 +85,19 @@ async fn spans_carry_route_status_and_org_but_no_request_data() {
         .await
         .unwrap();
     let status = res.status().as_u16();
+    // A bearer token is never downgraded to the dev header: refused, and its value not exported.
+    let refused = app
+        .oneshot(
+            Request::patch(format!("/v1/projects/{project}"))
+                .header("authorization", format!("Bearer {auth_marker}"))
+                .header("x-locksmith-dev-org", org.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refused.status().as_u16(), 401);
+    drop(refused);
     // The server span closes once the response body is done.
     drop(res);
 
@@ -99,6 +112,7 @@ async fn spans_carry_route_status_and_org_but_no_request_data() {
     let server: Vec<&SpanData> = finished
         .iter()
         .filter(|s| attr(s, "http.route").is_some())
+        .filter(|s| attr(s, "http.response.status_code") != Some(&Value::I64(401)))
         .collect();
     assert_eq!(server.len(), 1, "one server span: {finished:#?}");
     let span = server[0];

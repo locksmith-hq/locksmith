@@ -1,10 +1,14 @@
-//! Org binding. Until T1 lands, the org is chosen with the dev-only `X-Locksmith-Dev-Org`
-//! header, honoured only when dev auth is enabled. T1 replaces this extractor with JWT
-//! verification; handlers depend only on [`OrgBinding`].
+//! Org binding. A human request carries a bearer access token, verified against the configured
+//! OIDC issuer's JWKS ([`human`], [`jwks`]); the dev-only `X-Locksmith-Dev-Org` header is
+//! honoured only when dev auth is enabled and no bearer token is sent. Handlers depend only on
+//! [`OrgBinding`].
 //!
 //! The `/internal/v1` routes use [`ServiceOrgBinding`] instead: the caller is the gateway
 //! service, authenticated by a static bearer token compared in constant time (S3 design
 //! decision 2), which names the org it acts for in [`SERVICE_ORG_HEADER`].
+
+pub mod human;
+pub mod jwks;
 
 use axum::extract::FromRequestParts;
 use axum::http::header;
@@ -44,6 +48,18 @@ impl FromRequestParts<AppState> for OrgBinding {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        // A bearer token is a human credential: it is verified, and a bad one is never
+        // downgraded to the dev header. Without human auth configured it is refused too.
+        if let Some(value) = parts.headers.get(header::AUTHORIZATION) {
+            let auth = state.human_auth().ok_or(Unauthenticated)?;
+            let token = bearer(value.as_bytes())
+                .and_then(|t| std::str::from_utf8(t).ok())
+                .ok_or(Unauthenticated)?;
+            let identity = auth.verify(token).await.map_err(|_| Unauthenticated)?;
+            let org_id = human::personal_org_id(&identity);
+            tracing::Span::current().record("org.id", tracing::field::display(org_id));
+            return Ok(Self { org_id });
+        }
         if !state.dev_auth() {
             return Err(Unauthenticated);
         }

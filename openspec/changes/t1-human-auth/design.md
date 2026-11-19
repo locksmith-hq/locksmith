@@ -21,6 +21,7 @@
 | 6 | **Users table keyed by `(issuer, subject)`; personal org created in one transaction with `INSERT ... ON CONFLICT`.** Identity linking only by verified email. | Keying by email (account takeover on unverified email); creating orgs lazily on the first org call (races). | Account-takeover class documented in OIDC Core §5.7 (`sub` is the stable key). |
 | 7 | **Dev header off by default; release build refuses to start if on.** | Keeping it on in dev images (it would ship). | Current `auth.rs` header comment. |
 | 8 | **Claims used:** `iss`, `aud`, `exp`, `sub`, `email`, `email_verified`. No role claims (T6/T2 own roles). | Trusting issuer-supplied groups now (couples policy to an issuer). | A0-15. |
+| 9 | **Sign-in UX is option C: our own first screen plus the issuer's hosted page for passwords** ([#397](https://github.com/locksmith-hq/locksmith/issues/397), owner approved 2026-11-19). The console shows "Continue with GitHub / Google / email"; GitHub and Google go straight to the provider through the issuer's hint parameter (Keycloak `kc_idp_hint`, Cognito `identity_provider`); email goes to the issuer's hosted page with our logo and colours. Self-hosters with their own issuer see one "Continue" button. **First run:** land on the hub Overview, personal org created automatically (decision 6), a dismissible "Get started" checklist (`smith login --user`, desktop app, first agent); visual style uses the existing desktop and hub mockup tokens. | A: hosted page only (issuer's layout as first impression). B: our own pages calling the issuer API (passwords pass through our code, needs a non-PKCE flow against decision 4, rebuilds MFA/reset/lockout, about 2 to 3× the work). | Owner decision #397; brief https://claude.ai/artifact/4H2DZtpZTEufP1euDYBQeY; keeps decision 4 and A0-15. |
 
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
@@ -47,6 +48,6 @@ Built in-house: the JWKS cache and the `OrgBinding` extractor (about 200 lines).
 - `just auth-e2e` runs the flows; `just leak-scan` and `just audit-verify` afterwards.
 
 ## Open Questions
-- **Owner approval needed before building pages:** the first sign-in and onboarding UX and visual style (owner decision 2026-11-18). The lead should obtain an Artifact brief with two or three options before tasks 6.x start; tasks 1 to 5 do not depend on it.
+- ~~Owner approval needed before building pages~~ **Resolved 2026-11-19:** the owner approved option C in [#397](https://github.com/locksmith-hq/locksmith/issues/397); see decision 9. Tasks 6.x may start.
 - Cognito's GitHub path (decision 3) is deferred to P1; no AWS action in T1.
 - Whether the hosted console should use a BFF cookie session instead of in-memory tokens (decision 5).

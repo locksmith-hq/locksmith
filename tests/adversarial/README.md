@@ -94,7 +94,7 @@ reflecting fixture, an attacker's host and a logged-in agent, then runs each pro
 headless `claude -p --bare` in the agent's environment, with only the Locksmith MCP server
 (`--mcp-config`, `--strict-mcp-config`) and Bash. Transcripts (stream-json) go to
 `transcripts/<prompt>.jsonl` and are scanned with `oracle.py scan --transcript`; a hit passes
-only when its encoding is in the register. The CLI's own key is masked in everything saved.
+only when its encoding is in the register. The CLI's own key is masked (literal form only, on every exit) in everything saved.
 `ADVERSARIAL_LIVE_PROMPTS`, `ADVERSARIAL_LIVE_TIMEOUT` and `ADVERSARIAL_LIVE_BUDGET_USD` narrow
 a run. Without the `claude` CLI or `ANTHROPIC_API_KEY` the gate prints `skip live` and fails, so
 a missing key is visible.

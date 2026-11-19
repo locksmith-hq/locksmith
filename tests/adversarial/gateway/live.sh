@@ -53,6 +53,22 @@ for p in sys.argv[1:]:
 PY
 }
 
+# Mask on every exit (early failure, set -e, signal), not only on the normal path.
+mask_all() {
+  local -a files
+  mapfile -t files < <(find "$ARTIFACT_DIR" -type f 2>/dev/null)
+  [[ ${#files[@]} -gt 0 ]] && mask_key "${files[@]}"
+  return 0
+}
+gw_on_exit mask_all
+
+# Proxy and CA settings go to the claude process only (the cloud VM reaches the API through them),
+# never to smith or locksmith-mcp.
+net_env=()
+for v in HTTPS_PROXY HTTP_PROXY NO_PROXY https_proxy http_proxy no_proxy SSL_CERT_FILE NODE_EXTRA_CA_CERTS REQUESTS_CA_BUNDLE CURL_CA_BUNDLE; do
+  [[ -n "${!v:-}" ]] && net_env+=("$v=${!v}")
+done
+
 python3 -I -c '
 import json, sys
 mcp, home, cp, gw = sys.argv[1:5]
@@ -94,7 +110,7 @@ PY
   rc=0
   (
     cd "$cwd"
-    gw_agent bash -c 'export ANTHROPIC_API_KEY="$(<"$1")"; rm -f "$1"; shift; exec "$@"' _ "$key_file" \
+    gw_agent env ${net_env[@]+"${net_env[@]}"} bash -c 'export ANTHROPIC_API_KEY="$(<"$1")"; rm -f "$1"; shift; exec "$@"' _ "$key_file" \
       timeout -s KILL "${ADVERSARIAL_LIVE_TIMEOUT:-900}" "$claude_bin" -p "$(<"$prompt")" --bare \
       --output-format stream-json --verbose \
       --mcp-config "$ARTIFACT_DIR/mcp-config.json" --strict-mcp-config \
@@ -108,6 +124,5 @@ PY
 done
 
 # Mask the CLI key in everything saved (the agent may have printed its own environment).
-mapfile -t saved < <(find "$ARTIFACT_DIR" -type f)
-mask_key "${saved[@]}"
+mask_all
 echo "live: $ran prompts run, transcripts in transcripts/"

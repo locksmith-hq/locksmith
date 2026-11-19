@@ -84,3 +84,13 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.1, 5.2 - done
 - Verified: `cargo nextest run -p ls-gateway adversarial` -> 4 passed (register_loads, g2_reflection, g3_request_shaping, g4_encodings; G4 residuals report RESIDUAL); with ls-redact base64 forms disabled locally (`for k in 0..3` -> `0..0`, reverted) g2 and g3 FAIL with unlisted leaks; `just ci` -> exit 0; Sonnet evaluator PASS (nit fixed: no canary in assert messages)
 - Notes for next session: module is services/gateway/src/relay/tests/adversarial.rs (reuses the private relay harness). Next: group 6 (`just adversarial-gate`, live prompts, README, docs/testing.md), then 7 (web and desktop audit filter), 8. Stack: `just up && just api`.
+
+## 2026-11-19 worker (subagent)
+- Task: 6.1, 6.2, 6.3 - done; 6.4 - not ticked (`skip live`: no ANTHROPIC_API_KEY in the VM)
+- Verified:
+  - stack down: `just adversarial-gate` -> exit 1 `stack not running (...)`, no case ran;
+  - stack up (`just up`, `just api`): `just adversarial-gate` -> G1-G3, G5, G6 PASS, G4 RESIDUAL (registered), 0 stale; leak-scan COVERED postgres, loki, tempo, the audit export (19 files) and 1015 artifact files, clean; exit 0;
+  - `just adversarial-gate --agent claude` without a key -> same, then `skip live`, exit 1 (6.4's no-key outcome);
+  - live wiring with a stub `claude` on PATH and a fake key: 6 transcripts saved and scanned, the stub saw `--bare`, `--strict-mcp-config`, `--tools Bash`, `--allowedTools Bash mcp__locksmith`, only PATH/HOME/LOCKSMITH_* plus the key in its environment, and the fake key was masked in every saved file; a planted plain canary in a transcript -> `FAIL live: unlisted leak`, exit 1; an html-entity reply fetched through `smith relay` -> `RESIDUAL live`. The real CLI 2.1.328 accepts the flag set (an unknown flag is rejected at once) but was not run against the API;
+  - `just ci` -> exit 0 (688 passed).
+- Notes for next session: `gate.sh` reads the run's kept work dir from run.sh's `kept:` line; "starts the gateway" = one build of gateway/smith/mcp, each case starts its own gateway for its own org (lib.sh). The leak-scan leaves out the files the register lists (judged by run.sh) and the live artifacts (judged in step 4, where a hit passes only if its encoding is registered for any case; no stale check, live output varies). 6.4 needs a key: `just up && just api && just adversarial-gate --agent claude`. Owner: nightly routine prompt is in tests/adversarial/README.md. Then group 7.

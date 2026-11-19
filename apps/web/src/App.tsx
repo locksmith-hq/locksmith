@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createAuth, defaultConfig, type AuthService, type AuthState } from "./auth";
-import { createClient, type Agent, type AgentGrant, type AuditEvent, type AuditStatus, type Client } from "@locksmith/control-plane-client";
+import { auditOutcomeMatches as auditMatches, createClient, type Agent, type AuditOutcomeFilter as AuditFilter, type AgentGrant, type AuditEvent, type AuditStatus, type Client } from "@locksmith/control-plane-client";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
@@ -178,10 +178,6 @@ function chainSummary(s: AuditStatus): string {
   if (v.ok) return `Verified OK at ${v.finished_at}`;
   return `Verification FAILED at ${v.finished_at}${v.broken_seq != null ? ` (first broken seq ${v.broken_seq}${v.break_kind ? `, ${v.break_kind}` : ""})` : ""}`;
 }
-
-type AuditFilter = "all" | "denied" | "redaction_failed";
-const auditMatches = (e: AuditEvent, f: AuditFilter) =>
-  f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
 
 function Audit({ client }: { client: Client }) {
   const [status, setStatus] = useState<AuditStatus | null>(null);

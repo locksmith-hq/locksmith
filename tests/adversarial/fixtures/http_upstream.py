@@ -21,6 +21,12 @@ Location, WWW-Authenticate). The query selects how the body is sent:
   split=1                    chunked, one byte per chunk with pauses (cross-chunk redaction)
   sse=1                      text/event-stream, dripped in pieces 60 ms apart
   redirect=301|302|303|307|308 &to=URL   that status with `Location: URL` and the usual echo
+  g4=FORM                    (G4) only the credential of the Authorization header (the value
+                             after the scheme) in one form, with no other echo:
+                             plain, b32, b32-lower (unpadded), utf16le, utf16be, json-u (\\uXXXX
+                             escapes), html-dec, html-hex, qp (every octet =XX, soft line breaks),
+                             gzip (no Content-Encoding), reversed, split-headers (X-Part-1..4)
+                             or char-lines (one character per line)
 """
 import base64
 import gzip
@@ -82,6 +88,42 @@ def zstd_raw(data):
         out += struct.pack("<I", (len(b) << 3) | last)[:3]
         out += b
     return bytes(out)
+
+
+def g4_form(form, cred):
+    """(extra headers, content type, body) for one G4 encoding of the credential text."""
+    raw = cred.encode("latin-1")
+    text = "text/plain; charset=utf-8"
+    if form == "plain":
+        return [], text, raw + b"\n"
+    if form == "b32":
+        return [], text, base64.b32encode(raw) + b"\n"
+    if form == "b32-lower":
+        return [], text, base64.b32encode(raw).lower().rstrip(b"=") + b"\n"
+    if form in ("utf16le", "utf16be"):
+        codec = "utf-16-le" if form == "utf16le" else "utf-16-be"
+        return [], "text/plain; charset=" + codec, cred.encode(codec)
+    if form == "json-u":
+        return [], "application/json", ('{"token":"%s"}\n' % "".join("\\u%04x" % ord(c) for c in cred)).encode()
+    if form == "html-dec":
+        return [], "text/html", ("<p>%s</p>\n" % "".join("&#%d;" % ord(c) for c in cred)).encode()
+    if form == "html-hex":
+        return [], "text/html", ("<p>%s</p>\n" % "".join("&#x%x;" % ord(c) for c in cred)).encode()
+    if form == "qp":
+        enc = "".join("=%02X" % b for b in raw)
+        # RFC 2045 soft line breaks, at most 76 characters per line.
+        lines = [enc[i:i + 24] for i in range(0, len(enc), 24)]
+        return [], text, ("=\r\n".join(lines) + "\r\n").encode()
+    if form == "gzip":
+        return [], "application/octet-stream", gzip.compress(raw + b"\n")
+    if form == "reversed":
+        return [], text, raw[::-1] + b"\n"
+    if form == "split-headers":
+        n = -(-len(cred) // 4)
+        return [("X-Part-%d" % (i + 1), cred[i * n:(i + 1) * n]) for i in range(4)], text, b"ok\n"
+    if form == "char-lines":
+        return [], text, "\n".join(cred).encode("latin-1") + b"\n"
+    raise ValueError("unknown g4 form")
 
 
 ENCODE = {
@@ -169,6 +211,8 @@ class H(BaseHTTPRequestHandler):
         data = self.body()
         self.hit(data)
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        if q.get("g4"):
+            return self.g4(q["g4"][0])
         lines = ["role: %s" % role, "request: %s %s" % (self.command, self.path)]
         for k, v in self.headers.items():
             lines += forms(k, v)
@@ -231,6 +275,24 @@ class H(BaseHTTPRequestHandler):
         for k, v in hdrs:
             self.send_header(k, v)
         self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def g4(self, form):
+        _scheme, _, cred = self.headers.get("Authorization", "").partition(" ")
+        try:
+            extra, ctype, payload = g4_form(form, cred)
+        except ValueError:
+            self.send_response(400)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        for k, v in extra:
+            self.send_header(k, v)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(payload)
 

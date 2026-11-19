@@ -17,9 +17,111 @@
 # listed entry with no hit is STALE RESIDUAL and fails until it is removed. In a full
 # `run.sh gateway`, an entry whose case does not exist is stale too.
 #
-# Example (task 3.4 seeds the real entries):
-# [[residual]]
-# case = "G4"
-# encoding = "text-reversed"
-# label = "containment"
-# reason = "A bound upstream that reverses the injected key; the binding limits the key to hosts the owner trusts."
+# G4 seeds (task 3.4). The canary text is itself base64url, so each form of the plain canary hits
+# twice: `<view>/utf8` (the oracle joins it as `utf8+percent+json`) and `<view>/b64url-offset0`
+# (joined with `b64-offset0` when the two needles agree). Both are listed per form.
+
+# base32 (upper, padded)
+[[residual]]
+case = "G4"
+encoding = "text-b32-offset0"
+label = "containment"
+reason = "Task 4.1 (decision 4) teaches ls-redact this form; until then the binding limits the key to the bound upstream the owner trusts. Remove this entry when task 4.1 lands (it then fails as STALE)."
+
+# base32 (lower, unpadded)
+[[residual]]
+case = "G4"
+encoding = "text-b32-lower-offset0"
+label = "containment"
+reason = "Task 4.1 (decision 4) teaches ls-redact this form; until then the binding limits the key to the bound upstream the owner trusts. Remove this entry when task 4.1 lands (it then fails as STALE)."
+
+# UTF-16LE
+[[residual]]
+case = "G4"
+encoding = "text-utf16le"
+label = "containment"
+reason = "Task 4.1 (decision 4) teaches ls-redact this form; until then the binding limits the key to the bound upstream the owner trusts. Remove this entry when task 4.1 lands (it then fails as STALE)."
+
+# UTF-16BE
+[[residual]]
+case = "G4"
+encoding = "text-utf16be"
+label = "containment"
+reason = "Task 4.1 (decision 4) teaches ls-redact this form; until then the binding limits the key to the bound upstream the owner trusts. Remove this entry when task 4.1 lands (it then fails as STALE)."
+
+# \u escapes
+[[residual]]
+case = "G4"
+encoding = "json-u/utf8"
+label = "containment"
+reason = "Task 4.1 (decision 4) teaches ls-redact this form; until then the binding limits the key to the bound upstream the owner trusts. Remove this entry when task 4.1 lands (it then fails as STALE)."
+
+# \u escapes
+[[residual]]
+case = "G4"
+encoding = "json-u/b64url-offset0"
+label = "containment"
+reason = "Task 4.1 (decision 4) teaches ls-redact this form; until then the binding limits the key to the bound upstream the owner trusts. Remove this entry when task 4.1 lands (it then fails as STALE)."
+
+# HTML entities
+[[residual]]
+case = "G4"
+encoding = "html-entity/utf8"
+label = "containment"
+reason = "Decision 4 leaves HTML numeric entities to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# HTML entities
+[[residual]]
+case = "G4"
+encoding = "html-entity/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves HTML numeric entities to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# quoted-printable
+[[residual]]
+case = "G4"
+encoding = "qp/utf8"
+label = "containment"
+reason = "Decision 4 leaves quoted-printable to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# quoted-printable
+[[residual]]
+case = "G4"
+encoding = "qp/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves quoted-printable to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# unlabelled gzip
+[[residual]]
+case = "G4"
+encoding = "gzip/utf8"
+label = "containment"
+reason = "Decision 4 leaves a gzip body without a Content-Encoding label to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# unlabelled gzip
+[[residual]]
+case = "G4"
+encoding = "gzip/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves a gzip body without a Content-Encoding label to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# reversed
+[[residual]]
+case = "G4"
+encoding = "text-reversed"
+label = "containment"
+reason = "Decision 4 leaves the reversed value to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# split
+[[residual]]
+case = "G4"
+encoding = "stripped/utf8"
+label = "containment"
+reason = "Decision 4 leaves a value split across headers or written one character per line to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+
+# split
+[[residual]]
+case = "G4"
+encoding = "stripped/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves a value split across headers or written one character per line to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."

@@ -1,0 +1,20 @@
+/* Access pages: tab buttons (same look as the link tabs) and request rows. */
+.tabs button { padding: 8px 12px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; font: 500 14px var(--sans); color: var(--muted); cursor: pointer; }
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-current] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+/* .list .row starts with a 32px icon column; request rows have no icon. */
+.req .row { grid-template-columns: minmax(0, 1fr); }
+.req .ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.req .ctl input { flex: 1; min-width: 160px; height: 32px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); font: 13px var(--sans); }
+.req .ctl select { height: 32px; font-size: 13px; }
+.req .why { margin: 6px 0 0; color: var(--text); font-size: 13px; }
+.ok-t { color: var(--live-text); font-weight: 600; }
+.no-t { color: var(--danger-text); font-weight: 600; }
+.warn-t { color: var(--warning-text); font-weight: 600; }
+.ac-top { margin-top: 12px; }
+.ac-grow { min-width: 0; flex: 1; }
+.ac-text { color: var(--text); }
+.ac-warn { background: var(--warning-weak); border-color: var(--warning-border); color: var(--warning-text); }
+.ac-fs { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ac-leg { margin-bottom: 6px; padding: 0; }
+.ac-chk { gap: 6px; font-size: 13px; }

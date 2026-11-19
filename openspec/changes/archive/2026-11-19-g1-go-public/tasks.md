@@ -21,7 +21,7 @@
 
 ## 5. Owner flip checklist [sonnet]
 - [x] 5.1 Write `docs/going-public.md`: ordered owner steps with exact commands (visibility, `gh workflow enable ci` and `claude-review`, secret scanning and push protection, private advisories, branch rules, rotation of flagged values).
-- [ ] 5.2 Open a `needs-owner` issue linking the checklist and an Artifact brief, and record the owner's approval line in `openspec/decisions.md` when given.
+- [x] 5.2 Open a `needs-owner` issue linking the checklist and an Artifact brief, and record the owner's approval line in `openspec/decisions.md` when given.
 - [x] 5.3 Verify: `bash scripts/public-check.sh` passes and the checklist covers every item in #307.
 
 ## 6. Local verification [sonnet]

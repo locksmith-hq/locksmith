@@ -19,3 +19,8 @@
 - Task: 5.2 - blocked (owner)
 - Verified: gitleaks detect --redact (355 commits) -> no leaks; bash scripts/public-check.sh -> OK
 - Notes for next session: rescue #348 closed; owner decision raised as #349 with Artifact brief and push. On `approved`, record the line in openspec/decisions.md, tick 5.2 and archive in PR #344. Option B (hide harness) would need a history rewrite.
+
+## 2026-11-19 lead
+- Task: 5.2 - done (owner replied `approved`, option A, on #349)
+- Verified: approval line G1-1 in openspec/decisions.md and owner.md; openspec validate --all and just ci (see below)
+- Notes for next session: change archived in this PR. Owner runs the 8 steps in docs/going-public.md after merge; ci and claude-review come back then.

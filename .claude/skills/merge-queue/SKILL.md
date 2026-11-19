@@ -37,4 +37,4 @@ Take candidates oldest first, at most 4 per run. A failed candidate does not sto
      Then run `just ci`, push once and release the lock.
    - **Any other failure:** comment the reason on the PR. For protected files, also open a `needs-rescue` `Decision:` issue unless the PR links one; the lead takes it to the owner.
    - While the owner has the `ci` or `claude-review` workflow disabled, the gate prints `skip 4` / `skip 6` and merge-on-green merges on the `ready-to-merge` label alone.
-2. **On GATE PASS,** do nothing: merge-on-green merges it. Never merge a PR yourself.
+2. **On GATE PASS** with `skip 4`/`skip 6`, remove and re-add `ready-to-merge`: the label is merge-on-green's only trigger. Otherwise do nothing. Never merge a PR yourself.

@@ -9,7 +9,7 @@
 ## 2. Windows builds for secret-touching crates [opus]
 - [x] 2.1 Make `ls-vault` (SQLCipher with vendored OpenSSL), `ls-broker`, `smith-cli` and `locksmithd` compile under `cfg(windows)`, using the transport trait; no change to crypto or on-disk formats.
 - [x] 2.2 Replace Unix-only paths and permission calls (0600 file modes, socket paths) with a platform module that has an ACL equivalent on Windows.
-- [ ] 2.3 Verify: `cargo nextest run --workspace` stays green on Linux and `cargo check --workspace --target x86_64-pc-windows-gnu` compiles where the toolchain allows.
+- [x] 2.3 Verify: `cargo nextest run --workspace` stays green on Linux and `cargo check --workspace --target x86_64-pc-windows-gnu` compiles where the toolchain allows.
 
 ## 3. Desktop on all platforms [sonnet]
 - [ ] 3.1 Add the Windows branch of `secure_input.rs` and tray handling in `apps/desktop/src-tauri`; confirm the Tauri config bundles on Windows.

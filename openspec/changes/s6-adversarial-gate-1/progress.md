@@ -64,3 +64,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.6 - blocked (G6.sh built and live-passing, not ticked)
 - Verified: live `ADVERSARIAL_REQUIRE_ALL=1 run.sh gateway` -> G1-G3, G5, G6 PASS, G4 RESIDUAL (registered), 0 stale; Opus evaluator FAIL on one point only (below), other defects fixed
 - Notes for next session: 3.6 says every refusal gets a `denied` ledger event, but the gateway records nothing for 401 token failures (relay.rs `unauthenticated_caller_is_refused_first`) and the control plane records nothing for internal-route 401s; G6 asserts the ledger only for the revoke replay (`relay.denied`/`no_grant`, exactly +1, no new `relay.attempt`). Lead must narrow 3.6 to the revoke scenario or require the gateway to audit auth failures. Real clock expiry cannot be minted live (TTL fixed 15 min); covered by auth.rs and relay.rs unit tests. Then 3.7 and group 4. Stack: `just up && just api`.
+
+## 2026-11-19 lead (rescue)
+- Task: 3.6 - decided (#360, option a); not ticked
+- Verified: `openspec validate s6-adversarial-gate-1` -> valid; merge-gate on #361 -> GATE PASS
+- Notes for next session: #361 narrows 3.6 and the spec. The ledger records denials for authenticated agents only (the revoke replay adds one `relay.denied`); 401 token failures add no ledger event and are logged only (design decision 10). G6 already asserts this, so after #361 merges: merge main, re-run the Opus evaluator on G6, tick 3.6, then 3.7.

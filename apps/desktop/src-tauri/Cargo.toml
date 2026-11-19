@@ -2,7 +2,7 @@
 name = "locksmith-desktop"
 edition = "2024"
 version = "0.0.1-alpha.4"
-license = "UNLICENSED"
+license = "Apache-2.0"
 publish = false
 
 # Not in the root workspace (see the root Cargo.toml `exclude`): Tauri pulls webkit/gtk.

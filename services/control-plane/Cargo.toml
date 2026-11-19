@@ -3,7 +3,7 @@ name = "ls-control-plane"
 description = "Locksmith control-plane API service (axum)."
 edition.workspace = true
 version.workspace = true
-license.workspace = true
+license = "AGPL-3.0-only"
 publish.workspace = true
 
 [lints]

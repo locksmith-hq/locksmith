@@ -1297,7 +1297,7 @@
     "/.well-known/jwks.json": {
       "get": {
         "description": "Ed25519 public keys (RFC 8037). Verifiers select a key by the token's `kid`. Empty when token signing is not configured.",
-        "operationId": "jwks",
+        "operationId": "get_jwks",
         "responses": {
           "200": {
             "content": {
@@ -1326,7 +1326,7 @@
     },
     "/healthz": {
       "get": {
-        "operationId": "healthz",
+        "operationId": "get_healthz",
         "responses": {
           "200": {
             "description": "The process is up"
@@ -1341,7 +1341,7 @@
     "/internal/v1/agents/{agent_id}/grants": {
       "get": {
         "description": "The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`.",
-        "operationId": "agent_grants",
+        "operationId": "get_internal_agent_grants",
         "parameters": [
           {
             "description": "Agent id (the token's `sub`)",
@@ -1420,7 +1420,7 @@
     "/internal/v1/audit/events": {
       "post": {
         "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
-        "operationId": "append_event",
+        "operationId": "append_audit_event",
         "parameters": [
           {
             "description": "The org the event belongs to (the agent token's `org`)",
@@ -1538,7 +1538,7 @@
     },
     "/internal/v1/secrets/{secret_id}/versions/{version}/material": {
       "get": {
-        "operationId": "material",
+        "operationId": "get_secret_version_material",
         "parameters": [
           {
             "description": "Secret id",
@@ -1627,7 +1627,7 @@
     },
     "/readyz": {
       "get": {
-        "operationId": "readyz",
+        "operationId": "get_readyz",
         "responses": {
           "200": {
             "description": "Ready"
@@ -1645,7 +1645,7 @@
     "/v1/agent-tokens": {
       "post": {
         "description": "Returns an EdDSA JWT valid for 15 minutes with audience `gateway`, verifiable with the keys at `/.well-known/jwks.json`. Any invalid, unknown or replaced enrollment secret is the same `401`.",
-        "operationId": "mint_token",
+        "operationId": "create_agent_token",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1734,7 +1734,7 @@
     },
     "/v1/agents": {
       "get": {
-        "operationId": "list",
+        "operationId": "list_agents",
         "parameters": [
           {
             "description": "Page size, 1 to 100 (default 50).",
@@ -1820,7 +1820,7 @@
         ]
       },
       "post": {
-        "operationId": "create",
+        "operationId": "create_agent",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1911,7 +1911,7 @@
     "/v1/agents/{agent_id}": {
       "delete": {
         "description": "Tokens already minted stay valid until they expire (at most 15 minutes), but every relay is refused because the agent has no grants.",
-        "operationId": "delete",
+        "operationId": "delete_agent",
         "parameters": [
           {
             "description": "Agent id",
@@ -1980,7 +1980,7 @@
         ]
       },
       "get": {
-        "operationId": "get_one",
+        "operationId": "get_agent",
         "parameters": [
           {
             "description": "Agent id",
@@ -2049,7 +2049,7 @@
     "/v1/agents/{agent_id}/enrollment-secret": {
       "post": {
         "description": "The previous enrollment secret stops working immediately. Tokens already minted stay valid until they expire.",
-        "operationId": "rotate_enrollment",
+        "operationId": "rotate_agent_enrollment_secret",
         "parameters": [
           {
             "description": "Agent id",
@@ -2125,7 +2125,7 @@
     },
     "/v1/agents/{agent_id}/grants": {
       "get": {
-        "operationId": "list_grants",
+        "operationId": "list_agent_grants",
         "parameters": [
           {
             "description": "Agent id",
@@ -2221,7 +2221,7 @@
         ]
       },
       "post": {
-        "operationId": "create_grant",
+        "operationId": "create_agent_grant",
         "parameters": [
           {
             "description": "Agent id",
@@ -2328,7 +2328,7 @@
     "/v1/agents/{agent_id}/grants/{grant_id}": {
       "delete": {
         "description": "The gateway caches grants for at most 10 seconds; the revocation takes effect within that window.",
-        "operationId": "delete_grant",
+        "operationId": "delete_agent_grant",
         "parameters": [
           {
             "description": "Agent id",
@@ -2409,7 +2409,7 @@
     },
     "/v1/audit/events": {
       "get": {
-        "operationId": "list_events",
+        "operationId": "list_audit_events",
         "parameters": [
           {
             "description": "Page size, 1 to 100 (default 50).",
@@ -2497,7 +2497,7 @@
     },
     "/v1/audit/status": {
       "get": {
-        "operationId": "status",
+        "operationId": "get_audit_status",
         "responses": {
           "200": {
             "content": {
@@ -2553,7 +2553,7 @@
     },
     "/v1/orgs": {
       "post": {
-        "operationId": "create",
+        "operationId": "create_org",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2622,7 +2622,7 @@
     },
     "/v1/orgs/{org_id}": {
       "get": {
-        "operationId": "get_one",
+        "operationId": "get_org",
         "parameters": [
           {
             "description": "Org id",
@@ -2690,7 +2690,7 @@
     },
     "/v1/projects": {
       "get": {
-        "operationId": "list",
+        "operationId": "list_projects",
         "parameters": [
           {
             "description": "Page size, 1 to 100 (default 50).",
@@ -2776,7 +2776,7 @@
         ]
       },
       "post": {
-        "operationId": "create",
+        "operationId": "create_project",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2860,7 +2860,7 @@
     },
     "/v1/projects/{project_id}": {
       "delete": {
-        "operationId": "delete",
+        "operationId": "delete_project",
         "parameters": [
           {
             "description": "Project id",
@@ -2929,7 +2929,7 @@
         ]
       },
       "get": {
-        "operationId": "get_one",
+        "operationId": "get_project",
         "parameters": [
           {
             "description": "Project id",
@@ -2995,7 +2995,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch",
+        "operationId": "update_project",
         "parameters": [
           {
             "description": "Project id",
@@ -3093,7 +3093,7 @@
     },
     "/v1/projects/{project_id}/environments": {
       "get": {
-        "operationId": "list",
+        "operationId": "list_environments",
         "parameters": [
           {
             "description": "Project id",
@@ -3189,7 +3189,7 @@
         ]
       },
       "post": {
-        "operationId": "create",
+        "operationId": "create_environment",
         "parameters": [
           {
             "description": "Project id",
@@ -3295,7 +3295,7 @@
     },
     "/v1/projects/{project_id}/environments/{environment_id}": {
       "delete": {
-        "operationId": "delete",
+        "operationId": "delete_environment",
         "parameters": [
           {
             "description": "Project id",
@@ -3374,7 +3374,7 @@
         ]
       },
       "get": {
-        "operationId": "get_one",
+        "operationId": "get_environment",
         "parameters": [
           {
             "description": "Project id",
@@ -3450,7 +3450,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch",
+        "operationId": "update_environment",
         "parameters": [
           {
             "description": "Project id",
@@ -3558,7 +3558,7 @@
     },
     "/v1/projects/{project_id}/environments/{environment_id}/secrets": {
       "get": {
-        "operationId": "list",
+        "operationId": "list_secrets",
         "parameters": [
           {
             "description": "Project id",
@@ -3664,7 +3664,7 @@
         ]
       },
       "post": {
-        "operationId": "create",
+        "operationId": "create_secret",
         "parameters": [
           {
             "description": "Project id",
@@ -3780,7 +3780,7 @@
     },
     "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}": {
       "delete": {
-        "operationId": "delete",
+        "operationId": "delete_secret",
         "parameters": [
           {
             "description": "Project id",
@@ -3869,7 +3869,7 @@
         ]
       },
       "get": {
-        "operationId": "get_one",
+        "operationId": "get_secret",
         "parameters": [
           {
             "description": "Project id",
@@ -3955,7 +3955,7 @@
         ]
       },
       "patch": {
-        "operationId": "patch",
+        "operationId": "update_secret",
         "parameters": [
           {
             "description": "Project id",
@@ -4073,7 +4073,7 @@
     },
     "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions": {
       "get": {
-        "operationId": "list",
+        "operationId": "list_secret_versions",
         "parameters": [
           {
             "description": "Project id",
@@ -4159,7 +4159,7 @@
         ]
       },
       "post": {
-        "operationId": "create",
+        "operationId": "create_secret_version",
         "parameters": [
           {
             "description": "Project id",

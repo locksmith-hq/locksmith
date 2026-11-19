@@ -481,14 +481,18 @@ mod tests {
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims(ORG, AUDIENCE, 600)).unwrap());
         let tampered = format!("{}.{}.{}", parts[0], forged_payload, parts[2]);
         assert_eq!(a.verify(&tampered).await, Err(AuthError::BadSignature));
-        // `alg: none` and HS256 headers are refused before any key lookup.
-        for alg in ["none", "HS256"] {
+        // `alg: none` and HS256 headers are refused before any key lookup: `none` is not a
+        // JOSE algorithm the header parser accepts (malformed), HS256 is not EdDSA.
+        for (alg, want) in [
+            ("none", AuthError::Malformed),
+            ("HS256", AuthError::BadSignature),
+        ] {
             let h = URL_SAFE_NO_PAD.encode(format!(
                 r#"{{"alg":"{alg}","typ":"JWT","kid":"{}"}}"#,
                 s.jwk().kid
             ));
             let t = format!("{h}.{}.{}", parts[1], parts[2]);
-            assert!(a.verify(&t).await.is_err(), "{alg}");
+            assert_eq!(a.verify(&t).await.err(), Some(want), "{alg}");
         }
         assert_eq!(
             a.verify(&s.sign(&claims(ORG, AUDIENCE, -120)).unwrap())

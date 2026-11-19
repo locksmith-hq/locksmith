@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check task-guard
+ci: fmt lint test-rust test-web tree-check task-guard public-check
 
 fmt:
     cargo fmt --all --check
@@ -44,8 +44,14 @@ task-guard:
     scripts/check-task-edits.test.sh
     scripts/change-status.test.sh
     scripts/agent-identity.sh selftest
+    scripts/route.sh selftest
     scripts/check-task-edits.sh
     scripts/check-agent-docs.sh
+
+# Public-readiness hygiene: licences, root docs, links, denylist, secret canary.
+public-check:
+    scripts/public-check.test.sh
+    scripts/public-check.sh
 
 dev app:
     npm run build -w apps/{{app}}

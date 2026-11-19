@@ -215,14 +215,14 @@ async fn fallback() -> ApiError {
 }
 
 /// Liveness: `200` whenever the process serves requests.
-#[utoipa::path(get, path = "/healthz", tag = "health", summary = "Liveness probe",
+#[utoipa::path(get, path = "/healthz", operation_id = "get_healthz", tag = "health", summary = "Liveness probe",
     responses((status = 200, description = "The process is up")))]
 async fn healthz() -> StatusCode {
     StatusCode::OK
 }
 
 /// Readiness: `200` once migrations are applied and Postgres answers.
-#[utoipa::path(get, path = "/readyz", tag = "health", summary = "Readiness probe",
+#[utoipa::path(get, path = "/readyz", operation_id = "get_readyz", tag = "health", summary = "Readiness probe",
     responses((status = 200, description = "Ready"), (status = 503, description = "Not ready")))]
 async fn readyz(State(state): State<AppState>) -> StatusCode {
     if state.readiness.is_ready() {

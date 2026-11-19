@@ -104,7 +104,7 @@ How we stay inside it:
 - **`adversarial.yml`:** weekly instead of nightly.
 - **Agents:**
   - Verify in the cloud VM first, because that compute is free.
-  - Push at most once per run.
+  - Push each branch at most once per run (a run may push several branches).
   - Never re-run or dispatch workflows.
   - The weekly review reports Actions usage.
 

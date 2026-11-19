@@ -10,7 +10,8 @@ check() { # <file> <max-words>
   if [ "$w" -gt "$2" ]; then echo "agent-docs: $1 has $w words (max $2)"; fail=1; fi
 }
 check docs/agents/common.md 600
-for f in docs/agents/{worker,review,health,research,merge}.md; do check "$f" 400; done
+for f in docs/agents/{review,health,research,merge}.md; do check "$f" 400; done
+check docs/agents/worker.md 430  # owner 2026-11-19: several tasks, changes and PRs per run
 check docs/agents/lead.md 580  # owner 2026-11-18: owner-reply step 0, PM/lead scope; 2026-11-19: debates, rescue decisions
 check docs/agents/optimizer.md 860  # owner 2026-11-19: local optimizer (setup, communication, runs)
 for f in .claude/skills/*/SKILL.md; do

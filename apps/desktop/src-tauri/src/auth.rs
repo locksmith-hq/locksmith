@@ -105,12 +105,18 @@ impl TokenStore for KeyringTokenStore {
         entry(ACCESS_KEY)?
             .set_password(tokens.access.expose_secret())
             .map_err(ks_err)?;
-        match &tokens.refresh {
+        let refresh = match &tokens.refresh {
             Some(r) => entry(REFRESH_KEY)?
                 .set_password(r.expose_secret())
                 .map_err(ks_err),
             None => delete_entry(REFRESH_KEY),
+        };
+        if refresh.is_err() {
+            // Never leave a partial set behind.
+            let _ = delete_entry(ACCESS_KEY);
+            let _ = delete_entry(REFRESH_KEY);
         }
+        refresh
     }
 
     fn load(&self) -> Result<Option<TokenSet>> {
@@ -210,7 +216,8 @@ fn idp_hint(provider: Option<&str>) -> Result<Option<&'static str>> {
 }
 
 /// The query parameters of the redirect back to the loopback listener.
-#[derive(Debug, PartialEq, Eq)]
+/// Debug is manual so a stray `{:?}` never prints the code or state.
+#[derive(PartialEq, Eq)]
 pub enum Callback {
     Code {
         code: String,
@@ -224,7 +231,16 @@ pub enum Callback {
 
 /// Parses the request line of an HTTP request to the loopback listener. `None` for anything
 /// that is not `GET /callback?...` (favicon requests and so on).
-pub fn parse_callback(request: &str) -> Option<Callback> {
+impl std::fmt::Debug for Callback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Callback::Code { .. } => f.write_str("Callback::Code(..)"),
+            Callback::Failed { .. } => f.write_str("Callback::Failed(..)"),
+        }
+    }
+}
+
+fn parse_callback(request: &str) -> Option<Callback> {
     let line = request.lines().next()?;
     let mut parts = line.split_whitespace();
     if parts.next()? != "GET" {
@@ -369,7 +385,7 @@ fn sign_in_with_timeout(
             } else {
                 AuthErrorKind::BadRequest
             };
-            return Err(err(kind, format!("sign-in failed: {error}")));
+            return Err(err(kind, "sign-in failed at the issuer".to_string()));
         }
     };
     check_state(csrf.secret(), &state)?;

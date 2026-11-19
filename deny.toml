@@ -24,7 +24,13 @@ allow = [
 ]
 
 [bans]
-deny = [{ name = "openssl" }, { name = "openssl-sys" }]
+deny = [
+  { name = "openssl" },
+  { name = "openssl-sys" },
+  # ls-control-plane is AGPL-3.0: only the AGPL ls-gateway may depend on it, never an Apache-2.0 crate.
+  # (ls-gateway is a leaf binary nothing depends on; cargo-deny cannot ban a workspace root with wrappers.)
+  { crate = "ls-control-plane", wrappers = ["ls-gateway"] },
+]
 
 [sources]
 unknown-registry = "deny"

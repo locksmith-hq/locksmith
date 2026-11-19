@@ -21,7 +21,7 @@ Searched the tree for the owner email, 12-digit account IDs, private hostnames a
 
 - Owner contact details: none. The owner's GitHub handle `tomer555` appears in `.github/CODEOWNERS` and agent docs; it is a public handle and stays.
 - Agent persona names (`locksmith-linus`, `-alfie`, `-josie`, `-harriet`, `-walt`) appear in `docs/cloud-dev.md` and `docs/agents/owner.md`. They are public GitHub App names, no keys. Kept; default is public (see the open question in `design.md`).
-- 12-digit matches are test fixtures (`scripts/harness-check.sh` canary number), not account IDs.
+- 12-digit matches are test fixtures (`scripts/harness-check.sh` canary number) or placeholders. Two made-up-looking AWS account IDs in `apps/desktop/src/mock.ts` role ARNs were replaced with placeholders (`111122223333`, `444455556666`) to be safe.
 - No private hostnames found.
 
 ## 3. Owner flip checklist

@@ -52,7 +52,11 @@ Every agent-reachable control-plane response and error, the OpenAPI document, th
 - **THEN** the oracle finds no canary in any response, ledger row or export file, and internal routes return 401
 
 ### Requirement: Stolen or stale tokens are contained
-A token replayed after its grant is revoked or after it expires, used for another org, or sent to an internal endpoint SHALL be refused, and the refusal SHALL be recorded in the ledger.
+A token replayed after its grant is revoked or after it expires, used for another org, or sent to an internal endpoint SHALL be refused with no decrypt call. A refusal of an authenticated agent (its grant revoked or missing) SHALL be recorded as a `denied` event in the org's ledger. A token that fails authentication (signature, `kid`, expiry, audience, org) SHALL be refused before any ledger write and recorded only in the service log with the reason.
+
+#### Scenario: Forged or foreign token
+- **WHEN** case G6 sends a forged, expired or other-org token to the gateway, or the agent token to an internal route
+- **THEN** the call returns 401, makes no decrypt call and appends no ledger event
 
 #### Scenario: Replay after revoke
 - **WHEN** case G6 revokes the grant and replays the agent token after the grant cache TTL

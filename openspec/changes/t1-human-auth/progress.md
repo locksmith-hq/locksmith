@@ -50,3 +50,9 @@
 - Verified: `cargo test` desktop crate 23 passed, clippy -D warnings clean; `just ci` exit 0 (first run failed on stale node_modules, `npm ci` fixed it); Sonnet evaluator PASS
 - Deviation: keyring pinned 3.6.3 (4.x changes the store API); real keyring store has no unit test (no secret service on the VM); no webview UI wiring yet (Rust commands sign_in/sign_out/auth_status only). Evaluator nits fixed: manual Debug on Callback, fixed error text, no partial keystore writes.
 - Notes for next session: 6.3 `smith login --user` (device grant, keystore), 6.4, then 7.1. Follow-ups: desktop webview sign-in button; Overview landing and checklist.
+
+## 2026-11-19 worker (event, #477)
+- Task: 6.3 - done
+- Verified: `cargo nextest run -p smith-cli` 129 passed; clippy -D warnings clean; `just ci` exit 0 (after `npm ci` for stale node_modules); Sonnet evaluator PASS
+- Deviation: oauth2 5.0.0 (ureq) with a ~35-line SyncHttpClient wrapper, because stock ureq 2 maps 4xx to errors and hides authorization_pending/access_denied. deny.toml ignores RUSTSEC-2026-0543 (chrono unmaintained via oauth2). Real keyring store untested (no secret service on VM). Evaluator nit: transient non-zeroized String copy of the access token before SecretString.
+- Notes for next session: 6.4 (web lint/test, smith-cli tests, `just apps-build`), then 7.1. Realm needs a `locksmith-cli` client with the device grant enabled.

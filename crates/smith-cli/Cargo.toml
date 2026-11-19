@@ -37,6 +37,10 @@ ls-connector = { path = "../ls-connector" }
 secrecy = "0.10"
 ls-hooks = { version = "0.0.1-alpha.4", path = "../ls-hooks" }
 ls-proxy = { version = "0.0.1-alpha.4", path = "../ls-proxy" }
+# Human sign-in (T1 6.3): RFC 8628 device grant (`oauth2`) and OS keystore (`keyring`), same
+# pins as apps/desktop (task 6.2).
+oauth2 = { version = "5", default-features = false, features = ["ureq"] }
+keyring = { version = "3.6", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
 # `smith run` pty relay and signal forwarding (Unix only; refused on Windows for now, x1 task 2.1).
 [target.'cfg(unix)'.dependencies]

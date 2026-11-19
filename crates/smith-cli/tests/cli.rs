@@ -87,3 +87,22 @@ fn update_error_in_json_mode_is_one_document() {
     let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
     assert_eq!(v["code"], 1);
 }
+
+#[test]
+fn login_user_refuses_plain_http_issuer_before_any_request() {
+    let o = smith(&[
+        "login",
+        "--user",
+        "--issuer",
+        "http://issuer.example.com/realms/x",
+    ]);
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("https"));
+}
+
+#[test]
+fn login_requires_agent_or_user_and_they_conflict() {
+    assert_eq!(smith(&["login"]).status.code(), Some(2));
+    let o = smith(&["login", "--user", "--agent"]);
+    assert_eq!(o.status.code(), Some(2));
+}

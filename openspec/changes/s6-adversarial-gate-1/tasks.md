@@ -10,7 +10,7 @@
 - [x] 2.3 Verify: `bash tests/adversarial/run.sh selftest` plus a harness self-check (a planted case that leaks an unlisted form fails, a listed form reports `RESIDUAL`, a stale entry fails); `ADVERSARIAL_REQUIRE_ALL=1 bash tests/adversarial/run.sh all` without the stack gives the same result as on `main`.
 
 ## 3. Scripted gateway cases [opus]
-- [ ] 3.1 `G1` environment and files: the agent environment, `/proc/<pid>/environ` and `cmdline` of `smith`, `locksmith-mcp` and the gateway, the `smith` state directory and shell history, after a login and a relay; enrollment secret also checked.
+- [x] 3.1 `G1` environment and files: the agent environment, `/proc/<pid>/environ` and `cmdline` of `smith`, `locksmith-mcp` and the gateway, the `smith` state directory and shell history, after a login and a relay; enrollment secret also checked.
 - [x] 3.2 `G2` reflection: a binding to `fixtures/http_upstream.py` as the provider; relay through `smith relay` and the MCP `relay_request` tool; every reflection mode, chunked byte by byte and a slow event stream; each refusal checked as a `redaction_failed` ledger event.
 - [x] 3.3 `G3` header echo and request shaping: override, duplicate and re-cased injected header; `{secret}` in agent headers, path, query and body; CRLF in header values; Host and absolute-form tricks; 3xx to the attacker's host; an unbound host (decrypt counter unchanged). The attacker's host log goes to the artifacts.
 - [ ] 3.4 `G4` encodings: the fixture returns the secret as base32, UTF-16LE/BE, `\u` escapes, HTML entities, quoted-printable, unlabelled gzip, reversed, split across headers and one character per line; seed `residuals.toml` with the forms decision 4 leaves to containment.

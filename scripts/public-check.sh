@@ -79,9 +79,19 @@ check_denylist() {
 
 check_canary() {
   command -v gitleaks >/dev/null 2>&1 || { echo "public-check: gitleaks not installed, canary scan skipped" >&2; return; }
-  if ! gitleaks detect --no-git --source . --no-banner --redact >/dev/null 2>&1; then
+  # Scan a copy of the tracked/untracked-but-not-ignored files, so build output (target/, node_modules/) is skipped.
+  local tmp f
+  tmp="$(mktemp -d)"
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    mkdir -p "$tmp/$(dirname "$f")"
+    cp -p "$f" "$tmp/$f"
+  done < <(list_files | grep -vE '^(node_modules|target)/|/(node_modules|target)/')
+  [ -f .gitleaksignore ] && cp .gitleaksignore "$tmp/.gitleaksignore"
+  if ! (cd "$tmp" && gitleaks detect --no-git --source . --no-banner --redact >/dev/null 2>&1); then
     bad "gitleaks found a secret in the working tree"
   fi
+  rm -rf "$tmp"
 }
 
 mode="${1:-all}"

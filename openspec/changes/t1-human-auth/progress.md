@@ -11,3 +11,8 @@
 - Task: 1.1-1.4 JWT verification (jsonwebtoken kept; JWKS cache, OrgBinding, forged/none/aud/exp/rotation tests) - done
 - Verified: just ci -> green; nextest -p ls-control-plane auth -> pass; independent evaluator PASS
 - Notes for next session: personal_org_id is an interim UUIDv5(issuer,sub) until 3.2 creates real personal orgs; no RS256 signing round-trip test (ES256 only); telemetry_export test updated since a bearer is no longer downgraded to the dev header; 2.x next (dev_auth gating), 6.0 gated on owner UX approval.
+
+## 2026-11-19 18:00 worker
+- Task: 2.1, 2.2 - done
+- Verified: `cargo nextest run -p ls-control-plane config` -> 15 passed; `just ci` -> exit 0; Sonnet evaluator PASS
+- Notes for next session: `dev_auth` was already default off; added `LOCKSMITH_ALLOW_DEV_AUTH` override check (release builds only, unit-tested via a bool) and `just api` sets it. Group 3 (users, personal orgs) next; 6.0 still gated on owner UX approval (recorded T1-1 approved in decisions).

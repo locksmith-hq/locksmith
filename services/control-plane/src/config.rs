@@ -15,6 +15,8 @@ pub const ENV_DATABASE_OWNER_URL: &str = "DATABASE_OWNER_URL";
 pub const ENV_BIND: &str = "LOCKSMITH_BIND";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 pub const ENV_DEV_AUTH: &str = "LOCKSMITH_DEV_AUTH";
+/// Explicit override that lets a release build start with `LOCKSMITH_DEV_AUTH=1`.
+pub const ENV_ALLOW_DEV_AUTH: &str = "LOCKSMITH_ALLOW_DEV_AUTH";
 pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_CONTROL_PLANE_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
@@ -50,6 +52,8 @@ pub enum ConfigError {
     Invalid(&'static str),
     /// Dev auth is on but the bind address is not loopback.
     DevAuthNonLoopback(&'static str),
+    /// Dev auth is on in a release build without the explicit override.
+    DevAuthInRelease,
 }
 
 impl fmt::Display for ConfigError {
@@ -57,6 +61,10 @@ impl fmt::Display for ConfigError {
         match self {
             Self::Missing(var) => write!(f, "required environment variable {var} is not set"),
             Self::Invalid(var) => write!(f, "environment variable {var} has an invalid value"),
+            Self::DevAuthInRelease => write!(
+                f,
+                "{ENV_DEV_AUTH}=1 is refused in release builds unless {ENV_ALLOW_DEV_AUTH}=1 is also set"
+            ),
             Self::DevAuthNonLoopback(var) => write!(
                 f,
                 "{ENV_DEV_AUTH}=1 is only allowed with a loopback bind address; fix {var} or unset {ENV_DEV_AUTH}"
@@ -66,6 +74,14 @@ impl fmt::Display for ConfigError {
 }
 
 impl std::error::Error for ConfigError {}
+
+/// A release build refuses dev header auth unless the override flag is set (t1 design decision 7).
+fn check_release_dev_auth(dev_auth: bool, release: bool, allowed: bool) -> Result<(), ConfigError> {
+    if dev_auth && release && !allowed {
+        return Err(ConfigError::DevAuthInRelease);
+    }
+    Ok(())
+}
 
 /// Service configuration. No `Debug`/`Clone`: it holds secret-bearing URLs.
 pub struct Config {
@@ -139,6 +155,11 @@ impl Config {
         if dev_auth && !bind.ip().is_loopback() {
             return Err(ConfigError::DevAuthNonLoopback(ENV_BIND));
         }
+        check_release_dev_auth(
+            dev_auth,
+            !cfg!(debug_assertions),
+            get(ENV_ALLOW_DEV_AUTH).as_deref() == Some("1"),
+        )?;
 
         let openbao_addr = get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty());
         let audit_checkpoint = match get(ENV_AUDIT_CHECKPOINT_TOKEN).filter(|v| !v.is_empty()) {
@@ -336,6 +357,17 @@ mod tests {
         .unwrap();
         assert_eq!(err, ConfigError::DevAuthNonLoopback(ENV_BIND));
         assert!(err.to_string().contains(ENV_BIND));
+    }
+
+    #[test]
+    fn release_build_refuses_dev_auth_without_override() {
+        assert_eq!(
+            check_release_dev_auth(true, true, false),
+            Err(ConfigError::DevAuthInRelease)
+        );
+        assert!(check_release_dev_auth(true, true, true).is_ok());
+        assert!(check_release_dev_auth(true, false, false).is_ok());
+        assert!(check_release_dev_auth(false, true, false).is_ok());
     }
 
     #[test]

@@ -7,8 +7,8 @@
 - [x] 1.4 Verify: `cargo nextest run -p ls-control-plane auth` including forged, `none`, wrong-audience, expired and rotated-key tokens.
 
 ## 2. Dev header gating [sonnet]
-- [ ] 2.1 `dev_auth` config default off; release builds refuse to start with it on without `LOCKSMITH_ALLOW_DEV_AUTH`; update existing tests and `just api` to opt in.
-- [ ] 2.2 Verify: `cargo nextest run -p ls-control-plane` passes; a request with only the dev header gets `401` when `dev_auth` is off.
+- [x] 2.1 `dev_auth` config default off; release builds refuse to start with it on without `LOCKSMITH_ALLOW_DEV_AUTH`; update existing tests and `just api` to opt in.
+- [x] 2.2 Verify: `cargo nextest run -p ls-control-plane` passes; a request with only the dev header gets `401` when `dev_auth` is off.
 
 ## 3. Users and personal orgs [sonnet]
 - [ ] 3.1 Migration `0011_users.sql`: `users (id, issuer, subject, email, email_verified, created_at)` with a unique `(issuer, subject)`, RLS per A0-4/A0-5; extend `ls-tenant-lint`.

@@ -142,6 +142,7 @@ pub fn zenity(msg: &str) -> Command {
 
 /// Run a dialog child. Exit `decline_code` (with `decline_marker` in stderr) is Declined; any other
 /// failure is an error, so a broken dialog is never read as a decline.
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
 fn dialog(mut cmd: Command, decline_code: i32, decline_marker: &[u8]) -> io::Result<Outcome> {
     let out = cmd
         .stdin(Stdio::null())
@@ -236,6 +237,17 @@ pub fn tty_ask(msg: &str, mut input: impl Read, mut output: impl Write) -> io::R
         }
     }
     Ok(finish(&mut value))
+}
+
+/// No hidden-input console prompt on this OS yet (Windows, x1 task 2.1): refuse rather than
+/// read a secret with echo on.
+#[cfg(not(unix))]
+pub fn tty_prompt(msg: &str) -> io::Result<Outcome> {
+    let _ = msg;
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "no hidden-input terminal prompt on this OS",
+    ))
 }
 
 #[cfg(test)]

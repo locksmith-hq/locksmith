@@ -7,7 +7,6 @@ use ls_proxy::http::valid_host_pattern;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "agent-policy.toml";
@@ -85,7 +84,15 @@ pub fn check_path(path: &Path, uid: u32) -> Result<(), String> {
         ));
     }
     let pmd = std::fs::metadata(&parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    for (what, m) in [(p.to_string(), &md), (parent.display().to_string(), &pmd)] {
+    owner_only_writable([(path, &md), (&parent, &pmd)], uid)
+}
+
+/// Each entry is owned by `uid` and not writable by group or others.
+#[cfg(unix)]
+fn owner_only_writable(entries: [(&Path, &std::fs::Metadata); 2], uid: u32) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    for (what, m) in entries {
+        let what = what.display();
         if m.uid() != uid {
             return Err(format!(
                 "{what} is owned by uid {}, not the current user (uid {uid})",
@@ -96,6 +103,24 @@ pub fn check_path(path: &Path, uid: u32) -> Result<(), String> {
             return Err(format!(
                 "{what} is writable by group or others (mode {:o})",
                 m.mode() & 0o777
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Windows: each entry is owned by the current user and no DACL entry grants another user a
+/// write, delete or permission-change right (`ls_platform::fs`). `uid` has no meaning here.
+#[cfg(not(unix))]
+fn owner_only_writable(entries: [(&Path, &std::fs::Metadata); 2], uid: u32) -> Result<(), String> {
+    let _ = uid;
+    for (path, _) in entries {
+        let what = path.display();
+        let ok = ls_platform::fs::is_writable_only_by_owner(path)
+            .map_err(|e| format!("cannot read the owner or ACL of {what}: {e}"))?;
+        if !ok {
+            return Err(format!(
+                "{what} is not owned by the current user or is writable by other users"
             ));
         }
     }
@@ -216,7 +241,8 @@ impl Policy {
     }
 }
 
-#[cfg(test)]
+// Unix modes, uids and symlinks throughout; Windows ACL paths are covered in ls_platform::fs.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;

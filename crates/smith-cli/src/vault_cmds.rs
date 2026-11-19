@@ -10,8 +10,6 @@ use ls_crypto::{SecretBytes, SecretKey32};
 use ls_vault::{Error as VErr, Vault};
 use serde_json::json;
 use std::io::{IsTerminal, Write};
-use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use zeroize::Zeroizing;
@@ -621,13 +619,14 @@ fn copy_to_clipboard(value: &[u8]) -> Result<(), Fail> {
         return Err(Fail(ExitCode::Failure, format!("{tool} failed")));
     }
     // Detached (own process group) so it outlives smith and a Ctrl-C in the terminal.
-    Command::new("sh")
+    let mut clear = Command::new("sh");
+    clear
         .arg("-c")
         .arg(format!("sleep 30; printf \"\" | {cmdline}"))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .process_group(0)
+        .stderr(Stdio::null());
+    crate::session::detach(&mut clear)
         .spawn()
         .map_err(no_tool)?;
     Ok(())
@@ -704,10 +703,8 @@ fn export(o: &Opts, a: ExportArgs) -> Result<(), Fail> {
     }
     match &a.out {
         Some(p) => {
-            let mut f = std::fs::OpenOptions::new()
-                .write(true)
+            let mut f = ls_platform::fs::PrivateFile::new()
                 .create_new(true)
-                .mode(0o600)
                 .open(p)
                 .map_err(|e| {
                     Fail(

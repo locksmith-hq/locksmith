@@ -107,7 +107,30 @@ async fn relay_info() -> Result<RelayInfo> {
     blocking(|| Daemon::default().relay_info()).await
 }
 
+/// `locksmith-desktop --health [seconds]`: no window, no tray. Waits up to `seconds` (default 10)
+/// for `locksmithd` to answer a ping, prints one line, exits 0 when healthy and 1 otherwise.
+fn headless_health(wait_secs: u64) -> ! {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(wait_secs);
+    loop {
+        match Daemon::default().health() {
+            Ok(version) => {
+                println!("locksmithd healthy (version {version})");
+                std::process::exit(0);
+            }
+            Err(e) if std::time::Instant::now() >= deadline => {
+                eprintln!("locksmithd unhealthy: {}", e.message);
+                std::process::exit(1);
+            }
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(250)),
+        }
+    }
+}
+
 fn main() {
+    let mut args = std::env::args().skip(1);
+    if args.next().as_deref() == Some("--health") {
+        headless_health(args.next().and_then(|s| s.parse().ok()).unwrap_or(10));
+    }
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             status,

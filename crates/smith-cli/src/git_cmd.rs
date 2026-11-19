@@ -90,7 +90,8 @@ fn add_hosts(hosts: &[String]) -> Result<(), Fail> {
         return Ok(());
     }
     let dir = ls_core::config_dir().join("git");
-    ls_core::ensure_private_dir(&dir).map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    ls_platform::fs::ensure_private_dir(&dir)
+        .map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
     let path = dir.join("hosts");
     let have = std::fs::read_to_string(&path).unwrap_or_default();
     let mut f = std::fs::OpenOptions::new()

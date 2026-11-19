@@ -22,7 +22,7 @@ pub fn tcp_peer_owners(client: SocketAddr, server: SocketAddr) -> io::Result<Vec
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = (c, s);
-        return Err(io::ErrorKind::Unsupported.into());
+        Err(io::ErrorKind::Unsupported.into())
     }
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     if owners.is_empty() {

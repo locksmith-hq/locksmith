@@ -7,21 +7,21 @@ mod db;
 mod git;
 mod http;
 mod policy;
+// Off Unix `run::run` only refuses (no fd passing yet), so the rest of the module is unused.
+#[cfg_attr(not(unix), allow(dead_code, unused_imports))]
 mod run;
 mod scan;
 
 use ls_broker::{Denial, LeaseState, Leases, Manifest, Role};
 use ls_ipc::{
-    AuditEvent, ErrorCode, Frame, LOCK_FILE, Request, Response, SelfReport, read_frame, write_frame,
+    AuditEvent, DefaultListener, DefaultTransport, ErrorCode, Frame, LOCK_FILE, Listener, Request,
+    Response, SelfReport, read_frame, write_frame,
 };
 use ls_platform::proc::{Peer, ProcId, id_of};
 use ls_redact::binding::{Binding, parse as parse_binding};
 use ls_vault::audit::{AuditRecord, StoredEvent};
 use ls_vault::{Error as VErr, Vault};
-use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -50,6 +50,16 @@ impl Actor {
             exe_hash: m.digest_of(p).map(|d| d.hex()).unwrap_or_default(),
         }
     }
+}
+
+/// The daemon's own OS user id, the owner agent policies and agent roots must have. Windows has
+/// no uid: `u32::MAX` there matches nothing, and both consumers fail closed off Unix anyway
+/// (`policy::check_path` refuses, `ls_broker::agent_root` cannot read the process table).
+pub fn own_uid() -> u32 {
+    #[cfg(unix)]
+    return ls_platform::current_uid();
+    #[cfg(not(unix))]
+    u32::MAX
 }
 
 pub fn now() -> i64 {
@@ -344,7 +354,7 @@ fn secret_put(
 }
 
 fn load_agent_policy() -> Result<policy::Policy, String> {
-    policy::load(&policy::default_path(), ls_platform::current_uid())
+    policy::load(&policy::default_path(), own_uid())
 }
 
 /// M10e D1: refuse a run (or `smith gh`) that would inject keys an agent lease may not have.
@@ -441,7 +451,7 @@ fn agent_session_start(
     }
     let target = format!("{project}/{env}");
     // D4: root at the agent that launched the MCP server, as the kernel reports it.
-    let root = match ls_broker::agent_root(caller, ls_platform::current_uid()) {
+    let root = match ls_broker::agent_root(caller, own_uid()) {
         Ok(r) => r,
         Err(why) => {
             let _ = st.audit(rec(
@@ -542,7 +552,7 @@ fn agent_session_start(
     Response::Session { id, expires_at }
 }
 
-fn serve(d: Arc<Daemon>, mut s: UnixStream) {
+fn serve(d: Arc<Daemon>, mut s: DefaultTransport) {
     let Ok(peer) = Peer::of(&s) else { return };
     let role = d.manifest.classify(&peer);
     let actor = Actor::of(&peer, &d.manifest);
@@ -960,10 +970,10 @@ fn main() {
     ls_platform::proc::deny_debugger_attach();
 
     let dir = ls_ipc::runtime_dir();
-    if let Err(e) = ls_core::ensure_private_dir(&dir) {
+    if let Err(e) = ls_platform::fs::ensure_private_dir(&dir) {
         die(format!("cannot create {}: {e}", dir.display()));
     }
-    if !ls_core::is_private_dir(&dir).unwrap_or(false) {
+    if !ls_platform::fs::is_private(&dir).unwrap_or(false) {
         die(format!("{} is not private (0700)", dir.display()));
     }
     let sock = ls_ipc::socket_path();
@@ -974,12 +984,8 @@ fn main() {
         ));
     }
 
-    let mut lock = OpenOptions::new()
+    let mut lock = ls_platform::fs::PrivateFile::new()
         .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
         .open(dir.join(LOCK_FILE))
         .unwrap_or_else(|e| die(format!("cannot open lock file: {e}")));
     if lock.try_lock().is_err() {
@@ -995,11 +1001,11 @@ fn main() {
     let _ = write!(lock, "{}", std::process::id());
 
     let _ = std::fs::remove_file(&sock); // stale: we hold the lock, so no live daemon owns it
-    let listener = UnixListener::bind(&sock)
+    // Unix: socket file made 0600 by bind; Windows: named pipe with a current-user-only DACL
+    // and a peer-SID check on every connection (ls-ipc transport).
+    // Through the trait on purpose: UnixListener's inherent `bind` would skip the chmod.
+    let listener = <DefaultListener as Listener>::bind(&sock)
         .unwrap_or_else(|e| die(format!("cannot bind {}: {e}", sock.display())));
-    if let Err(e) = std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o600)) {
-        die(format!("cannot chmod socket: {e}"));
-    }
 
     let idle = std::env::var("LOCKSMITH_IDLE_LOCK_SECS")
         .ok()
@@ -1039,11 +1045,15 @@ fn main() {
             "locksmithd: screen-lock watcher unavailable ({e}); idle and sleep auto-lock still apply"
         );
     }
-    for conn in listener.incoming().flatten() {
+    loop {
+        // A failed accept (e.g. a Windows peer of another user, closed by the transport) only
+        // drops that client. Blocking accept on the main thread: never inside a tokio runtime.
+        let Ok(conn) = Listener::accept(&listener) else {
+            continue;
+        };
         let d = d.clone();
         std::thread::spawn(move || serve(d, conn));
     }
-    drop(lock);
 }
 
 #[cfg(test)]

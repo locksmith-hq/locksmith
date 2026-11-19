@@ -8,7 +8,6 @@ use clap::{Args, Subcommand};
 use ls_core::ExitCode;
 use ls_ipc::{Request, Response};
 use serde_json::json;
-use std::os::unix::process::CommandExt;
 
 #[derive(Subcommand)]
 pub enum DbCmd {
@@ -135,11 +134,18 @@ pub fn run(json: bool, cmd: DbCmd) -> Result<ExitCode, Fail> {
     };
     drop(c);
     if !a.cmd.is_empty() {
+        let mut c = std::process::Command::new(&a.cmd[0]);
+        c.args(&a.cmd[1..]).envs(ep.env());
         // exec: the command replaces smith, so it stays inside the session tree.
-        let e = std::process::Command::new(&a.cmd[0])
-            .args(&a.cmd[1..])
-            .envs(ep.env())
-            .exec();
+        #[cfg(unix)]
+        let e = std::os::unix::process::CommandExt::exec(&mut c);
+        // No exec on Windows: run it as our child (still inside the session tree) and pass its
+        // exit code on.
+        #[cfg(not(unix))]
+        let e = match c.status() {
+            Ok(st) => std::process::exit(crate::run_cmd::exit_code(st)),
+            Err(e) => e,
+        };
         return Err(fail(
             if e.kind() == std::io::ErrorKind::NotFound {
                 ExitCode::NotFound

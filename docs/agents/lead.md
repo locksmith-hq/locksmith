@@ -26,6 +26,8 @@ Take open `for-lead` issues, then review diffs merged in the window (`merge-revi
 - in-flight change: lock it, untick the task, add a `lead` progress entry;
 - new work: at most one `refactor-<area>` change per run (`openspec-propose` on `claude/planning-<id>`), unless an open planning PR covers it.
 
+**Backlog depth is yours.** Every run, `bash scripts/change-status.sh` must show three `ready` or `stackable` changes, or `--plannable` must print a row. If neither, unblock work: correct the roadmap's `Needs` column on `claude/lead-<date>` (ids whose code a row needs to start; `<id>:contract` when the contract is enough; `-` for none), or add a "Contract" task group to the in-flight change blocking the most rows (`claude/planning-<id>-tasks`). Workers plan exactly what `Needs` allows.
+
 Close each `for-lead` issue with what you did.
 
 Quality work never adds `needs-rescue` or `needs-owner`.

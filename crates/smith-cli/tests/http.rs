@@ -193,11 +193,10 @@ impl Env {
             assert!(h.add(k, v).status.success());
         }
         if !policy.is_empty() {
-            use std::os::unix::fs::PermissionsExt;
             let f = h.0.join("agent-policy.toml");
             std::fs::write(&f, policy).unwrap();
-            std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o600)).unwrap();
-            std::fs::set_permissions(&h.0, std::fs::Permissions::from_mode(0o700)).unwrap();
+            ls_platform::fs::set_private_file(&f).unwrap();
+            ls_platform::fs::set_private_dir(&h.0).unwrap();
         }
         let addr = start_upstream(seen.clone());
         let up: Vec<String> = hosts.iter().map(|h| format!("{h}={addr}")).collect();

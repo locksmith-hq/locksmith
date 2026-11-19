@@ -1,10 +1,10 @@
 //! OS-specific code. The only crate allowed `unsafe`; every block states why it is sound.
 
-#[cfg(unix)]
+// net, proc and prompt compile on every OS; where an OS has no implementation yet (Windows, x1
+// task 2.1) they fail closed: no peer is attested, no TCP owner is found, no prompt is shown.
+pub mod fs;
 pub mod net;
-#[cfg(unix)]
 pub mod proc;
-#[cfg(unix)]
 pub mod prompt;
 pub mod screen;
 

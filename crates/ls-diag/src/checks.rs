@@ -19,32 +19,25 @@ fn platform_supported() -> Outcome {
     }
 }
 
-#[cfg(unix)]
 fn config_dir_perms() -> Outcome {
     config_dir_perms_at(&ls_core::config_dir())
 }
 
-#[cfg(unix)]
 fn config_dir_perms_at(dir: &std::path::Path) -> Outcome {
     if !dir.exists() {
         return Outcome::skip(format!("{} not created yet", dir.display()));
     }
-    match ls_core::is_private_dir(dir) {
-        Ok(true) => Outcome::ok("config directory is private (0700)"),
+    match ls_platform::fs::is_private(dir) {
+        Ok(true) => Outcome::ok("config directory is private to the current user"),
         Ok(false) => Outcome::fail(
             format!("{} is readable by other users", dir.display()),
-            format!("chmod 700 '{}'", dir.display()),
+            ls_platform::fs::private_dir_fix(dir),
         ),
         Err(e) => Outcome::fail(
             format!("cannot stat config dir: {e}"),
             "check ownership of the directory",
         ),
     }
-}
-
-#[cfg(not(unix))]
-fn config_dir_perms() -> Outcome {
-    Outcome::skip("ACL checks arrive with Windows support (M16)")
 }
 
 fn binary_signature() -> Outcome {

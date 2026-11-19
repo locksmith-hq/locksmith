@@ -133,15 +133,11 @@ pub fn write_include(port: u16) -> std::io::Result<()> {
     let smith = std::env::current_exe()?
         .canonicalize()?
         .with_file_name("smith");
-    ls_core::ensure_private_dir(&dir())?;
+    ls_platform::fs::ensure_private_dir(&dir())?;
     let tmp = dir().join(".forwarder.gitconfig.tmp");
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
+        let mut f = ls_platform::fs::PrivateFile::new()
             .truncate(true)
-            .mode(0o600)
             .open(&tmp)?;
         std::io::Write::write_all(&mut f, render_include(port, &hosts(), &smith).as_bytes())?;
     }

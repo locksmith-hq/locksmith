@@ -7,7 +7,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroize;
 
@@ -38,6 +37,11 @@ pub fn socket_path() -> PathBuf {
 }
 
 pub mod desktop;
+pub mod transport;
+
+#[cfg(any(unix, windows))]
+pub use transport::{DefaultListener, DefaultTransport};
+pub use transport::{Listener, Transport};
 
 /// Passphrase sent client → daemon for unlock (also the secret value of `SecretPut`). Zeroized on drop; no Debug/Display/Clone.
 pub struct Passphrase(Vec<u8>);
@@ -528,21 +532,29 @@ pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result
     out
 }
 
-/// A blocking client connection to the daemon.
-pub struct Client {
-    pub stream: UnixStream,
+/// A blocking client connection to the daemon over transport `T` (the host OS transport by
+/// default, so `Client` alone is a client over [`DefaultTransport`]).
+pub struct Client<T: Transport = DefaultTransport> {
+    pub stream: T,
 }
 
 impl Client {
     pub fn connect(path: &Path) -> io::Result<Client> {
-        Ok(Client {
-            stream: UnixStream::connect(path)?,
-        })
+        Self::connect_via(path)
     }
 
     /// Connect to the per-user daemon at [`socket_path`].
     pub fn connect_default() -> io::Result<Client> {
         Self::connect(&socket_path())
+    }
+}
+
+impl<T: Transport> Client<T> {
+    /// Connect over an explicit transport.
+    pub fn connect_via(path: &Path) -> io::Result<Self> {
+        Ok(Client {
+            stream: T::connect(path)?,
+        })
     }
 
     pub fn send(&mut self, req: &Request) -> io::Result<()> {
@@ -917,7 +929,7 @@ mod tests {
 
     #[test]
     fn frames_roundtrip() {
-        let (mut a, mut b) = UnixStream::pair().unwrap();
+        let (mut b, mut a) = std::io::pipe().unwrap(); // portable: also runs on Windows
         for r in every_response() {
             write_frame(&mut a, &r).unwrap();
             match read_frame::<Response>(&mut b).unwrap() {
@@ -963,7 +975,7 @@ mod tests {
 
     #[test]
     fn other_version_and_oversize_frames_are_rejected() {
-        let (mut a, mut b) = UnixStream::pair().unwrap();
+        let (mut b, mut a) = std::io::pipe().unwrap(); // portable: also runs on Windows
         let mut buf = vec![0u8; 4];
         ciborium::into_writer(
             &Envelope {
@@ -986,7 +998,7 @@ mod tests {
 
     #[test]
     fn garbage_is_an_error_not_a_panic() {
-        let (mut a, mut b) = UnixStream::pair().unwrap();
+        let (mut b, mut a) = std::io::pipe().unwrap(); // portable: also runs on Windows
         a.write_all(&3u32.to_be_bytes()).unwrap();
         a.write_all(b"\xff\x00\x13").unwrap();
         assert!(read_frame::<Request>(&mut b).is_err());

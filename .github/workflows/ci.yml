@@ -1,17 +1,12 @@
 name: ci
 
-# Budget: GitHub Free gives private repos $12/month of Actions compute
-# (Linux x64 $0.006/min, Windows $0.010/min, macOS $0.062/min;
-# https://docs.github.com/en/billing/concepts/product-billing/github-actions).
-# PR CI therefore runs ONLY lint/format plus seconds-long hygiene (layout, task guard, word budgets,
-# secret scan), on Linux, with timeouts, path filters and cancellation of superseded runs.
-# Tests/builds run in the agent VM (`just ci`). macOS/Windows: ci-platforms.yml (manual + tags).
+# Full PR checks (the repo is public, so standard runners are free). Each job runs the same `just`
+# recipes as `just ci`, so CI and the agent VM cannot drift. macOS/Windows: ci-platforms.yml.
 
 on:
   pull_request:
   push:
     branches: [main]
-    paths-ignore: ['**/*.md', 'docs/**']
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -21,48 +16,21 @@ permissions:
   contents: read
 
 jobs:
-  # Cheap checks in one job: repo layout, OpenSpec task-edit guard, secret scan.
+  # Repo layout, OpenSpec task-edit guard, public-readiness check, secret scan.
   hygiene:
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
-    outputs:
-      rust: ${{ steps.filter.outputs.rust }}
-      web: ${{ steps.filter.outputs.web }}
-      desktop: ${{ steps.filter.outputs.desktop }}
-    permissions:
-      contents: read
-      pull-requests: read  # paths-filter lists changed files through the API
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - id: filter
-        uses: dorny/paths-filter@v3
+      - uses: taiki-e/install-action@v2
         with:
-          filters: |
-            rust:
-              - 'crates/**'
-              - 'services/**'
-              - 'tests/**'
-              - 'Cargo.*'
-              - 'rust-toolchain.toml'
-              - 'deny.toml'
-            web:
-              - 'apps/**'
-              - 'packages/**'
-              - 'integrations/**'
-              - 'package*.json'
-              - '.nvmrc'
-            desktop:
-              - 'apps/desktop/**'
-              - 'crates/ls-ipc/**'
-              - 'crates/ls-core/**'
-              - 'packages/api-types/**'
-      - run: bash scripts/tree-check.sh
-      - name: OpenSpec task-edit guard
+          tool: just
+      - name: tree-check, task guard, public-check
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: bash scripts/check-task-edits.test.sh && bash scripts/change-status.test.sh && bash scripts/check-task-edits.sh && bash scripts/check-agent-docs.sh
+        run: just tree-check task-guard public-check
       - name: gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1
@@ -70,44 +38,61 @@ jobs:
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
           ./gitleaks git --no-banner --redact --exit-code 1 .
 
-  # Lint and format only (owner policy, AGENTS.md "CI policy"). Tests, builds and the docker
-  # stack run in the agent VM via `just ci`, which is free; the Claude review checks the result.
-  rust-lint:
-    needs: hygiene
-    if: needs.hygiene.outputs.rust == 'true'
+  rust:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10  # 2.7 min warm; headroom for a cold cache
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}  # PRs read the cache; only main writes it
-      - run: cargo fmt --all --check
+          tool: just,cargo-nextest@0.9.152
+      - run: just fmt
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - uses: EmbarkStudios/cargo-deny-action@v2
+      - run: just test-rust
 
-  desktop-format:
-    needs: hygiene
-    if: needs.hygiene.outputs.desktop == 'true'
+  web:
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
-
-  web-lint:
-    needs: hygiene
-    if: needs.hygiene.outputs.web == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - run: npm ci
       - run: npm run lint
+      - run: just test-web
+
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -y -q libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just desktop-test
+      - name: api-types are up to date
+        run: |
+          just api-types
+          git diff --exit-code packages/api-types
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test -w @locksmith/desktop

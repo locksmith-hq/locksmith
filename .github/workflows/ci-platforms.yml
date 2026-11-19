@@ -1,10 +1,11 @@
 name: ci-platforms
 
-# macOS costs ~10x Linux per minute and Windows ~1.7x on private repos (see ci.yml header), so these
-# run only on demand and on release tags, never on every PR.
+# macOS and Windows checks on every PR (standard runners are free on public repos).
 on:
+  pull_request:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ['v*']
 
 concurrency:
@@ -17,13 +18,18 @@ permissions:
 jobs:
   macos:
     runs-on: macos-latest
-    timeout-minutes: 15  # macOS minutes count 10x against the quota
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      # macOS runners have no Docker or Postgres: the `portable` profile skips stack and testcontainers tests.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.152
+      - run: cargo nextest run --workspace --profile portable
+      - run: cargo test --workspace --exclude ls-e2e --doc
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -35,7 +41,7 @@ jobs:
 
   windows-check:
     runs-on: windows-2022
-    timeout-minutes: 15  # Windows minutes count 2x
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

@@ -90,23 +90,8 @@ Pending: the owner chose to test first. Run a worker manually that stops on an o
 4. Branch protection: **owner decision 2026-11-16: not protected for now.** Revisit before the repo goes public or anyone else gets write access.
 5. Start one interactive cloud session on `locksmith-dev` and confirm `just ci` passes, plus `just up` once F0 exists.
 
-## GitHub Actions budget
-GitHub Free gives a private repo $12 of Actions compute a month. Per-minute prices: Linux x64 $0.006, Windows $0.010, macOS $0.062. Source: https://docs.github.com/en/billing/concepts/product-billing/github-actions
-
-How we stay inside it:
-- **`ci.yml` (every PR):**
-  - Linux only, with timeouts on every job.
-  - A new push cancels the CI run it supersedes.
-  - Path filters skip work that isn't needed, and Markdown-only PRs skip CI entirely. OpenSpec files still run.
-  - Cheap checks (tree layout, task-edit guard, gitleaks) share one job.
-  - Only `main` writes the Rust cache.
-- **`ci-platforms.yml`:** macOS and Windows checks run only manually or on release tags.
-- **`adversarial.yml`:** weekly instead of nightly.
-- **Agents:**
-  - Verify in the cloud VM first, because that compute is free.
-  - Push each branch at most once per run (a run may push several branches).
-  - Never re-run or dispatch workflows.
-  - The weekly review reports Actions usage.
+## GitHub Actions
+The repo is public, so standard runners are free. `ci`, `ci-platforms` and `adversarial` run on every PR and on `main` (see `AGENTS.md`, "CI policy").
 
 ## Scheduler design (why it looks like this)
 The design follows Anthropic's long-running agent harness (https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents):
@@ -157,7 +142,9 @@ Owner setup:
 2. Run each routine in its own environment.
 3. Add the `locksmith-*[bot]` logins to the author filter of the GitHub triggers (`Worker (events)` and `Lead`), next to `tomer555`.
 
-On the owner's Mac, the **optimizer** (`docs/agents/optimizer.md`, desktop scheduled task, 07:00 and 20:00, replaced the local lead 2026-11-19) runs as the owner in its own worktree `~/locksmith-optimizer`, detached at `origin/main`. It is the only agent that reads routine run logs (`RemoteTrigger`); it audits the schedules, agent communication and run efficiency, fixes repo causes in a `claude/optimizer-*` PR, and may only edit routine prompts; other routine changes go to the owner as `needs-owner`.
+On the owner's Mac, the **optimizer** (`docs/agents/optimizer.md`, desktop scheduled task, 07:00 and 20:00, replaced the local lead 2026-11-19) runs as the owner in its own worktree `~/locksmith-optimizer`, detached at `origin/main`. It is the only agent that reads routine run logs (`RemoteTrigger`); it audits the schedules, agent communication and run efficiency, logs each cause on the pinned `harness-backlog` issue, and on Saturday at 07:00 builds the one weekly agent-system release (`claude/harness-release-<YYYY-WW>`), which the owner merges. It may only edit routine prompts; other routine changes go to the owner as `needs-owner`.
+
+**Agent System v3 (#470, 2026-11-19).** Agent-system files (`docs/agents`, `.claude/skills`, agent scripts, workflows) change only in that weekly release or on a `*hotfix-*` branch (red main, a security fix, every run failing), for owner sessions too; `scripts/check-task-edits.sh` enforces it and merge-gate gate 5 leaves those PRs to the owner. An owner `needs-owner` issue parks a change only when its next task is a `Gate:` task, so gates block just their own tasks. Each change has one tracking issue; per-task issues are retired.
 
 Cloud runs never see the app keys; they see the one-hour installation token, which reaches only this repo with the access above. Revoke a key in the app's settings page.
 

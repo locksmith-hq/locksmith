@@ -55,6 +55,7 @@ rules:
   tasks:
     - "Size each task to at most 30 minutes of agent work (one commit; a worker run takes several, and a change's PR carries many); tag each task [haiku], [sonnet] or [opus] (untagged means sonnet)."
     - "Contract first: when other roadmap rows need this change, task group 1 is \"Contract\" (that word in the heading): the OpenAPI schema, shared types and fixture or mock data that dependents build on, committed before any implementation. A change that needs only another change's contract lists `<id>:contract` in `x-depends_on`, stacks on that branch and builds against the mocks until the real code lands."
+    - "Owner gates go last: a task that needs an owner decision starts with `Gate:` and sits right before only the tasks that need its answer, as late as possible; every task that does not need the answer comes before it. An open owner issue parks the change only once the next unticked task is that gate (#470)."
     - "Each task group ends with a verification task naming the exact local command (`just ...`, `cargo nextest ...`) that proves it."
     - "The last group is \"Local verification\" running `just up`, the change's smoke test, `just apps-build`, then `just ci`."
     - "Apps grow every change, never at the end: a change with user-facing behaviour adds its web console and desktop surface in the same change, and `just apps-build` (web + desktop on the host OS) must stay green. The last change of each phase also runs the manual `ci-platforms` workflow (macOS, Linux, Windows) and records the result in progress.md."

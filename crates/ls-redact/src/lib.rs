@@ -83,6 +83,63 @@ fn hex(v: &[u8], upper: bool) -> Vec<u8> {
         .collect()
 }
 
+/// RFC 4648 base32 (alphabet A-Z2-7) of the whole value; `pad` adds the `=` padding.
+fn base32(v: &[u8], pad: bool, lower: bool) -> Vec<u8> {
+    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let mut out = Vec::with_capacity(v.len().div_ceil(5) * 8);
+    for group in v.chunks(5) {
+        let mut buf = [0u8; 5];
+        buf[..group.len()].copy_from_slice(group);
+        let n = u64::from_be_bytes([0, 0, 0, buf[0], buf[1], buf[2], buf[3], buf[4]]);
+        let chars = (group.len() * 8).div_ceil(5);
+        for i in 0..8 {
+            if i < chars {
+                let c = ALPHABET[((n >> (35 - 5 * i)) & 31) as usize];
+                out.push(if lower { c.to_ascii_lowercase() } else { c });
+            } else if pad {
+                out.push(b'=');
+            }
+        }
+    }
+    out
+}
+
+/// UTF-16 code units of the value: its characters when it is UTF-8, else its bytes as Latin-1.
+fn utf16_units(v: &[u8]) -> Vec<u16> {
+    match std::str::from_utf8(v) {
+        Ok(t) => t.encode_utf16().collect(),
+        Err(_) => v.iter().map(|&b| u16::from(b)).collect(),
+    }
+}
+
+fn utf16(v: &[u8], big_endian: bool) -> Vec<u8> {
+    utf16_units(v)
+        .into_iter()
+        .flat_map(|u| {
+            if big_endian {
+                u.to_be_bytes()
+            } else {
+                u.to_le_bytes()
+            }
+        })
+        .collect()
+}
+
+/// `\uXXXX` for every UTF-16 unit (the form a JSON encoder emits with ASCII escaping forced).
+fn json_u(v: &[u8], upper: bool) -> Vec<u8> {
+    utf16_units(v)
+        .into_iter()
+        .flat_map(|u| {
+            if upper {
+                format!("\\u{u:04X}")
+            } else {
+                format!("\\u{u:04x}")
+            }
+            .into_bytes()
+        })
+        .collect()
+}
+
 /// Every encoded form of one secret value (design D1).
 fn forms(s: &Secret) -> Vec<Vec<u8>> {
     let v: &[u8] = &s.value;
@@ -98,6 +155,13 @@ fn forms(s: &Secret) -> Vec<Vec<u8>> {
     out.push(hex(v, true));
     out.push(percent(v, true));
     out.push(percent(v, false));
+    for (pad, lower) in [(true, false), (false, false), (true, true), (false, true)] {
+        out.push(base32(v, pad, lower));
+    }
+    out.push(utf16(v, false));
+    out.push(utf16(v, true));
+    out.push(json_u(v, false));
+    out.push(json_u(v, true));
     if let Ok(text) = std::str::from_utf8(v) {
         let json = serde_json::to_string(text).expect("string serializes");
         let inner = json.as_bytes()[1..json.len() - 1].to_vec();
@@ -373,6 +437,54 @@ mod tests {
                 "{}",
                 String::from_utf8_lossy(&c)
             );
+        }
+    }
+
+    fn split_check(enc: &[u8]) {
+        let red = r();
+        let out = red.redact_all(enc);
+        assert!(String::from_utf8_lossy(&out).contains("[REDACTED:STRIPE_KEY]"));
+        // split across chunks at every position
+        for cut in 1..enc.len() {
+            let mut st = red.stream();
+            let mut got = st.push(&enc[..cut]);
+            got.extend(st.push(&enc[cut..]));
+            got.extend(st.finish());
+            assert_eq!(got, out, "cut {cut}");
+        }
+    }
+
+    #[test]
+    fn base32_forms() {
+        assert_eq!(base32(b"foobar", true, false), b"MZXW6YTBOI======");
+        assert_eq!(base32(b"foobar", false, true), b"mzxw6ytboi");
+        assert_eq!(base32(b"fooba", true, false), b"MZXW6YTB");
+        for (pad, lower) in [(true, false), (false, false), (true, true), (false, true)] {
+            let mut data = b"x=".to_vec();
+            data.extend(base32(V, pad, lower));
+            data.extend_from_slice(b";");
+            split_check(&data);
+        }
+    }
+
+    #[test]
+    fn utf16_forms() {
+        for be in [false, true] {
+            let mut data = b"\0\0".to_vec();
+            data.extend(utf16(V, be));
+            data.extend_from_slice(b"\0\0");
+            split_check(&data);
+        }
+    }
+
+    #[test]
+    fn json_u_forms() {
+        assert_eq!(json_u(b"a/", false), b"\\u0061\\u002f");
+        for upper in [false, true] {
+            let mut data = b"\"".to_vec();
+            data.extend(json_u(V, upper));
+            data.extend_from_slice(b"\"");
+            split_check(&data);
         }
     }
 

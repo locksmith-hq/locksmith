@@ -12,7 +12,7 @@ jobs:
   build:
     name: build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25  # macOS minutes count 10x against the quota
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

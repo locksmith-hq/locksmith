@@ -7,3 +7,19 @@ retries = 1
 
 [profile.ci.junit]
 path = "junit.xml"
+
+# No Docker and no `just up` stack (the macOS ci-platforms runner). Skips the stack e2e tests, the
+# a0 RLS spike, and the tests that start Postgres through ls-pg-test (testcontainers). A new
+# Postgres-backed test binary must be added here. Run: `just test-rust-portable`.
+[profile.portable]
+fail-fast = false
+default-filter = """
+not (
+  package(ls-e2e)
+  | (package(a0-spikes) & binary(rls))
+  | (package(ls-audit) & binary(pg))
+  | (package(locksmith-audit) & binary(/^(db|export|tamper)$/))
+  | (package(ls-control-plane) & binary(/^(agents|api|audit|checkpoint|checkpoint_span|internal|tenancy|versions)$/))
+  | (package(ls-gateway) & test(/^relay::tests::(relay_events_land_in_the_ledger|outcome_resend_is_idempotent)$/))
+)
+"""

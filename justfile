@@ -14,6 +14,11 @@ test-rust:
     cargo nextest run --workspace --exclude ls-e2e -E 'not (package(a0-spikes) & binary(rls))'
     cargo test --workspace --exclude ls-e2e --doc
 
+# Rust tests without Docker or the `just up` stack (macOS ci-platforms); filter in .config/nextest.toml.
+test-rust-portable:
+    cargo nextest run --workspace --profile portable
+    cargo test --workspace --exclude ls-e2e --doc
+
 test-web:
     npm run build && npm test
 

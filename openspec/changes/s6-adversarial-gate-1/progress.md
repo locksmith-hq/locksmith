@@ -79,3 +79,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 4.1, 4.2, 4.3 - done
 - Verified: `cargo test -p ls-redact` (per-form tests split at every byte) and `cargo test -p ls-gateway echoed_secret` -> pass; live `ADVERSARIAL_REQUIRE_ALL=1 run.sh gateway` -> 5 passed, 0 failed, 1 residual (G4), 0 stale after removing the six base32/utf16/json-u entries; `just ci` -> exit 0; Sonnet evaluator: only blocker was rustfmt, fixed and ci re-run green
 - Notes for next session: group 5 next (in-process gateway adversarial module), then 6, 7, 8. Stack: `just up && just api`.
+
+## 2026-11-19 worker (a)
+- Task: 5.1, 5.2 - done
+- Verified: `cargo nextest run -p ls-gateway adversarial` -> 4 passed (register_loads, g2_reflection, g3_request_shaping, g4_encodings; G4 residuals report RESIDUAL); with ls-redact base64 forms disabled locally (`for k in 0..3` -> `0..0`, reverted) g2 and g3 FAIL with unlisted leaks; `just ci` -> exit 0; Sonnet evaluator PASS (nit fixed: no canary in assert messages)
+- Notes for next session: module is services/gateway/src/relay/tests/adversarial.rs (reuses the private relay harness). Next: group 6 (`just adversarial-gate`, live prompts, README, docs/testing.md), then 7 (web and desktop audit filter), 8. Stack: `just up && just api`.

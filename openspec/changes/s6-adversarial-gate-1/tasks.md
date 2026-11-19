@@ -24,8 +24,8 @@
 - [x] 4.3 Verify: `cargo nextest run -p ls-redact -p ls-gateway`, then `bash tests/adversarial/run.sh gateway G4` shows those forms no longer leak and no stale residual.
 
 ## 5. Fast tier in just ci [opus]
-- [ ] 5.1 `services/gateway` adversarial test module: the G2 to G4 payloads against the in-process relay (fake KMS and material, wiremock provider and attacker host); writes what the caller received to a temp dir and runs `python3 -I tests/kit/oracle.py scan` on it; reads `residuals.toml` with the same rules; no Docker or network.
-- [ ] 5.2 Verify: `cargo nextest run -p ls-gateway adversarial` passes, and fails when base64 redaction is disabled locally (record the check in progress.md, then revert it); `just ci` passes.
+- [x] 5.1 `services/gateway` adversarial test module: the G2 to G4 payloads against the in-process relay (fake KMS and material, wiremock provider and attacker host); writes what the caller received to a temp dir and runs `python3 -I tests/kit/oracle.py scan` on it; reads `residuals.toml` with the same rules; no Docker or network.
+- [x] 5.2 Verify: `cargo nextest run -p ls-gateway adversarial` passes, and fails when base64 redaction is disabled locally (record the check in progress.md, then revert it); `just ci` passes.
 
 ## 6. Stack gate and live mode [opus]
 - [ ] 6.1 `just adversarial-gate [--agent claude]`: fails fast when the stack is down, starts the gateway, runs `run.sh gateway` with `ADVERSARIAL_REQUIRE_ALL=1`, then `just leak-scan` with `--dir` over the audit export and the kept artifacts.

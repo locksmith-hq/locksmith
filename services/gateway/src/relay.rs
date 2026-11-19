@@ -804,6 +804,9 @@ mod tests {
     const VALUE: &[u8] = b"canary-relay-7Hk2/q+Zx9=W";
     const AGENT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a1);
 
+    /// Tasks 5.1 and 5.2 of s6-adversarial-gate-1: the G2 to G4 payloads, judged by the oracle.
+    mod adversarial;
+
     fn grant(secret_id: Uuid, name: &str, expires_at: Option<time::OffsetDateTime>) -> Grant {
         Grant {
             grant_id: Uuid::now_v7(),
@@ -911,6 +914,8 @@ mod tests {
         /// TTL of the gateway's grant cache in front of [`StubGrants`].
         grant_ttl: Duration,
         options: RelayOptions,
+        /// The sealed secret value (the adversarial tests use the oracle's canary).
+        value: Vec<u8>,
     }
 
     impl Default for Setup {
@@ -922,6 +927,7 @@ mod tests {
                 outcome_fails_first: 0,
                 audit: None,
                 grant_ttl: crate::grants::MAX_GRANT_TTL,
+                value: VALUE.to_vec(),
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
@@ -948,9 +954,9 @@ mod tests {
         let upstream = MockServer::start().await;
         let cp = MockServer::start().await;
         let bao = MockServer::start().await;
-        let sealed = seal(ORG, SECRET, 1, VALUE);
-        let unbound = seal(ORG, UNBOUND, 1, VALUE);
-        let dead = seal(ORG, DEAD, 1, VALUE);
+        let sealed = seal(ORG, SECRET, 1, &setup.value);
+        let unbound = seal(ORG, UNBOUND, 1, &setup.value);
+        let dead = seal(ORG, DEAD, 1, &setup.value);
         for (id, s) in [(SECRET, &sealed), (UNBOUND, &unbound), (DEAD, &dead)] {
             Mock::given(method("GET"))
                 .and(path(format!(

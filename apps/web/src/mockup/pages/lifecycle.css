@@ -1,0 +1,29 @@
+/* Lifecycle pages (dynamic secrets, history, rotation, syncs). Tokens only, so light and dark both work. */
+.lc-st { font-size: 13px; font-weight: 600; color: var(--muted); }
+.lc-st[data-t="live"] { color: var(--live-text); }
+.lc-st[data-t="warn"] { color: var(--warning-text); }
+.lc-st[data-t="danger"] { color: var(--danger-text); }
+
+.lc-day { margin: 22px 0 8px; }
+.lc-day:first-of-type { margin-top: 0; }
+.list .lc-row .meta { flex-wrap: wrap; justify-content: flex-end; }
+.lc-row .ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--chip); color: var(--muted); }
+.lc-row .ic svg { width: 16px; height: 16px; }
+.lc-row .badge { margin-left: 0; }
+.lc-row[data-undone="true"] b, .lc-row[data-undone="true"] p { color: var(--muted); text-decoration: line-through; }
+.lc-route { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lc-route svg { width: 14px; height: 14px; color: var(--muted); }
+.lc-sub { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 8px; }
+.lc-sub h2 { margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; }
+.panel.form .add.lc-add { grid-template-columns: repeat(auto-fit, minmax(160px, max-content)); }
+.panel.form .add.lc-add .field input { width: 100%; min-width: 160px; }
+
+@media (max-width: 600px) {
+  .list .lc-row { grid-template-columns: 32px minmax(0, 1fr); }
+  .list .lc-row .meta { grid-column: 2; justify-content: flex-start; }
+  .lc-sub { flex-wrap: wrap; }
+}
+
+.lc-ask { display: block; margin: 10px 0 14px; font-weight: 500; }
+.lc-ask p { margin: 0 0 8px; }
+.lc-ask p:last-child { margin: 0; }

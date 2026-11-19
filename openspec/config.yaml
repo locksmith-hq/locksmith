@@ -53,7 +53,7 @@ rules:
     - "Explain anything built in-house instead of reused, and what was searched for first."
     - "Include a \"How an agent debugs this\" section: the MCP servers, `just` commands, logs, traces and DB tables involved."
   tasks:
-    - "Size each task to one PR (half a day to two days of agent work); tag each task [haiku], [sonnet] or [opus] (untagged means sonnet)."
+    - "Size each task to at most 30 minutes of agent work (one commit; a worker run takes several, and a change's PR carries many); tag each task [haiku], [sonnet] or [opus] (untagged means sonnet)."
     - "Each task group ends with a verification task naming the exact local command (`just ...`, `cargo nextest ...`) that proves it."
     - "The last group is \"Local verification\" running `just up`, the change's smoke test, `just apps-build`, then `just ci`."
     - "Apps grow every change, never at the end: a change with user-facing behaviour adds its web console and desktop surface in the same change, and `just apps-build` (web + desktop on the host OS) must stay green. The last change of each phase also runs the manual `ci-platforms` workflow (macOS, Linux, Windows) and records the result in progress.md."

@@ -45,7 +45,7 @@ Create these at claude.ai/code → environment selector → New environment.
   - `reddit.com`, `www.reddit.com`, `old.reddit.com`, `medium.com`, `*.medium.com` (added 2026-11-17): user-written pages, so they are hints only. Act on a claim only after confirming it on the registry, the project's repo or its official docs, and cite that source.
 - **Why separate:** the worker never needs open web access, so a prompt-injected web page can't reach a session that runs code with a wider network. **[test]** Whether WebSearch and WebFetch obey the environment allowlist. If they do, add domains here as research needs them; never switch to Full.
 
-### 3. Later: `locksmith-aws-dev`, from phase 4 (P1)
+### 3. Later: `locksmith-aws-dev`, from P1 (phase 2)
 - **Baseline infrastructure and guardrails** (IAM, SCPs, budget) deploy from **GitHub Actions using OIDC**. Claude writes OpenTofu and opens a PR. `tofu plan` runs with a read-only role, and `tofu apply` runs on merge with a scoped deploy role.
 - The reason: AWS requests are signed with SigV4, so they can't use the cloud "network secrets" proxy, and putting AWS keys in environment variables would expose them to the model. That breaks the very rule this product exists to enforce.
 - **The AWS MCP Server** (managed, by AWS) runs on the owner's laptop through Remote Control with IAM Identity Center short-lived credentials, so no key enters the cloud VM. After D2 (AWS STS), Claude sessions get it through Locksmith itself. This is dogfooding.
@@ -104,7 +104,7 @@ How we stay inside it:
 - **`adversarial.yml`:** weekly instead of nightly.
 - **Agents:**
   - Verify in the cloud VM first, because that compute is free.
-  - Push at most once per run.
+  - Push each branch at most once per run (a run may push several branches).
   - Never re-run or dispatch workflows.
   - The weekly review reports Actions usage.
 

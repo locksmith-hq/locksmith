@@ -20,7 +20,7 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
    - `ls-crypto` (AEAD, KDF)
    - `ls-vault` (audit hash chain)
    - `smith-cli`, `locksmith-mcp`, `ls-hooks` (agent connector and hooks)
-5. **Local, then cloud.** AWS `dev` arrives only in phase 4. Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
+5. **Local, then cloud.** AWS `dev` arrives in phase 2, right after sign-in (P1; owner decision H1-3). Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
 6. **Apps are built every change.** The web console and the desktop app (Tauri) grow with each slice
    instead of arriving at the end. Every change's Local verification runs `just apps-build`; the last
    change of each phase also runs the manual `ci-platforms` workflow on macOS and Linux (Windows parity is
@@ -55,13 +55,20 @@ uses what the previous one taught us.
 
 ## Phase 2: Team product
 
+Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmith/issues/363)): sign-in first, then the cloud dev environment, then the console in slices, so a person can use the product in the cloud early. Design: [design/hub-technical-design.md](design/hub-technical-design.md).
+
 | # | Change | Usable outcome |
 |---|---|---|
 | T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). |
+| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). |
+| T3 | `t3-console-mvp` | React console shell on the real API, built from the mockup in `apps/web/src/mockup`: hub home, projects, environments, secret names and versions, agents, grants and activity. Design tokens move to `packages/ui`. No secret value entry yet. Playwright e2e. |
+| T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. |
+| T8 | `t8-sessions-and-revoke` | Live agent sessions are listed in the console; revoke one, revoke all, or pause every agent, and it takes effect within seconds. |
 | T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. |
 | T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. |
-| T3 | `t3-console-mvp` | React console: projects, secrets (client-side encrypted), agents, sessions and audit view. Playwright e2e. |
 | T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. |
+| N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). |
+| M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). |
 | T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. |
 
 ## Phase 3: Delegation beyond HTTP
@@ -77,7 +84,6 @@ uses what the previous one taught us.
 
 | # | Change | Usable outcome |
 |---|---|---|
-| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). |
 | P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. |
 | P3 | `p3-sdks-and-plugins` | SDKs generated from OpenAPI, plus plugins or skills for the widely used agent frameworks: Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, each with a live smoke test, and a generic MCP setup for any other MCP client. |
 
@@ -85,6 +91,13 @@ uses what the previous one taught us.
 
 Rotation and dynamic secrets (run in the gateway), syncs, the Terraform provider and k8s operator,
 SAML and SCIM, passkeys (moved out of T1 to keep it small), billing, SOC2 programme, local-only mode for solo developers.
+
+## Product direction (not committed)
+
+Certificates, KMS, Access Broker (brokered and recorded sessions to databases and servers) and
+Security (scanning for exposed secrets) appear in the console mockup as direction only (owner
+decision H1-4). No spec is written for any of them until Agent Gateway and Secret Management are in
+use in the cloud, and each needs a research note first.
 
 ## Phase 6: GA hardening
 

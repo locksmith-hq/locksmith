@@ -27,9 +27,14 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
    deferred to GA hardening, owner decision [#320](https://github.com/locksmith-hq/locksmith/issues/320)).
 7. **Model tiers.** Sonnet runs by default. Only hard, complex tasks are marked `[opus]`; a change marked `[opus]` here is security-sensitive, but its tasks still run on Sonnet unless tagged `[opus]` in `tasks.md`.
 
-Status: ☐ not started · ◐ in progress · ☑ archived. Only the next one or two changes are written in
-full. Later rows are proposed (`/opsx:propose`) when their predecessor is about done, so each one
-uses what the previous one taught us.
+Status: ☐ not started · ◐ in progress · ☑ archived. Parallel work comes first
+(owner 2026-11-19): enough changes are written in full to keep at least three takeable, so every worker
+has one. A row is proposed (`/opsx:propose`) as soon as it can start. The `Needs` column decides that: it lists
+the changes whose code the row needs before work can begin (`-` for none), and the row can start once each
+is archived or fully ticked on its branch. `<id>:contract` means the row needs only that change's contract
+(API schema, shared types, mock data): it can start as soon as the "Contract" task group is ticked, and it
+builds against the mocks until the real code lands. The lead keeps the column right; the PM keeps the row order.
+`bash scripts/change-status.sh --plannable` prints the rows that can start today.
 
 ## Phase 0: Harness (make the system observable to agents)
 
@@ -57,35 +62,35 @@ uses what the previous one taught us.
 
 Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmith/issues/363)): sign-in first, then the cloud dev environment, then the console in slices, so a person can use the product in the cloud early. Design: [design/hub-technical-design.md](design/hub-technical-design.md).
 
-| # | Change | Usable outcome |
-|---|---|---|
-| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). |
-| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). |
-| T3 | `t3-console-mvp` | React console shell on the real API, built from the mockup in `apps/web/src/mockup`: hub home, projects, environments, secret names and versions, agents, grants and activity. Design tokens move to `packages/ui`. No secret value entry yet. Playwright e2e. |
-| T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. |
-| T8 | `t8-sessions-and-revoke` | Live agent sessions are listed in the console; revoke one, revoke all, or pause every agent, and it takes effect within seconds. |
-| T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. |
-| T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. |
-| T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. |
-| N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). |
-| M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). |
-| T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. |
+| # | Change | Usable outcome | Needs |
+|---|---|---|---|
+| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). | - |
+| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). | - |
+| T3 | `t3-console-mvp` | React console shell on the real API, built from the mockup in `apps/web/src/mockup`: hub home, projects, environments, secret names and versions, agents, grants and activity. Design tokens move to `packages/ui`. No secret value entry yet. Playwright e2e. | t1-human-auth:contract |
+| T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. | t3-console-mvp |
+| T8 | `t8-sessions-and-revoke` | Live agent sessions are listed in the console; revoke one, revoke all, or pause every agent, and it takes effect within seconds. | t3-console-mvp |
+| T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. | t1-human-auth:contract, t3-console-mvp |
+| T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. | t6-org-members:contract |
+| T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. | t2-policy-engine:contract, t3-console-mvp |
+| N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). | t3-console-mvp |
+| M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). | t1-human-auth:contract |
+| T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. | n1-notifications:contract |
 
 ## Phase 3: Delegation beyond HTTP
 
-| # | Change | Usable outcome |
-|---|---|---|
-| D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. |
-| D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). |
-| D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. |
+| # | Change | Usable outcome | Needs |
+|---|---|---|---|
+| D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. | - |
+| D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - |
+| D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract |
 
 ## Phase 4: Deployable
 
-| # | Change | Usable outcome |
-|---|---|---|
-| P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. |
-| P3 | `p3-sdks-and-plugins` | SDKs generated from OpenAPI, plus plugins or skills for the widely used agent frameworks: Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, each with a live smoke test, and a generic MCP setup for any other MCP client. |
+| # | Change | Usable outcome | Needs |
+|---|---|---|---|
+| P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - |
+| P3 | `p3-sdks-and-plugins` | SDKs generated from OpenAPI, plus plugins or skills for the widely used agent frameworks: Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, each with a live smoke test, and a generic MCP setup for any other MCP client. | m1-remote-mcp:contract |
 
 ## Phase 5: Parity and beyond (ordered later, by demand)
 

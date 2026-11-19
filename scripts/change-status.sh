@@ -9,8 +9,12 @@
 #   claimed    another worker holds the change lock (detail: holder)
 #   review     every task ticked on the branch; waiting for the merge queue
 #   finished   every task ticked on main but not archived
-# Usage: scripts/change-status.sh [--ready]   (--ready prints only ids a worker may take now)
-# Dependencies: `x-depends_on: [id, ...]` in the change's .openspec.yaml (x- keeps openspec validate quiet).
+# Usage: scripts/change-status.sh [--ready|--plannable]
+#   --ready      prints only ids a worker may take now
+#   --plannable  prints unwritten roadmap rows that can start today, in roadmap order: every id in the row's
+#                `Needs` column is archived or fully ticked on its branch (`-` = needs nothing;
+#                `<id>:contract` = only that change's "Contract" task group must be ticked)
+# Dependencies: `x-depends_on: [id, id:contract, ...]` in the change's .openspec.yaml (x- keeps openspec validate quiet).
 # OFFLINE=1 skips GitHub lookups (parked, claimed); used by the self-test.
 set -uo pipefail
 repo=locksmith-hq/locksmith
@@ -25,7 +29,32 @@ tasks_of() {
 }
 all_ticked() { ! grep -qE '^\s*- \[ \]' <<<"$1"; }
 archived() { compgen -G "openspec/changes/archive/*-$1" >/dev/null; }
+# dep_state <id|id:contract>: merged (archived), branch (every task ticked on its branch; for :contract only its
+# "Contract" task group, so dependents can start against the schema and mocks), or unmet.
+dep_state() {
+  local d="${1%:contract}" t
+  archived "$d" && { echo merged; return; }
+  [ -f "openspec/changes/$d/tasks.md" ] || { echo unmet; return; }
+  t=$(tasks_of "$d")
+  if [ "$1" != "$d" ]; then t=$(awk '/^## /{c=($0 ~ /[Cc]ontract/)} c' <<<"$t"); [ -n "$t" ] || { echo unmet; return; }; fi
+  if all_ticked "$t"; then echo branch; else echo unmet; fi
+}
 deps_of() { sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\][[:space:]]*$/\1/p' "openspec/changes/$1/.openspec.yaml" 2>/dev/null | tr ',' '\n' | tr -d ' "'"'" | grep -v '^$'; }
+
+if [ "${1:-}" = --plannable ]; then
+  awk -F'|' '
+    /^\| *# *\|/ { n=0; for (i=2; i<=NF; i++) if ($i ~ /^ *Needs *$/) n=i; next }
+    n && /^\| *[A-Z][0-9]+ *\|/ { id=$3; sub(/^[^`]*`/,"",id); sub(/`.*$/,"",id); d=$n; gsub(/[,`]/," ",d); print id, d }' docs/roadmap.md |
+  while read -r id needs; do
+    { [ -e "openspec/changes/$id" ] || archived "$id"; } && continue  # already written
+    ok=1
+    for d in $needs; do
+      [ "$d" = - ] || [ "$(dep_state "$d")" != unmet ] || ok=0
+    done
+    [ "$ok" = 1 ] && echo "$id"
+  done
+  exit 0
+fi
 
 # Roadmap order first, then any change the roadmap does not name.
 # shellcheck disable=SC2016 # literal backticks
@@ -47,10 +76,11 @@ for id in $ids; do
   else
     state=ready; detail=""
     for d in $(deps_of "$id"); do
-      archived "$d" && continue
-      if [ -f "openspec/changes/$d/tasks.md" ] && all_ticked "$(tasks_of "$d")"; then
-        [ "$state" = ready ] && { state=stackable; detail="on $d"; }
-      else state=blocked; detail="needs $d"; break; fi
+      case "$(dep_state "$d")" in
+        merged) ;;
+        branch) [ "$state" = ready ] && { state=stackable; detail="on ${d%:contract}"; } ;;
+        *) state=blocked; detail="needs $d"; break ;;
+      esac
     done
     if [ "$state" != blocked ] && [ -n "$blockers" ]; then
       b=$(grep -F -- "$id" <<<"$blockers" | head -1)

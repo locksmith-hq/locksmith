@@ -22,10 +22,11 @@ jqs() { jq -r "$@"; }
 # Roadmap rows: phase US id US tier US outcome US gate (US = \x1f, so empty fields survive `read`)
 rows=$(awk -F'|' '
   /^## Phase/ { p=$0; sub(/^## /,"",p); sub(/ *\(.*$/,"",p); next }
+  /^\| *# *\|/ { gc=0; for (i=2; i<=NF; i++) if ($i ~ /Local gate/) gc=i; next }
   p && /^\| *[A-Z][0-9]+ *\|/ {
     c=$3; id=c; sub(/^[^`]*`/,"",id); sub(/`.*$/,"",id)
     tier=""; if (c ~ /\[opus\]/) tier="opus"; else if (c ~ /\[haiku\]/) tier="haiku"
-    o=$4; g=$5; gsub(/^ +| +$/,"",o); gsub(/^ +| +$/,"",g)
+    o=$4; g=(gc ? $gc : ""); gsub(/^ +| +$/,"",o); gsub(/^ +| +$/,"",g)
     printf "%s\x1f%s\x1f%s\x1f%s\x1f%s\n", p, id, tier, o, g }' docs/roadmap.md)
 phases=$(awk '/^## Phase/{p=$0; sub(/^## /,"",p); d=p; sub(/ *\(.*$/,"",p); sub(/^[^(]*\(?/,"",d); sub(/\)$/,"",d); print p"\t"d}' docs/roadmap.md)
 
@@ -127,7 +128,7 @@ while IFS=$'\x1f' read -r -u 3 phase id tier outcome gate; do
   # 4. Blocked by: dependency changes and open owner/rescue issues that name this change.
   # shortcut: relationships are only added, never removed; a dropped dependency must be unlinked by hand.
   have=$(gh api "repos/$repo/issues/$n/dependencies/blocked_by" -q '.[].id' 2>/dev/null)
-  want=$(for d in $(sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\]/\1/p' "openspec/changes/$id/.openspec.yaml" | tr ',' ' '); do
+  want=$(for d in $(sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\]/\1/p' "openspec/changes/$id/.openspec.yaml" | tr ',' ' ' | sed 's/:contract//g'); do
            issue_of "$d" | jq -r '.id // empty'; done
          grep -F -- "$id" <<<"$blockers" | cut -f1)
   for b in $want; do grep -qx "$b" <<<"$have" || w "repos/$repo/issues/$n/dependencies/blocked_by" -F issue_id="$b" >/dev/null; done

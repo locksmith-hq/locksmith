@@ -54,6 +54,7 @@ pub(super) fn from_row(r: &sql::PgRow) -> sql::Result<Project> {
 #[utoipa::path(
     post,
     path = "/v1/projects",
+    operation_id = "create_project",
     tag = "projects",
     summary = "Create a project",
     request_body = NewProject,
@@ -93,6 +94,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/v1/projects/{project_id}",
+    operation_id = "get_project",
     tag = "projects",
     summary = "Get a project",
     params(("project_id" = Uuid, Path, description = "Project id")),
@@ -129,6 +131,7 @@ pub async fn get_one(
 #[utoipa::path(
     get,
     path = "/v1/projects",
+    operation_id = "list_projects",
     tag = "projects",
     summary = "List projects",
     params(PageParams),
@@ -167,6 +170,7 @@ pub async fn list(
 #[utoipa::path(
     patch,
     path = "/v1/projects/{project_id}",
+    operation_id = "update_project",
     tag = "projects",
     summary = "Update a project",
     params(("project_id" = Uuid, Path, description = "Project id")),
@@ -210,6 +214,7 @@ pub async fn patch(
 #[utoipa::path(
     delete,
     path = "/v1/projects/{project_id}",
+    operation_id = "delete_project",
     tag = "projects",
     summary = "Delete a project",
     params(("project_id" = Uuid, Path, description = "Project id")),

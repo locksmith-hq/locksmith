@@ -167,6 +167,7 @@ fn kms_error(e: WrapError) -> ApiError {
 #[utoipa::path(
     post,
     path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions",
+    operation_id = "create_secret_version",
     tag = "secrets",
     summary = "Write a new secret version (the value is encrypted and never returned)",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
@@ -244,6 +245,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions",
+    operation_id = "list_secret_versions",
     tag = "secrets",
     summary = "List secret versions (metadata only, never a value)",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),

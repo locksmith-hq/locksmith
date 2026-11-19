@@ -99,6 +99,7 @@ fn event_from_row(r: &sql::PgRow) -> sql::Result<AuditEvent> {
 #[utoipa::path(
     get,
     path = "/v1/audit/events",
+    operation_id = "list_audit_events",
     tag = "audit",
     summary = "List audit events, newest first",
     params(AuditEventParams),
@@ -208,6 +209,7 @@ pub struct AuditStatus {
 #[utoipa::path(
     get,
     path = "/v1/audit/status",
+    operation_id = "get_audit_status",
     tag = "audit",
     summary = "Get the audit chain status",
     responses(

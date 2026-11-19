@@ -15,7 +15,7 @@ export interface paths {
          * Public keys that verify agent tokens (JWKS)
          * @description Ed25519 public keys (RFC 8037). Verifiers select a key by the token's `kid`. Empty when token signing is not configured.
          */
-        get: operations["jwks"];
+        get: operations["get_jwks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -32,7 +32,7 @@ export interface paths {
             cookie?: never;
         };
         /** Liveness probe */
-        get: operations["healthz"];
+        get: operations["get_healthz"];
         put?: never;
         post?: never;
         delete?: never;
@@ -52,7 +52,7 @@ export interface paths {
          * List an agent's unexpired grants (gateway only)
          * @description The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`.
          */
-        get: operations["agent_grants"];
+        get: operations["get_internal_agent_grants"];
         put?: never;
         post?: never;
         delete?: never;
@@ -74,7 +74,7 @@ export interface paths {
          * Append a relay event to the org's audit ledger (gateway only)
          * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
          */
-        post: operations["append_event"];
+        post: operations["append_audit_event"];
         delete?: never;
         options?: never;
         head?: never;
@@ -89,7 +89,7 @@ export interface paths {
             cookie?: never;
         };
         /** Fetch the encrypted material of a secret version (gateway only; no plaintext) */
-        get: operations["material"];
+        get: operations["get_secret_version_material"];
         put?: never;
         post?: never;
         delete?: never;
@@ -106,7 +106,7 @@ export interface paths {
             cookie?: never;
         };
         /** Readiness probe */
-        get: operations["readyz"];
+        get: operations["get_readyz"];
         put?: never;
         post?: never;
         delete?: never;
@@ -128,7 +128,7 @@ export interface paths {
          * Exchange an enrollment secret for a short-lived agent token
          * @description Returns an EdDSA JWT valid for 15 minutes with audience `gateway`, verifiable with the keys at `/.well-known/jwks.json`. Any invalid, unknown or replaced enrollment secret is the same `401`.
          */
-        post: operations["mint_token"];
+        post: operations["create_agent_token"];
         delete?: never;
         options?: never;
         head?: never;
@@ -143,10 +143,10 @@ export interface paths {
             cookie?: never;
         };
         /** List agents */
-        get: operations["list"];
+        get: operations["list_agents"];
         put?: never;
         /** Register an agent; returns its enrollment secret once */
-        post: operations["create"];
+        post: operations["create_agent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -161,14 +161,14 @@ export interface paths {
             cookie?: never;
         };
         /** Get an agent */
-        get: operations["get_one"];
+        get: operations["get_agent"];
         put?: never;
         post?: never;
         /**
          * Delete an agent and revoke all its grants
          * @description Tokens already minted stay valid until they expire (at most 15 minutes), but every relay is refused because the agent has no grants.
          */
-        delete: operations["delete"];
+        delete: operations["delete_agent"];
         options?: never;
         head?: never;
         patch?: never;
@@ -187,7 +187,7 @@ export interface paths {
          * Replace an agent's enrollment secret; returns the new one once
          * @description The previous enrollment secret stops working immediately. Tokens already minted stay valid until they expire.
          */
-        post: operations["rotate_enrollment"];
+        post: operations["rotate_agent_enrollment_secret"];
         delete?: never;
         options?: never;
         head?: never;
@@ -202,10 +202,10 @@ export interface paths {
             cookie?: never;
         };
         /** List an agent's grants (including expired ones) */
-        get: operations["list_grants"];
+        get: operations["list_agent_grants"];
         put?: never;
         /** Grant an agent relay use of a secret */
-        post: operations["create_grant"];
+        post: operations["create_agent_grant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -226,7 +226,7 @@ export interface paths {
          * Revoke a grant
          * @description The gateway caches grants for at most 10 seconds; the revocation takes effect within that window.
          */
-        delete: operations["delete_grant"];
+        delete: operations["delete_agent_grant"];
         options?: never;
         head?: never;
         patch?: never;
@@ -240,7 +240,7 @@ export interface paths {
             cookie?: never;
         };
         /** List audit events, newest first */
-        get: operations["list_events"];
+        get: operations["list_audit_events"];
         put?: never;
         post?: never;
         delete?: never;
@@ -257,7 +257,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get the audit chain status */
-        get: operations["status"];
+        get: operations["get_audit_status"];
         put?: never;
         post?: never;
         delete?: never;
@@ -276,7 +276,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Create an org (dev only) */
-        post: operations["create"];
+        post: operations["create_org"];
         delete?: never;
         options?: never;
         head?: never;
@@ -291,7 +291,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get the bound org */
-        get: operations["get_one"];
+        get: operations["get_org"];
         put?: never;
         post?: never;
         delete?: never;
@@ -308,10 +308,10 @@ export interface paths {
             cookie?: never;
         };
         /** List projects */
-        get: operations["list"];
+        get: operations["list_projects"];
         put?: never;
         /** Create a project */
-        post: operations["create"];
+        post: operations["create_project"];
         delete?: never;
         options?: never;
         head?: never;
@@ -326,15 +326,15 @@ export interface paths {
             cookie?: never;
         };
         /** Get a project */
-        get: operations["get_one"];
+        get: operations["get_project"];
         put?: never;
         post?: never;
         /** Delete a project */
-        delete: operations["delete"];
+        delete: operations["delete_project"];
         options?: never;
         head?: never;
         /** Update a project */
-        patch: operations["patch"];
+        patch: operations["update_project"];
         trace?: never;
     };
     "/v1/projects/{project_id}/environments": {
@@ -345,10 +345,10 @@ export interface paths {
             cookie?: never;
         };
         /** List environments */
-        get: operations["list"];
+        get: operations["list_environments"];
         put?: never;
         /** Create an environment */
-        post: operations["create"];
+        post: operations["create_environment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -363,15 +363,15 @@ export interface paths {
             cookie?: never;
         };
         /** Get an environment */
-        get: operations["get_one"];
+        get: operations["get_environment"];
         put?: never;
         post?: never;
         /** Delete an environment */
-        delete: operations["delete"];
+        delete: operations["delete_environment"];
         options?: never;
         head?: never;
         /** Update an environment */
-        patch: operations["patch"];
+        patch: operations["update_environment"];
         trace?: never;
     };
     "/v1/projects/{project_id}/environments/{environment_id}/secrets": {
@@ -382,10 +382,10 @@ export interface paths {
             cookie?: never;
         };
         /** List secrets */
-        get: operations["list"];
+        get: operations["list_secrets"];
         put?: never;
         /** Create a secret (metadata only, never a value) */
-        post: operations["create"];
+        post: operations["create_secret"];
         delete?: never;
         options?: never;
         head?: never;
@@ -400,15 +400,15 @@ export interface paths {
             cookie?: never;
         };
         /** Get secret metadata */
-        get: operations["get_one"];
+        get: operations["get_secret"];
         put?: never;
         post?: never;
         /** Delete a secret */
-        delete: operations["delete"];
+        delete: operations["delete_secret"];
         options?: never;
         head?: never;
         /** Update secret metadata */
-        patch: operations["patch"];
+        patch: operations["update_secret"];
         trace?: never;
     };
     "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions": {
@@ -419,10 +419,10 @@ export interface paths {
             cookie?: never;
         };
         /** List secret versions (metadata only, never a value) */
-        get: operations["list"];
+        get: operations["list_secret_versions"];
         put?: never;
         /** Write a new secret version (the value is encrypted and never returned) */
-        post: operations["create"];
+        post: operations["create_secret_version"];
         delete?: never;
         options?: never;
         head?: never;
@@ -928,7 +928,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    jwks: {
+    get_jwks: {
         parameters: {
             query?: never;
             header?: never;
@@ -950,7 +950,7 @@ export interface operations {
             };
         };
     };
-    healthz: {
+    get_healthz: {
         parameters: {
             query?: never;
             header?: never;
@@ -968,7 +968,7 @@ export interface operations {
             };
         };
     };
-    agent_grants: {
+    get_internal_agent_grants: {
         parameters: {
             query?: never;
             header: {
@@ -1021,7 +1021,7 @@ export interface operations {
             };
         };
     };
-    append_event: {
+    append_audit_event: {
         parameters: {
             query?: never;
             header: {
@@ -1111,7 +1111,7 @@ export interface operations {
             };
         };
     };
-    material: {
+    get_secret_version_material: {
         parameters: {
             query?: never;
             header: {
@@ -1166,7 +1166,7 @@ export interface operations {
             };
         };
     };
-    readyz: {
+    get_readyz: {
         parameters: {
             query?: never;
             header?: never;
@@ -1191,7 +1191,7 @@ export interface operations {
             };
         };
     };
-    mint_token: {
+    create_agent_token: {
         parameters: {
             query?: never;
             header?: never;
@@ -1262,7 +1262,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_agents: {
         parameters: {
             query?: {
                 /** @description Page size, 1 to 100 (default 50). */
@@ -1323,7 +1323,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_agent: {
         parameters: {
             query?: never;
             header?: never;
@@ -1387,7 +1387,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    get_agent: {
         parameters: {
             query?: never;
             header?: never;
@@ -1437,7 +1437,7 @@ export interface operations {
             };
         };
     };
-    delete: {
+    delete_agent: {
         parameters: {
             query?: never;
             header?: never;
@@ -1494,7 +1494,7 @@ export interface operations {
             };
         };
     };
-    rotate_enrollment: {
+    rotate_agent_enrollment_secret: {
         parameters: {
             query?: never;
             header?: never;
@@ -1546,7 +1546,7 @@ export interface operations {
             };
         };
     };
-    list_grants: {
+    list_agent_grants: {
         parameters: {
             query?: {
                 /** @description Page size, 1 to 100 (default 50). */
@@ -1610,7 +1610,7 @@ export interface operations {
             };
         };
     };
-    create_grant: {
+    create_agent_grant: {
         parameters: {
             query?: never;
             header?: never;
@@ -1684,7 +1684,7 @@ export interface operations {
             };
         };
     };
-    delete_grant: {
+    delete_agent_grant: {
         parameters: {
             query?: never;
             header?: never;
@@ -1743,7 +1743,7 @@ export interface operations {
             };
         };
     };
-    list_events: {
+    list_audit_events: {
         parameters: {
             query?: {
                 /** @description Page size, 1 to 100 (default 50). */
@@ -1804,7 +1804,7 @@ export interface operations {
             };
         };
     };
-    status: {
+    get_audit_status: {
         parameters: {
             query?: never;
             header?: never;
@@ -1851,7 +1851,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_org: {
         parameters: {
             query?: never;
             header?: never;
@@ -1904,7 +1904,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    get_org: {
         parameters: {
             query?: never;
             header?: never;
@@ -1954,7 +1954,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_projects: {
         parameters: {
             query?: {
                 /** @description Page size, 1 to 100 (default 50). */
@@ -2015,7 +2015,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_project: {
         parameters: {
             query?: never;
             header?: never;
@@ -2077,7 +2077,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    get_project: {
         parameters: {
             query?: never;
             header?: never;
@@ -2127,7 +2127,7 @@ export interface operations {
             };
         };
     };
-    delete: {
+    delete_project: {
         parameters: {
             query?: never;
             header?: never;
@@ -2184,7 +2184,7 @@ export interface operations {
             };
         };
     };
-    patch: {
+    update_project: {
         parameters: {
             query?: never;
             header?: never;
@@ -2256,7 +2256,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_environments: {
         parameters: {
             query?: {
                 /** @description Page size, 1 to 100 (default 50). */
@@ -2320,7 +2320,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_environment: {
         parameters: {
             query?: never;
             header?: never;
@@ -2394,7 +2394,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    get_environment: {
         parameters: {
             query?: never;
             header?: never;
@@ -2446,7 +2446,7 @@ export interface operations {
             };
         };
     };
-    delete: {
+    delete_environment: {
         parameters: {
             query?: never;
             header?: never;
@@ -2505,7 +2505,7 @@ export interface operations {
             };
         };
     };
-    patch: {
+    update_environment: {
         parameters: {
             query?: never;
             header?: never;
@@ -2579,7 +2579,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_secrets: {
         parameters: {
             query?: {
                 /** @description Page size, 1 to 100 (default 50). */
@@ -2645,7 +2645,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_secret: {
         parameters: {
             query?: never;
             header?: never;
@@ -2721,7 +2721,7 @@ export interface operations {
             };
         };
     };
-    get_one: {
+    get_secret: {
         parameters: {
             query?: never;
             header?: never;
@@ -2775,7 +2775,7 @@ export interface operations {
             };
         };
     };
-    delete: {
+    delete_secret: {
         parameters: {
             query?: never;
             header?: never;
@@ -2836,7 +2836,7 @@ export interface operations {
             };
         };
     };
-    patch: {
+    update_secret: {
         parameters: {
             query?: never;
             header?: never;
@@ -2912,7 +2912,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_secret_versions: {
         parameters: {
             query?: never;
             header?: never;
@@ -2966,7 +2966,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_secret_version: {
         parameters: {
             query?: never;
             header?: never;

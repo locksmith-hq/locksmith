@@ -1,9 +1,9 @@
 # Tasks: G1 go public
 
 ## 1. Secret and history audit [opus]
-- [ ] 1.1 Triage all `gitleaks detect` findings: for each, record file, commit, rule and verdict (fake fixture, revoked, real) in `docs/going-public.md`; add a reason comment to every `.gitleaksignore` entry. Raise a `needs-owner` issue for any real one (fingerprint only).
-- [ ] 1.2 Scan the tree for private identifiers (agent app key names, account IDs, private hostnames, owner contact details) and fix or list each in the denylist decision.
-- [ ] 1.3 Verify: `gitleaks detect --no-banner --redact` over the full history exits 0.
+- [x] 1.1 Triage all `gitleaks detect` findings: for each, record file, commit, rule and verdict (fake fixture, revoked, real) in `docs/going-public.md`; add a reason comment to every `.gitleaksignore` entry. Raise a `needs-owner` issue for any real one (fingerprint only).
+- [x] 1.2 Scan the tree for private identifiers (agent app key names, account IDs, private hostnames, owner contact details) and fix or list each in the denylist decision.
+- [x] 1.3 Verify: `gitleaks detect --no-banner --redact` over the full history exits 0.
 
 ## 2. Licences [sonnet]
 - [ ] 2.1 Add `LICENSE` (AGPL-3.0) and `LICENSE-APACHE` files, set each manifest's `license`, replace `UNLICENSED`, and write `THIRD_PARTY.md` for vendored data.

@@ -20,3 +20,29 @@ b070db04c9543cee641bd6a8b031db1a98d88a4b:crates/ls-proxy/tests/aws_relay.rs:aws-
 e0315fbfb5026a49d5a273535608c45dc82b6b4b:crates/ls-envelope/vectors/v1.json:generic-api-key:46
 e0315fbfb5026a49d5a273535608c45dc82b6b4b:crates/ls-envelope/vectors/v1.json:generic-api-key:47
 e0315fbfb5026a49d5a273535608c45dc82b6b4b:crates/ls-envelope/vectors/v1.json:generic-api-key:50
+
+# Made-up AWS access key IDs (AKIALOCKSMITH*, AKIAUPSTREAM*) in the M7 mock relay test branch commits; mock upstream, no secret keys, never real (g1 triage 1.1).
+06be8e94fb9afa7911e98e3a891aac46f4db174c:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+06be8e94fb9afa7911e98e3a891aac46f4db174c:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+14111b32b5b1012f1af74b05f328903406b2bf32:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+14111b32b5b1012f1af74b05f328903406b2bf32:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+1a842c7a2bc032e147e43cbaa8e94cdce8ac9c16:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+1a842c7a2bc032e147e43cbaa8e94cdce8ac9c16:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+4167e1c5b5d5bc525f7efb6770e389ad52d67fac:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+4167e1c5b5d5bc525f7efb6770e389ad52d67fac:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+43e84dc33aa8cdd8a2f99d6c9a80c17e83086f25:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+43e84dc33aa8cdd8a2f99d6c9a80c17e83086f25:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+5c43fae7970433a56159142a5f422d0e2e7bc32a:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+5c43fae7970433a56159142a5f422d0e2e7bc32a:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+80f5ada23c81a8095725da334c38b771507fe016:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+80f5ada23c81a8095725da334c38b771507fe016:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+b74daa461b16f7dd66bd48655ae53a3532fdefd1:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+b74daa461b16f7dd66bd48655ae53a3532fdefd1:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+babfcc350e1eb16061b80f1156aaa831b5eeb0cb:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+babfcc350e1eb16061b80f1156aaa831b5eeb0cb:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+bc4f12770e1f72b60b160e06b631ca399058f9f6:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+bc4f12770e1f72b60b160e06b631ca399058f9f6:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+daaca0ee540ad43a11439db70d1f8ef878483db8:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+daaca0ee540ad43a11439db70d1f8ef878483db8:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+# Fixed known-answer test vector secret_id in ls-envelope v1.json, same vector as the entries above (g1 triage 1.1).
+06be8e94fb9afa7911e98e3a891aac46f4db174c:crates/ls-envelope/vectors/v1.json:generic-api-key:50

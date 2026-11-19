@@ -29,6 +29,11 @@ expect s2-crypto "stackable on s1-api"
 expect w1-site "parked owner #7" "7 owner Need a domain for w1-site landing"
 expect w1-site "parked rescue #8" "8 rescue Rescue: w1-site 1.1"
 expect w1-site "parked owner #7" "$(printf '8 rescue Rescue: w1-site 1.1\n7 owner Need a domain for w1-site')"
+# w1's PR is labelled ready-to-merge: it waits for merge-on-green, so it is not takeable (#352).
+got=$(OFFLINE=1 QUEUED='42 claude/change-w1-site' bash "$script" | awk -F'\t' '$1=="w1-site"{print $2" "$3}')
+[ "$got" = "queued #42 ready-to-merge" ] || { echo "FAIL: w1-site queued, got '$got'"; exit 1; }; echo "ok: w1-site queued"
+[ "$(OFFLINE=1 QUEUED='42 claude/change-w1-site' bash "$script" --ready | tr '\n' ' ')" = "s2-crypto " ] || { echo "FAIL: --ready with queued"; exit 1; }
+echo "ok: --ready skips a queued change"
 [ "$(OFFLINE=1 BLOCKERS='7 owner w1-site' bash "$script" --ready | tr '\n' ' ')" = "s2-crypto " ] || { echo "FAIL: --ready"; exit 1; }
 echo "ok: --ready lists only takeable changes"
 echo "change-status: all tests passed"

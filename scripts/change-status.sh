@@ -7,11 +7,12 @@
 #   parked     an open needs-owner / needs-rescue issue names this change (detail: owner #n | rescue #n;
 #              owner wins, since a rescue that failed twice also gets needs-owner)
 #   claimed    another worker holds the change lock (detail: holder)
+#   queued     its PR is labelled ready-to-merge; merge-on-green merges it, so no worker takes it
 #   review     every task ticked on the branch; waiting for the merge queue
 #   finished   every task ticked on main but not archived
 # Usage: scripts/change-status.sh [--ready]   (--ready prints only ids a worker may take now)
 # Dependencies: `x-depends_on: [id, ...]` in the change's .openspec.yaml (x- keeps openspec validate quiet).
-# OFFLINE=1 skips GitHub lookups (parked, claimed); used by the self-test.
+# OFFLINE=1 skips GitHub lookups (parked, queued, claimed); used by the self-test. BLOCKERS and QUEUED override them.
 set -uo pipefail
 repo=locksmith-hq/locksmith
 only_ready=0; [ "${1:-}" = --ready ] && only_ready=1
@@ -32,6 +33,11 @@ blockers=""
   -q '.[]|select(any(.labels[]; .name=="needs-owner" or .name=="needs-rescue"))
     |"\(.number) \(if any(.labels[]; .name=="needs-owner") then "owner" else "rescue" end) \((.title+" "+(.body // ""))|gsub("\n";" "))"' 2>/dev/null)
 blockers=$(sort -s -k2,2 <<<"${BLOCKERS:-$blockers}")
+# One line per open PR labelled ready-to-merge: "<number> <head ref>". Its change waits for merge-on-green (#352).
+queued=""
+[ "${OFFLINE:-0}" = 1 ] || queued=$(gh api "repos/$repo/pulls?state=open&per_page=100" \
+  -q '.[]|select(any(.labels[]; .name=="ready-to-merge"))|"\(.number) \(.head.ref)"' 2>/dev/null)
+queued="${QUEUED:-$queued}"
 
 for id in $ids; do
   t=$(tasks_of "$id")
@@ -49,6 +55,10 @@ for id in $ids; do
     if [ "$state" != blocked ] && [ -n "$blockers" ]; then
       b=$(grep -F -- "$id" <<<"$blockers" | head -1)
       [ -n "$b" ] && { state=parked; detail="$(cut -d' ' -f2 <<<"$b") #$(cut -d' ' -f1 <<<"$b")"; }
+    fi
+    if { [ "$state" = ready ] || [ "$state" = stackable ]; } && [ -n "$queued" ]; then
+      q=$(awk -v ref="claude/change-$id" '$2==ref{print $1; exit}' <<<"$queued")
+      [ -n "$q" ] && { state=queued; detail="#$q ready-to-merge"; }
     fi
     if [ "$state" = ready ] || [ "$state" = stackable ] && [ "${OFFLINE:-0}" != 1 ]; then
       h=$(bash scripts/run-lock.sh holder "status-check" "$id" 2>/dev/null)

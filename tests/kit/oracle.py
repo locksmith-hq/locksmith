@@ -155,6 +155,11 @@ GZIP_MAGIC = b"\x1f\x8b\x08"
 GZIP_MAX_MEMBERS = 256
 GZIP_MAX_ATTEMPTS = 4096  # gzip-looking offsets tried per buffer, decoded or not
 GZIP_MAX_DEPTH = 3
+# Compressed input fed to zlib across all gzip attempts in one scan. A gzip-looking header with
+# no NUL after it makes zlib read to the end of the data, so without this cap repeated magic
+# bytes cost attempts x size. Reaching the cap marks the scan incomplete (fail closed).
+GZIP_MAX_INPUT = 2 * MAX_BYTES
+GZIP_IN_CHUNK = 64 * 1024
 
 
 def view_offsets(pattern, repl, data, voffs):
@@ -196,6 +201,74 @@ def find_hits(data, needles):
     return hits
 
 
+def salvage(d, chunk, room):
+    """Return what d decodes from chunk before the byte that makes zlib fail, found by bisection
+    on copies of d, so a damaged member (bad CRC, corrupt tail) still shows what `gzip -dc` shows."""
+    outs = []
+    while chunk and room > 0:
+        if len(chunk) == 1:
+            try:
+                outs.append(d.copy().decompress(chunk, room))
+            except zlib.error:
+                pass
+            break
+        half = len(chunk) // 2
+        t = d.copy()
+        try:
+            piece = t.decompress(chunk[:half], room)
+        except zlib.error:
+            chunk = chunk[:half]
+            continue
+        outs.append(piece)
+        room -= len(piece)
+        if t.unconsumed_tail or t.eof:
+            break
+        d, chunk = t, chunk[half:]
+    return b"".join(outs)
+
+
+def gunzip_member(buf, i, state):
+    """Decode the gzip member at buf[i:], or return None if it does not decode to anything.
+
+    Input goes to zlib in GZIP_IN_CHUNK pieces, each charged to state["input"]; output is
+    charged to state["budget"]. Stopping at either limit before the member's end sets
+    state["incomplete"]. A member cut short by the end of the data, or damaged (zlib error), is
+    returned as far as it decodes.
+    """
+    d = zlib.decompressobj(31)  # wbits 31: a gzip header
+    pos, outs, got = i, [], 0
+    while not d.eof:
+        room = state["budget"] - got
+        if room <= 0:  # max_length 0 would mean unlimited
+            state["incomplete"] = "gzip budget exhausted, not fully scanned"
+            break
+        if d.unconsumed_tail:
+            chunk = d.unconsumed_tail
+        else:
+            if pos >= len(buf):
+                break
+            if state["input"] <= 0:
+                state["incomplete"] = "gzip budget exhausted, not fully scanned"
+                break
+            chunk = buf[pos:pos + GZIP_IN_CHUNK]
+            pos += len(chunk)
+            state["input"] -= len(chunk)
+        snap = d.copy()  # a failed decompress leaves d mid-chunk; salvage replays from here
+        try:
+            piece = d.decompress(chunk, room)
+        except zlib.error:
+            piece = salvage(snap, chunk, room)
+            outs.append(piece)
+            got += len(piece)
+            break
+        outs.append(piece)
+        got += len(piece)
+    state["budget"] -= got
+    if not got and not d.eof:
+        return None
+    return b"".join(outs)
+
+
 class Matcher:
     """Needles for a set of canaries, plus a guard that keeps fragments out of printed text.
 
@@ -218,11 +291,11 @@ class Matcher:
         # The stripped view drops whitespace, so its needles do too (raw bytes can hold some).
         self.stripped = [(name, WS_RE.sub(b"", needle)) for name, needle in self.needles]
 
-    def find(self, data, budget=MAX_BYTES):
+    def find(self, data, budget=MAX_BYTES, input_budget=GZIP_MAX_INPUT):
         """Return [(label, offset)]. A view hit's offset is where it starts in data (for a gzip
         member, where the member starts). Afterwards self.incomplete is None, or why the gzip
-        views stopped before the end of the data (the member limit or the byte budget)."""
-        state = {"budget": budget, "incomplete": None}
+        views stopped before the end of the data (a member, attempt, output or input limit)."""
+        state = {"budget": budget, "input": input_budget, "incomplete": None}
         hits = self._find(data, 0, state)
         self.incomplete = state["incomplete"]
         return hits
@@ -256,23 +329,16 @@ class Matcher:
                 i = data.find(GZIP_MAGIC, start)
                 if i < 0:
                     break
-                if members >= GZIP_MAX_MEMBERS or attempts >= GZIP_MAX_ATTEMPTS or state["budget"] <= 0:
+                if (members >= GZIP_MAX_MEMBERS or attempts >= GZIP_MAX_ATTEMPTS
+                        or state["budget"] <= 0 or state["input"] <= 0):
                     state["incomplete"] = "gzip budget exhausted, not fully scanned"
                     break
                 start = i + 1
                 attempts += 1
-                d = zlib.decompressobj(31)
-                try:
-                    # wbits 31: a gzip header; output stops at the member's end or the budget.
-                    out = d.decompress(buf[i:], state["budget"])
-                except zlib.error:
-                    continue
-                if not out and not d.eof:
+                out = gunzip_member(buf, i, state)
+                if out is None:
                     continue
                 members += 1
-                state["budget"] -= len(out)
-                if d.unconsumed_tail:
-                    state["incomplete"] = "gzip budget exhausted, not fully scanned"
                 for name, _off in self._find(out, depth + 1, state):
                     hits.append(("gzip/" + name, i))
         return hits
@@ -309,6 +375,7 @@ def collect(canary, paths):
     for fp in files:
         try:
             if os.path.getsize(fp) > MAX_BYTES:
+                errors.append("over 50 MB, not scanned: %s" % fp)
                 continue
             with open(fp, "rb") as fh:
                 data = fh.read()
@@ -367,16 +434,11 @@ class Report:
             self.leak(name, locator)
         self.incomplete(locator)
 
-    def incomplete(self, locator, strict=True):
-        """Report a gzip view that stopped early, like content over 50 MB: an error, or (legacy
-        positional paths) a notice."""
-        if not self.m.incomplete:
-            return
-        msg = "%s: %s" % (self.m.incomplete, locator)
-        if strict:
-            self.error(msg)
-        else:
-            print("notice: %s" % self.m.safe(msg), file=sys.stderr, flush=True)
+    def incomplete(self, locator):
+        """Report a gzip view that stopped early as an error, like content over 50 MB: a scan
+        that could not look everywhere never reports clean."""
+        if self.m.incomplete:
+            self.error("%s: %s" % (self.m.incomplete, locator))
 
     def unreach(self, name, why):
         self.unreachable.append(name)
@@ -394,14 +456,11 @@ class Report:
 
 # --- file sources -----------------------------------------------------------------------------
 
-def read_capped(rep, fp, strict=True):
-    """Read a file. Over 50 MB is an error, or (legacy positional paths) a skip notice."""
+def read_capped(rep, fp):
+    """Read a file. Over 50 MB is an error."""
     try:
         if os.path.getsize(fp) > MAX_BYTES:
-            if strict:
-                rep.error("over 50 MB, not scanned: %s" % fp)
-            else:
-                print("skip over 50 MB: %s" % rep.m.safe(fp), file=sys.stderr)
+            rep.error("over 50 MB, not scanned: %s" % fp)
             return None
         with open(fp, "rb") as fh:
             return fh.read()
@@ -418,12 +477,12 @@ def scan_paths(rep, paths):
         rep.error(str(e))
         return
     for fp in files:
-        data = read_capped(rep, fp, strict=False)
+        data = read_capped(rep, fp)
         if data is None:
             continue
         for name, off in rep.m.find(data):
             rep.leak(name, "%s:%d" % (fp, off))
-        rep.incomplete(fp, strict=False)
+        rep.incomplete(fp)
 
 
 def scan_dir(rep, path):
@@ -813,6 +872,23 @@ def gzip_limit_checks(tmp):
     short_ok = bool(m.incomplete)
     hits = m.find(data, budget=4096 + len(text))
     yield "gzip-small-budget", short_ok and not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
+    # Input cap: a gzip-looking header with no NUL after it reads to the end of the data, so
+    # repeated magic stops at the input cap and fails closed; enough input finds the canary.
+    data = GZIP_MAGIC * 64 + b"\x01" * (1 << 20) + member
+    m.find(data, input_budget=4 << 20)
+    capped_ok = bool(m.incomplete)
+    hits = m.find(GZIP_MAGIC * 4 + member, input_budget=4 * GZIP_IN_CHUNK)
+    # A damaged member still shows what it decodes to, as `gzip -dc` does: a bad CRC, and a
+    # corrupt byte after the canary in a member larger than one input chunk.
+    pad = secrets.token_bytes(GZIP_IN_CHUNK).hex().encode()
+    bad_crc = bytearray(gzip.compress(text))
+    bad_crc[-6] ^= 0x55
+    corrupt = bytearray(gzip.compress(pad + text + pad))
+    corrupt[-200] ^= 0x55
+    for name, data in (("gzip-bad-crc", bad_crc), ("gzip-corrupt-tail", corrupt)):
+        hits = m.find(bytes(data))
+        yield name, not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
+    yield "gzip-input-exhausted", capped_ok and not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
 
 
 def cmd_selftest(_args):

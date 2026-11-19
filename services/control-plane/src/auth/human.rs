@@ -13,7 +13,6 @@ use std::time::Duration;
 use jsonwebtoken::{Algorithm, Validation};
 use serde::Deserialize;
 use tracing::Instrument as _;
-use uuid::Uuid;
 
 use super::jwks::{DEFAULT_MAX_AGE, DEFAULT_MIN_REFRESH, JwksCache, JwksError};
 
@@ -23,8 +22,6 @@ pub const LEEWAY_SECS: u64 = 60;
 pub const MAX_TOKEN_BYTES: usize = 8 * 1024;
 /// Algorithms a human token may use. The key decides which one applies to it.
 const ALLOWED: [Algorithm; 2] = [Algorithm::RS256, Algorithm::ES256];
-/// Namespace for the interim personal-org id (see [`personal_org_id`]).
-const ORG_NAMESPACE: Uuid = Uuid::from_u128(0x6c6f_636b_736d_6974_6820_6f72_675f_7431);
 
 /// Issuer settings. Public values only: no secret is involved in verifying a token.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,17 +134,4 @@ impl HumanAuth {
             email_verified: c.email_verified.unwrap_or(false),
         })
     }
-}
-
-/// The org a verified human acts in.
-///
-/// Interim until the users table and first-login transaction (tasks 3.1 and 3.2): a stable
-/// UUIDv5 of `(issuer, subject)`, so a person keeps one org across requests and two people never
-/// share one. Task 3.2 creates the personal org with this same id, or replaces this lookup.
-pub fn personal_org_id(identity: &HumanIdentity) -> Uuid {
-    let mut name = Vec::with_capacity(identity.issuer.len() + identity.subject.len() + 1);
-    name.extend_from_slice(identity.issuer.as_bytes());
-    name.push(0);
-    name.extend_from_slice(identity.subject.as_bytes());
-    Uuid::new_v5(&ORG_NAMESPACE, &name)
 }

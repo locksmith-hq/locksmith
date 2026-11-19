@@ -17,7 +17,7 @@ use http_body_util::BodyExt as _;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::auth::OrgBinding;
-use ls_control_plane::auth::human::{HumanAuth, HumanAuthConfig, HumanIdentity, personal_org_id};
+use ls_control_plane::auth::human::{HumanAuth, HumanAuthConfig};
 use ls_control_plane::readiness::ReadyFlag;
 use p256::pkcs8::EncodePrivateKey as _;
 use serde_json::{Value, json};
@@ -75,7 +75,7 @@ fn now() -> u64 {
 fn claims(sub: &str) -> Value {
     json!({
         "iss": ISSUER, "aud": AUDIENCE, "sub": sub, "exp": now() + 600,
-        "email": "ada@example.com", "email_verified": true,
+        "email": format!("{sub}@example.com"), "email_verified": true,
     })
 }
 
@@ -92,14 +92,24 @@ fn raw_token(header: &Value, claims: &Value, signature: &[u8]) -> String {
 
 struct Issuer {
     server: MockServer,
+    /// A migrated database, for tests whose valid tokens reach the users table (T1 task 3.2).
+    pg: Option<common::Pg>,
 }
 
 impl Issuer {
     async fn start(keys: &[&TestKey]) -> Self {
         let issuer = Self {
             server: MockServer::start().await,
+            pg: None,
         };
         issuer.publish(keys).await;
+        issuer
+    }
+
+    /// As [`Self::start`], with a migrated Postgres behind the app.
+    async fn start_db(keys: &[&TestKey]) -> Self {
+        let mut issuer = Self::start(keys).await;
+        issuer.pg = Some(common::Pg::migrated().await);
         issuer
     }
 
@@ -131,7 +141,9 @@ impl Issuer {
         let state = AppState::new(
             dev_auth,
             Arc::new(ReadyFlag::new(true)),
-            common::unreachable_db(),
+            self.pg
+                .as_ref()
+                .map_or_else(common::unreachable_db, |pg| pg.app_db(Default::default())),
         )
         .with_human_auth(human);
         app::with_layers(app::routes().route("/whoami", get(whoami)), state)
@@ -160,16 +172,6 @@ async fn call(app: &Router, token: Option<&str>, dev_org: Option<&str>) -> (Stat
     (status, String::from_utf8(body.to_vec()).unwrap())
 }
 
-fn org_of(iss: &str, sub: &str) -> String {
-    personal_org_id(&HumanIdentity {
-        issuer: iss.to_owned(),
-        subject: sub.to_owned(),
-        email: None,
-        email_verified: false,
-    })
-    .to_string()
-}
-
 /// Assert `token` is refused and return the response body for uniformity checks.
 async fn refused(app: &Router, token: &str) -> String {
     let (status, body) = call(app, Some(token), None).await;
@@ -181,11 +183,11 @@ async fn refused(app: &Router, token: &str) -> String {
 #[tokio::test]
 async fn auth_valid_token_binds_the_users_org() {
     let key = TestKey::new("k1", 1);
-    let issuer = Issuer::start(&[&key]).await;
+    let issuer = Issuer::start_db(&[&key]).await;
     let app = issuer.app(false);
     let (status, body) = call(&app, Some(&key.mint(&claims("user-1"))), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body, org_of(ISSUER, "user-1"));
+    assert!(uuid::Uuid::parse_str(&body).is_ok(), "{body}");
     // Same person, same org; a different person, a different org.
     let (_, again) = call(&app, Some(&key.mint(&claims("user-1"))), None).await;
     let (_, other) = call(&app, Some(&key.mint(&claims("user-2"))), None).await;
@@ -197,7 +199,7 @@ async fn auth_valid_token_binds_the_users_org() {
 #[tokio::test]
 async fn auth_audience_may_be_one_of_several() {
     let key = TestKey::new("k1", 1);
-    let issuer = Issuer::start(&[&key]).await;
+    let issuer = Issuer::start_db(&[&key]).await;
     let mut c = claims("user-1");
     c["aud"] = json!(["other-api", AUDIENCE]);
     let (status, _) = call(&issuer.app(false), Some(&key.mint(&c)), None).await;
@@ -329,7 +331,7 @@ async fn auth_rejections_are_uniform_and_say_nothing_about_why() {
 #[tokio::test]
 async fn auth_token_just_past_expiry_is_within_the_leeway_but_not_far_past() {
     let key = TestKey::new("k1", 1);
-    let issuer = Issuer::start(&[&key]).await;
+    let issuer = Issuer::start_db(&[&key]).await;
     let app = issuer.app(false);
     let mut c = claims("user-1");
     c["exp"] = json!(now() - 20);
@@ -348,7 +350,7 @@ async fn auth_token_just_past_expiry_is_within_the_leeway_but_not_far_past() {
 async fn auth_rotated_key_is_accepted_after_one_rate_limited_refresh() {
     let old = TestKey::new("old", 1);
     let new = TestKey::new("new", 2);
-    let issuer = Issuer::start(&[&old]).await;
+    let issuer = Issuer::start_db(&[&old]).await;
     let app = issuer.app(false);
 
     assert_eq!(
@@ -406,7 +408,7 @@ async fn auth_issuer_outage_refuses_tokens_without_a_distinct_answer() {
 #[tokio::test]
 async fn auth_dev_header_works_only_with_dev_auth_and_never_overrides_a_bearer_token() {
     let key = TestKey::new("k1", 1);
-    let issuer = Issuer::start(&[&key]).await;
+    let issuer = Issuer::start_db(&[&key]).await;
 
     // Off: the header alone is refused.
     assert_eq!(
@@ -431,7 +433,9 @@ async fn auth_dev_header_works_only_with_dev_auth_and_never_overrides_a_bearer_t
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, org_of(ISSUER, "user-1"));
+    // The token's identity, not the header, picks the org: the user's own personal org.
+    assert_ne!(body, DEV_ORG);
+    assert!(uuid::Uuid::parse_str(&body).is_ok(), "{body}");
 }
 
 #[tokio::test]
@@ -459,7 +463,7 @@ async fn auth_verify_span_has_no_token_content() {
     let _guard = tracing::subscriber::set_default(subscriber);
 
     let key = TestKey::new("k1", 1);
-    let issuer = Issuer::start(&[&key]).await;
+    let issuer = Issuer::start_db(&[&key]).await;
     let app = issuer.app(false);
     let good = key.mint(&claims("secret-subject-xyz"));
     let bad = key.mint(&{
@@ -486,8 +490,50 @@ async fn auth_verify_span_has_no_token_content() {
         good.split('.').nth(1).unwrap(),
         good.split('.').nth(2).unwrap(),
         "secret-subject-xyz",
-        "ada@example.com",
+        "secret-subject-xyz@example.com",
     ] {
         assert!(!logs.contains(secret), "trace leaked token content");
     }
+}
+
+#[tokio::test]
+async fn users_unverified_email_gets_403_problem_over_http() {
+    let key = TestKey::new("k1", 1);
+    let issuer = Issuer::start_db(&[&key]).await;
+    let app = issuer.app(false);
+    for unverified in [json!(false), Value::Null] {
+        let mut c = claims("unverified-1");
+        if unverified.is_null() {
+            c.as_object_mut().unwrap().remove("email_verified");
+        } else {
+            c["email_verified"] = unverified;
+        }
+        let (status, body) = call(&app, Some(&key.mint(&c)), None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        let v: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            v["type"],
+            "urn:locksmith:problem:email-verification-required"
+        );
+        assert_eq!(v["status"], 403);
+        assert!(!body.contains("unverified-1"), "no identity echoed");
+    }
+    // Once the issuer reports the email as verified, the same subject gets in.
+    let (status, _) = call(&app, Some(&key.mint(&claims("unverified-1"))), None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn users_same_verified_email_from_two_subjects_share_one_org_over_http() {
+    let key = TestKey::new("k1", 1);
+    let issuer = Issuer::start_db(&[&key]).await;
+    let app = issuer.app(false);
+    let mut google = claims("google-1");
+    google["email"] = json!("ada@example.com");
+    let mut github = claims("github-1");
+    github["email"] = json!("ada@example.com");
+    let (_, a) = call(&app, Some(&key.mint(&google)), None).await;
+    let (_, b) = call(&app, Some(&key.mint(&github)), None).await;
+    assert!(uuid::Uuid::parse_str(&a).is_ok(), "{a}");
+    assert_eq!(a, b);
 }

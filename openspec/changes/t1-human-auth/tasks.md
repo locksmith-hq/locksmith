@@ -11,10 +11,10 @@
 - [x] 2.2 Verify: `cargo nextest run -p ls-control-plane` passes; a request with only the dev header gets `401` when `dev_auth` is off.
 
 ## 3. Users and personal orgs [sonnet]
-- [ ] 3.1 Migration `0011_users.sql`: `users (id, issuer, subject, email, email_verified, created_at)` with a unique `(issuer, subject)`, RLS per A0-4/A0-5; extend `ls-tenant-lint`.
-- [ ] 3.2 First-login transaction creating the user and personal org idempotently; concurrency test.
-- [ ] 3.3 Email-verified gate (`403` problem type) and verified-email-only identity linking.
-- [ ] 3.4 Verify: `cargo nextest run -p ls-control-plane users` and `cargo nextest run -p ls-tenant-lint`.
+- [x] 3.1 Migration `0011_users.sql`: `users (id, issuer, subject, email, email_verified, created_at)` with a unique `(issuer, subject)`, RLS per A0-4/A0-5; extend `ls-tenant-lint`.
+- [x] 3.2 First-login transaction creating the user and personal org idempotently; concurrency test.
+- [x] 3.3 Email-verified gate (`403` problem type) and verified-email-only identity linking.
+- [x] 3.4 Verify: `cargo nextest run -p ls-control-plane users` and `cargo nextest run -p ls-tenant-lint`.
 
 ## 4. Local issuer [sonnet]
 - [ ] 4.1 Keycloak in `infra/compose` (profile `auth`), realm JSON with the `locksmith-web`, `locksmith-desktop` and `smith-cli` clients, test users, a mail catcher for verification and reset mails, and Google/GitHub identity-provider stubs with placeholder client ids (no secrets).

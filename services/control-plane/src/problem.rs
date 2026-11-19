@@ -18,6 +18,7 @@ pub const PROBLEM_JSON: &str = "application/problem+json";
 pub enum Kind {
     Validation,
     Unauthenticated,
+    EmailVerificationRequired,
     NotFound,
     Conflict,
     PayloadTooLarge,
@@ -31,6 +32,7 @@ impl Kind {
         match self {
             Kind::Validation => StatusCode::BAD_REQUEST,
             Kind::Unauthenticated => StatusCode::UNAUTHORIZED,
+            Kind::EmailVerificationRequired => StatusCode::FORBIDDEN,
             Kind::NotFound => StatusCode::NOT_FOUND,
             Kind::Conflict => StatusCode::CONFLICT,
             Kind::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
@@ -45,6 +47,7 @@ impl Kind {
         match self {
             Kind::Validation => "validation",
             Kind::Unauthenticated => "unauthenticated",
+            Kind::EmailVerificationRequired => "email-verification-required",
             Kind::NotFound => "not-found",
             Kind::Conflict => "conflict",
             Kind::PayloadTooLarge => "payload-too-large",
@@ -58,6 +61,7 @@ impl Kind {
         match self {
             Kind::Validation => "Invalid request",
             Kind::Unauthenticated => "Authentication required",
+            Kind::EmailVerificationRequired => "Email verification required",
             Kind::NotFound => "Resource not found",
             Kind::Conflict => "Conflict",
             Kind::PayloadTooLarge => "Request body too large",
@@ -114,6 +118,11 @@ impl ApiError {
 
     pub fn unauthenticated() -> Self {
         Self::bare(Kind::Unauthenticated)
+    }
+
+    /// `403`: the token is valid but its email is not verified (T1 spec: unverified email).
+    pub fn email_verification_required() -> Self {
+        Self::bare(Kind::EmailVerificationRequired)
     }
 }
 

@@ -16,3 +16,8 @@
 - Task: 2.1, 2.2 - done
 - Verified: `cargo nextest run -p ls-control-plane config` -> 15 passed; `just ci` -> exit 0; Sonnet evaluator PASS
 - Notes for next session: `dev_auth` was already default off; added `LOCKSMITH_ALLOW_DEV_AUTH` override check (release builds only, unit-tested via a bool) and `just api` sets it. Group 3 (users, personal orgs) next; 6.0 still gated on owner UX approval (recorded T1-1 approved in decisions).
+
+## 2026-11-19 worker (b)
+- Task: 3.1-3.4 - done
+- Verified: `cargo nextest run -p ls-control-plane users` (8) and `-p ls-tenant-lint` (5) pass; `just ci` exit 0 (725 tests); Sonnet evaluator PASS
+- Notes for next session: `users.resolve` runs in `Database::with_login` (advisory lock per identity; users RLS admits the bound login identity and verified email). Open risk: two different identities with the same verified email signing in concurrently for the first time can each create an org (add an email-keyed lock if it matters). Every human request does a DB read in the extractor (no cache). 3.3 exemption for resend-verification/sign-out routes is needed when those routes exist. Next: 4.x (Keycloak) and 5.x; 6.1+ web.

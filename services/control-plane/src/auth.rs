@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::problem::ApiError;
+use crate::users;
 
 pub const DEV_ORG_HEADER: &str = "x-locksmith-dev-org";
 /// The org an internal (service-token) request acts for.
@@ -42,7 +43,7 @@ impl IntoResponse for Unauthenticated {
 }
 
 impl FromRequestParts<AppState> for OrgBinding {
-    type Rejection = Unauthenticated;
+    type Rejection = ApiError;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -51,24 +52,33 @@ impl FromRequestParts<AppState> for OrgBinding {
         // A bearer token is a human credential: it is verified, and a bad one is never
         // downgraded to the dev header. Without human auth configured it is refused too.
         if let Some(value) = parts.headers.get(header::AUTHORIZATION) {
-            let auth = state.human_auth().ok_or(Unauthenticated)?;
+            let auth = state.human_auth().ok_or_else(ApiError::unauthenticated)?;
             let token = bearer(value.as_bytes())
                 .and_then(|t| std::str::from_utf8(t).ok())
-                .ok_or(Unauthenticated)?;
-            let identity = auth.verify(token).await.map_err(|_| Unauthenticated)?;
-            let org_id = human::personal_org_id(&identity);
-            tracing::Span::current().record("org.id", tracing::field::display(org_id));
-            return Ok(Self { org_id });
+                .ok_or_else(ApiError::unauthenticated)?;
+            let identity = auth
+                .verify(token)
+                .await
+                .map_err(|_| ApiError::unauthenticated())?;
+            // `403` for an unverified email, a new user and personal org on first sign-in.
+            let user = users::resolve(state.db(), &identity).await?;
+            tracing::Span::current().record("org.id", tracing::field::display(user.org_id));
+            return Ok(Self {
+                org_id: user.org_id,
+            });
         }
         if !state.dev_auth() {
-            return Err(Unauthenticated);
+            return Err(ApiError::unauthenticated());
         }
-        let value = parts.headers.get(DEV_ORG_HEADER).ok_or(Unauthenticated)?;
+        let value = parts
+            .headers
+            .get(DEV_ORG_HEADER)
+            .ok_or_else(ApiError::unauthenticated)?;
         let org_id = value
             .to_str()
             .ok()
             .and_then(|s| Uuid::parse_str(s.trim()).ok())
-            .ok_or(Unauthenticated)?;
+            .ok_or_else(ApiError::unauthenticated)?;
         tracing::Span::current().record("org.id", tracing::field::display(org_id));
         Ok(Self { org_id })
     }

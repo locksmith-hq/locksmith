@@ -50,13 +50,14 @@ uses what the previous one taught us.
 | S5 | `s5-audit-ledger` | Append-only, hash-chained audit per org. `just audit-verify` checks it and an export goes to a file sink. | Tamper test | ☑ |
 | S6 | `s6-adversarial-gate-1` [opus] | Scripted and live-agent extraction attempts against S1–S5 (env, reflection, header echo, encodings). | Suite green in CI and nightly | ☐ |
 | X1 | `x1-apps-all-platforms` | The desktop app builds and launches on macOS and Linux, and the web console builds; `ci-platforms` builds the macOS bundle and the Linux bundle is built locally. Windows code (named pipe, ACLs) stays compile-checked only; runtime parity is deferred to GA hardening ([#320](https://github.com/locksmith-hq/locksmith/issues/320)). | `just apps-build` locally, `ci-platforms` green on macOS | ☑ |
+| G1 | `g1-go-public` | The repo is ready to flip public: full-history secret scan triaged, AGPL/Apache licences in every manifest, a public README and community docs, `scripts/public-check.sh` in `just ci`, and an owner flip checklist. Only the owner flips visibility and re-enables `ci` (owner request [#147](https://github.com/locksmith-hq/locksmith/issues/147), [#307](https://github.com/locksmith-hq/locksmith/issues/307)). | `bash scripts/public-check.test.sh`, `gitleaks detect` clean | ☐ |
 | H1 | `h1-test-recipes` | Every crate, service, app, package and integration has a documented test recipe: `docs/testing.md` maps each one to its command, `just test <name>` runs it, and tree-check fails when a new component has no entry. | `just test <name>` for every listed component, tree-check fails on a planted unlisted crate | ☑ |
 
 ## Phase 2: Team product
 
 | # | Change | Usable outcome |
 |---|---|---|
-| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub, plus passkeys: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). |
+| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). |
 | T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. |
 | T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. |
 | T3 | `t3-console-mvp` | React console: projects, secrets (client-side encrypted), agents, sessions and audit view. Playwright e2e. |
@@ -83,7 +84,7 @@ uses what the previous one taught us.
 ## Phase 5: Parity and beyond (ordered later, by demand)
 
 Rotation and dynamic secrets (run in the gateway), syncs, the Terraform provider and k8s operator,
-SAML and SCIM, billing, SOC2 programme, local-only mode for solo developers.
+SAML and SCIM, passkeys (moved out of T1 to keep it small), billing, SOC2 programme, local-only mode for solo developers.
 
 ## Phase 6: GA hardening
 

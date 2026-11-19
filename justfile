@@ -261,8 +261,11 @@ test name:
         fi ;;
     esac
 
-# OpenTofu offline checks: fmt, validate (no backend) for each root, plan-policy tests. Needs `tofu`.
+# OpenTofu offline checks: fmt, validate (no backend) for each root, plan-policy tests. scripts/tofu-setup.sh installs tofu and a verified hashicorp/aws mirror.
 aws-validate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
     tofu fmt -check -recursive infra/tofu
     for m in guardrails base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
     python3 -I infra/tofu/policy/test_check_plan.py

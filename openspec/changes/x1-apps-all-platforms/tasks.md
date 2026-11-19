@@ -12,7 +12,7 @@
 - [x] 2.3 Verify: `cargo nextest run --workspace` stays green on Linux and `cargo check --workspace --target x86_64-pc-windows-gnu` compiles where the toolchain allows.
 
 ## 3. Desktop on all platforms [sonnet]
-- [ ] 3.1 Add the Windows branch of `secure_input.rs` and tray handling in `apps/desktop/src-tauri`; confirm the Tauri config bundles on Windows.
+- [x] 3.1 Add the Windows branch of `secure_input.rs` and tray handling in `apps/desktop/src-tauri`; confirm the Tauri config bundles on Windows.
 - [ ] 3.2 Add a daemon health IPC call and `scripts/desktop-smoke.sh` (launch headless, wait for health, exit 0, non-zero when the daemon is down).
 - [ ] 3.3 Extend `just apps-build` to build web plus desktop on the host OS; add a test that it fails on a planted error.
 - [ ] 3.4 Verify: `just apps-build` and `bash scripts/desktop-smoke.sh` on Linux.

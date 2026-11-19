@@ -11,3 +11,26 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.1 - failed (2 attempts, evaluator FAIL both; WIP, not ticked)
 - Verified: `bash tests/adversarial/run.sh selftest` -> pass; `bash tests/kit/leak_scan_test.sh` -> pass
 - Notes for next session: oracle.py has all new forms (commit 33bdad9, WIP follow-up has gzip fail-closed fix). Remaining evaluator blockers: (1) `tests/adversarial/run.sh` ~line 79 calls `oracle.py scan` via positional path (`scan_paths`, strict=False), so "gzip budget exhausted" is only a stderr notice and exits 0 -> repro: GZIP_MAGIC*4096 + gzip(canary) (~12KB) reports clean. Make `rep.incomplete` strict in scan_paths (also the >50MB skip) or use `--dir` in run.sh. (2) perf: GZIP_MAX_ATTEMPTS=4096 makes repeated-magic input ~14x slower (44s at 16MB); decompress only the first ~64KB per offset, or cap total gzip input bytes and mark incomplete. Then re-evaluate and tick 1.1/1.2.
+
+## 2026-11-19 08:40 lead
+- Task: 1.1, 1.2 - done (rescue #318)
+- Cause: positional scans (run.sh) treated an incomplete gzip view as a notice (exit 0). A gzip-looking header with no NUL made zlib read to the end of the data on every attempt (39 s at 16 MB). Independent Opus review then found more fail-open gaps, each fixed and given a selftest:
+  - damaged members (bad CRC, corrupt tail) were dropped;
+  - zero-window back-references, which `gzip -dc` decodes, were missed;
+  - a canary split across members was missed, back-to-back, across NUL padding and in a tie with a false member;
+  - the run-join NUL check was quadratic.
+- Fix: in `oracle.py`:
+  - scans are strict everywhere;
+  - zlib input is capped at 100 MB in 64 KB chunks;
+  - the oracle parses the gzip header itself and inflates raw deflate with a 32 KB zero preset dictionary;
+  - bisection `salvage()` keeps the output of a damaged member;
+  - adjacent members, including across NUL padding and ties, are scanned joined, with the joined bytes capped;
+  - the committed `__pycache__` is removed and ignored.
+- Verified:
+  - `python3 -I tests/kit/oracle.py selftest` -> passed (3.5 s);
+  - `bash tests/adversarial/run.sh selftest` -> PASS;
+  - `bash tests/kit/leak_scan_test.sh` (stack up) -> all PASS;
+  - `bash tests/adversarial/run.sh all` -> 8 passed, 1 skipped;
+  - Opus evaluator PASS: 0 of about 200 fuzzed damaged members that `gzip -dc` recovers were missed, and every perf probe on inputs up to 50 MB finished in 6 s or less;
+  - `just ci` -> see the PR comment.
+- Notes for next session: group 2 next. A minor item is out of scope: the quoted-printable view is linear but takes about 14 s on 50 MB of `=41`.

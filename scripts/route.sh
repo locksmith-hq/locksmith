@@ -61,6 +61,16 @@ debate_input() { # <issue>: the decide() input, from GitHub (or $DEBATE_JSON in 
 
 cfgq() { jq -r "$@" "$cfg"; }
 
+# True when another owner reply on the issue came under 60 s before this one: its wake already covers
+# this one (#397: "C" then "Approved C" 13 s apart fired two lead runs that did the same work).
+replied_just_before() { # <issue> <comment-id> <created_at>; comments from GitHub or $COMMENTS_JSON
+  [ -n "$3" ] || return 1
+  { if [ -n "${COMMENTS_JSON:-}" ]; then cat "$COMMENTS_JSON"; else gh api --paginate "repos/$repo/issues/$1/comments?per_page=100" | jq -s add; fi; } |
+    jq -e --argjson id "$2" --arg t "$3" --argjson o "$(cfgq -c .roles.owner.logins)" --arg m "$marker" '
+      ($t|fromdateiso8601) as $now | any(.[]; .id != $id and (.user.login as $l | $o | index($l)) and ((.body // "") | test($m) | not)
+        and (($now - (.created_at|fromdateiso8601)) as $d | ($d > 0 or ($d == 0 and .id < $id)) and $d < 60))' >/dev/null 2>&1
+}
+
 event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   local ev=$1 n labels l to who body
   case "${GITHUB_EVENT_NAME:?}" in
@@ -84,9 +94,11 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       [ "$(jq -r '.issue.pull_request != null' "$ev")" = true ] && return 0
       n=$(jq -r .issue.number "$ev"); labels=$(jq -r '.issue.labels[].name' "$ev")
       who=$(jq -r .comment.user.login "$ev"); body=$(jq -r .comment.body "$ev")
+      id=$(jq -r '.comment.id // 0' "$ev"); at=$(jq -r '.comment.created_at // ""' "$ev")
       for l in $labels; do
         to=$(cfgq --arg l "$l" '.channels[$l].on_reply // empty')
-        if [ -n "$to" ] && cfgq '.roles.owner.logins[]' | grep -qxF "$who" && ! grep -qE "$marker" <<<"$body"; then
+        if [ -n "$to" ] && cfgq '.roles.owner.logins[]' | grep -qxF "$who" && ! grep -qE "$marker" <<<"$body" &&
+          ! replied_just_before "$n" "$id" "$at"; then
           printf '%s\towner replied on %s #%s\n' "$to" "$l" "$n"
         fi
         [ "$l" = debate ] && debate_input "$n" | decide | awk -v n="$n" '$1=="wake"{r=$2; sub(/^wake [a-z]+ /,""); print r "\tdebate #" n ": " $0}'
@@ -149,6 +161,11 @@ no role marker"
   ev 'worker\tneeds-rescue #5 closed' issues '{"action":"closed","issue":{"number":5,"labels":[{"name":"needs-rescue"},{"name":"needs-owner"}]}}'
   ev 'lead\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"approved"}}'
   ev '' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\nplan"}}'
+  printf '%s' '[{"id":1,"user":{"login":"tomer555"},"body":"C","created_at":"2026-11-19T16:43:10Z"},{"id":2,"user":{"login":"tomer555"},"body":"<!-- agent -->\nx","created_at":"2026-11-19T16:43:20Z"}]' >"$d/c.json"
+  r7='{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"id":3,"user":{"login":"tomer555"},"body":"Approved C","created_at":"'
+  COMMENTS_JSON=$d/c.json ev '' issue_comment "${r7}2026-11-19T16:43:23Z\"}}"  # 13 s after "C": that wake covers it
+  COMMENTS_JSON=$d/c.json ev 'lead\towner replied on needs-owner #7' issue_comment "${r7}2026-11-19T16:45:00Z\"}}"
+  COMMENTS_JSON=$d/c.json ev 'lead\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"id":1,"user":{"login":"tomer555"},"body":"C","created_at":"2026-11-19T16:43:10Z"}}'
   ev '' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}],"pull_request":{}},"comment":{"user":{"login":"tomer555"},"body":"ok"}}'
   ev 'worker\tCI failed on main' workflow_run '{"workflow_run":{"conclusion":"failure","head_branch":"main","event":"push","pull_requests":[]}}'
   ev '' workflow_run '{"workflow_run":{"conclusion":"failure","head_branch":"feature","event":"pull_request","pull_requests":[]}}'

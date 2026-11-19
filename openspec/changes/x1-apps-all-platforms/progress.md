@@ -88,3 +88,8 @@
 - Task: 3.3 and 3.4 - done
 - Verified: `just apps-build` exit 0 (web + docs build, desktop `tauri build --debug --no-bundle`); new `scripts/apps-build.test.sh` (`just apps-build-test`) plants a TS error in apps/web and apps/desktop, asserts the build fails, then passes once removed; `scripts/desktop-smoke.sh` exit 0 against a live `locksmithd` (LOCKSMITH_HOME temp dir) and exit 1 with the daemon down
 - Notes for next session: 4.1 next (ci-platforms.yml patch in PR description plus a needs-owner issue; workflows are protected, do not edit them). Then 4.2 (waits on owner), 5.1 (`just up`, smoke, apps-build, `just ci`).
+
+## 2026-11-19 harriet worker
+- Task: 4.1 and 5.1 - done (ticked). 4.2 not started: it waits for the final commit, then a needs-owner issue asks the owner to dispatch `ci-platforms` once for macOS.
+- Verified: 4.1 `cd apps/desktop && npm exec -- tauri build --debug --bundles deb` -> exit 0, `Locksmith_0.0.1-alpha.4_amd64.deb` (54 MiB; package locksmith; Depends libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0). 5.1 `just up` exit 0 (all containers healthy); `scripts/desktop-smoke.sh` exit 0 against a live `locksmithd` and exit 1 with it stopped; `just apps-build` exit 0; `just ci` exit 0 (687 tests). Sonnet evaluator: PASS once this entry was added (its only finding).
+- Notes for next session: a fresh VM needs `apt-get install -y libayatana-appindicator3-dev librsvg2-dev` before the deb build (tauri-cli panics with "Can't detect any appindicator library" otherwise). `bundle.active` is false in tauri.conf.json, but `--bundles deb` still bundles. Only 4.2 remains: open the needs-owner issue (Change: x1-apps-all-platforms), tick 4.2, then archive the change in the same PR and mark #259 ready.

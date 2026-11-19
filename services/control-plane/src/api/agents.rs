@@ -9,6 +9,10 @@
 //!
 //! Registration and grants are org-scoped through [`OrgBinding`] and the tenant helper, like
 //! every `/v1` resource. No response carries a secret value.
+//!
+//! Every successful registration, rotation, delete, grant and revocation appends an event to the
+//! org's audit ledger (S5) in the same transaction as the change, so neither commits without the
+//! other. Events carry ids, a mode code and an expiry only, never a name, description or secret.
 
 use axum::Json;
 use axum::extract::State;
@@ -30,6 +34,7 @@ use super::{
 };
 use crate::agent_token::{AUDIENCE, JwkSet, MintedToken};
 use crate::app::AppState;
+use crate::audit::{self, DEV_AUTH_ACTOR};
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
 use crate::enrollment::{EnrollmentInput, EnrollmentSecret};
@@ -80,6 +85,13 @@ impl GrantMode {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             GrantMode::Relay => "relay",
+        }
+    }
+
+    /// The mode as an audit code.
+    pub(crate) fn audit_code(self) -> ls_audit::Code {
+        match self {
+            GrantMode::Relay => ls_audit::Code::new("relay"),
         }
     }
 
@@ -251,9 +263,16 @@ pub async fn create(
                 .bind(input.name)
                 .bind(input.description)
                 .bind(hash)
-                .fetch_one(c)
+                .fetch_one(&mut *c)
                 .await?;
-                Ok::<_, ApiError>(agent_from_row(&row)?)
+                let agent = agent_from_row(&row)?;
+                audit::append(
+                    c,
+                    org.org_id,
+                    &audit::agent_created(DEV_AUTH_ACTOR, agent_id),
+                )
+                .await?;
+                Ok::<_, ApiError>(agent)
             })
         })
         .await?;
@@ -363,12 +382,25 @@ pub async fn delete(
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
+                // The grants go with the agent (ON DELETE CASCADE); count them for the event.
+                let grants: i64 =
+                    sql::query_scalar("SELECT count(*) FROM agent_grants WHERE agent_id = $1")
+                        .bind(agent_id)
+                        .fetch_one(&mut *c)
+                        .await?;
                 let n = sql::query("DELETE FROM agents WHERE id = $1")
                     .bind(agent_id)
-                    .execute(c)
+                    .execute(&mut *c)
                     .await?
                     .rows_affected();
-                deleted_or_404(n)
+                let status = deleted_or_404(n)?;
+                audit::append(
+                    c,
+                    org.org_id,
+                    &audit::agent_deleted(DEV_AUTH_ACTOR, agent_id, grants),
+                )
+                .await?;
+                Ok::<_, ApiError>(status)
             })
         })
         .await?;
@@ -407,9 +439,16 @@ pub async fn rotate_enrollment(
                 ))
                 .bind(agent_id)
                 .bind(hash)
-                .fetch_optional(c)
+                .fetch_optional(&mut *c)
                 .await?;
-                one(row, agent_from_row)
+                let agent = one(row, agent_from_row)?;
+                audit::append(
+                    c,
+                    org.org_id,
+                    &audit::agent_rotated(DEV_AUTH_ACTOR, agent_id),
+                )
+                .await?;
+                Ok::<_, ApiError>(agent)
             })
         })
         .await?;
@@ -474,10 +513,20 @@ pub async fn create_grant(
                 .bind(input.secret_id)
                 .bind(input.mode.as_str())
                 .bind(input.expires_at)
-                .fetch_one(c)
+                .fetch_one(&mut *c)
                 .await
                 .map_err(grant_conflict)?;
-                Ok::<_, ApiError>(grant_from_row(&row)?)
+                let grant = grant_from_row(&row)?;
+                let event = audit::grant_created(
+                    DEV_AUTH_ACTOR,
+                    grant.id,
+                    agent_id,
+                    grant.secret_id,
+                    grant.mode.audit_code(),
+                    grant.expires_at,
+                );
+                audit::append(c, org.org_id, &event).await?;
+                Ok::<_, ApiError>(grant)
             })
         })
         .await?;
@@ -574,10 +623,17 @@ pub async fn delete_grant(
                 let n = sql::query("DELETE FROM agent_grants WHERE id = $1 AND agent_id = $2")
                     .bind(grant_id)
                     .bind(agent_id)
-                    .execute(c)
+                    .execute(&mut *c)
                     .await?
                     .rows_affected();
-                deleted_or_404(n)
+                let status = deleted_or_404(n)?;
+                audit::append(
+                    c,
+                    org.org_id,
+                    &audit::grant_revoked(DEV_AUTH_ACTOR, grant_id, agent_id),
+                )
+                .await?;
+                Ok::<_, ApiError>(status)
             })
         })
         .await?;

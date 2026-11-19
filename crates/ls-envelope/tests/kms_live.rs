@@ -4,12 +4,14 @@
 //!
 //! Without a reachable OpenBao these tests skip, unless `LS_REQUIRE_KMS=1` (then they fail).
 //! Env: `OPENBAO_ADDR` (default `http://127.0.0.1:8200`), `OPENBAO_CONTROL_PLANE_TOKEN`
-//! (default `dev-only-control-plane`), `OPENBAO_GATEWAY_TOKEN` (default `dev-only-gateway`).
+//! (default `dev-only-control-plane`), `OPENBAO_GATEWAY_TOKEN` (default `dev-only-gateway`),
+//! `OPENBAO_AUDIT_CHECKPOINT_TOKEN` (default `dev-only-audit-checkpoint`, S5: sign-only on the
+//! Ed25519 `audit-checkpoint` key).
 //! The defaults are dev-only values from `infra/compose/.env.example`, not credentials.
 
 use ls_envelope::{
-    BaoToken, Binding, KeyWrapper, OpenBaoTransit, Purpose, SecretBytes, WrapError, WrapKeyId,
-    WrappedDek, seal_version,
+    BaoToken, Binding, KeyWrapper, OpenBaoTransit, Purpose, SecretBytes, TransitSigner, WrapError,
+    WrapKeyId, WrappedDek, seal_version,
 };
 
 fn addr() -> String {
@@ -151,4 +153,62 @@ async fn kms_unwrap_under_another_binding_fails() {
             "unwrap under a different binding must fail"
         );
     }
+}
+
+fn signer(token_env: &str, default: &str, key: &str) -> TransitSigner {
+    TransitSigner::new(&addr(), key, BaoToken::new(env_or(token_env, default))).unwrap()
+}
+
+fn checkpoint_signer(key: &str) -> TransitSigner {
+    signer(
+        "OPENBAO_AUDIT_CHECKPOINT_TOKEN",
+        "dev-only-audit-checkpoint",
+        key,
+    )
+}
+
+/// S5 task 4.1: the checkpoint token signs with `audit-checkpoint` (an Ed25519 signature is 64
+/// bytes) and can do nothing else; the control-plane token cannot sign.
+#[tokio::test]
+async fn kms_audit_checkpoint_token_is_sign_only() {
+    if !available().await {
+        return;
+    }
+    let s = checkpoint_signer("audit-checkpoint")
+        .sign(b"live checkpoint")
+        .await
+        .unwrap();
+    assert!(s.key_version >= 1);
+    assert_eq!(s.signature.len(), 64);
+    assert_eq!(
+        checkpoint_signer("gateway").sign(b"m").await.err(),
+        Some(WrapError::Denied)
+    );
+    assert_eq!(
+        signer(
+            "OPENBAO_CONTROL_PLANE_TOKEN",
+            "dev-only-control-plane",
+            "audit-checkpoint"
+        )
+        .sign(b"m")
+        .await
+        .err(),
+        Some(WrapError::Denied)
+    );
+    let sealed = seal_version(
+        &binding(6, 1, Purpose::SecretPayload),
+        &SecretBytes::new(b"v".to_vec()),
+    )
+    .unwrap();
+    let wrapper = transit(
+        "OPENBAO_AUDIT_CHECKPOINT_TOKEN",
+        "dev-only-audit-checkpoint",
+    );
+    assert_eq!(
+        wrapper
+            .wrap(sealed.dek(), &binding(6, 1, Purpose::DekWrap))
+            .await
+            .err(),
+        Some(WrapError::Denied)
+    );
 }

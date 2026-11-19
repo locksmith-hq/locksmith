@@ -481,18 +481,36 @@ def scan_loki(rep, start_ns, end_ns):
     rep.cover("loki", "lines", streams=len(streams), lines=lines)
 
 
+def tempo_search(rep, base, start_s, end_s):
+    """Yield the trace ids found in [start_s, end_s]. A window that returns the search limit is
+    split in half (a load test leaves more traces than one search returns), down to one second."""
+    body, res = http_get(base + "/api/search", {"start": start_s, "end": end_s, "limit": TEMPO_LIMIT})
+    traces = res.get("traces") or []
+    if len(traces) >= TEMPO_LIMIT and end_s - start_s > 1:
+        mid = (start_s + end_s) // 2
+        yield from tempo_search(rep, base, start_s, mid)
+        yield from tempo_search(rep, base, mid, end_s)
+        return
+    rep.scan(body, "tempo:search")
+    if len(traces) >= TEMPO_LIMIT:
+        rep.error("tempo: search returned the %d-trace limit for one second; traces were not scanned" % TEMPO_LIMIT)
+    for t in traces:
+        yield str(t.get("traceID", ""))
+
+
 def scan_tempo(rep, start_s, end_s):
     base = os.environ.get("LEAK_SCAN_TEMPO", "").rstrip("/") or grafana() + "/api/datasources/proxy/uid/tempo"
+    seen = set()
+    spans = total = 0
     try:
-        body, res = http_get(base + "/api/search", {"start": start_s, "end": end_s, "limit": TEMPO_LIMIT})
-        rep.scan(body, "tempo:search")
-        traces = res.get("traces") or []
-        spans = total = 0
-        for t in traces:
-            tid = str(t.get("traceID", ""))
+        for tid in tempo_search(rep, base, start_s, end_s):
             if not re.fullmatch(r"[0-9a-fA-F]{1,32}", tid):
                 rep.error("tempo: skipped a trace with an unexpected id")
                 continue
+            # Adjacent windows share their boundary second, so a trace can be found twice.
+            if tid in seen:
+                continue
+            seen.add(tid)
             body, trace = http_get(base + "/api/traces/" + tid)
             total += len(body)
             spans += body.count(b'"spanId"')
@@ -503,9 +521,7 @@ def scan_tempo(rep, start_s, end_s):
     except (KeyError, TypeError, ValueError, AttributeError) as e:
         rep.unreach("tempo", "unexpected reply: %s" % e.__class__.__name__)
         return
-    if len(traces) >= TEMPO_LIMIT:
-        rep.error("tempo: search returned the %d-trace limit; older traces were not scanned" % TEMPO_LIMIT)
-    rep.cover("tempo", "traces", traces=len(traces), spans=spans, bytes=total)
+    rep.cover("tempo", "traces", traces=len(seen), spans=spans, bytes=total)
 
 
 # --- commands ---------------------------------------------------------------------------------

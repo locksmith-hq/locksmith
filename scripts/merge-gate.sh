@@ -16,6 +16,10 @@ state=$(jq -r .state <<<"$pr"); draft=$(jq -r .draft <<<"$pr")
 head_ref=$(jq -r .head.ref <<<"$pr"); sha=$(jq -r .head.sha <<<"$pr")
 [ "$state" = open ] || fail "PR is $state"
 [ "$draft" = false ] || fail "PR is a draft (cloud runs cannot un-draft; needs owner)"
+# Public repo: only same-repo PRs opened by the owner (agents push as the owner) can auto-merge.
+# Anyone else's PR (forks, collaborators) is merged by hand after a code-owner review.
+[ "$(jq -r .head.repo.full_name <<<"$pr")" = "$repo" ] || fail "fork PR: merged by hand after review"
+[ "$(jq -r .user.login <<<"$pr")" = "${OWNER_LOGIN:-tomer555}" ] || fail "PR not opened by the owner: merged by hand after review"
 # MERGE_ON_GREEN=1 (merge-on-green workflow, owner 2026-11-18): a non-agent branch needs no label and skips
 # gates 5-6, so it merges once complete and CI is green. Agent (claude/*) PRs always run the full gate:
 # ready-to-merge label plus a claude-review PASS, so they never merge before review.

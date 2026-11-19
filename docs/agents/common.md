@@ -15,7 +15,7 @@ Procedures are skills in `.claude/skills/` (load one only when needed); the key 
 - Every comment an agent posts starts with `<!-- agent -->`. Each routine posts as its own GitHub App (`docs/agents/routing.json` maps logins to roles).
 
 ## Budget
-- **Actions minutes.** Push each branch at most once per run, never re-run or dispatch workflows, and verify locally first (the VM is free).
+- **CI.** Verify locally with `just ci` before pushing; CI runs the same recipes on every PR.
 - **Tokens.** Read only what the current step needs. Use the `long-commands` skill for anything slow or flaky.
 
 ## Help: only the lead (and the optimizer) asks the owner

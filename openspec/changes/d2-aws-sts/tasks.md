@@ -1,7 +1,7 @@
 # Tasks: D2 AWS STS credentials
 
 ## 1. Moto and spike [sonnet]
-- [ ] 1.1 Add `motoserver/moto` (pinned, record version and release date in design.md) to `infra/compose/compose.yaml` and `.env.example`; `just up` starts it and `harness-check` reports it.
+- [x] 1.1 Add `motoserver/moto` (pinned, record version and release date in design.md) to `infra/compose/compose.yaml` and `.env.example`; `just up` starts it and `harness-check` reports it.
 - [ ] 1.2 [opus] Spike `tests/e2e` against moto: AssumeRole returns usable keys; record in design.md which session-policy and IAM checks moto enforces and decide how enforcement is asserted (captured request vs moto IAM mode).
 - [ ] 1.3 Verify: `just up && curl -fsS localhost:5000/moto-api/` and the spike test pass.
 

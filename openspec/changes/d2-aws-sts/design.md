@@ -23,7 +23,7 @@
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| moto (`motoserver/moto` image) | Apache-2.0 | **[verify]** pin at apply | **[verify]** | local STS and IAM stand-in (A0-14) | test-time container, not linked |
+| moto (`motoserver/moto` image) | Apache-2.0 | 5.1.20 (pinned in compose, 2026-11-19) | image built 2026-01-17 | local STS and IAM stand-in (A0-14) | test-time container, not linked |
 | ureq (workspace, via `ls-proxy`) | MIT/Apache-2.0 | 3.x workspace | n/a | existing STS HTTPS calls | not AGPL |
 | axum (workspace) | MIT | workspace | n/a | the gateway route | not AGPL |
 | awscli v2 (test tool only) | Apache-2.0 | **[verify]** system | n/a | real CLI end-to-end through `credential_process` | not shipped |

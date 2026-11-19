@@ -60,5 +60,16 @@ services:
       timeout: 3s
       retries: 20
 
+  # Local AWS stand-in for STS and IAM (A0-14, d2-aws-sts). Test only; endpoint override
+  # AWS_ENDPOINT_URL_STS=http://127.0.0.1:5000.
+  moto:
+    image: ${MOTO_IMAGE:-motoserver/moto:5.1.20}
+    ports: ["127.0.0.1:5000:5000"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u; u.urlopen('http://localhost:5000/moto-api/')\""]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
 volumes:
   pgdata:

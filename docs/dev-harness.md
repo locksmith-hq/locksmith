@@ -10,6 +10,7 @@ Local stack that makes the system observable to agents. Start it with `just up`;
 | lgtm | `grafana/otel-lgtm:0.41.0` | 3000 Grafana, 4317 OTLP gRPC, 4318 OTLP HTTP | logs (Loki), traces (Tempo), metrics (Prometheus) |
 | openbao | `openbao/openbao:2.7.2` (dev mode) | 8200 | stand-in KMS (transit engine) |
 | upstream | `wiremock/wiremock:3.13.2` | 8089 | mock third-party API that records requests |
+| moto | `motoserver/moto:5.1.20` | 5000 | local AWS STS and IAM stand-in (`AWS_ENDPOINT_URL_STS`) |
 
 Dev credentials are in `infra/compose/.env.example`. They are dev-only and never real.
 

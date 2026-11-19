@@ -1819,6 +1819,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 
@@ -1839,6 +1840,8 @@ dependencies = [
  "ciborium",
  "ls-core",
  "serde",
+ "tokio",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 

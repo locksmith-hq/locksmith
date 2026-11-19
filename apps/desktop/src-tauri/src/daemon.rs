@@ -176,7 +176,7 @@ impl Daemon {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))] // the mock daemon is a UnixListener
 mod tests {
     use super::*;
     use ls_ipc::{Frame, read_frame, write_frame};

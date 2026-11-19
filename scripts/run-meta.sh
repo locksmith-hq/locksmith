@@ -72,5 +72,21 @@ EOF
       if grep -q 'plan the next one' <<<"$asked"; then echo "run-meta: WARN planning is still asked and no planning PR is open: do worker.md step 6 before you finish" >&2; fi
     fi
     ;;
-  *) echo "usage: $0 start <kind> | report | block < agent-fields" >&2; exit 2 ;;
+  eval)
+    # evaluate-escalate step 4: record the independent evaluator's verdict for push-check.
+    case "${2:-}" in PASS|FAIL) echo "EVAL=$2" >> "$state" ;; *) echo "usage: $0 eval PASS|FAIL" >&2; exit 2 ;; esac
+    ;;
+  push-check)
+    # pre-push hook (agent-start.sh): the block WARN came after the push, and 2 runs on 2026-11-19 still
+    # pushed ticks with `evaluator: n/a`. Refuse a push that ticks tasks unless `eval PASS` was recorded.
+    [ -f "$state" ] || exit 0
+    since=$(sed -n 's/^START_EPOCH=//p' "$state"); verdict=$(sed -n 's/^EVAL=//p' "$state" | tail -1)
+    # HEAD --not origin/main: ticks other runs merged to main and this branch merged in are not ours.
+    ticks=$(git log --since="@${since:-$(date -u +%s)}" --no-merges -p HEAD --not origin/main -- '*tasks.md' 2>/dev/null | grep -c '^+.*\[x\]' || true)
+    if [ "${ticks:-0}" -gt 0 ] && [ "$verdict" != PASS ]; then
+      echo "run-meta: push refused: this run ticked $ticks task(s) without an evaluator PASS. Run the evaluator (evaluate-escalate step 3), then 'bash scripts/run-meta.sh eval PASS', or untick." >&2
+      exit 1
+    fi
+    ;;
+  *) echo "usage: $0 start <kind> | report | block < agent-fields | eval PASS|FAIL | push-check" >&2; exit 2 ;;
 esac

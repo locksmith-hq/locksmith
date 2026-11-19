@@ -12,8 +12,11 @@ mk s1-api    'x-depends_on: [a0-base]'        '- [x] 1.1 a\n- [ ] 1.2 b\n'
 mk s2-crypto 'x-depends_on: [s1-api]'         '- [ ] 1.1 a\n'
 mk t1-auth   'x-depends_on: [a0-base, s1-api]' '- [x] 1.1 a\n'
 mk w1-site   ''                             '- [ ] 1.1 a\n'
+mk k1-api    ''                             '## 1. Contract\n- [x] 1.1 schema\n## 2. Build\n- [ ] 2.1 b\n'
+mk k2-ui     'x-depends_on: [k1-api:contract]'  '- [ ] 1.1 a\n'
+mk k3-ui     'x-depends_on: [w1-site:contract]' '- [ ] 1.1 a\n'
 # shellcheck disable=SC2016 # literal backticks
-printf '| # | Change | Usable outcome | Needs |\n| N1 | `n1-new` | x | - |\n| N2 | `n2-later` | x | s2-crypto |\n| N3 | `n3-on-s1` | x | a0-base, s1-api |\n| S1 | `s1-api` | x | - |\n' >> docs/roadmap.md
+printf '| # | Change | Usable outcome | Needs |\n| N1 | `n1-new` | x | - |\n| N2 | `n2-later` | x | s2-crypto |\n| N3 | `n3-on-s1` | x | a0-base, s1-api |\n| N4 | `n4-on-contract` | x | k1-api:contract |\n| N5 | `n5-no-contract` | x | w1-site:contract |\n| S1 | `s1-api` | x | - |\n' >> docs/roadmap.md
 git add -A; git commit -qm base; git update-ref refs/remotes/origin/main HEAD
 
 expect() { got=$(OFFLINE=1 BLOCKERS="${3:-}" bash "$script" | awk -F'\t' -v id="$1" '$1==id{print $2" "$3}' | sed 's/ $//')
@@ -23,6 +26,9 @@ expect s1-api "ready"
 expect s2-crypto "blocked needs s1-api"
 expect t1-auth "finished"
 expect w1-site "ready"
+# A :contract dependency is met once the dep's "Contract" task group is ticked; a dep without one blocks.
+expect k2-ui "stackable on k1-api"
+expect k3-ui "blocked needs w1-site:contract"
 # s1's branch has every task ticked: s1 is in review, s2 may stack on it.
 git switch -qc claude/change-s1-api; sed -i.bak 's/- \[ \] 1.2/- [x] 1.2/' openspec/changes/s1-api/tasks.md; rm -f openspec/changes/s1-api/*.bak
 git commit -qam tick; git update-ref refs/remotes/origin/claude/change-s1-api HEAD; git switch -q main
@@ -36,9 +42,9 @@ expect s2-crypto "stackable on s1-api"
 expect w1-site "parked owner #7" "7 owner Need a domain for w1-site landing"
 expect w1-site "parked rescue #8" "8 rescue Rescue: w1-site 1.1"
 expect w1-site "parked owner #7" "$(printf '8 rescue Rescue: w1-site 1.1\n7 owner Need a domain for w1-site')"
-[ "$(OFFLINE=1 BLOCKERS='7 owner w1-site' bash "$script" --ready | tr '\n' ' ')" = "s2-crypto " ] || { echo "FAIL: --ready"; exit 1; }
+[ "$(OFFLINE=1 BLOCKERS='7 owner w1-site' bash "$script" --ready | tr '\n' ' ')" = "s2-crypto k1-api k2-ui " ] || { echo "FAIL: --ready"; exit 1; }
 echo "ok: --ready lists only takeable changes"
 # Unwritten rows whose Needs are archived or fully ticked on a branch; written rows (s1) never.
-[ "$(bash "$script" --plannable | tr '\n' ' ')" = "n1-new n3-on-s1 " ] || { echo "FAIL: --plannable, got '$(bash "$script" --plannable | tr '\n' ' ')'"; exit 1; }
+[ "$(bash "$script" --plannable | tr '\n' ' ')" = "n1-new n3-on-s1 n4-on-contract " ] || { echo "FAIL: --plannable, got '$(bash "$script" --plannable | tr '\n' ' ')'"; exit 1; }
 echo "ok: --plannable lists unwritten rows that can start"
 echo "change-status: all tests passed"

@@ -128,7 +128,7 @@ while IFS=$'\x1f' read -r -u 3 phase id tier outcome gate; do
   # 4. Blocked by: dependency changes and open owner/rescue issues that name this change.
   # shortcut: relationships are only added, never removed; a dropped dependency must be unlinked by hand.
   have=$(gh api "repos/$repo/issues/$n/dependencies/blocked_by" -q '.[].id' 2>/dev/null)
-  want=$(for d in $(sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\]/\1/p' "openspec/changes/$id/.openspec.yaml" | tr ',' ' '); do
+  want=$(for d in $(sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\]/\1/p' "openspec/changes/$id/.openspec.yaml" | tr ',' ' ' | sed 's/:contract//g'); do
            issue_of "$d" | jq -r '.id // empty'; done
          grep -F -- "$id" <<<"$blockers" | cut -f1)
   for b in $want; do grep -qx "$b" <<<"$have" || w "repos/$repo/issues/$n/dependencies/blocked_by" -F issue_id="$b" >/dev/null; done

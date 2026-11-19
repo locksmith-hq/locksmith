@@ -80,6 +80,11 @@ class TrustPolicyTest(unittest.TestCase):
             self.assertNotEqual(a, "*")
             self.assertNotEqual(a, "iam:*")
 
+    def test_ci_role_can_refresh_its_own_iam_resources(self):
+        allowed = {a for s in PERMS["Statement"] if s["Effect"] == "Allow" for a in s["Action"]}
+        for a in ("iam:GetRole", "iam:ListAttachedRolePolicies", "iam:ListRoleTags", "iam:GetOpenIDConnectProvider", "iam:ListOpenIDConnectProviderTags"):
+            self.assertIn(a, allowed)
+
 
 if __name__ == "__main__":
     unittest.main()

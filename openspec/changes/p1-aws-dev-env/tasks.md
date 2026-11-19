@@ -17,8 +17,8 @@
 - [x] 3.4 Verify: `just aws-validate`; moto-backed smoke of the S3 and KMS modules where supported.
 
 ## 4. Guardrails and OIDC apply [sonnet]
-- [ ] 4.1 `infra/tofu/guardrails` (owner-applied): $5 Budget with $1/$3 email and deny-create action, SCPs, Cost Anomaly Detection.
-- [ ] 4.2 GitHub OIDC provider and apply role scoped to this repo and workflow; `infra/tofu/base` trust policy test.
+- [x] 4.1 `infra/tofu/guardrails` (owner-applied): $5 Budget with $1/$3 email and deny-create action, SCPs, Cost Anomaly Detection.
+- [x] 4.2 GitHub OIDC provider and apply role scoped to this repo and workflow; `infra/tofu/base` trust policy test.
 - [ ] 4.3 Manual workflow `aws-base-apply.yml`: lint-class job only, `workflow_dispatch`, plan with approval environment, redacted summary. (Workflow files are protected: this task is a lead PR the owner merges.)
 - [ ] 4.4 Verify: `just aws-validate`, `actionlint` on the workflow.
 

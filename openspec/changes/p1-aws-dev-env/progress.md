@@ -23,3 +23,8 @@
 - Task: 3.1, 3.2, 3.3, 3.4 - done (attempt 2, Sonnet -> Opus; attempt 1 failed: RDS managed secret = Secrets Manager, no moto smoke)
 - Verified: `just aws-validate` -> 3x valid + 5 policy tests; `just aws-moto-smoke` -> moto-smoke: OK (11 resources; Object Lock GOVERNANCE 1d, alias, SSE-KMS); `just ci` -> exit 0; Opus evaluator PASS
 - Notes for next session: Aurora master password is a public placeholder replaced once at create by a local-exec (needs `aws` CLI on the applier; moves to `master_password_wo` when tofu >= 1.11); `check_plan.py` rejects manage_master_user_password. Imported clusters would keep the placeholder (README note worth adding). Task 4.3 workflow must provide the aws CLI. 1.2 gate still open. Next: 4.1, 4.2, 5.x.
+
+## 2026-11-19 worker
+- Task: 4.1, 4.2 - done (4.3 needs a lead PR, 4.4 waits on actionlint of 4.3)
+- Verified: `just aws-validate` -> 3x valid + 5 + 8 policy tests OK; `just aws-moto-smoke` OK; `just ci` -> exit 0 (before final small fix: IAM read actions + test + design note, re-validated); Sonnet evaluator FAIL then PASS after fixes
+- Notes for next session: OIDC trust sub is environment-based (`environment:aws-base-apply`), recorded in design.md; 4.3 workflow must use that environment and provide the aws CLI. No offline SCP test for guardrails (minor). 1.2 gate still open. Next: 5.1-5.4.

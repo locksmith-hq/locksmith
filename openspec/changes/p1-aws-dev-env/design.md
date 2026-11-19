@@ -54,3 +54,6 @@ Built in-house: only the HCL, the `just aws-*` recipes and the smoke scripts. Se
 - Online (owner machine only): AWS MCP server read-only (CloudWatch logs, describe calls), `just aws-status`, `just aws-smoke`, `just aws-drift`.
 - Logs: CloudWatch groups with one-day retention; the control plane's OpenTelemetry traces go to the same collector as locally.
 - DB: connect through the session task or a temporary `psql` task; never open the cluster publicly.
+
+## Deviation recorded (worker, 2026-11-19): OIDC trust subject
+Decision 5 says "dispatched workflow ref". The apply role trusts `sub = repo:locksmith-hq/locksmith:environment:aws-base-apply` (exact, `StringEquals`, aud `sts.amazonaws.com`), because a job in an approval environment gets an environment-based `sub`. Branch limits therefore live in the GitHub environment (required reviewers, deployment branch main), which is owner-configured and not in git. Task 4.3's workflow must declare `environment: aws-base-apply` and provide the `aws` CLI.

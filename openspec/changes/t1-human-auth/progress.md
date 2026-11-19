@@ -27,3 +27,9 @@
 - Verified: `just up` (Keycloak keycloak/keycloak:26.0.8 from Docker Hub, quay.io is blocked; mailpit v1.21.8), `just api` in background, `just auth-e2e` -> all checks passed (re-run by the worker after the implementer); `just ci` -> exit 0; Sonnet evaluator PASS
 - Deviation: 4.2 social flows only test the `kc_idp_hint` redirect up to the provider authorize URL with a placeholder client id (no mock IdP); device grant is started, not approved; unverified-user 403 is covered by unit tests, as Keycloak issues no token to unverified users.
 - Notes for next session: 5.x (ledger auth events, G7 adversarial case), then 6.1-6.4 web/desktop/CLI. `just up` now starts the `auth` profile; `just up-lite` skips it. Stack: `just up && just api`.
+
+## 2026-11-19 worker (c)
+- Task: 5.1 - done
+- Verified: `cargo nextest run -p ls-control-plane` (131 passed, 4 new in tests/human_auth.rs), clippy clean, `just ci` -> exit 0 (729 tests); Sonnet evaluator PASS
+- Deviation: `auth.verify_failed` is ledgered only for a known user with an unverified email (the ledger chain is per org; a forged or unknown token has no trustworthy org, and a global sink would invite flooding). `auth.sign_in`/`auth.sign_out` are new `POST /v1/auth/sign-in` and `/sign-out` routes (204, human bearer only), since a per-request event would serialize on the org head lock; sign-out is stateless. `org.personal_created` is appended in the first-login transaction. Event attrs: issuer host and static reason only.
+- Notes for next session: 5.2 (G7 case in the adversarial gate) and 5.3 next, then 6.1-6.4 and 7.1. If bad-token failures must be ledgered, it needs a system-level chain decision (lead).

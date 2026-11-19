@@ -537,3 +537,138 @@ async fn users_same_verified_email_from_two_subjects_share_one_org_over_http() {
     assert!(uuid::Uuid::parse_str(&a).is_ok(), "{a}");
     assert_eq!(a, b);
 }
+
+// T1 task 5.1: auth events in the audit ledger, never with credentials.
+
+async fn post(app: &Router, uri: &str, token: Option<&str>, dev_org: Option<&str>) -> StatusCode {
+    let mut b = Request::builder().method("POST").uri(uri);
+    if let Some(t) = token {
+        b = b.header("authorization", format!("Bearer {t}"));
+    }
+    if let Some(o) = dev_org {
+        b = b.header("x-locksmith-dev-org", o);
+    }
+    app.clone()
+        .oneshot(b.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+        .status()
+}
+
+/// Every ledger row as `(kind, actor, target, outcome, attrs)`, oldest first per org.
+async fn ledger(pg: &common::Pg) -> Vec<(String, String, Option<String>, String, String)> {
+    let mut c = pg.admin().await;
+    ls_control_plane::db::sql::query_as(
+        "SELECT kind, actor, target, outcome, attrs::text FROM audit_events ORDER BY at, seq",
+    )
+    .fetch_all(&mut c)
+    .await
+    .unwrap()
+}
+
+fn kinds(rows: &[(String, String, Option<String>, String, String)]) -> Vec<&str> {
+    rows.iter().map(|r| r.0.as_str()).collect()
+}
+
+#[tokio::test]
+async fn auth_events_sign_in_sign_out_and_personal_org_are_ledgered_without_tokens() {
+    let key = TestKey::new("k1", 1);
+    let issuer = Issuer::start_db(&[&key]).await;
+    let app = issuer.app(false);
+    let token = key.mint(&claims("user-audit"));
+    let (_, org) = call(&app, Some(&token), None).await; // first sign-in creates the org
+    assert_eq!(
+        post(&app, "/v1/auth/sign-in", Some(&token), None).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        post(&app, "/v1/auth/sign-out", Some(&token), None).await,
+        StatusCode::NO_CONTENT
+    );
+
+    let rows = ledger(issuer.pg.as_ref().unwrap()).await;
+    assert_eq!(
+        kinds(&rows),
+        ["org.personal_created", "auth.sign_in", "auth.sign_out"]
+    );
+    for (_, actor, target, outcome, attrs) in &rows {
+        assert!(actor.starts_with("user:"), "{actor}");
+        assert_eq!(target.as_deref(), Some(format!("org:{org}").as_str()));
+        assert_eq!(outcome, "ok");
+        assert!(attrs.contains("idp.test"), "issuer host recorded: {attrs}");
+    }
+    // Nothing credential-like or identity-claim-like reached any column.
+    let dump = format!("{rows:?}");
+    let parts: Vec<&str> = token.split('.').collect();
+    assert!(!dump.contains(&token) && parts.iter().all(|p| !dump.contains(p)));
+    for claim in ["user-audit", "example.com", "Bearer", "authorization"] {
+        assert!(!dump.contains(claim), "{claim} leaked into the ledger");
+    }
+}
+
+#[tokio::test]
+async fn auth_sign_in_and_out_refuse_the_dev_header_and_bad_tokens() {
+    let key = TestKey::new("k1", 1);
+    let issuer = Issuer::start_db(&[&key]).await;
+    let app = issuer.app(true);
+    for uri in ["/v1/auth/sign-in", "/v1/auth/sign-out"] {
+        assert_eq!(
+            post(&app, uri, None, Some(DEV_ORG)).await,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(post(&app, uri, None, None).await, StatusCode::UNAUTHORIZED);
+        let forged = TestKey::new("k1", 9).mint(&claims("user-1"));
+        assert_eq!(
+            post(&app, uri, Some(&forged), None).await,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    assert!(ledger(issuer.pg.as_ref().unwrap()).await.is_empty());
+}
+
+#[tokio::test]
+async fn auth_verify_failed_is_ledgered_for_a_known_user_only() {
+    let key = TestKey::new("k1", 1);
+    let issuer = Issuer::start_db(&[&key]).await;
+    let app = issuer.app(false);
+
+    // An unknown identity with an unverified email gets 403 and no ledger row anywhere.
+    let mut stranger = claims("stranger");
+    stranger["email_verified"] = json!(false);
+    let (status, _) = call(&app, Some(&key.mint(&stranger)), None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(ledger(issuer.pg.as_ref().unwrap()).await.is_empty());
+
+    // A known user whose token now says "unverified" is refused and the refusal is recorded.
+    let (status, _) = call(&app, Some(&key.mint(&claims("known"))), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let mut now_unverified = claims("known");
+    now_unverified["email_verified"] = json!(false);
+    let token = key.mint(&now_unverified);
+    let (status, _) = call(&app, Some(&token), None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let rows = ledger(issuer.pg.as_ref().unwrap()).await;
+    assert_eq!(kinds(&rows), ["org.personal_created", "auth.verify_failed"]);
+    let (_, actor, _, outcome, attrs) = &rows[1];
+    assert!(actor.starts_with("user:"));
+    assert_eq!(outcome, "denied");
+    assert!(attrs.contains("email_unverified"), "{attrs}");
+    let dump = format!("{rows:?}");
+    assert!(!dump.contains(&token) && !dump.contains("known@"));
+}
+
+#[tokio::test]
+async fn auth_linked_identity_does_not_create_a_second_personal_org_event() {
+    let key = TestKey::new("k1", 1);
+    let issuer = Issuer::start_db(&[&key]).await;
+    let app = issuer.app(false);
+    let mut a = claims("google-1");
+    a["email"] = json!("ada@example.com");
+    let mut b = claims("github-1");
+    b["email"] = json!("ada@example.com");
+    call(&app, Some(&key.mint(&a)), None).await;
+    call(&app, Some(&key.mint(&b)), None).await;
+    let rows = ledger(issuer.pg.as_ref().unwrap()).await;
+    assert_eq!(kinds(&rows), ["org.personal_created"]);
+}

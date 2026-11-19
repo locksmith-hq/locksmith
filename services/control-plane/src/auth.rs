@@ -52,16 +52,7 @@ impl FromRequestParts<AppState> for OrgBinding {
         // A bearer token is a human credential: it is verified, and a bad one is never
         // downgraded to the dev header. Without human auth configured it is refused too.
         if let Some(value) = parts.headers.get(header::AUTHORIZATION) {
-            let auth = state.human_auth().ok_or_else(ApiError::unauthenticated)?;
-            let token = bearer(value.as_bytes())
-                .and_then(|t| std::str::from_utf8(t).ok())
-                .ok_or_else(ApiError::unauthenticated)?;
-            let identity = auth
-                .verify(token)
-                .await
-                .map_err(|_| ApiError::unauthenticated())?;
-            // `403` for an unverified email, a new user and personal org on first sign-in.
-            let user = users::resolve(state.db(), &identity).await?;
+            let (_, user) = human_login(state, value.as_bytes()).await?;
             tracing::Span::current().record("org.id", tracing::field::display(user.org_id));
             return Ok(Self {
                 org_id: user.org_id,
@@ -81,6 +72,57 @@ impl FromRequestParts<AppState> for OrgBinding {
             .ok_or_else(ApiError::unauthenticated)?;
         tracing::Span::current().record("org.id", tracing::field::display(org_id));
         Ok(Self { org_id })
+    }
+}
+
+/// Verify the bearer token in an `Authorization` value and resolve its user (T1): `401` for any
+/// bad token, `403` for an unverified email. A first sign-in creates the user and personal org.
+async fn human_login(
+    state: &AppState,
+    authorization: &[u8],
+) -> Result<(human::HumanIdentity, users::ResolvedUser), ApiError> {
+    let auth = state.human_auth().ok_or_else(ApiError::unauthenticated)?;
+    let token = bearer(authorization)
+        .and_then(|t| std::str::from_utf8(t).ok())
+        .ok_or_else(ApiError::unauthenticated)?;
+    let identity = auth
+        .verify(token)
+        .await
+        .map_err(|_| ApiError::unauthenticated())?;
+    let user = users::resolve(state.db(), &identity).await?;
+    Ok((identity, user))
+}
+
+/// A signed-in human: requires a verified bearer token (the dev header is never accepted) and
+/// names the user as well as the org. Used by the sign-in and sign-out routes, whose audit
+/// events need the user.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HumanSession {
+    pub user_id: Uuid,
+    pub org_id: Uuid,
+    /// The issuer that vouched for the identity (public configuration, not a claim to trust
+    /// beyond verification).
+    pub issuer: String,
+}
+
+impl FromRequestParts<AppState> for HumanSession {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let value = parts
+            .headers
+            .get(header::AUTHORIZATION)
+            .ok_or_else(ApiError::unauthenticated)?;
+        let (identity, user) = human_login(state, value.as_bytes()).await?;
+        tracing::Span::current().record("org.id", tracing::field::display(user.org_id));
+        Ok(Self {
+            user_id: user.user_id,
+            org_id: user.org_id,
+            issuer: identity.issuer,
+        })
     }
 }
 

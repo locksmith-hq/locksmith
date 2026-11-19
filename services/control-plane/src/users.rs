@@ -13,6 +13,7 @@
 
 use uuid::Uuid;
 
+use crate::audit;
 use crate::auth::human::HumanIdentity;
 use crate::db::{Database, bind_org, sql};
 use crate::problem::ApiError;
@@ -39,6 +40,7 @@ pub struct ResolvedUser {
 /// user, no org and no link.
 pub async fn resolve(db: &Database, identity: &HumanIdentity) -> Result<ResolvedUser, ApiError> {
     if !identity.email_verified {
+        record_unverified(db, identity).await;
         return Err(ApiError::email_verification_required());
     }
     let email = identity
@@ -53,6 +55,35 @@ pub async fn resolve(db: &Database, identity: &HumanIdentity) -> Result<Resolved
         Box::pin(async move { resolve_in_tx(c, &issuer, &subject, email_owned.as_deref()).await })
     })
     .await
+}
+
+/// Ledger a refusal for an identity that already has a user (an org to attribute it to). An
+/// identity with no user has no org chain to write to and gets no row at all. Best effort: the
+/// refusal stands whether or not the event could be written.
+async fn record_unverified(db: &Database, identity: &HumanIdentity) {
+    let issuer = identity.issuer.clone();
+    let subject = identity.subject.clone();
+    let result = db
+        .with_login(&identity.issuer, &identity.subject, None, move |c| {
+            Box::pin(async move {
+                let Some((user_id, org_id, _)) = find(c, &issuer, &subject).await? else {
+                    return Ok::<_, ApiError>(());
+                };
+                bind_org(c, org_id).await?;
+                let event = audit::auth_verify_failed(
+                    user_id,
+                    org_id,
+                    &issuer,
+                    ls_audit::Code::new("email_unverified"),
+                );
+                audit::append(c, org_id, &event).await?;
+                Ok(())
+            })
+        })
+        .await;
+    if result.is_err() {
+        tracing::warn!("could not record auth.verify_failed");
+    }
 }
 
 async fn find(
@@ -120,6 +151,10 @@ async fn resolve_in_tx(
     .bind(org_id)
     .fetch_one(&mut *c)
     .await?;
+    if linked.is_none() {
+        let event = audit::org_personal_created(user_id, org_id, issuer);
+        audit::append(c, org_id, &event).await?;
+    }
     Ok(ResolvedUser {
         user_id,
         org_id,

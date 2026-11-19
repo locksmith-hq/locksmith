@@ -22,7 +22,7 @@
 - [x] 4.3 Verify: `just up && just auth-e2e`.
 
 ## 5. Audit and leak safety [sonnet]
-- [ ] 5.1 Ledger events `auth.sign_in`, `auth.sign_out`, `auth.verify_failed`, `org.personal_created` without credentials.
+- [x] 5.1 Ledger events `auth.sign_in`, `auth.sign_out`, `auth.verify_failed`, `org.personal_created` without credentials.
 - [ ] 5.2 Add a G7 case to the adversarial gate (forged and replayed human tokens, dev header, human token at agent and internal routes).
 - [ ] 5.3 Verify: `just leak-scan`, `just audit-verify`, `bash tests/adversarial/run.sh gateway G7`.
 

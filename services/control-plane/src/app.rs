@@ -44,6 +44,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
     modifiers(&DevOrgSecurity),
     tags(
         (name = "health", description = "Liveness and readiness"),
+        (name = "auth", description = "Sign-in and sign-out markers for the audit ledger; human bearer token only"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
         (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),

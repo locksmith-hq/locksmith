@@ -90,23 +90,8 @@ Pending: the owner chose to test first. Run a worker manually that stops on an o
 4. Branch protection: **owner decision 2026-11-16: not protected for now.** Revisit before the repo goes public or anyone else gets write access.
 5. Start one interactive cloud session on `locksmith-dev` and confirm `just ci` passes, plus `just up` once F0 exists.
 
-## GitHub Actions budget
-GitHub Free gives a private repo $12 of Actions compute a month. Per-minute prices: Linux x64 $0.006, Windows $0.010, macOS $0.062. Source: https://docs.github.com/en/billing/concepts/product-billing/github-actions
-
-How we stay inside it:
-- **`ci.yml` (every PR):**
-  - Linux only, with timeouts on every job.
-  - A new push cancels the CI run it supersedes.
-  - Path filters skip work that isn't needed, and Markdown-only PRs skip CI entirely. OpenSpec files still run.
-  - Cheap checks (tree layout, task-edit guard, gitleaks) share one job.
-  - Only `main` writes the Rust cache.
-- **`ci-platforms.yml`:** macOS and Windows checks run only manually or on release tags.
-- **`adversarial.yml`:** weekly instead of nightly.
-- **Agents:**
-  - Verify in the cloud VM first, because that compute is free.
-  - Push each branch at most once per run (a run may push several branches).
-  - Never re-run or dispatch workflows.
-  - The weekly review reports Actions usage.
+## GitHub Actions
+The repo is public, so standard runners are free. `ci`, `ci-platforms` and `adversarial` run on every PR and on `main` (see `AGENTS.md`, "CI policy").
 
 ## Scheduler design (why it looks like this)
 The design follows Anthropic's long-running agent harness (https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents):

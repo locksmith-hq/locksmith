@@ -54,7 +54,6 @@ Only the owner does these, in this order. Agents never change repository, Action
    gh api -X PUT repos/OWNER/REPO/private-vulnerability-reporting
    ```
 7. **Branch rules.** Branch protection on `main` is off by owner decision (2026-11-16). Revisit with the merge workflow before inviting outside contributors.
-8. **Check Actions usage** with `scripts/actions-usage.py` after the first public week.
 
 ### Coverage of owner decision #307
 | #307 item | Step |

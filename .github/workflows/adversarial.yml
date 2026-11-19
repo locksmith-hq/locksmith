@@ -1,9 +1,16 @@
 name: adversarial
 
 on:
+  pull_request:
+  push:
+    branches: [main]
   schedule:
-    - cron: '0 3 * * 0'  # weekly (Sunday) to save private-repo Actions minutes
+    - cron: '0 3 * * *'  # nightly
   workflow_dispatch:
+
+concurrency:
+  group: adversarial-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -33,7 +40,7 @@ jobs:
       - name: Scripted adversarial cases
         run: bash tests/adversarial/run.sh all
       - name: Live adversarial cases
-        if: env.HAS_KEY == 'true'
+        if: env.HAS_KEY == 'true' && github.event_name != 'pull_request'  # API spend: nightly and main only
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: bash tests/adversarial/run.sh all --agent claude

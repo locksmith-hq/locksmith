@@ -10,7 +10,6 @@ Window: the last 24h. First load what is already handled: the `harness-backlog` 
 - **Prompt:** it reads `common.md` and its role file from origin/main and contradicts neither (escalation, who contacts the owner, debates, hard rules).
 - **Health:** enabled, `last_run` failures, fires that left no session.
 - **Value:** the idle share per slot over 7 days.
-- **Actions minutes:** run `scripts/actions-usage.py`.
 
 ## 2. Communication
 Measure latency in the window, with links:

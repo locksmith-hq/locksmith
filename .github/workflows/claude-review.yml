@@ -64,11 +64,12 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/issues/$N/labels" -f "labels[]=$label" >/dev/null
           echo "labelled $label"
 
-  # On-demand: anyone with write access can ask @claude something in a PR or issue comment.
+  # On-demand: repo owner, members and collaborators (public repo) can ask @claude something in a PR or issue comment.
   mention:
     if: >-
       github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') &&
-      github.event.comment.user.type != 'Bot'
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

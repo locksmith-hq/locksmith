@@ -25,7 +25,7 @@ Cloud subagents always run async ("Async agent launched"): end the turn with one
    - no secret can leak;
    - no reinvented OSS;
    - the package versions are real.
-4. Tick only the checkbox, after verification and the evaluator pass. Never tick or mark ready with `evaluator: n/a`.
+4. Tick only the checkbox, after verification and the evaluator pass, recorded with `bash scripts/run-meta.sh eval PASS` (pre-push refuses ticks without it).
 5. Otherwise, make attempt 2 one tier up (haiku → sonnet → opus). Give the new implementer the evaluator's reasons, failing output and attempt-1 diff; repeat steps 2–4.
 6. If attempt 2 also fails:
    - commit with a `WIP:` message if the code builds, otherwise `git stash`;

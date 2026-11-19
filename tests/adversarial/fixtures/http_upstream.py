@@ -5,7 +5,8 @@ Usage: python3 -I http_upstream.py ROLE PORT_FILE HITS_FILE [CANARY_FILE]
 ROLE is `api` (the real provider, which the relay may send the key to) or `evil` (an attacker's
 host). Listens on 127.0.0.1 (random port, written to PORT_FILE). Every request appends one line
 to HITS_FILE. For `api` the line has the method, path, header names and `key=ok` when the
-canary (CANARY_FILE) arrived in a header or the query, `key=no` otherwise. For `evil` the
+canary (CANARY_FILE) arrived in a header or the query, `key=no` otherwise, then `where=` and the
+places the canary arrived in (header names, `path`, `query`, `body`; `-` for none). For `evil` the
 line holds the whole raw request, because whatever reaches an attacker's host is the
 attacker's: if the real key ever got there, the oracle finds it in HITS_FILE.
 
@@ -19,6 +20,7 @@ Location, WWW-Authenticate). The query selects how the body is sent:
   te=gzip                    Transfer-Encoding: gzip, chunked (no Content-Encoding)
   split=1                    chunked, one byte per chunk with pauses (cross-chunk redaction)
   sse=1                      text/event-stream, dripped in pieces 60 ms apart
+  redirect=301|302|303|307|308 &to=URL   that status with `Location: URL` and the usual echo
 """
 import base64
 import gzip
@@ -142,7 +144,26 @@ class H(BaseHTTPRequestHandler):
                 seen += [base64.b64decode(v.split(" ", 1)[1] + "==").decode("latin-1", "replace")
                          for v in self.headers.get_all("Authorization", []) if v.lower().startswith("basic ")]
                 ok = "ok" if canary and any(canary in v for v in seen) else "no"
-                f.write(("%s %s headers=%s key=%s\n" % (self.command, self.path.split("?")[0], names, ok)).encode())
+                where = []
+                if canary:
+                    path, _, query = self.path.partition("?")
+                    for k, v in self.headers.items():
+                        dec = v
+                        if v.lower().startswith("basic "):
+                            try:
+                                dec = base64.b64decode(v.split(" ", 1)[1] + "==").decode("latin-1", "replace")
+                            except ValueError:
+                                pass
+                        if canary in v or canary in dec:
+                            where.append(k.lower())
+                    if canary in urllib.parse.unquote(path):
+                        where.append("path")
+                    if canary in urllib.parse.unquote(query):
+                        where.append("query")
+                    if canary.encode() in data:
+                        where.append("body")
+                f.write(("%s %s headers=%s key=%s where=%s\n" % (
+                    self.command, self.path.split("?")[0], names, ok, ",".join(where) or "-")).encode())
 
     def serve(self):
         data = self.body()
@@ -188,6 +209,18 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+            return
+        if q.get("redirect"):
+            # A redirect toward another host; the relay must not follow it.
+            code = int(q["redirect"][0])
+            self.send_response(code)
+            for k, v in hdrs:
+                if k != "Location":
+                    self.send_header(k, v)
+            self.send_header("Location", q.get("to", ["/"])[0])
+            self.send_header("Content-Length", str(len(text)))
+            self.end_headers()
+            self.wfile.write(text)
             return
         payload = text
         if enc:

@@ -131,12 +131,14 @@ print(v)
 }
 
 # gw_cp METHOD PATH [BODY_FILE] [NAME]: call the control plane as the operator (dev org header
-# when GW_ORG is set). The response body goes to ARTIFACT_DIR/setup/<n>-<NAME>.json; sets GW_BODY
-# and GW_STATUS. The body is read from a file so no value appears on a command line.
+# when GW_ORG is set). The response body goes to ARTIFACT_DIR/setup/<n>-<NAME>.json (to GW_WORK
+# instead when GW_CP_PRIVATE=1, for a response that holds a secret); sets GW_BODY and GW_STATUS.
+# The body is read from a file so no value appears on a command line.
 gw_cp() {
-  local method="$1" path="$2" body="${3:-}" name="${4:-call}" args=()
+  local method="$1" path="$2" body="${3:-}" name="${4:-call}" args=() dir="$ARTIFACT_DIR/setup"
+  [[ "${GW_CP_PRIVATE:-}" == 1 ]] && dir="$GW_WORK"
   GW_N=$((GW_N + 1))
-  GW_BODY="$ARTIFACT_DIR/setup/$(printf '%02d' "$GW_N")-$name.json"
+  GW_BODY="$dir/$(printf '%02d' "$GW_N")-$name.json"
   args=(-X "$method" -o "$GW_BODY" -w '%{http_code}' -H 'Accept: application/json')
   [[ -n "${GW_ORG:-}" ]] && args+=(-H "X-Locksmith-Dev-Org: $GW_ORG")
   [[ -n "$body" ]] && args+=(-H 'Content-Type: application/json' --data-binary "@$body")
@@ -187,19 +189,22 @@ with open(sys.argv[2], "w") as fh:
   gw_post "$secrets/$GW_SECRET_ID/versions" "$GW_WORK/version.json" version
   rm -f "$GW_WORK/version.json"
 
-  gw_post /v1/agents "$(gw_body agent "{\"name\":\"adv-agent-$GW_CASE\"}")" agent
-  GW_AGENT_ID="$(gw_json "$GW_BODY" agent.id)"
+  # The response holds the enrollment secret: it lands in GW_WORK, and only a masked copy goes
+  # to the artifacts.
+  GW_CP_PRIVATE=1 gw_post /v1/agents "$(gw_body agent "{\"name\":\"adv-agent-$GW_CASE\"}")" agent
   GW_ENROLLMENT_FILE="$GW_WORK/enrollment"
-  # Keep the enrollment secret private; the artifact copy is masked.
   python3 -I -c '
 import json, sys
 doc = json.load(open(sys.argv[1]))
 with open(sys.argv[2], "w") as fh:
     fh.write(doc["enrollment_secret"])
 doc["enrollment_secret"] = "<masked by lib.sh>"
-with open(sys.argv[1], "w") as fh:
+with open(sys.argv[3], "w") as fh:
     json.dump(doc, fh)
-' "$GW_BODY" "$GW_ENROLLMENT_FILE"
+' "$GW_BODY" "$GW_ENROLLMENT_FILE" "$ARTIFACT_DIR/setup/$(basename "$GW_BODY")"
+  rm -f "$GW_BODY"
+  GW_BODY="$ARTIFACT_DIR/setup/$(basename "$GW_BODY")"
+  GW_AGENT_ID="$(gw_json "$GW_BODY" agent.id)"
   gw_post "/v1/agents/$GW_AGENT_ID/grants" "$(gw_body grant "{\"secret_id\":\"$GW_SECRET_ID\"}")" grant
   GW_GRANT_ID="$(gw_json "$GW_BODY" id)"
 
@@ -281,4 +286,147 @@ gw_smith() {
 gw_login() {
   GW_WITH_ENROLLMENT=1 gw_smith login login --agent || gw_fail "smith login --agent failed (see smith-login.err)"
   [[ -s "$GW_AGENT_HOME/agent.json" ]] || gw_fail "smith login --agent wrote no state file"
+}
+
+# gw_fixture ROLE NAME: start fixtures/http_upstream.py as ROLE (`api`: the provider, given the
+# canary so it logs whether and where the key arrived; `evil`: an attacker's host that logs every
+# byte it receives). Its log is ARTIFACT_DIR/NAME-hits.log. Sets GW_FIXTURE_PORT; stopped when
+# the case exits.
+gw_fixture() {
+  local role="$1" name="$2" pf="$GW_WORK/$2.port" pid i
+  local fixture="$GW_ROOT/tests/adversarial/fixtures/http_upstream.py" args=()
+  [[ "$role" == api ]] && args=("$CANARY_FILE")
+  rm -f "$pf"
+  : >"$ARTIFACT_DIR/$name-hits.log"
+  python3 -I "$fixture" "$role" "$pf" "$ARTIFACT_DIR/$name-hits.log" ${args[@]+"${args[@]}"} \
+    2>>"$ARTIFACT_DIR/$name-fixture.err" &
+  pid=$!
+  gw_on_exit "kill $pid 2>/dev/null; wait $pid 2>/dev/null"
+  for i in $(seq 1 100); do
+    [[ -s "$pf" ]] && break
+    sleep 0.05
+  done
+  [[ -s "$pf" ]] || gw_fail "fixture $name did not start"
+  GW_FIXTURE_PORT="$(<"$pf")"
+}
+
+# gw_auth_header: write `Authorization: Bearer <agent token>` (from the agent state file) to a
+# private file in GW_WORK and print its path, for `curl -H @file`, so the token is never on a
+# command line.
+gw_auth_header() {
+  python3 -I -c '
+import json, sys
+t = json.load(open(sys.argv[1]))["access_token"]
+with open(sys.argv[2], "w") as fh:
+    fh.write("Authorization: Bearer %s\n" % t)
+' "$GW_AGENT_HOME/agent.json" "$GW_WORK/agent-auth.hdr"
+  echo "$GW_WORK/agent-auth.hdr"
+}
+
+# gw_relay_raw NAME BODY_FILE: POST BODY_FILE to the gateway's /v1/relay with the agent's token,
+# as an agent with its own HTTP client would (smith and locksmith-mcp refuse credential headers
+# before they reach the gateway; this tests the gateway's own checks). The response head and body
+# go to ARTIFACT_DIR/raw-NAME.hdr and .out; prints the HTTP status.
+gw_relay_raw() {
+  local name="$1" body="$2" auth
+  auth="$(gw_auth_header)"
+  gw_curl -X POST -H "@$auth" -H 'Content-Type: application/json' --data-binary "@$body" \
+    -D "$ARTIFACT_DIR/raw-$name.hdr" -o "$ARTIFACT_DIR/raw-$name.out" -w '%{http_code}' \
+    "$GW_GATEWAY_URL/v1/relay" 2>>"$ARTIFACT_DIR/raw-$name.err" || echo 000
+}
+
+# gw_mcp NAME TOOL_CALLS_FILE: run locksmith-mcp as the agent, send initialize and then each line
+# of TOOL_CALLS_FILE (JSON-RPC requests), and save the replies to ARTIFACT_DIR/mcp-NAME.out
+# (stderr to .err). Returns the server's exit code.
+gw_mcp() {
+  local name="$1" calls="$2"
+  {
+    printf '%s\n' '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"adversarial","version":"0"}}}'
+    printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+    cat "$calls"
+  } | gw_agent "$GW_MCP_BIN" >"$ARTIFACT_DIR/mcp-$name.out" 2>"$ARTIFACT_DIR/mcp-$name.err"
+}
+
+# gw_ledger NAME: the org's audit events (every page, newest first) as the operator, to
+# ARTIFACT_DIR/ledger-NAME.json (a JSON array). Sets GW_LEDGER to that path.
+gw_ledger() {
+  local name="$1" cursor="" page=0 q
+  GW_LEDGER="$ARTIFACT_DIR/ledger-$name.json"
+  rm -f "$GW_WORK"/ledger-page-*.json
+  while :; do
+    page=$((page + 1))
+    q="limit=100"
+    [[ -n "$cursor" ]] && q="$q&cursor=$cursor"
+    gw_cp GET "/v1/audit/events?$q" "" "ledger-$name-$page"
+    [[ "$GW_STATUS" == 200 ]] || gw_fail "GET /v1/audit/events returned $GW_STATUS"
+    cp "$GW_BODY" "$GW_WORK/ledger-page-$(printf '%04d' "$page").json"
+    cursor="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("next") or "")' "$GW_BODY")"
+    [[ -n "$cursor" ]] || break
+  done
+  python3 -I -c '
+import json, sys
+items = []
+for p in sys.argv[2:]:
+    items += json.load(open(p))["items"]
+json.dump(items, open(sys.argv[1], "w"), indent=1)
+' "$GW_LEDGER" "$GW_WORK"/ledger-page-*.json
+}
+
+# gw_ledger_count FILE KIND [OUTCOME]: how many events of KIND (e.g. `relay.attempt`) in a
+# gw_ledger file, optionally with OUTCOME, for this case's agent.
+gw_ledger_count() {
+  python3 -I -c '
+import json, sys
+f, kind, outcome, agent = sys.argv[1:5]
+n = sum(1 for e in json.load(open(f))
+        if e["kind"] == kind and (not outcome or e["outcome"] == outcome)
+        and e["actor"] == "agent:" + agent)
+print(n)
+' "$1" "$2" "${3:-}" "$GW_AGENT_ID"
+}
+
+# gw_unwrap FILE...: for each saved relay reply (smith --json output, a raw /v1/relay response or
+# MCP replies), also write the bytes an agent gets by decoding `body_base64` to FILE.body, so the
+# oracle judges the body as the agent can trivially read it.
+gw_unwrap() {
+  python3 -I - "$@" <<'PY'
+import base64, json, sys
+
+def walk(v, out):
+    if isinstance(v, dict):
+        b = v.get("body_base64")
+        if isinstance(b, str):
+            try:
+                out.append(base64.b64decode(b))
+            except ValueError:
+                pass
+        for x in v.values():
+            walk(x, out)
+    elif isinstance(v, list):
+        for x in v:
+            walk(x, out)
+    elif isinstance(v, str) and "body_base64" in v:
+        try:
+            walk(json.loads(v), out)
+        except ValueError:
+            pass
+
+for p in sys.argv[1:]:
+    out = []
+    try:
+        text = open(p, encoding="utf-8", errors="replace").read()
+    except OSError:
+        continue
+    try:
+        walk(json.loads(text), out)
+    except ValueError:
+        for line in text.splitlines():
+            try:
+                walk(json.loads(line), out)
+            except ValueError:
+                pass
+    if out:
+        with open(p + ".body", "wb") as fh:
+            fh.write(b"\n".join(out))
+PY
 }

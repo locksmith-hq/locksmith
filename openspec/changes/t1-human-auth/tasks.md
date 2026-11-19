@@ -29,7 +29,7 @@
 ## 6. Console, desktop and CLI [sonnet]
 - [x] 6.0 Gate: confirm the owner approved the sign-in and onboarding UX direction (design.md Open Questions); otherwise stop here and report to the lead.
 - [x] 6.1 `apps/web`: sign-in redirect with PKCE, callback, return-to, in-memory tokens, signed-in header, sign-out, expiry handling; Vitest tests.
-- [ ] 6.2 `apps/desktop`: system-browser flow with loopback redirect; tokens in the OS keystore.
+- [x] 6.2 `apps/desktop`: system-browser flow with loopback redirect; tokens in the OS keystore.
 - [ ] 6.3 `smith login --user` with the device grant; token in the keystore.
 - [ ] 6.4 Verify: `npm run lint`, `npm test --workspace apps/web`, `cargo nextest run -p smith-cli`, `just apps-build`.
 

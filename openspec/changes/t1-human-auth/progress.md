@@ -44,3 +44,9 @@
 - Verified: `npm test --workspace apps/web` 19 passed (10 new); `just ci` exit 0; Sonnet evaluator PASS
 - Deviation: oidc-client-ts 3.5.0 with InMemoryWebStorage; only PKCE state (no tokens) uses sessionStorage. Overview landing and "Get started" checklist not built yet; dev Org id input removed (org comes from the bearer).
 - Notes for next session: 6.2 desktop (loopback + keyring), 6.3 `smith login --user` (device grant), 6.4, then 7.1. Follow-up: Overview landing page and checklist from decision 9.
+
+## 2026-11-19 worker (c)
+- Task: 6.2 - done
+- Verified: `cargo test` desktop crate 23 passed, clippy -D warnings clean; `just ci` exit 0 (first run failed on stale node_modules, `npm ci` fixed it); Sonnet evaluator PASS
+- Deviation: keyring pinned 3.6.3 (4.x changes the store API); real keyring store has no unit test (no secret service on the VM); no webview UI wiring yet (Rust commands sign_in/sign_out/auth_status only). Evaluator nits fixed: manual Debug on Callback, fixed error text, no partial keystore writes.
+- Notes for next session: 6.3 `smith login --user` (device grant, keystore), 6.4, then 7.1. Follow-ups: desktop webview sign-in button; Overview landing and checklist.

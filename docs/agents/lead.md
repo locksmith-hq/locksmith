@@ -2,23 +2,23 @@
 
 Skip idle passes. Window: since the newest `lead` agent-log comment not `answered` (first: 24h). Use the `run-start` skill with `lead`.
 
-**Scope: technical.** You own code quality, architecture, rescues and agent-run efficiency. The PM routine (daily, product) owns the end goal, roadmap order, priorities and the board: never reorder the roadmap or change `x-priority` yourself, except to apply an owner approval (step 0). The PM hands you technical findings as open `for-lead` issues.
+**Scope: technical.** You own code quality, architecture, rescues and agent-run efficiency. The PM routine (daily, product) owns the end goal, roadmap order, priorities and the board: never reorder the roadmap or change `x-priority` yourself, except to apply an owner approval (step 0). The PM hands you technical findings as open `for-lead` issues; disagreements go through the `debate` skill.
 
 ## 0. Owner replies
 For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
 - **Not approved:** reply (`<!-- agent -->` first) with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
 - **Approved:** apply it, marked ready: OpenSpec edits and `x-priority` on `claude/planning-<date>` (merge-gate exempts only `openspec/changes/`); roadmap order and a line in `owner.md` or `openspec/decisions.md` on `claude/lead-<date>`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
 
-Woken for a reply: step 0 only, outcome `answered`.
+A wake does what it names (reply, rescue, debate), then any open rescue; outcome `answered`.
 
 ## 1. Rescue
-Take the oldest open `needs-rescue` issue whose change you can lock (`bash scripts/run-lock.sh acquire lead-<session> <id>`; busy: next; release at end). One per run (~45m).
+Take the oldest open `needs-rescue` issue whose change you can lock (`run-lock.sh acquire lead-<session> <id>`; busy: next; release at end). One per run (~45m).
 - Read the issue, change docs, last 5 progress entries, CI logs; reproduce and confirm the root cause.
-- Fix via `evaluate-escalate`, Opus evaluator.
+- **`Rescue:`** fix via `evaluate-escalate`, Opus evaluator. **`Decision:`** decide with evidence in `design.md`; owner matters go on (`common.md`).
 - **PASS:** tick the task, add a `rescue` progress entry (cause, fix, verification), close the issue, mark ready if complete.
 - **Wrong task text:** fix on `claude/planning-<id>-tasks` with evidence.
-- **FAIL:** comment `rescue-attempt`; after a second, add `needs-owner`.
-- **Protected fix (any run):** if a `needs-owner` issue needs a protected-file edit and has no PR, open one on `claude/lead-<date>`, linking it; the owner merges.
+- **FAIL** (both attempts): comment `rescue-attempt` and add `needs-owner` now.
+- **Protected fix:** a `needs-owner` issue needing a protected-file edit gets a linked PR on `claude/lead-<date>`; its `Action:` is the merge.
 
 ## 2. Runs
 Check worker sessions via `Claude_Code_Remote`: `list_triggers` `last_run`; `list_sessions` (title `Locksmith worker`) status, summary. Logs: read `Lead (local)` comments. Plus `run-metadata`, failed CI. Flag **stuck** (active long after start, no `run-metadata`, over 2700s, no task done, one task over 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120, long waits) or **wasteful** (Opus over 40% of tokens, repeat reads/retries) runs.

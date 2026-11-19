@@ -145,6 +145,10 @@ function chainSummary(s: AuditStatus): string {
   return `Verification FAILED at ${v.finished_at}${v.broken_seq != null ? ` (first broken seq ${v.broken_seq}${v.break_kind ? `, ${v.break_kind}` : ""})` : ""}`;
 }
 
+type AuditFilter = "all" | "denied" | "redaction_failed";
+const auditMatches = (e: AuditEvent, f: AuditFilter) =>
+  f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
+
 function Audit({ client }: { client: Client }) {
   const [status, setStatus] = useState<AuditStatus | null>(null);
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
@@ -152,6 +156,7 @@ function Audit({ client }: { client: Client }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const inflight = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<AuditFilter>("all");
 
   useEffect(() => {
     let live = true; // a response for an earlier client (org) is ignored
@@ -188,13 +193,21 @@ function Audit({ client }: { client: Client }) {
           <p data-testid="verify-result">{chainSummary(status)}</p>
         </div>
       )}
-      {!events ? (error ? null : <p>Reading the ledger…</p>) : events.length === 0 ? <p>No audit events yet.</p> : (
+      <label>
+        Outcome{" "}
+        <select aria-label="Outcome filter" value={filter} onChange={(e) => setFilter(e.target.value as AuditFilter)}>
+          <option value="all">All</option>
+          <option value="denied">Denied</option>
+          <option value="redaction_failed">Redaction failed</option>
+        </select>
+      </label>
+      {!events ? (error ? null : <p>Reading the ledger…</p>) : events.length === 0 ? <p>No audit events yet.</p> : !events.some((e) => auditMatches(e, filter)) ? <p>No matching events{next ? " loaded yet" : ""}.</p> : (
         <table>
           <thead>
             <tr><th>Seq</th><th>Time</th><th>Kind</th><th>Actor</th><th>Target</th><th>Outcome</th></tr>
           </thead>
           <tbody>
-            {events.map((e) => (
+            {events.filter((e) => auditMatches(e, filter)).map((e) => (
               <tr key={e.id}>
                 <td>{e.seq}</td><td>{e.at}</td><td>{e.kind}</td><td>{e.actor}</td><td>{e.target ?? ""}</td><td>{e.outcome}</td>
               </tr>

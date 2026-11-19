@@ -344,3 +344,22 @@ test("org audit: shows chain status and events from the control plane, and pages
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
   expect(client.listAuditEvents).toHaveBeenLastCalledWith({ cursor: "c1" });
 });
+
+test("org audit: outcome filter narrows to denied and redaction_failed events", async () => {
+  const e = (seq: number, kind: string, outcome: string) => ({ id: `e${seq}`, seq, at: "2026-01-01T00:00:00Z", kind, actor: "agent:a1", target: "secret:s1", outcome, attrs: {}, digest: "d", prev_digest: "p" });
+  const client = {
+    auditStatus: vi.fn().mockResolvedValue({ head_seq: 3, latest_checkpoint: null, latest_verify: null }),
+    listAuditEvents: vi.fn().mockResolvedValue({ items: [e(3, "relay.outcome", "redaction_failed"), e(2, "relay.denied", "no_grant"), e(1, "agent.created", "ok")] }),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  render(<App />);
+  await nav("Org audit");
+  expect(await screen.findByText("agent.created")).toBeInTheDocument();
+  const sel = screen.getByRole("combobox", { name: "Outcome filter" });
+  await userEvent.selectOptions(sel, "denied");
+  expect(screen.getByText("relay.denied")).toBeInTheDocument();
+  expect(screen.queryByText("agent.created")).toBeNull();
+  await userEvent.selectOptions(sel, "redaction_failed");
+  expect(screen.getByText("relay.outcome")).toBeInTheDocument();
+  expect(screen.queryByText("relay.denied")).toBeNull();
+});

@@ -34,9 +34,9 @@
 - [ ] 6.4 Verify: `just up && just api && just adversarial-gate --agent claude` exits 0 with every transcript scanned (or, without a key, exits non-zero with `skip live`; record which in progress.md).
 
 ## 7. Console and desktop [sonnet]
-- [ ] 7.1 Web audit page (S5): outcome filter for `denied` and `redaction_failed`.
-- [ ] 7.2 Desktop audit view: the same filter.
-- [ ] 7.3 Verify: `npm run lint`, `npm test --workspace apps/web`, and `just apps-build`.
+- [x] 7.1 Web audit page (S5): outcome filter for `denied` and `redaction_failed`.
+- [x] 7.2 Desktop audit view: the same filter.
+- [x] 7.3 Verify: `npm run lint`, `npm test --workspace apps/web`, and `just apps-build`.
 
 ## 8. Local verification
 - [ ] 8.1 `just up`, `just api`, `just adversarial-gate`, `just leak-scan`, `just audit-verify`, `just apps-build`, then `just ci`.

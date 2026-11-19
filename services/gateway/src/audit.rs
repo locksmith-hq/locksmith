@@ -100,6 +100,12 @@ pub enum EventKind {
     Outcome(Outcome),
     /// A refusal before any attempt (`Outcome::is_denial`).
     Denied(Outcome),
+    /// A Git clone or fetch through `/git/...` (D1), one event per call with its final outcome.
+    GitFetch(Outcome),
+    /// A Git push through `/git/...` (D1), one event per call with its final outcome.
+    GitPush(Outcome),
+    /// A refused Git call (`Outcome::is_denial`).
+    GitDenied(Outcome),
 }
 
 impl EventKind {
@@ -108,6 +114,9 @@ impl EventKind {
             Self::Attempt => ("relay.attempt", "pending"),
             Self::Outcome(o) => ("relay.outcome", o.as_str()),
             Self::Denied(o) => ("relay.denied", o.as_str()),
+            Self::GitFetch(o) => ("git.fetch", o.as_str()),
+            Self::GitPush(o) => ("git.push", o.as_str()),
+            Self::GitDenied(o) => ("git.denied", o.as_str()),
         }
     }
 }
@@ -237,7 +246,10 @@ impl HttpAudit {
     async fn post(&self, ev: RelayEvent) -> Result<Uuid, AuditError> {
         // Never a ledger outcome: the ledger was unreachable when it happened.
         if let EventKind::Outcome(Outcome::AuditUnavailable)
-        | EventKind::Denied(Outcome::AuditUnavailable) = ev.kind
+        | EventKind::Denied(Outcome::AuditUnavailable)
+        | EventKind::GitFetch(Outcome::AuditUnavailable)
+        | EventKind::GitPush(Outcome::AuditUnavailable)
+        | EventKind::GitDenied(Outcome::AuditUnavailable) = ev.kind
         {
             return Err(AuditError::Rejected);
         }

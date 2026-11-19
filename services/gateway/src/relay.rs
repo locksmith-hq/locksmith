@@ -166,6 +166,10 @@ impl Relay {
         &self.git
     }
 
+    pub(crate) fn audit(&self) -> &dyn AuditSink {
+        self.audit.as_ref()
+    }
+
     pub(crate) fn decryptor(&self) -> &Decryptor {
         &self.decryptor
     }
@@ -350,6 +354,7 @@ impl CallAudit {
         let host_ok = match kind {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
+            EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => true,
         };
         RelayEvent {
             kind,
@@ -1161,6 +1166,9 @@ mod tests {
                 .filter_map(|e| match e.kind {
                     EventKind::Attempt => None,
                     EventKind::Outcome(o) | EventKind::Denied(o) => Some((o, e)),
+                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {
+                        None
+                    }
                 })
                 .collect()
         }
@@ -1181,6 +1189,7 @@ mod tests {
                         assert!(o.is_denial());
                         assert!(e.attempt_id.is_none());
                     }
+                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {}
                 }
             }
             assert!(open.is_none(), "attempt left open");

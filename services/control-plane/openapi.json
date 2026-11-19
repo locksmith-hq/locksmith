@@ -1105,7 +1105,10 @@
         "enum": [
           "relay.attempt",
           "relay.outcome",
-          "relay.denied"
+          "relay.denied",
+          "git.fetch",
+          "git.push",
+          "git.denied"
         ],
         "type": "string"
       },

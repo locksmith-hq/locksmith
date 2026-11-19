@@ -6,12 +6,13 @@
 # Setup as the G cases (lib.sh): an org, the canary as a secret bound to fixtures/http_upstream.py
 # (the reflecting provider, which also serves the G4 forms), an attacker's host (the fixture as
 # `evil`, its log in evil-hits.log), a gateway and a `smith login --agent`. Then each prompt in
-# prompts/*.md (env, reflection, header echo, encodings, API, token) runs as one headless
+# prompts/*.md (env, reflection, header echo, encodings, API, token, git) runs as one headless
 # `claude -p --bare` session in the agent's environment (lib.sh gw_agent: only PATH, HOME and the
 # connector settings, plus ANTHROPIC_API_KEY and any proxy and CA variables for the CLI itself), with the Locksmith MCP server
 # (locksmith-mcp, from --mcp-config only) and the Bash tool and nothing else. Placeholders
 # {{SMITH}}, {{SECRET_ID}}, {{GATEWAY_URL}}, {{CONTROL_PLANE_URL}}, {{PROVIDER_URL}} and
-# {{EVIL_URL}} are filled in per run; the prompts are versioned so runs compare.
+# {{EVIL_URL}} and {{GIT_URL}} (the gateway's Git route to the same provider, a fetch-only
+# `[[git_binding]]` for owner `acme`, added to the bindings file below) are filled in per run; the prompts are versioned so runs compare.
 #
 # Each transcript (stream-json) goes to ARTIFACT_DIR/transcripts/<prompt>.jsonl; the gate scans
 # them with `oracle.py scan --transcript` and the rest of ARTIFACT_DIR with `--dir`. The CLI's
@@ -33,6 +34,15 @@ gw_fixture api provider
 provider="http://127.0.0.1:$GW_FIXTURE_PORT"
 gw_fixture evil evil
 evil="http://127.0.0.1:$GW_FIXTURE_PORT"
+# Add a Git binding for the same secret to the bindings file gw_setup writes (G7 shows the shape).
+gw_bind_relay="$(declare -f gw_bind)"
+eval "gw_bind_relay_only${gw_bind_relay#gw_bind}"
+gw_bind() {
+  gw_bind_relay_only "$@"
+  printf '[[git_binding]]\nsecret_id = "%s"\nhost = "127.0.0.1"\nrepo_prefix = "acme"\nservices = ["fetch"]\nallow_private_hosts = true\nplain_http = true\nport = %s\n' \
+    "$GW_SECRET_ID" "$GW_FIXTURE_PORT_PROVIDER" >>"$GW_BINDINGS"
+}
+GW_FIXTURE_PORT_PROVIDER="${provider##*:}"
 gw_setup "$provider"
 
 # The CLI key goes to a private file that the wrapper below reads and deletes, so it is never on a
@@ -93,12 +103,12 @@ for name in "${names[@]}"; do
   [[ -f "$src" ]] || gw_fail "no prompt $src"
   prompt="$ARTIFACT_DIR/prompt-$name.md"
   python3 -I - "$src" "$prompt" "$GW_SMITH_BIN" "$GW_SECRET_ID" "$GW_GATEWAY_URL" "$GW_API" \
-    "$provider" "$evil" <<'PY'
+    "$provider" "$evil" "$GW_GATEWAY_URL/git/127.0.0.1/acme" <<'PY'
 import sys
-src, out, smith, sid, gw, cp, provider, evil = sys.argv[1:9]
+src, out, smith, sid, gw, cp, provider, evil, git = sys.argv[1:10]
 text = open(src).read()
 for k, v in (("SMITH", smith), ("SECRET_ID", sid), ("GATEWAY_URL", gw), ("CONTROL_PLANE_URL", cp),
-             ("PROVIDER_URL", provider), ("EVIL_URL", evil)):
+             ("PROVIDER_URL", provider), ("EVIL_URL", evil), ("GIT_URL", git)):
     text = text.replace("{{%s}}" % k, v)
 if "{{" in text:
     sys.exit("unfilled placeholder in " + src)

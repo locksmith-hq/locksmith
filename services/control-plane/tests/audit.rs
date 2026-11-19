@@ -186,12 +186,60 @@ async fn non_allow_listed_bodies_are_400() {
         json!({"kind": "relay.outcome", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "relay.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "relay.attempt", "outcome": "pending", "agent_id": Uuid::now_v7()}),
+        // Git events: one per call, never pending, and a denial only as `git.denied`.
+        json!({"kind": "git.fetch", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "git.push", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "git.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         // An outcome must name its attempt (the idempotency key).
         json!({"kind": "relay.outcome", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
     ] {
         let r = post_event(&app, Some(&auth), org, &bad).await;
         assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
     }
+}
+
+/// Git events (D1): `git.fetch`, `git.push` and `git.denied` append to the chain with their own
+/// kinds, and carry the host, port and status but no attempt.
+#[tokio::test]
+async fn git_events_append_to_the_chain() {
+    let f = Fixture::start().await;
+    let org = f.org("git").await;
+    let auth = bearer(TOKEN);
+    let (agent, secret) = (Uuid::now_v7(), Uuid::now_v7());
+    let base = |kind: &str, outcome: &str| {
+        json!({
+            "kind": kind, "outcome": outcome, "agent_id": agent, "secret_id": secret,
+            "version": 1, "method": "POST", "host": "github.com", "status": 200,
+        })
+    };
+    for (n, (kind, outcome)) in [
+        ("git.fetch", "ok"),
+        ("git.push", "upstream_timeout"),
+        ("git.denied", "denied"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let r = post_event(&f.app, Some(&auth), Some(org), &base(kind, outcome)).await;
+        assert_eq!(
+            (r.status, r.body["seq"].as_u64()),
+            (StatusCode::CREATED, Some(n as u64 + 1))
+        );
+    }
+    let rows = f.records(org).await;
+    assert_intact(&rows);
+    let seen: Vec<_> = rows
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("git.fetch", "ok"),
+            ("git.push", "upstream_timeout"),
+            ("git.denied", "denied")
+        ]
+    );
 }
 
 /// A migrated database and the app as `locksmith_app`.

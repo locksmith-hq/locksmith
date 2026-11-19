@@ -12,12 +12,15 @@ use axum::extract::{Path, RawQuery, State};
 use axum::http::{HeaderMap, Method, StatusCode, header};
 use axum::response::Response;
 use base64::Engine as _;
-use ls_proxy::github::{Credential, TokenCache, parse_credential, upstream_header};
+use ls_proxy::github::{Credential, TokenCache, parse_credential, pat_header, upstream_token};
+use ls_redact::{MIN_ENCODED_LEN, Redactor, Secret};
 use reqwest::header::{HeaderName, HeaderValue};
 use serde::Deserialize;
 use url::Url;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
+use crate::audit::{EventKind, Method as AuditMethod, Outcome, RelayEvent};
 use crate::config::Binding;
 use crate::decrypt::{DecryptError, MaterialError};
 use crate::egress::{self, EgressError};
@@ -285,7 +288,9 @@ const FORWARD_RESPONSE_HEADERS: &[&str] = &[
 ];
 
 /// Pick the binding that allows this request among those the agent holds a grant for. When none
-/// does, the most specific reason (service, then repository, then path).
+/// does, the most specific reason (service, then repository, then path) and the secret to name in
+/// the denial event: the binding that refused the service, else the first the agent may use
+/// (`None` when it holds no Git grant at all, so there is no secret to name).
 fn select<'a>(
     bindings: &'a [GitBinding],
     granted: impl Fn(Uuid) -> bool,
@@ -293,21 +298,191 @@ fn select<'a>(
     path: &str,
     query: Option<&str>,
     post: bool,
-) -> Result<(&'a GitBinding, GitTarget), GitDenied> {
+) -> Result<(&'a GitBinding, GitTarget), (GitDenied, Option<Uuid>)> {
     let mut reason = GitDenied::NotBound;
     let mut path_denied = false;
+    let (mut first, mut service_denied) = (None, None);
     for b in bindings.iter().filter(|b| granted(b.secret_id)) {
+        first.get_or_insert(b.secret_id);
         match b.authorize(host, path, query, post) {
             Ok(t) => return Ok((b, t)),
             Err(GitDenied::PathNotAllowed) => path_denied = true,
-            Err(GitDenied::ServiceNotAllowed) => reason = GitDenied::ServiceNotAllowed,
+            Err(GitDenied::ServiceNotAllowed) => {
+                reason = GitDenied::ServiceNotAllowed;
+                service_denied.get_or_insert(b.secret_id);
+            }
             Err(GitDenied::NotBound) => {}
         }
     }
     if path_denied && reason == GitDenied::NotBound {
         reason = GitDenied::PathNotAllowed;
     }
-    Err(reason)
+    Err((reason, service_denied.or(first)))
+}
+
+/// Largest buffered upstream body (an error page, or any response that is not a Git stream). A
+/// larger one is withheld rather than relayed unscanned.
+pub(crate) const MAX_SCANNED_BODY: usize = 64 * 1024;
+
+/// A `2xx` Git smart-HTTP stream (`application/x-git-*`): pack data and pkt-lines, relayed raw.
+/// Rewriting it would break the pkt-line lengths and corrupt packs, so only the headers are
+/// scanned; the upstream is the host the owner bound the credential to.
+fn is_git_stream(status: StatusCode, headers: &reqwest::header::HeaderMap) -> bool {
+    status.is_success()
+        && headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| {
+                v.trim_start()
+                    .to_ascii_lowercase()
+                    .starts_with("application/x-git-")
+            })
+}
+
+/// Every form of the upstream credential the redactor knows: the token and the
+/// `Basic base64("x-access-token:" + token)` header form. `None` when the token is too short
+/// for its encoded forms to be matched (an echo could not be caught: fail closed).
+fn redactor_for(token: &str) -> Option<Redactor> {
+    if token.len() < MIN_ENCODED_LEN {
+        return None;
+    }
+    let mut secret = Secret::new("SECRET", token.as_bytes());
+    secret.basic_auth_user = Some("x-access-token".to_owned());
+    Some(Redactor::new(&[secret]))
+}
+
+/// Allow-listed upstream headers with the credential redacted, or `None` when a value still
+/// matches afterwards (withhold the response).
+fn scan_headers(
+    redactor: &Redactor,
+    headers: &reqwest::header::HeaderMap,
+) -> Option<Vec<(&'static str, HeaderValue)>> {
+    let mut out = Vec::new();
+    for name in FORWARD_RESPONSE_HEADERS {
+        for v in headers.get_all(*name) {
+            let clean = redactor.redact_all(v.as_bytes());
+            if !redactor.find(&clean).is_empty() {
+                return None;
+            }
+            out.push((*name, HeaderValue::from_bytes(&clean).ok()?));
+        }
+    }
+    Some(out)
+}
+
+/// Read an upstream body (at most [`MAX_SCANNED_BODY`]), redact it and re-check. `None` withholds.
+async fn scan_body(mut resp: reqwest::Response, redactor: &Redactor) -> Option<Vec<u8>> {
+    let encoded = resp
+        .headers()
+        .get_all(header::CONTENT_ENCODING)
+        .iter()
+        .any(|v| !v.as_bytes().eq_ignore_ascii_case(b"identity"));
+    if encoded {
+        return None;
+    }
+    let mut raw = Zeroizing::new(Vec::new());
+    while let Ok(Some(chunk)) = resp.chunk().await {
+        if raw.len() + chunk.len() > MAX_SCANNED_BODY {
+            return None;
+        }
+        raw.extend_from_slice(&chunk);
+    }
+    // A failed read ends the loop early; the redacted partial body is still safe, but a
+    // truncated error page helps nobody, so only a clean end is relayed.
+    let clean = redactor.redact_all(&raw);
+    redactor.find(&clean).is_empty().then_some(clean)
+}
+
+/// What goes back to the agent: a Git stream as it comes, or a scanned, redacted body.
+enum Payload {
+    Stream(reqwest::Response),
+    Text(Vec<u8>),
+}
+
+/// One Git ledger event: ids, the bound host and closed codes only.
+fn git_event(
+    kind: EventKind,
+    agent_id: Uuid,
+    binding: &GitBinding,
+    post: bool,
+    status: Option<u16>,
+) -> RelayEvent {
+    RelayEvent {
+        kind,
+        agent_id,
+        secret_id: binding.secret_id,
+        version: binding.version,
+        method: Some(if post {
+            AuditMethod::Post
+        } else {
+            AuditMethod::Get
+        }),
+        host: Some(binding.host.clone()),
+        port: binding.port,
+        status,
+        attempt_id: None,
+    }
+}
+
+/// Record a refusal as `git.denied` (one try: the call is refused either way).
+async fn deny(relay: &Relay, agent_id: Uuid, binding: &GitBinding, post: bool, why: Outcome) {
+    let ev = git_event(EventKind::GitDenied(why), agent_id, binding, post, None);
+    if relay.audit().append(ev).await.is_err() {
+        tracing::error!("git denied event not appended");
+    }
+}
+
+/// An admitted Git call: records its final outcome as `git.fetch` or `git.push`.
+struct Call<'a> {
+    relay: &'a Relay,
+    agent_id: Uuid,
+    binding: &'a GitBinding,
+    service: GitService,
+    post: bool,
+}
+
+impl Call<'_> {
+    /// Record the call's final outcome, retried like a relay outcome. `false` when the ledger
+    /// did not take it.
+    async fn record(&self, outcome: Outcome, status: Option<u16>) -> bool {
+        let kind = match self.service {
+            GitService::Fetch => EventKind::GitFetch(outcome),
+            GitService::Push => EventKind::GitPush(outcome),
+        };
+        let ev = git_event(kind, self.agent_id, self.binding, self.post, status);
+        let opts = self.relay.options();
+        let mut wait = opts.outcome_retry_backoff;
+        for try_no in 0..=opts.outcome_retries {
+            match self.relay.audit().append(ev.clone()).await {
+                Ok(_) => return true,
+                Err(crate::audit::AuditError::Rejected) => break,
+                Err(crate::audit::AuditError::Unavailable) => {
+                    if try_no < opts.outcome_retries {
+                        tokio::time::sleep(wait).await;
+                        wait = wait.saturating_mul(2);
+                    }
+                }
+            }
+        }
+        tracing::error!(git.service = self.service.event(), "git event not appended");
+        false
+    }
+
+    async fn deny(&self, why: Outcome) {
+        deny(self.relay, self.agent_id, self.binding, self.post, why).await;
+    }
+
+    /// Record a failure and answer with its fixed error.
+    async fn failed(
+        &self,
+        outcome: Outcome,
+        status: StatusCode,
+        slug: &'static str,
+        request_id: &str,
+    ) -> Response {
+        self.record(outcome, None).await;
+        fail(status, slug, request_id)
+    }
 }
 
 /// Git sends the agent token as the Basic password (the credential helper's answer); accept
@@ -409,14 +584,25 @@ async fn handle(
     drop(grants);
     let (binding, target) = match selected {
         Ok(x) => x,
-        Err(why) => {
+        Err((why, secret)) => {
             tracing::info!(agent.id = %agent.agent_id, reason = ?why, "git: request denied");
+            // The ledger names a secret; an agent with no Git grant has none to name.
+            if let Some(b) = secret.and_then(|id| relay.bindings().git_for_secret(id)) {
+                deny(&relay, agent.agent_id, b, post, Outcome::Denied).await;
+            }
             let slug = match why {
                 GitDenied::ServiceNotAllowed => "service_denied",
                 _ => "denied",
             };
             return fail(StatusCode::FORBIDDEN, slug, &request_id);
         }
+    };
+    let call = Call {
+        relay: &relay,
+        agent_id: agent.agent_id,
+        binding,
+        service: target.service,
+        post,
     };
 
     // Egress: origin and address guard; the client is pinned to the checked addresses.
@@ -433,13 +619,22 @@ async fn handle(
     let checked = match egress::check(&egress_binding, &base, relay.resolver()).await {
         Ok(t) => t,
         Err(EgressError::HostNotAllowed) => {
+            call.deny(Outcome::Denied).await;
             return fail(StatusCode::FORBIDDEN, "denied", &request_id);
         }
         Err(EgressError::AddressNotAllowed) => {
+            call.deny(Outcome::DeniedAddress).await;
             return fail(StatusCode::FORBIDDEN, "denied_address", &request_id);
         }
         Err(EgressError::Unresolvable) => {
-            return fail(StatusCode::BAD_GATEWAY, "upstream_unreachable", &request_id);
+            return call
+                .failed(
+                    Outcome::UpstreamUnreachable,
+                    StatusCode::BAD_GATEWAY,
+                    "upstream_unreachable",
+                    &request_id,
+                )
+                .await;
         }
     };
     let opts = relay.git().options;
@@ -449,7 +644,7 @@ async fn handle(
         return fail(StatusCode::INTERNAL_SERVER_ERROR, "internal", &request_id);
     };
 
-    // Decrypt, build the header, drop the value.
+    // Decrypt, build the header and the redactor, drop the value.
     let value = match relay
         .decryptor()
         .decrypt(binding.secret_id, binding.version)
@@ -457,40 +652,108 @@ async fn handle(
     {
         Ok(v) => v,
         Err(DecryptError::Material(MaterialError::NotFound)) => {
-            return fail(StatusCode::NOT_FOUND, "not_found", &request_id);
+            return call
+                .failed(
+                    Outcome::MaterialError,
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    &request_id,
+                )
+                .await;
         }
-        Err(_) => return fail(StatusCode::BAD_GATEWAY, "secret_unavailable", &request_id),
+        Err(_) => {
+            return call
+                .failed(
+                    Outcome::DecryptFailed,
+                    StatusCode::BAD_GATEWAY,
+                    "secret_unavailable",
+                    &request_id,
+                )
+                .await;
+        }
     };
     let Ok(cred) = parse_credential(value.expose()) else {
-        return fail(StatusCode::BAD_GATEWAY, "secret_unusable", &request_id);
+        return call
+            .failed(
+                Outcome::InjectFailed,
+                StatusCode::BAD_GATEWAY,
+                "secret_unusable",
+                &request_id,
+            )
+            .await;
     };
     drop(value);
     if matches!(cred, Credential::App(_))
         && !(binding.host == "github.com" || relay.git().apps_any_host)
     {
-        return fail(StatusCode::BAD_GATEWAY, "secret_unusable", &request_id);
+        return call
+            .failed(
+                Outcome::InjectFailed,
+                StatusCode::BAD_GATEWAY,
+                "secret_unusable",
+                &request_id,
+            )
+            .await;
     }
     let repo_full = format!("{}/{}", target.owner, target.repo);
     let minted = {
         let relay = relay.clone();
         let now = now.unix_timestamp();
         tokio::task::spawn_blocking(move || {
-            upstream_header(&cred, &relay.git().tokens, &repo_full, now)
+            upstream_token(&cred, &relay.git().tokens, &repo_full, now)
         })
         .await
     };
-    let auth_value = match minted {
-        Ok(Ok(h)) => HeaderValue::from_str(&h).ok().map(|mut v| {
+    let token = match minted {
+        Ok(Ok(t)) => t,
+        Ok(Err(_)) => {
+            return call
+                .failed(
+                    Outcome::MaterialError,
+                    StatusCode::BAD_GATEWAY,
+                    "token_unavailable",
+                    &request_id,
+                )
+                .await;
+        }
+        Err(_) => {
+            return call
+                .failed(
+                    Outcome::InjectFailed,
+                    StatusCode::BAD_GATEWAY,
+                    "secret_unusable",
+                    &request_id,
+                )
+                .await;
+        }
+    };
+    // The redactor first: a token too short to scan for in its encoded forms is not relayed.
+    let Some(redactor) = redactor_for(&token) else {
+        return call
+            .failed(
+                Outcome::RedactionFailed,
+                StatusCode::BAD_GATEWAY,
+                "secret_unusable",
+                &request_id,
+            )
+            .await;
+    };
+    let auth_value = HeaderValue::from_str(&pat_header(&token))
+        .ok()
+        .map(|mut v| {
             v.set_sensitive(true);
             v
-        }),
-        Ok(Err(_)) => {
-            return fail(StatusCode::BAD_GATEWAY, "token_unavailable", &request_id);
-        }
-        Err(_) => None,
-    };
+        });
+    drop(token);
     let Some(auth_value) = auth_value else {
-        return fail(StatusCode::BAD_GATEWAY, "secret_unusable", &request_id);
+        return call
+            .failed(
+                Outcome::InjectFailed,
+                StatusCode::BAD_GATEWAY,
+                "secret_unusable",
+                &request_id,
+            )
+            .await;
     };
 
     let mut url = checked.url().clone();
@@ -526,12 +789,35 @@ async fn handle(
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) if e.is_timeout() => {
-            return fail(StatusCode::GATEWAY_TIMEOUT, "upstream_timeout", &request_id);
+            return call
+                .failed(
+                    Outcome::UpstreamTimeout,
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "upstream_timeout",
+                    &request_id,
+                )
+                .await;
         }
         Err(e) if e.is_connect() => {
-            return fail(StatusCode::BAD_GATEWAY, "upstream_unreachable", &request_id);
+            return call
+                .failed(
+                    Outcome::UpstreamUnreachable,
+                    StatusCode::BAD_GATEWAY,
+                    "upstream_unreachable",
+                    &request_id,
+                )
+                .await;
         }
-        Err(_) => return fail(StatusCode::BAD_GATEWAY, "upstream_error", &request_id),
+        Err(_) => {
+            return call
+                .failed(
+                    Outcome::UpstreamError,
+                    StatusCode::BAD_GATEWAY,
+                    "upstream_error",
+                    &request_id,
+                )
+                .await;
+        }
     };
     let status = resp.status();
     tracing::info!(
@@ -541,24 +827,71 @@ async fn handle(
         upstream.status = status.as_u16(),
         "git request relayed"
     );
+    let code = Some(status.as_u16());
     // Never follow, and never hand the agent a Location or a credential challenge.
-    if status.is_redirection() {
-        return fail(StatusCode::BAD_GATEWAY, "upstream_redirect", &request_id);
+    if status.is_redirection() || status == StatusCode::UNAUTHORIZED {
+        let slug = if status.is_redirection() {
+            "upstream_redirect"
+        } else {
+            "upstream_unauthorized"
+        };
+        if !call.record(Outcome::UpstreamError, code).await {
+            return fail(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "audit_failed",
+                &request_id,
+            );
+        }
+        return fail(StatusCode::BAD_GATEWAY, slug, &request_id);
     }
-    if status == StatusCode::UNAUTHORIZED {
+
+    // Redact the credential in the headers passed back; fail closed when a value still matches.
+    let Some(out_headers) = scan_headers(&redactor, resp.headers()) else {
+        return call
+            .failed(
+                Outcome::RedactionFailed,
+                StatusCode::BAD_GATEWAY,
+                "redaction_failed",
+                &request_id,
+            )
+            .await;
+    };
+    // A Git stream goes through raw; anything else (an error page above all) is read, redacted
+    // and re-checked, or withheld.
+    let payload = if is_git_stream(status, resp.headers()) {
+        Payload::Stream(resp)
+    } else {
+        match scan_body(resp, &redactor).await {
+            Some(b) => Payload::Text(b),
+            None => {
+                return call
+                    .failed(
+                        Outcome::RedactionFailed,
+                        StatusCode::BAD_GATEWAY,
+                        "redaction_failed",
+                        &request_id,
+                    )
+                    .await;
+            }
+        }
+    };
+    // The ledger takes the event before the agent sees the answer.
+    if !call.record(Outcome::Ok, code).await {
         return fail(
-            StatusCode::BAD_GATEWAY,
-            "upstream_unauthorized",
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "audit_failed",
             &request_id,
         );
     }
     let mut out = Response::builder().status(status);
-    for name in FORWARD_RESPONSE_HEADERS {
-        for v in resp.headers().get_all(*name) {
-            out = out.header(*name, v.clone());
-        }
+    for (name, v) in out_headers {
+        out = out.header(name, v);
     }
-    out.body(Body::from_stream(resp.bytes_stream()))
+    let body = match payload {
+        Payload::Text(b) => Body::from(b),
+        Payload::Stream(r) => Body::from_stream(r.bytes_stream()),
+    };
+    out.body(body)
         .unwrap_or_else(|_| fail(StatusCode::BAD_GATEWAY, "upstream_error", &request_id))
 }
 

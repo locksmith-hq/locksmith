@@ -11,9 +11,9 @@
 - [x] 2.4 Verify: `cargo nextest run -p ls-gateway git` against a `git http-backend` fixture: clone, push, unbound repo 403, fetch-only grant cannot push, redirect not followed.
 
 ## 3. Redaction and audit [sonnet]
-- [ ] 3.1 Redact the credential in upstream headers and text error bodies; ledger events `git.fetch`, `git.push` and denials without credential or pack data.
-- [ ] 3.2 Add a Git case to the adversarial gateway suite (`tests/adversarial/gateway/`) for the error channel and header echo.
-- [ ] 3.3 Verify: `cargo nextest run -p ls-gateway git_redact`, `just leak-scan`, `just audit-verify`.
+- [x] 3.1 Redact the credential in upstream headers and text error bodies; ledger events `git.fetch`, `git.push` and denials without credential or pack data.
+- [x] 3.2 Add a Git case to the adversarial gateway suite (`tests/adversarial/gateway/`) for the error channel and header echo.
+- [x] 3.3 Verify: `cargo nextest run -p ls-gateway git_redact`, `just leak-scan`, `just audit-verify`.
 
 ## 4. Client setup [sonnet]
 - [ ] 4.1 `smith git setup --gateway <url>` writes `insteadOf` and the credential helper returning the agent token; `smith doctor` check; `teardown` removes it.

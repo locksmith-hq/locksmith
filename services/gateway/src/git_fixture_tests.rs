@@ -25,14 +25,14 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::app::{self, AppState};
-use crate::audit::MemoryAudit;
+use crate::audit::{EventKind, MemoryAudit, Method as AuditMethod, Outcome};
 use crate::auth::testkit::StubJwks;
 use crate::auth::{AgentAuth, JwksSettings};
 use crate::config::Bindings;
 use crate::decrypt::testkit::{key, seal};
 use crate::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use crate::egress::testkit::StubResolver;
-use crate::git::{GitBinding, GitOptions, GitService, GitState};
+use crate::git::{GitBinding, GitOptions, GitService, GitState, MAX_SCANNED_BODY};
 use crate::grants::testkit::StubGrants;
 use crate::grants::{Grant, GrantCache, GrantCacheSettings};
 use crate::relay::{Relay, RelayOptions};
@@ -292,6 +292,7 @@ struct Gateway {
     base: String,
     token: String,
     cp: MockServer,
+    audit: Arc<MemoryAudit>,
 }
 
 impl Gateway {
@@ -331,6 +332,21 @@ async fn start_gateway(
     git_bindings: Vec<GitBinding>,
     secrets: &[(Uuid, Vec<u8>)],
     github_api: Option<String>,
+) -> Gateway {
+    start_gateway_with(
+        git_bindings,
+        secrets,
+        github_api,
+        Arc::new(MemoryAudit::default()),
+    )
+    .await
+}
+
+async fn start_gateway_with(
+    git_bindings: Vec<GitBinding>,
+    secrets: &[(Uuid, Vec<u8>)],
+    github_api: Option<String>,
+    audit: Arc<MemoryAudit>,
 ) -> Gateway {
     let cp = MockServer::start().await;
     let bao = MockServer::start().await;
@@ -402,7 +418,7 @@ async fn start_gateway(
         },
         decryptor,
         Arc::new(StubResolver::default()),
-        Arc::new(MemoryAudit::default()),
+        audit.clone(),
         RelayOptions::default(),
     )
     .with_git(state);
@@ -413,7 +429,12 @@ async fn start_gateway(
     tokio::spawn(async move {
         let _ = axum::serve(l, router).await;
     });
-    Gateway { base, token, cp }
+    Gateway {
+        base,
+        token,
+        cp,
+        audit,
+    }
 }
 
 async fn run_git(dir: PathBuf, args: Vec<String>) -> std::process::Output {
@@ -503,6 +524,25 @@ async fn git_clone_and_push_through_gateway() {
     // The fixture saw the credential on every request and never one without it.
     assert!(fx.seen.authorized.load(Ordering::SeqCst) >= 4);
     assert_eq!(fx.seen.unauthorized.load(Ordering::SeqCst), 0);
+    // The ledger has the fetches and the push, and neither credential nor pack data.
+    let kinds: Vec<EventKind> = gw.audit.events().into_iter().map(|e| e.kind).collect();
+    assert!(
+        kinds.contains(&EventKind::GitFetch(Outcome::Ok)),
+        "{kinds:?}"
+    );
+    assert!(
+        kinds.contains(&EventKind::GitPush(Outcome::Ok)),
+        "{kinds:?}"
+    );
+    assert!(
+        kinds
+            .iter()
+            .all(|k| matches!(k, EventKind::GitFetch(_) | EventKind::GitPush(_)))
+    );
+    assert_no_secret(
+        "audit events",
+        format!("{:?}", gw.audit.stored()).as_bytes(),
+    );
     // The agent side never holds the GitHub credential.
     let text = std::fs::read_to_string(w.join(".git/config")).unwrap();
     assert!(!text.contains(PAT) && !text.contains(&B64.encode(format!("x-access-token:{PAT}"))));
@@ -581,6 +621,14 @@ async fn git_unbound_repo_is_403_with_no_decrypt_and_no_upstream_call() {
         gw.material_fetches().await,
         0,
         "no decrypt for an unbound repository"
+    );
+    let events = gw.audit.events();
+    assert!(!events.is_empty());
+    assert!(
+        events
+            .iter()
+            .all(|e| e.kind == EventKind::GitDenied(Outcome::Denied) && e.status.is_none()),
+        "{events:?}"
     );
     assert_eq!(fx.seen.authorized.load(Ordering::SeqCst), 0);
     assert_eq!(
@@ -779,4 +827,307 @@ fn rsa_pem() -> Option<String> {
         ]))
     .then(|| std::fs::read_to_string(&k1).ok())
     .flatten()
+}
+
+// ---------------------------------------------------------------------------------------------
+// D1 task 3: redaction (headers, text error bodies) and the ledger events.
+// ---------------------------------------------------------------------------------------------
+
+/// The oracle: every form `ls-redact` knows of the PAT and of its `Basic` header.
+fn assert_no_secret(what: &str, bytes: &[u8]) {
+    let mut secret = ls_redact::Secret::new("C", PAT.as_bytes());
+    secret.basic_auth_user = Some("x-access-token".to_owned());
+    let oracle = ls_redact::Redactor::new(&[secret]);
+    assert!(
+        oracle.find(bytes).is_empty(),
+        "{what}: the credential is still there"
+    );
+}
+
+/// A gateway bound to a mock upstream that answers every request with `reply`.
+async fn hostile(reply: ResponseTemplate, services: Vec<GitService>) -> (Gateway, MockServer) {
+    hostile_with(reply, services, Arc::new(MemoryAudit::default())).await
+}
+
+async fn hostile_with(
+    reply: ResponseTemplate,
+    services: Vec<GitService>,
+    audit: Arc<MemoryAudit>,
+) -> (Gateway, MockServer) {
+    let up = MockServer::start().await;
+    Mock::given(wiremock::matchers::any())
+        .respond_with(reply)
+        .mount(&up)
+        .await;
+    let binding = git_binding(RW, "acme/widgets", services, up.address().port());
+    let gw = start_gateway_with(vec![binding], &[(RW, PAT.as_bytes().to_vec())], None, audit).await;
+    (gw, up)
+}
+
+fn refs_url(gw: &Gateway) -> String {
+    format!("{}/info/refs?service=git-upload-pack", gw.remote("widgets"))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_redact_error_body_and_headers_echoing_the_credential() {
+    let basic_b64 = B64.encode(format!("x-access-token:{PAT}"));
+    let echo = format!(
+        "denied for token {PAT}; header Authorization: Basic {basic_b64}; json {{\"t\":\"{PAT}\"}}"
+    );
+    let reply = ResponseTemplate::new(403)
+        .insert_header("content-type", "text/plain")
+        .insert_header("cache-control", format!("no-cache, echo={PAT}"))
+        .insert_header("pragma", format!("Basic {basic_b64}"))
+        // Not on the allow-list: dropped whole.
+        .insert_header("x-echo", PAT)
+        .insert_header("www-authenticate", format!("Basic realm=\"{PAT}\""))
+        .set_body_string(echo);
+    let (gw, up) = hostile(reply, vec![GitService::Fetch]).await;
+    let r = http()
+        .get(refs_url(&gw))
+        .header("authorization", format!("Bearer {}", gw.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "the upstream status passes through");
+    let mut head = String::new();
+    for (n, v) in r.headers() {
+        head.push_str(&format!("{n}: {}\n", String::from_utf8_lossy(v.as_bytes())));
+    }
+    assert!(r.headers().get("x-echo").is_none());
+    assert!(r.headers().get("www-authenticate").is_none());
+    assert_no_secret("response headers", head.as_bytes());
+    assert!(
+        r.headers()["cache-control"]
+            .to_str()
+            .unwrap()
+            .contains("[REDACTED:SECRET]")
+    );
+    let body = r.text().await.unwrap();
+    assert_no_secret("response body", body.as_bytes());
+    assert!(body.contains("[REDACTED:SECRET]") && body.contains("denied for token"));
+    // The injected credential did reach the upstream, in the one header.
+    let seen = up.received_requests().await.unwrap();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(
+        seen[0]
+            .headers
+            .get("authorization")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        basic(PAT)
+    );
+    // The ledger: one `git.fetch` carrying the upstream status.
+    let events = gw.audit.events();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].kind, EventKind::GitFetch(Outcome::Ok));
+    assert_eq!(events[0].status, Some(403));
+    assert_no_secret("audit events", format!("{events:?}").as_bytes());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_redact_withholds_what_it_cannot_scan() {
+    let big = vec![b'a'; MAX_SCANNED_BODY + 1];
+    for reply in [
+        // A text body past the scan bound.
+        ResponseTemplate::new(500)
+            .insert_header("content-type", "text/plain")
+            .set_body_bytes(big.clone()),
+        // A compressed body: the redactor could not read it.
+        ResponseTemplate::new(500)
+            .insert_header("content-type", "text/plain")
+            .insert_header("content-encoding", "gzip")
+            .set_body_bytes(b"\x1f\x8b not really gzip".to_vec()),
+        // A "success" that is not a Git stream is scanned like an error page.
+        ResponseTemplate::new(200)
+            .insert_header("content-type", "text/html")
+            .set_body_bytes(big.clone()),
+    ] {
+        let (gw, _up) = hostile(reply, vec![GitService::Fetch]).await;
+        let r = http()
+            .get(refs_url(&gw))
+            .header("authorization", format!("Bearer {}", gw.token))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 502);
+        assert!(r.text().await.unwrap().contains("redaction_failed"));
+        let events = gw.audit.events();
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(
+            events[0].kind,
+            EventKind::GitFetch(Outcome::RedactionFailed)
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_redact_git_streams_pass_through_raw() {
+    // Binary pack-like data past the scan bound, a pkt-line length that a rewrite would break.
+    let mut pack = b"001e# service=git-upload-pack\n0000PACK".to_vec();
+    pack.extend((0..MAX_SCANNED_BODY * 2).map(|i| (i % 251) as u8));
+    let reply = ResponseTemplate::new(200)
+        .insert_header(
+            "content-type",
+            "application/x-git-upload-pack-advertisement",
+        )
+        .insert_header("cache-control", "no-cache")
+        .set_body_bytes(pack.clone());
+    let (gw, _up) = hostile(reply, vec![GitService::Fetch]).await;
+    let r = http()
+        .get(refs_url(&gw))
+        .header("authorization", format!("Bearer {}", gw.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.bytes().await.unwrap().as_ref(), pack.as_slice());
+    let events = gw.audit.events();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].kind, EventKind::GitFetch(Outcome::Ok));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_redact_allowed_header_values_are_replaced() {
+    // A header the gateway passes back is scanned: the credential in it is replaced.
+    let reply = ResponseTemplate::new(200)
+        .insert_header(
+            "content-type",
+            "application/x-git-upload-pack-advertisement",
+        )
+        .insert_header("expires", format!("{PAT}{PAT}"))
+        .set_body_bytes(b"0000".to_vec());
+    let (gw, _up) = hostile(reply, vec![GitService::Fetch]).await;
+    let r = http()
+        .get(refs_url(&gw))
+        .header("authorization", format!("Bearer {}", gw.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.headers()["expires"], "[REDACTED:SECRET][REDACTED:SECRET]");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_redact_events_hold_ids_and_codes_only() {
+    let pack = "PACKDATA-MARKER-9f3a";
+    let reply = ResponseTemplate::new(200)
+        .insert_header("content-type", "application/x-git-receive-pack-result")
+        .set_body_bytes(b"000eunpack ok\n0000".to_vec());
+    let (gw, up) = hostile(reply, vec![GitService::Fetch, GitService::Push]).await;
+    let h = http();
+    let auth = format!("Bearer {}", gw.token);
+    let push = h
+        .post(format!("{}/git-receive-pack", gw.remote("widgets")))
+        .header("authorization", &auth)
+        .header("content-type", "application/x-git-receive-pack-request")
+        .body(pack.to_owned())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(push.status(), 200);
+    let fetch = h
+        .get(refs_url(&gw))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(fetch.status(), 200);
+    assert_eq!(up.received_requests().await.unwrap().len(), 2);
+
+    let events = gw.audit.events();
+    let shape: Vec<_> = events
+        .iter()
+        .map(|e| (e.kind, e.method, e.status))
+        .collect();
+    assert_eq!(
+        shape,
+        [
+            (
+                EventKind::GitPush(Outcome::Ok),
+                Some(AuditMethod::Post),
+                Some(200)
+            ),
+            (
+                EventKind::GitFetch(Outcome::Ok),
+                Some(AuditMethod::Get),
+                Some(200)
+            ),
+        ]
+    );
+    for e in &events {
+        assert_eq!((e.agent_id, e.secret_id), (AGENT, RW));
+        assert_eq!(e.host.as_deref(), Some("127.0.0.1"));
+        assert!(e.attempt_id.is_none());
+    }
+    let text = format!("{:?}", gw.audit.stored());
+    assert_no_secret("audit events", text.as_bytes());
+    assert!(
+        !text.contains(pack) && !text.contains("widgets"),
+        "no pack data, no repository path"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_redact_denials_are_recorded_without_request_data() {
+    let (gw, up) = hostile(ResponseTemplate::new(200), vec![GitService::Fetch]).await;
+    let auth = format!("Bearer {}", gw.token);
+    // A push with a fetch-only binding, then an unbound repository.
+    let push = http()
+        .post(format!("{}/git-receive-pack", gw.remote("widgets")))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(push.status(), 403);
+    let other = http()
+        .get(format!(
+            "{}/git/127.0.0.1/acme/secret-repo-name.git/info/refs?service=git-upload-pack",
+            gw.base
+        ))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(other.status(), 403);
+    assert!(up.received_requests().await.unwrap().is_empty());
+    let events = gw.audit.events();
+    assert_eq!(events.len(), 2);
+    for e in &events {
+        assert_eq!(e.kind, EventKind::GitDenied(Outcome::Denied));
+        assert_eq!((e.agent_id, e.secret_id, e.status), (AGENT, RW, None));
+    }
+    let text = format!("{events:?}");
+    assert!(
+        !text.contains("secret-repo-name"),
+        "the caller's path never reaches the ledger"
+    );
+    // An unauthenticated caller is not audited at all.
+    let anon = http().get(refs_url(&gw)).send().await.unwrap();
+    assert_eq!(anon.status(), 401);
+    assert_eq!(gw.audit.events().len(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_redact_unaudited_response_is_withheld() {
+    let audit = Arc::new(MemoryAudit {
+        fail: true,
+        ..MemoryAudit::default()
+    });
+    let reply = ResponseTemplate::new(200)
+        .insert_header(
+            "content-type",
+            "application/x-git-upload-pack-advertisement",
+        )
+        .set_body_bytes(b"0000".to_vec());
+    let (gw, _up) = hostile_with(reply, vec![GitService::Fetch], audit).await;
+    let r = http()
+        .get(refs_url(&gw))
+        .header("authorization", format!("Bearer {}", gw.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 500);
+    assert!(r.text().await.unwrap().contains("audit_failed"));
 }

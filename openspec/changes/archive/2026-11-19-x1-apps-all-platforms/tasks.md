@@ -19,7 +19,7 @@
 
 ## 4. Platform CI [sonnet]
 - [x] 4.1 Build the Linux Tauri bundle locally (`tauri build --debug --bundles deb`) and record the result in progress.md; no `ci-platforms.yml` change (Windows deferred by owner decision #320).
-- [ ] 4.2 On the final commit, open a `needs-owner` issue asking the owner to dispatch `ci-platforms` once (macOS: `cargo test --workspace` and the app bundle); record the macOS and Linux results in progress.md.
+- [x] 4.2 On the final commit, open a `needs-owner` issue asking the owner to dispatch `ci-platforms` once (macOS: `cargo test --workspace` and the app bundle); record the macOS and Linux results in progress.md.
 
 ## 5. Local verification [sonnet]
 - [x] 5.1 Run `just up`, the smoke test, `just apps-build`, then `just ci`.

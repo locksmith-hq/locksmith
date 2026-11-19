@@ -25,7 +25,7 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
    instead of arriving at the end. Every change's Local verification runs `just apps-build`; the last
    change of each phase also runs the manual `ci-platforms` workflow on macOS and Linux (Windows parity is
    deferred to GA hardening, owner decision [#320](https://github.com/locksmith-hq/locksmith/issues/320)).
-7. **Model tiers.** Sonnet runs by default. Tasks marked `[opus]` touch crypto, auth, the gateway or adversarial gates.
+7. **Model tiers.** Sonnet runs by default. Only hard, complex tasks are marked `[opus]`; a change marked `[opus]` here is security-sensitive, but its tasks still run on Sonnet unless tagged `[opus]` in `tasks.md`.
 
 Status: ☐ not started · ◐ in progress · ☑ archived. Only the next one or two changes are written in
 full. Later rows are proposed (`/opsx:propose`) when their predecessor is about done, so each one

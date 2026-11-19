@@ -9,6 +9,9 @@
 
 When unsure, use Sonnet and escalate only if it fails evaluation. Split a mixed task so each part runs on the right tier.
 
+## Agent-system changes (#470)
+Agent-system files (`docs/agents`, `.claude/skills`, agent scripts, workflows; full list in `scripts/check-task-edits.sh`) change only on an `owner/harness-release-<YYYY-WW>` branch or a `*hotfix-*` branch (red main, a security fix, every run failing). In any other session, comment the idea on the `harness-backlog` issue instead.
+
 ## Skills
 Repeatable procedures live as skills in `.claude/skills/`, each with scripts. Use the skill instead of improvising:
 - `run-start`

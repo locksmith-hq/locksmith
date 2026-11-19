@@ -42,6 +42,11 @@ expect s2-crypto "stackable on s1-api"
 expect w1-site "parked owner #7" "7 owner Need a domain for w1-site landing"
 expect w1-site "parked rescue #8" "8 rescue Rescue: w1-site 1.1"
 expect w1-site "parked owner #7" "$(printf '8 rescue Rescue: w1-site 1.1\n7 owner Need a domain for w1-site')"
+# A needs-owner-only issue (gate) parks the change only when its next unticked task is a Gate: task (#470).
+expect w1-site "ready" "9 gate Approve the w1-site cost brief"
+expect w1-site "parked rescue #8" "$(printf '9 gate Approve w1-site\n8 rescue Rescue: w1-site 1.1')"
+mk g1-gated '' '- [x] 1.1 brief\n- [ ] 1.2 Gate: owner approved the brief\n- [ ] 1.3 apply\n'
+expect g1-gated "parked owner #9" "9 gate Approve the g1-gated cost brief"; rm -rf openspec/changes/g1-gated
 [ "$(OFFLINE=1 BLOCKERS='7 owner w1-site' bash "$script" --ready | tr '\n' ' ')" = "s2-crypto k1-api k2-ui " ] || { echo "FAIL: --ready"; exit 1; }
 echo "ok: --ready lists only takeable changes"
 # Unwritten rows whose Needs are archived or fully ticked on a branch; written rows (s1) never.

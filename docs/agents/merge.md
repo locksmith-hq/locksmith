@@ -11,6 +11,6 @@ The owner asked on 2026-11-16 for PRs to merge autonomously, with no waiting win
   - no protected files changed;
   - the independent review passed. That review is the `claude-review` workflow: Claude Opus running in GitHub Actions as the Claude GitHub App, posting `merge-review <sha>: PASS`. The verdict holds while the PR's own diff (by patch-id) is unchanged, so merging main in or pushes that add up to no net change do not need a new review.
 - Merges are pinned to the reviewed SHA and always use a merge commit, so `git revert -m 1` undoes any of them.
-- An agent PR that touches protected files never auto-merges; the owner merges it.
+- An agent PR that touches agent-system files (the weekly harness release or a hotfix) never auto-merges; the owner merges it.
 - If main CI goes red after a merge, fixing it comes before any other work.
 - This file, `scripts/merge-gate.sh`, `.claude/skills/merge-queue`, `.claude/skills/merge-review` and the workflows change only in owner sessions, or through a lead PR that the owner merges (`lead.md`).

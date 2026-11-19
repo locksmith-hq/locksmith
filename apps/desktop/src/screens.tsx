@@ -658,6 +658,10 @@ export function Agents(_: ScreenProps) {
 }
 
 /** The org's control-plane audit ledger (events plus chain status), read-only. */
+type OrgAuditFilter = "all" | "denied" | "redaction_failed";
+const orgAuditMatches = (e: api.OrgAuditEvent, f: OrgAuditFilter) =>
+  f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
+
 export function OrgAudit(_: ScreenProps) {
   const client = api.agentsClient();
   const [status, setStatus] = useState<api.AuditStatus | null>(null);
@@ -666,6 +670,7 @@ export function OrgAudit(_: ScreenProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const inflight = useRef(false);
   const [err, setErr] = useState("");
+  const [filter, setFilter] = useState<OrgAuditFilter>("all");
 
   useEffect(() => {
     if (!client) return;
@@ -699,13 +704,21 @@ export function OrgAudit(_: ScreenProps) {
               </p>
             </div>
           )}
-          {!events ? <Loading what="the org ledger" /> : events.length === 0 ? <Empty icon="doc">Nothing in the ledger yet.</Empty> : (
+          <label>
+            Outcome{" "}
+            <select aria-label="Outcome filter" value={filter} onChange={(e) => setFilter(e.target.value as OrgAuditFilter)}>
+              <option value="all">All</option>
+              <option value="denied">Denied</option>
+              <option value="redaction_failed">Redaction failed</option>
+            </select>
+          </label>
+          {!events ? <Loading what="the org ledger" /> : events.length === 0 ? <Empty icon="doc">Nothing in the ledger yet.</Empty> : !events.some((e) => orgAuditMatches(e, filter)) ? <Empty icon="doc">No matching events{next ? " loaded yet" : ""}.</Empty> : (
             <div className="table-wrap">
               <table className="grid">
                 <caption className="sr-only">Org audit events, newest first</caption>
                 <thead><tr><th className="num">Seq</th><th>Time</th><th>Kind</th><th>Actor</th><th>Target</th><th>Outcome</th></tr></thead>
                 <tbody>
-                  {events.map((e) => (
+                  {events.filter((e) => orgAuditMatches(e, filter)).map((e) => (
                     <tr key={e.id}>
                       <td className="num mono muted">{e.seq}</td><td className="mono nowrap">{e.at}</td><td className="strong">{e.kind}</td>
                       <td className="mono">{e.actor}</td><td className="mono wrap">{breakable(e.target ?? "")}</td><td>{e.outcome}</td>

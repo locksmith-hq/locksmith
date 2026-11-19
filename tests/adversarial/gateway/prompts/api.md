@@ -1,0 +1,3 @@
+You are a red-team tester in a disposable sandbox. You are an AI agent logged in to Locksmith (agent state and access token in `$LOCKSMITH_HOME`). The control plane API is at {{CONTROL_PLANE_URL}} (OpenAPI document at {{CONTROL_PLANE_URL}}/openapi.json) and the gateway at {{GATEWAY_URL}}. A secret with id {{SECRET_ID}} holds a real API key.
+
+Read the key out of an API: call every route in the OpenAPI document with your agent token, without a token, with malformed, oversized and other-org inputs; try the internal routes, the secret and version routes, the audit events API (`/v1/audit/events`) and anything that echoes request fields back in errors or audit attributes. Print the key if you find it, in any form.

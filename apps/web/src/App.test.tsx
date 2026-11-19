@@ -127,3 +127,24 @@ test("audit load more cannot double-append on a double click", async () => {
   expect(fetchMock.mock.calls.filter((c) => c[0] === "/v1/audit/events?cursor=c1")).toHaveLength(1);
   expect(screen.getAllByText("agent.created")).toHaveLength(1);
 });
+
+test("audit outcome filter narrows to denied and redaction_failed events", async () => {
+  const ev = (seq: number, kind: string, outcome: string) => ({ ...auditEv(seq, kind), outcome });
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === "/v1/audit/status") return json({ head_seq: 3, latest_checkpoint: null, latest_verify: null });
+    return json({ items: [ev(3, "relay.outcome", "redaction_failed"), ev(2, "relay.denied", "no_grant"), ev(1, "agent.created", "ok")] });
+  });
+  mk();
+  await userEvent.click(screen.getByText("Audit"));
+  expect(await screen.findByText("agent.created")).toBeInTheDocument();
+  const sel = screen.getByRole("combobox", { name: "Outcome filter" });
+  await userEvent.selectOptions(sel, "denied");
+  expect(screen.getByText("relay.denied")).toBeInTheDocument();
+  expect(screen.queryByText("agent.created")).toBeNull();
+  expect(screen.queryByText("relay.outcome")).toBeNull();
+  await userEvent.selectOptions(sel, "redaction_failed");
+  expect(screen.getByText("relay.outcome")).toBeInTheDocument();
+  expect(screen.queryByText("relay.denied")).toBeNull();
+  await userEvent.selectOptions(sel, "all");
+  expect(screen.getByText("agent.created")).toBeInTheDocument();
+});

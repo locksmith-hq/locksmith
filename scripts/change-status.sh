@@ -16,7 +16,13 @@ set -uo pipefail
 repo=locksmith-hq/locksmith
 only_ready=0; [ "${1:-}" = --ready ] && only_ready=1
 
-tasks_of() { git show "origin/claude/change-$1:openspec/changes/$1/tasks.md" 2>/dev/null || cat "openspec/changes/$1/tasks.md" 2>/dev/null; }
+tasks_of() {
+  local b="origin/claude/change-$1" p
+  git show "$b:openspec/changes/$1/tasks.md" 2>/dev/null && return
+  # A branch that archived the change in its PR has no live tasks.md; main's unticked copy would make it look ready.
+  p=$(git ls-tree -r --name-only "$b" -- openspec/changes/archive 2>/dev/null | grep -m1 -E -- "-$1/tasks\.md$")
+  if [ -n "$p" ]; then git show "$b:$p"; else cat "openspec/changes/$1/tasks.md" 2>/dev/null; fi
+}
 all_ticked() { ! grep -qE '^\s*- \[ \]' <<<"$1"; }
 archived() { compgen -G "openspec/changes/archive/*-$1" >/dev/null; }
 deps_of() { sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\][[:space:]]*$/\1/p' "openspec/changes/$1/.openspec.yaml" 2>/dev/null | tr ',' '\n' | tr -d ' "'"'" | grep -v '^$'; }

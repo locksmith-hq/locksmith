@@ -26,6 +26,11 @@ git switch -qc claude/change-s1-api; sed -i.bak 's/- \[ \] 1.2/- [x] 1.2/' opens
 git commit -qam tick; git update-ref refs/remotes/origin/claude/change-s1-api HEAD; git switch -q main
 expect s1-api "review"
 expect s2-crypto "stackable on s1-api"
+# s1's branch archives the change inside its PR: still in review, not ready again.
+git switch -q claude/change-s1-api; git mv openspec/changes/s1-api openspec/changes/archive/2026-01-02-s1-api
+git commit -qam archive; git update-ref refs/remotes/origin/claude/change-s1-api HEAD; git switch -q main
+expect s1-api "review"
+expect s2-crypto "stackable on s1-api"
 expect w1-site "parked owner #7" "7 owner Need a domain for w1-site landing"
 expect w1-site "parked rescue #8" "8 rescue Rescue: w1-site 1.1"
 expect w1-site "parked owner #7" "$(printf '8 rescue Rescue: w1-site 1.1\n7 owner Need a domain for w1-site')"

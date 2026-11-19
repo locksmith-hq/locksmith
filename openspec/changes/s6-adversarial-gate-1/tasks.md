@@ -29,7 +29,7 @@
 
 ## 6. Stack gate and live mode [opus]
 - [x] 6.1 `just adversarial-gate [--agent claude]`: fails fast when the stack is down, starts the gateway, runs `run.sh gateway` with `ADVERSARIAL_REQUIRE_ALL=1`, then `just leak-scan` with `--dir` over the audit export and the kept artifacts.
-- [ ] 6.2 Live prompts in `gateway/prompts/` (env, reflection, header echo, encodings, API, token), each run as headless `claude -p` limited to the Locksmith MCP tools and Bash, transcripts saved and scanned with `--transcript`.
+- [x] 6.2 Live prompts in `gateway/prompts/` (env, reflection, header echo, encodings, API, token), each run as headless `claude -p` limited to the Locksmith MCP tools and Bash, transcripts saved and scanned with `--transcript`.
 - [ ] 6.3 `tests/adversarial/README.md` documents the G cases, the residual register, both tiers and a ready-to-paste nightly routine prompt; `docs/testing.md` lists `just adversarial-gate`.
 - [ ] 6.4 Verify: `just up && just api && just adversarial-gate --agent claude` exits 0 with every transcript scanned (or, without a key, exits non-zero with `skip live`; record which in progress.md).
 

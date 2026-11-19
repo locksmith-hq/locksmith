@@ -144,11 +144,15 @@ def forms(label):
     prefix = views + "/" if views else ""
     return {label} | {prefix + n for n in names.split("+")}
 ok = True
+seen = set()
 for line in open(scan, encoding="utf-8", errors="replace"):
     p = line.split()
     if len(p) >= 3 and p[0] == "LEAK":
-        loc = p[2][len("transcript:"):] if p[2].startswith("transcript:") else p[2]
+        loc = p[2].split(":", 1)[1] if p[2].startswith(("transcript:", "dir:")) else p[2]
         where = os.path.relpath(loc.rpartition(":")[0] or loc, adir)
+        if (p[1], where) in seen:
+            continue
+        seen.add((p[1], where))
         hit = [known[f] for f in forms(p[1]) if f in known]
         if hit:
             print("RESIDUAL live %s in %s (%s)" % (p[1], where, hit[0]))

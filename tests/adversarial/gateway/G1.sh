@@ -60,7 +60,14 @@ dump_proc_private() {
   for f in environ cmdline status; do
     cat "/proc/$pid/$f" >"$GW_WORK/privproc/$name.$f" 2>/dev/null || gw_fail "cannot read /proc/$pid/$f ($name)"
   done
-  tr '\0' '\n' <"$GW_WORK/privproc/$name.environ" | sed 's/=.*//' >"$P/$name.environ-names.txt"
+  # Split on NUL (not newline): a value with embedded newlines (a PEM key, an exported function)
+  # must not leak its later lines into the names file.
+  python3 -I -c '
+import sys
+for kv in open(sys.argv[1], "rb").read().split(b"\0"):
+    if kv:
+        sys.stdout.buffer.write(kv.partition(b"=")[0] + b"\n")
+' "$GW_WORK/privproc/$name.environ" >"$P/$name.environ-names.txt"
   tr '\0' ' ' <"$GW_WORK/privproc/$name.cmdline" >"$P/$name.cmdline.txt"
   cp "$GW_WORK/privproc/$name.status" "$P/$name.status"
 }

@@ -4,7 +4,7 @@
     "owner":  { "logins": ["tomer555"] },
     "lead":   { "logins": ["locksmith-linus[bot]"], "trigger": "trig_01QEJR9b7UBh6XeiCeAa7cv1", "secret": "LEAD_FIRE_TOKEN" },
     "worker": { "logins": ["locksmith-alfie[bot]", "locksmith-josie[bot]", "locksmith-harriet[bot]"], "trigger": "trig_01JUGABHdyZuNMJSYdEKSfJx", "secret": "ROUTINE_FIRE_TOKEN" },
-    "pm":     { "logins": ["locksmith-walt[bot]"], "trigger": "", "secret": "PM_FIRE_TOKEN" }
+    "pm":     { "logins": ["locksmith-walt[bot]"], "trigger": "trig_01Dja9jHSJRqbcepRAGz9GUQ", "secret": "PM_FIRE_TOKEN" }
   },
   "channels": {
     "needs-rescue": { "from": ["worker"], "to": "lead", "on_close": "worker" },

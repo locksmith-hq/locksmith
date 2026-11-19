@@ -23,7 +23,8 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
 5. **Local, then cloud.** AWS `dev` arrives only in phase 4. Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
 6. **Apps are built every change.** The web console and the desktop app (Tauri) grow with each slice
    instead of arriving at the end. Every change's Local verification runs `just apps-build`; the last
-   change of each phase also runs the manual `ci-platforms` workflow on macOS, Linux and Windows.
+   change of each phase also runs the manual `ci-platforms` workflow on macOS and Linux (Windows parity is
+   deferred to GA hardening, owner decision [#320](https://github.com/locksmith-hq/locksmith/issues/320)).
 7. **Model tiers.** Sonnet runs by default. Tasks marked `[opus]` touch crypto, auth, the gateway or adversarial gates.
 
 Status: ☐ not started · ◐ in progress · ☑ archived. Only the next one or two changes are written in
@@ -48,14 +49,15 @@ uses what the previous one taught us.
 | S4 | `s4-agent-connector` | Agent identity plus short-lived token. `smith` and `locksmith-mcp` list grants and route tool calls through the gateway. **First demo: Claude Code calls a real API (e.g. Langfuse) with no key on the laptop.** | Live headless `claude -p` run, `just leak-scan` on the transcript | ☑ |
 | S5 | `s5-audit-ledger` | Append-only, hash-chained audit per org. `just audit-verify` checks it and an export goes to a file sink. | Tamper test | ☑ |
 | S6 | `s6-adversarial-gate-1` [opus] | Scripted and live-agent extraction attempts against S1–S5 (env, reflection, header echo, encodings). | Suite green in CI and nightly | ☐ |
-| X1 | `x1-apps-all-platforms` | The desktop app builds and launches on macOS, Linux and Windows (`ls-ipc` over a Windows named pipe), and the web console builds; `ci-platforms` builds the Tauri bundle on all three. From here every phase ends green on all three. | `just apps-build` locally, `ci-platforms` green on all three | ☐ |
+| X1 | `x1-apps-all-platforms` | The desktop app builds and launches on macOS and Linux, and the web console builds; `ci-platforms` builds the macOS bundle and the Linux bundle is built locally. Windows code (named pipe, ACLs) stays compile-checked only; runtime parity is deferred to GA hardening ([#320](https://github.com/locksmith-hq/locksmith/issues/320)). | `just apps-build` locally, `ci-platforms` green on macOS | ☐ |
+| G1 | `g1-go-public` | The repo is ready to flip public: full-history secret scan triaged, AGPL/Apache licences in every manifest, a public README and community docs, `scripts/public-check.sh` in `just ci`, and an owner flip checklist. Only the owner flips visibility and re-enables `ci` (owner request [#147](https://github.com/locksmith-hq/locksmith/issues/147), [#307](https://github.com/locksmith-hq/locksmith/issues/307)). | `bash scripts/public-check.test.sh`, `gitleaks detect` clean | ☐ |
 | H1 | `h1-test-recipes` | Every crate, service, app, package and integration has a documented test recipe: `docs/testing.md` maps each one to its command, `just test <name>` runs it, and tree-check fails when a new component has no entry. | `just test <name>` for every listed component, tree-check fails on a planted unlisted crate | ☑ |
 
 ## Phase 2: Team product
 
 | # | Change | Usable outcome |
 |---|---|---|
-| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub, plus passkeys: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). |
+| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). |
 | T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. |
 | T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. |
 | T3 | `t3-console-mvp` | React console: projects, secrets (client-side encrypted), agents, sessions and audit view. Playwright e2e. |
@@ -82,8 +84,8 @@ uses what the previous one taught us.
 ## Phase 5: Parity and beyond (ordered later, by demand)
 
 Rotation and dynamic secrets (run in the gateway), syncs, the Terraform provider and k8s operator,
-SAML and SCIM, billing, SOC2 programme, local-only mode for solo developers.
+SAML and SCIM, passkeys (moved out of T1 to keep it small), billing, SOC2 programme, local-only mode for solo developers.
 
 ## Phase 6: GA hardening
 
-External pentest, full adversarial suite, Windows connector, docs and landing site.
+External pentest, full adversarial suite, Windows parity (desktop, daemon and CLI tested on Windows; [#320](https://github.com/locksmith-hq/locksmith/issues/320)), Windows connector, docs and landing site.

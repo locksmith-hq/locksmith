@@ -18,8 +18,8 @@
 - [ ] 3.4 Verify: `just apps-build` and `bash scripts/desktop-smoke.sh` on Linux.
 
 ## 4. Platform CI [sonnet]
-- [ ] 4.1 Prepare the `ci-platforms.yml` change (drop the Windows exclusions, add `cargo test --workspace` to the Windows job, add Linux and Windows Tauri bundle jobs) as a patch in the PR description and open a `needs-owner` issue, because workflows are protected.
-- [ ] 4.2 After the owner lands it, run `ci-platforms` once on the final commit, including `cargo test --workspace` and `scripts/desktop-smoke.sh` on macOS and Windows, and record the three results in progress.md.
+- [ ] 4.1 Build the Linux Tauri bundle locally (`tauri build --debug --bundles deb`) and record the result in progress.md; no `ci-platforms.yml` change (Windows deferred by owner decision #320).
+- [ ] 4.2 On the final commit, open a `needs-owner` issue asking the owner to dispatch `ci-platforms` once (macOS: `cargo test --workspace` and the app bundle); record the macOS and Linux results in progress.md.
 
 ## 5. Local verification [sonnet]
 - [ ] 5.1 Run `just up`, the smoke test, `just apps-build`, then `just ci`.

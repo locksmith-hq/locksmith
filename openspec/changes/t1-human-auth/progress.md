@@ -33,3 +33,8 @@
 - Verified: `cargo nextest run -p ls-control-plane` (131 passed, 4 new in tests/human_auth.rs), clippy clean, `just ci` -> exit 0 (729 tests); Sonnet evaluator PASS
 - Deviation: `auth.verify_failed` is ledgered only for a known user with an unverified email (the ledger chain is per org; a forged or unknown token has no trustworthy org, and a global sink would invite flooding). `auth.sign_in`/`auth.sign_out` are new `POST /v1/auth/sign-in` and `/sign-out` routes (204, human bearer only), since a per-request event would serialize on the org head lock; sign-out is stateless. `org.personal_created` is appended in the first-login transaction. Event attrs: issuer host and static reason only.
 - Notes for next session: 5.2 (G7 case in the adversarial gate) and 5.3 next, then 6.1-6.4 and 7.1. If bad-token failures must be ledgered, it needs a system-level chain decision (lead).
+
+## 2026-11-19 worker (events)
+- Task: 5.2, 5.3 - done
+- Verified: `bash tests/adversarial/run.sh gateway G7` PASS (real Keycloak token; forged, dev-header-off, agent/internal routes all 401); `just leak-scan` clean; `just audit-verify` ok; `just ci` exit 0 (first run had one load-induced timeout in smith-cli http test, passes alone and on rerun)
+- Notes for next session: expired-but-signed token not testable from a case (unit-covered); sign-out replay not asserted (stateless by design). Next: 6.1-6.4 web/desktop/CLI, then 7.1.

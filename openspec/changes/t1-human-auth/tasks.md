@@ -23,8 +23,8 @@
 
 ## 5. Audit and leak safety [sonnet]
 - [x] 5.1 Ledger events `auth.sign_in`, `auth.sign_out`, `auth.verify_failed`, `org.personal_created` without credentials.
-- [ ] 5.2 Add a G7 case to the adversarial gate (forged and replayed human tokens, dev header, human token at agent and internal routes).
-- [ ] 5.3 Verify: `just leak-scan`, `just audit-verify`, `bash tests/adversarial/run.sh gateway G7`.
+- [x] 5.2 Add a G7 case to the adversarial gate (forged and replayed human tokens, dev header, human token at agent and internal routes).
+- [x] 5.3 Verify: `just leak-scan`, `just audit-verify`, `bash tests/adversarial/run.sh gateway G7`.
 
 ## 6. Console, desktop and CLI [sonnet]
 - [x] 6.0 Gate: confirm the owner approved the sign-in and onboarding UX direction (design.md Open Questions); otherwise stop here and report to the lead.

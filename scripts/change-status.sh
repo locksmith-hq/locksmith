@@ -4,8 +4,9 @@
 #   ready      deps merged, nothing open blocks it
 #   stackable  a dep is unmerged but its PR is fully ticked; branch from that PR's branch
 #   blocked    a dep is not finished (detail names it)
-#   parked     an open needs-owner / needs-rescue issue names this change (detail: owner #n | rescue #n;
-#              owner wins, since a rescue that failed twice also gets needs-owner)
+#   parked     an open needs-rescue issue names this change (detail: rescue #n, or owner #n once the lead
+#              escalated it with needs-owner), or an open needs-owner-only issue names it and the next unticked
+#              task is a `Gate:` task (detail: owner #n). Owner gates go last, so they block only their own tasks (#470).
 #   claimed    another worker holds the change lock (detail: holder)
 #   review     every task ticked on the branch; waiting for the merge queue
 #   finished   every task ticked on main but not archived
@@ -62,11 +63,14 @@ ids=$( { grep -oE '`[a-z][0-9]+-[a-z0-9-]+`' docs/roadmap.md | tr -d '`'; ls ope
   awk '!seen[$0]++' | while read -r id; do [ "$id" != archive ] && [ -f "openspec/changes/$id/tasks.md" ] && echo "$id"; done)
 
 blockers=""
-# One line per open blocker issue: "<number> <owner|rescue> <title and body on one line>", owner first.
+# One line per open blocker issue: "<number> <kind> <title and body on one line>"; kind is owner (escalated
+# rescue: both labels), rescue, or gate (needs-owner only).
+# shellcheck disable=SC2016 # jq variables
 [ "${OFFLINE:-0}" = 1 ] || blockers=$(gh api "repos/$repo/issues?state=open&per_page=100" \
   -q '.[]|select(any(.labels[]; .name=="needs-owner" or .name=="needs-rescue"))
-    |"\(.number) \(if any(.labels[]; .name=="needs-owner") then "owner" else "rescue" end) \((.title+" "+(.body // ""))|gsub("\n";" "))"' 2>/dev/null)
-blockers=$(sort -s -k2,2 <<<"${BLOCKERS:-$blockers}")
+    |(any(.labels[]; .name=="needs-owner")) as $o | (any(.labels[]; .name=="needs-rescue")) as $r
+    |"\(.number) \(if $o and $r then "owner" elif $r then "rescue" else "gate" end) \((.title+" "+(.body // ""))|gsub("\n";" "))"' 2>/dev/null)
+blockers=${BLOCKERS:-$blockers}
 
 for id in $ids; do
   t=$(tasks_of "$id")
@@ -83,8 +87,14 @@ for id in $ids; do
       esac
     done
     if [ "$state" != blocked ] && [ -n "$blockers" ]; then
-      b=$(grep -F -- "$id" <<<"$blockers" | head -1)
-      [ -n "$b" ] && { state=parked; detail="$(cut -d' ' -f2 <<<"$b") #$(cut -d' ' -f1 <<<"$b")"; }
+      mine=$(grep -F -- "$id" <<<"$blockers")
+      gate_next=$(grep -m1 -E '^\s*- \[ \]' <<<"$t" | grep -c 'Gate:')
+      for k in owner rescue gate; do
+        b=$(awk -v k="$k" '$2==k' <<<"$mine" | head -1)
+        [ -z "$b" ] && continue
+        [ "$k" = gate ] && [ "$gate_next" = 0 ] && continue
+        state=parked; detail="$([ "$k" = rescue ] && echo rescue || echo owner) #$(cut -d' ' -f1 <<<"$b")"; break
+      done
     fi
     if [ "$state" = ready ] || [ "$state" = stackable ] && [ "${OFFLINE:-0}" != 1 ]; then
       h=$(bash scripts/run-lock.sh holder "status-check" "$id" 2>/dev/null)

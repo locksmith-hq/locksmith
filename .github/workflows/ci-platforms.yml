@@ -1,10 +1,11 @@
 name: ci-platforms
 
-# macOS costs ~10x Linux per minute and Windows ~1.7x on private repos (see ci.yml header), so these
-# run only on demand and on release tags, never on every PR.
+# macOS and Windows checks on every PR (standard runners are free on public repos).
 on:
+  pull_request:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ['v*']
 
 concurrency:
@@ -17,7 +18,7 @@ permissions:
 jobs:
   macos:
     runs-on: macos-latest
-    timeout-minutes: 15  # macOS minutes count 10x against the quota
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -40,7 +41,7 @@ jobs:
 
   windows-check:
     runs-on: windows-2022
-    timeout-minutes: 15  # Windows minutes count 2x
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

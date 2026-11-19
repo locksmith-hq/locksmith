@@ -53,8 +53,7 @@ Only the owner does these, in this order. Agents never change repository, Action
    ```sh
    gh api -X PUT repos/OWNER/REPO/private-vulnerability-reporting
    ```
-7. **Branch rules.** Branch protection on `main` is off by owner decision (2026-11-16). Revisit with the merge workflow before inviting outside contributors.
-8. **Check Actions usage** with `scripts/actions-usage.py` after the first public week.
+7. **Branch rules.** Applied 2026-11-19 (steps 4 `ci`, 5 and 6 too): `main` needs a code-owner review, dismisses stale approvals and needs last-push approval; ruleset `main-threads` requires resolved review threads and blocks force pushes and deletion; ruleset `release-tags` lets only admins create, move or delete `v*` tags. Admins bypass all of them, so owner and agent PRs still merge on green. Fork PR workflows need approval for every outside contributor, and Dependabot alerts are on. `merge-gate.sh` refuses fork PRs and PRs not opened by the owner; those merge by hand after review.
 
 ### Coverage of owner decision #307
 | #307 item | Step |

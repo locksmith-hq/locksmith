@@ -16,6 +16,10 @@ state=$(jq -r .state <<<"$pr"); draft=$(jq -r .draft <<<"$pr")
 head_ref=$(jq -r .head.ref <<<"$pr"); sha=$(jq -r .head.sha <<<"$pr")
 [ "$state" = open ] || fail "PR is $state"
 [ "$draft" = false ] || fail "PR is a draft (cloud runs cannot un-draft; needs owner)"
+# Public repo: only same-repo PRs opened by the owner (agents push as the owner) can auto-merge.
+# Anyone else's PR (forks, collaborators) is merged by hand after a code-owner review.
+[ "$(jq -r .head.repo.full_name <<<"$pr")" = "$repo" ] || fail "fork PR: merged by hand after review"
+[ "$(jq -r .user.login <<<"$pr")" = "${OWNER_LOGIN:-tomer555}" ] || fail "PR not opened by the owner: merged by hand after review"
 # MERGE_ON_GREEN=1 (merge-on-green workflow, owner 2026-11-18): a non-agent branch needs no label and skips
 # gates 5-6, so it merges once complete and CI is green. Agent (claude/*) PRs always run the full gate:
 # ready-to-merge label plus a claude-review PASS, so they never merge before review.
@@ -26,7 +30,7 @@ if [ "$on_green" != 1 ]; then
   jq -e '.labels[]|select(.name=="ready-to-merge")' <<<"$pr" >/dev/null || fail "no ready-to-merge label"
 fi
 jq -e '.labels[]|select(.name=="hold")' <<<"$pr" >/dev/null && fail "owner hold label"
-# Owner can pause CI and review (gh workflow disable ci / claude-review): their gates are then skipped.
+# Owner can pause the review (gh workflow disable claude-review): gate 6 is then skipped. CI is never skipped.
 wf_off() { [ "$(gh api "repos/$repo/actions/workflows/$1" -q .state 2>/dev/null)" = disabled_manually ]; }
 
 if ! { git fetch -q origin main "$head_ref" && git checkout -q --detach "$sha"; }; then fail "cannot check out $sha"; fi
@@ -53,7 +57,6 @@ for _ in 1 2 3; do [ "$m" != null ] && break; sleep 3; m=$(gh api "repos/$repo/p
 [ "$m" = true ] || fail "3 not mergeable (conflicts: merge origin/main into $head_ref, resolve, push)"
 echo "ok 3 mergeable"
 # 4 CI green on the head SHA
-if wf_off ci.yml; then echo "skip 4 ci: ci workflow disabled by owner"; else
 # Latest run per check name; the claude-review jobs (review, mention) are judged by gate 6 instead.
 runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" -q '[.check_runs[]|select(.name!="review" and .name!="mention")|{n:.name,s:.status,c:.conclusion,t:(.started_at//"")}]|group_by(.n)|map(max_by(.t))')
 [ "$(jq length <<<"$runs")" -gt 0 ] || fail "4 ci: no check runs yet"
@@ -61,10 +64,14 @@ jq -e 'all(.[]; .s=="completed")' <<<"$runs" >/dev/null || fail "4 ci: checks st
 jq -e 'all(.[]; .c=="success" or .c=="skipped" or .c=="neutral")' <<<"$runs" >/dev/null || fail "4 ci: $(jq -r '[.[]|select(.c!="success" and .c!="skipped" and .c!="neutral")|.n]|join(",")' <<<"$runs") not green"
 jq -e 'any(.[]; .n=="hygiene" and .c=="success")' <<<"$runs" >/dev/null || fail "4 ci: hygiene did not succeed"
 echo "ok 4 ci-green"
-fi
 [ "$on_green" = 1 ] && { echo "GATE PASS $sha"; exit 0; }
-# 5 no protected files
-prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude/settings.json .claude/settings.local.json .claude/agents .claude/skills/merge-queue .claude/skills/merge-review 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh AGENTS.md CLAUDE.md openspec/config.yaml docs/agents/common.md docs/agents/merge.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh)
+# 5 no agent-system files: the weekly harness release (and any hotfix) is merged by the owner (#470).
+# owner.md is excluded: agents append approved owner decisions to it.
+prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude AGENTS.md CLAUDE.md openspec/config.yaml docs/agents \
+  ':(exclude)docs/agents/owner.md' 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh scripts/route.sh \
+  scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh \
+  scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh scripts/issues-sync.sh \
+  scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
 [ -z "$prot" ] || fail "5 protected files changed: ${prot//$'\n'/ }"
 echo "ok 5 no-protected-files"
 # 6 independent review by the claude-review workflow (Claude GitHub App), for this exact head SHA

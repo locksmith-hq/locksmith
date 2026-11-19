@@ -8,29 +8,42 @@ set -euo pipefail
 
 branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 
-# Agents (claude/* branches) may never change their own rules, CI, or this guard.
-# Exception: claude/lead-* may edit skills (not merge-queue), role files and helper scripts;
-# gates, workflows, AGENTS.md/CLAUDE.md, config and .claude settings stay owner-only for everyone.
+# Two rules for the agent system (owner 2026-11-19, Agent System v3, #470):
+# 1. Weekly release: agent-system files change only on a *harness-release-* branch (one PR a week, built by the
+#    optimizer, approved by the owner) or a *hotfix-* branch (red main, a security fix, every run failing).
+#    This binds every branch, owner sessions included; other findings go to the harness-backlog issue.
+# 2. Trust root: agents (claude/* branches) never change the gates, guards, routing, workflows or hard rules.
+trust=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh
+       scripts/route.sh docs/agents/routing.json docs/agents/common.md docs/agents/merge.md .claude/skills/merge-review
+       AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents)
+harness=("${trust[@]}" docs/agents .claude/skills scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh
+         scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh
+         scripts/dates-sync.sh scripts/issues-sync.sh scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
 protected_fail=0
-if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/null; then
-  paths=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh
-         AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents
-         .claude/skills/merge-queue .claude/skills/merge-review docs/agents/merge.md docs/agents/common.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh
-         scripts/route.sh docs/agents/routing.json docs/agents/optimizer.md)
-  # Lead and optimizer branches may improve other skills, role files, lessons and helper scripts.
-  [[ "$branch" == claude/lead-* || "$branch" == claude/optimizer-* ]] || paths+=(docs/agents .claude/skills scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
-  # owner.md and openspec/decisions.md: agents may only append (new owner decisions), never edit existing lines.
+if git rev-parse -q --verify origin/main >/dev/null; then
   ob=$(git merge-base HEAD origin/main)
-  for f in docs/agents/owner.md openspec/decisions.md; do
-    if git cat-file -e "$ob:$f" 2>/dev/null; then
-      old=$(git show "$ob:$f" | wc -c)
-      { [ -f "$f" ] && cmp -s -n "$old" <(git show "$ob:$f") "$f"; } || { echo "task-edit guard: $f is append-only for agents"; protected_fail=1; }
+  # owner.md (owner decisions) may be appended on any branch; it is not part of the weekly release.
+  changed=$(git diff --name-only "$ob" -- "${harness[@]}" | grep -v '^docs/agents/owner.md$' || true)
+  case "$branch" in *harness-release-*|*hotfix-*) ;; *)
+    if [ -n "$changed" ]; then
+      echo "task-edit guard: '$branch' changes agent-system files outside the weekly release:"; echo "$changed"
+      echo "  Add the finding to the harness-backlog issue, or use a *hotfix-* branch for red main, a security fix or every run failing."
+      protected_fail=1
+    fi ;;
+  esac
+  if [[ "$branch" == claude/* ]]; then
+    # owner.md and openspec/decisions.md: agents may only append (new owner decisions), never edit existing lines.
+    for f in docs/agents/owner.md openspec/decisions.md; do
+      if git cat-file -e "$ob:$f" 2>/dev/null; then
+        old=$(git show "$ob:$f" | wc -c)
+        { [ -f "$f" ] && cmp -s -n "$old" <(git show "$ob:$f") "$f"; } || { echo "task-edit guard: $f is append-only for agents"; protected_fail=1; }
+      fi
+    done
+    tchanged=$(git diff --name-only "$ob" -- "${trust[@]}" || true)
+    if [ -n "$tchanged" ]; then
+      echo "task-edit guard: agent branch '$branch' changed trust-root files (owner-only):"; echo "$tchanged"
+      protected_fail=1
     fi
-  done
-  changed=$(git diff --name-only "$(git merge-base HEAD origin/main)" -- "${paths[@]}" | grep -v '^docs/agents/owner.md$' || true)
-  if [ -n "$changed" ]; then
-    echo "task-edit guard: agent branch '$branch' changed protected files (owner-only):"; echo "$changed"
-    protected_fail=1
   fi
 fi
 

@@ -69,3 +69,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.6 - decided (#360, option a); not ticked
 - Verified: `openspec validate s6-adversarial-gate-1` -> valid; merge-gate on #361 -> GATE PASS
 - Notes for next session: #361 narrows 3.6 and the spec. The ledger records denials for authenticated agents only (the revoke replay adds one `relay.denied`); 401 token failures add no ledger event and are logged only (design decision 10). G6 already asserts this, so after #361 merges: merge main, re-run the Opus evaluator on G6, tick 3.6, then 3.7.
+
+## 2026-11-19 worker (events)
+- Task: 3.6, 3.7 - done
+- Verified: merged main (#361 narrowing); live `ADVERSARIAL_REQUIRE_ALL=1 run.sh gateway` -> 5 passed, 0 failed, 1 residual (G4 registered); `just ci` -> exit 0; Opus evaluator PASS for 3.6 and 3.7 (stale KNOWN GAP comment in G6.sh replaced with decision 10)
+- Notes for next session: group 3 done. Next: group 4 (redactor hardening, 4.1 first; remove the base32/utf16/json-u entries from residuals.toml when it lands, they go STALE), then 5, 6. Optional stricter G6: assert org-wide ledger count unchanged across token failures and the revoke event reason is `no_grant`. Stack: `just up && just api`.

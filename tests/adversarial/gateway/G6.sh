@@ -18,12 +18,13 @@
 # It is covered by `forged_expired_wrong_audience_and_wrong_org_are_refused` in
 # services/gateway/src/auth.rs and, with no decrypt/fetch/upstream call, by
 # `unauthenticated_caller_is_refused_first` in services/gateway/src/relay.rs.
-# KNOWN GAP (task 3.6 asks for a `denied` ledger event per refusal): the gateway records nothing
-# for a 401 token failure and the control plane records nothing for internal-route 401s, so only
-# the revoke replay is asserted in the ledger. See progress.md / the needs-rescue Decision.
+# Ledger policy (design decision 10): only an authenticated agent's refusal is audited. The
+# revoke replay appends exactly one `relay.denied` and no `relay.attempt`; token failures and
+# internal-route 401s append no ledger event (the caller is unauthenticated).
 # Checks: every refused probe is 401 or 403 and never 200; no decrypt: the ledger's
-# `relay.attempt` count does not move across the refused probes; after the revoke one
-# `relay.denied` event is appended for the agent; the provider sees exactly one request.
+# `relay.attempt` count does not move across the refused probes; token failures add no
+# `relay.denied`; after the revoke exactly one `relay.denied` is appended for the agent;
+# the provider sees exactly one request.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 gw_init

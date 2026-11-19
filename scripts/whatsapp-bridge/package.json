@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "name": "whatsapp-bridge",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Relays needs-owner issues to the owner's WhatsApp and replies back as issue comments.",
+  "scripts": {
+    "start": "node bridge.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "baileys": "7.0.0-rc14",
+    "pino": "9.14.0"
+  }
+}

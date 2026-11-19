@@ -2,11 +2,11 @@
 
 Every routine reads this file and its role file from origin/main.
 
-- The detailed procedures are skills in `.claude/skills/`. Load a skill only when you need it.
-- The rules that matter most are enforced by scripts.
+- Procedures are skills in `.claude/skills/`; load one only when needed.
+- Scripts enforce the rules that matter most.
 
 ## Environment
-- Each run gets a fresh cloud VM with the repo cloned. It starts with no memory, and anything you don't push is lost.
+- Each run gets a fresh cloud VM with no memory; anything you don't push is lost.
 - Use GitHub's REST API only: `gh api repos/locksmith-hq/locksmith/...`. The `gh pr` and `gh issue` commands are blocked.
 - Start every run with the `run-start` skill and end it with the `run-log` skill.
 
@@ -33,7 +33,7 @@ Decide the rest yourself, with evidence in design.md. Only the affected change w
 
 - **Workers** never contact the owner; they open `needs-rescue` (`evaluate-escalate` skill; `Decision:` titles for owner matters). The lead answers in git and closes it, which wakes a worker.
 - **PM and lead** settle what-versus-how disagreements with the `debate` skill; an unsettled one goes to the owner through the lead.
-- **The lead** raises owner matters: a `needs-owner` issue (one-sentence first line, `Change: <id>`, options, recommendation, any Artifact brief, and `Action:` naming exactly what the owner must do); `owner-alert` emails it. Send a `PushNotification` (≤200 characters) or write "push: unavailable". Close it once verified.
+- **The lead** raises owner matters: a `needs-owner` issue (one-sentence first line, `Change: <id>`, options, recommendation, any Artifact brief, and `Action:` naming exactly what the owner must do); `owner-alert` emails it. End it and comments needing answers with a short casual `<!-- wa: ... -->` WhatsApp text. Send a ≤200-character `PushNotification` or write "push: unavailable". Close it once verified.
 
 Never raise one for progress or retryable failures.
 

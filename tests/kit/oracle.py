@@ -334,7 +334,7 @@ class Matcher:
         """Return [(label, offset)]. A view hit's offset is where it starts in data (for a gzip
         member, where the member starts). Afterwards self.incomplete is None, or why the gzip
         views stopped before the end of the data (a member, attempt, output or input limit)."""
-        state = {"budget": budget, "input": input_budget, "incomplete": None}
+        state = {"budget": budget, "input": input_budget, "joined": 2 * budget, "incomplete": None}
         hits = self._find(data, 0, state)
         self.incomplete = state["incomplete"]
         return hits
@@ -384,19 +384,20 @@ class Matcher:
                     continue
                 out, end = res
                 members += 1
-                prev = max((e for e in runs if e <= i), default=None)
-                if prev is not None and (prev == i or not data[prev:i].strip(b"\0")):
-                    first, outs = runs[prev].pop()
-                    if not runs[prev]:
-                        del runs[prev]
-                else:
-                    first, outs = i, []
-                outs.append(out)
-                if end is None:
-                    done.append((first, outs))
-                else:
-                    runs[end].append((first, outs))
+                # Join every run that ends here or before NUL padding up to here: a false member
+                # inside another member's bytes can end where it does, and either may be the
+                # one gzip -dc decodes.
+                joined = [(first, outs + [out])
+                          for e in [e for e in runs if e <= i and data.count(b"\0", e, i) == i - e]
+                          for first, outs in runs.pop(e)]
+                for run in joined or [(i, [out])]:
+                    (done if end is None else runs[end]).append(run)
             for first, outs in done + [r for rs in runs.values() for r in rs]:
+                # Tied runs share outputs, so the joined bytes are capped separately.
+                state["joined"] -= sum(len(o) for o in outs)
+                if state["joined"] < 0:
+                    state["incomplete"] = "gzip budget exhausted, not fully scanned"
+                    break
                 for name, _off in self._find(b"".join(outs), depth + 1, state):
                     hits.append(("gzip/" + name, first))
         return hits
@@ -944,6 +945,18 @@ def gzip_limit_checks(tmp):
             ("gzip-split-nul-1", (text[:20], text[20:]), b"\0"),
             ("gzip-split-nul-8192", (text[:20], text[20:]), bytes(8192))):
         hits = m.find(sep.join(gzip.compress(x) for x in parts))
+        yield name, not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
+    # Two members tie: a false member inside the first (a gzip header in a stored block) ends
+    # where the first does. The second must join the first, which holds the canary's start.
+    hdr = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
+    stored = lambda b: b"\x00" + len(b).to_bytes(2, "little") + (len(b) ^ 0xFFFF).to_bytes(2, "little") + b
+    pre = b"Q" * 10 + text[:20] + b"R" * 50 + hdr + stored(b"S" * 40)
+    c = zlib.compressobj(9, zlib.DEFLATED, -15, zdict=pre)
+    tail = c.compress(text[:20]) + c.flush()
+    first = (hdr + stored(pre) + tail + zlib.crc32(pre + text[:20]).to_bytes(4, "little")
+             + (len(pre) + 20).to_bytes(4, "little"))
+    for name, sep in (("gzip-split-tie", b""), ("gzip-split-tie-nul", bytes(16))):
+        hits = m.find(first + sep + gzip.compress(text[20:]))
         yield name, not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
     # A back-reference into the zeros before the member: zlib refuses it, gzip -dc decodes it.
     c = zlib.compressobj(9, zlib.DEFLATED, -15, zdict=GZIP_ZERO_WINDOW)

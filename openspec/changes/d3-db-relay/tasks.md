@@ -34,5 +34,5 @@
 - [ ] 6.2 Verify: `npm test --workspace apps/web` and `just apps-build`.
 
 ## 7. Local verification [sonnet]
-- [ ] 7.1 `just db-smoke` recipe and `tests/e2e/tests/db_relay.rs`: start gateway and API, create a SCRAM role on the compose Postgres, register an agent, grant, run real `psql` through `smith db connect --gateway`, assert the result and that the agent home holds no password or token.
+- [ ] 7.1 `just db-smoke` recipe and `tests/e2e/tests/db_relay.rs`: start gateway and API, create a SCRAM role on the compose Postgres, register an agent, grant, run real `psql` through `smith db connect --gateway`, assert the result, that `db connect` creates or modifies no file holding the token or a password (existing `agent.json` excepted, home snapshotted before and after), and that no file holds a database password.
 - [ ] 7.2 `just up`, `just db-smoke`, `just apps-build`, then `just ci`.

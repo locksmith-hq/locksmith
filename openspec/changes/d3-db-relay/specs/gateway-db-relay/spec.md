@@ -71,4 +71,4 @@ An open relayed session SHALL be closed by the gateway within the grant cache TT
 
 #### Scenario: Connect writes nothing to disk
 - **WHEN** an agent runs `smith db connect app --gateway <url> -- psql -c 'select 1'`
-- **THEN** the command succeeds, the child sees `PGSSLMODE` of at least `require`, and no file under the agent's home or working directory contains the agent token or a database password
+- **THEN** the command succeeds, the child sees `PGSSLMODE` of at least `require`, and `db connect` creates or modifies no file holding the agent token or a database password (the existing 0600 `agent.json` from `smith login --agent` excepted; home is snapshotted before and after), and no file anywhere holds a database password

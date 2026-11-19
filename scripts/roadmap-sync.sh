@@ -2,10 +2,10 @@
 # Mirrors the roadmap into GitHub's own structure, so progress is visible without opening the repo:
 #   milestone  = roadmap phase ("Phase 1: First vertical slice"); closes when all its changes are done
 #   issue      = one per roadmap change (type Feature, label `change`), planned ones included
-#   sub-issue  = one per task in tasks.md (type Task, label `task`), closed when the task is ticked
+#   (no per-task issues: the change issue's checklist, written by change-sync.sh, is the task view; #470)
 #   blocked by = the change's x-depends_on changes, plus open needs-owner / needs-rescue issues naming it
 # change-sync.sh writes the status page and board Status of written changes; this script owns
-# milestones, planned changes, task sub-issues and relationships. Writes only what differs.
+# milestones, planned changes and relationships; it also closes the old per-task issues. Writes only what differs.
 #   scripts/roadmap-sync.sh             DRY_RUN=1 prints the writes instead of making them
 set -uo pipefail
 repo=locksmith-hq/locksmith
@@ -95,35 +95,10 @@ while IFS=$'\x1f' read -r -u 3 phase id tier outcome gate; do
     continue
   fi
 
-  # 3. One sub-issue per task, closed when ticked (tasks from the change branch when it exists).
-  # Board: ticked = Done; the first open task of a claimed change = In progress; other open tasks = Planned.
-  cstate=$(awk -F'\t' -v id="$id" '$1==id{print $2}' <<<"$status"); first_open=1
-  t=$(git show "origin/claude/change-$id:openspec/changes/$id/tasks.md" 2>/dev/null || cat "openspec/changes/$id/tasks.md")
-  while IFS= read -r line; do
-    tid=$(sed -nE 's/^[[:space:]]*- \[[ xX]\] ([0-9]+\.[0-9]+) .*/\1/p' <<<"$line"); [ -z "$tid" ] && continue
-    text=$(sed -E 's/^[[:space:]]*- \[[ xX]\] [0-9]+\.[0-9]+ //' <<<"$line")
-    done_=open; grep -qE '^[[:space:]]*- \[[xX]\]' <<<"$line" && done_=closed
-    title="$id $tid: $(cut -c1-90 <<<"$text")"
-    tj=$(jq -rs --arg p "$id $tid:" '[.[]|select(.t|startswith($p))]|sort_by(.n)|.[0]|select(.!=null)|@json' <<<"$tasks")
-    if [ -z "$tj" ]; then
-      tn=$(w "repos/$repo/issues" -f title="$title" -f body="$text" -f 'labels[]=task' -f type=Task -F milestone="$m" -q .id)
-      [ "${DRY_RUN:-0}" = 1 ] && continue
-      w "repos/$repo/issues/$n/sub_issues" -F sub_issue_id="$tn" >/dev/null
-      tnum=$(gh api "repos/$repo/issues/$n/sub_issues" -q ".[]|select(.id==$tn)|.number")
-      [ "$done_" = closed ] && w -X PATCH "repos/$repo/issues/$tnum" -f state=closed -f state_reason=completed >/dev/null
-    else
-      tnum=$(jqs .n <<<"$tj")
-      [ "$(jqs .t <<<"$tj")" = "$title" ] || w -X PATCH "repos/$repo/issues/$tnum" -f title="$title" -f body="$text" >/dev/null
-      if [ "$(jqs .s <<<"$tj")" != "$done_" ]; then
-        if [ "$done_" = closed ]; then w -X PATCH "repos/$repo/issues/$tnum" -f state=closed -f state_reason=completed >/dev/null
-        else w -X PATCH "repos/$repo/issues/$tnum" -f state=open >/dev/null; fi
-      fi
-    fi
-    if [ "$done_" = closed ]; then tstate="done"
-    elif [ "$first_open" = 1 ] && [ "$cstate" = claimed ]; then tstate=claimed; first_open=0
-    else tstate=planned; first_open=0; fi
-    [ "${DRY_RUN:-0}" = 1 ] || board "$tnum" "$tstate"
-  done < <(grep -E '^[[:space:]]*- \[[ xX]\] [0-9]+\.[0-9]+ ' <<<"$t")
+  # 3. Per-task issues are retired (#470): close any still open for this change.
+  jq -r --arg p "$id " 'select(.s=="open" and (.t|startswith($p)))|.n' <<<"$tasks" | while read -r tnum; do
+    w -X PATCH "repos/$repo/issues/$tnum" -f state=closed -f state_reason=not_planned >/dev/null
+  done
 
   # 4. Blocked by: dependency changes and open owner/rescue issues that name this change.
   # shortcut: relationships are only added, never removed; a dropped dependency must be unlinked by hand.

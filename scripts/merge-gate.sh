@@ -63,8 +63,13 @@ jq -e 'any(.[]; .n=="hygiene" and .c=="success")' <<<"$runs" >/dev/null || fail 
 echo "ok 4 ci-green"
 fi
 [ "$on_green" = 1 ] && { echo "GATE PASS $sha"; exit 0; }
-# 5 no protected files
-prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude/settings.json .claude/settings.local.json .claude/agents .claude/skills/merge-queue .claude/skills/merge-review 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh AGENTS.md CLAUDE.md openspec/config.yaml docs/agents/common.md docs/agents/merge.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh)
+# 5 no agent-system files: the weekly harness release (and any hotfix) is merged by the owner (#470).
+# owner.md is excluded: agents append approved owner decisions to it.
+prot=$(git diff --name-only origin/main...HEAD -- .github/workflows .claude AGENTS.md CLAUDE.md openspec/config.yaml docs/agents \
+  ':(exclude)docs/agents/owner.md' 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh scripts/route.sh \
+  scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh \
+  scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh scripts/issues-sync.sh \
+  scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
 [ -z "$prot" ] || fail "5 protected files changed: ${prot//$'\n'/ }"
 echo "ok 5 no-protected-files"
 # 6 independent review by the claude-review workflow (Claude GitHub App), for this exact head SHA

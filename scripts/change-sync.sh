@@ -80,18 +80,13 @@ render() { # <id> <state> <detail>
   echo; echo "<!-- change-sync: generated from tasks.md and progress.md; edits here are overwritten -->"
 }
 
-# Linked pull requests: the change's PR gets a managed block of closing keywords for the change
-# issue and every task sub-issue, so each one lists the PR under Development and closes when it
-# merges (the finishing PR also archives the change, so closing then is correct).
+# Linked pull requests: the change's PR gets a managed block with a closing keyword for the change
+# issue, so it lists the PR under Development and closes when it merges (the finishing PR also archives the change, so closing then is correct).
 link_pr() { # <id> <change-issue>
-  local pr cur tasks block new
+  local pr cur block new
   pr=$(gh api "repos/$repo/pulls?head=${repo%%/*}:claude/change-$1&state=open" -q '.[0].number // empty')
   [ -n "$pr" ] || return 0
-  tasks=$(gh api --paginate "repos/$repo/issues?labels=task&state=all&per_page=100" \
-    -q ".[]|select(.title|startswith(\"$1 \"))|.number" | sort -n)
-  block=$(printf '<!-- issue-links:start -->\n---\nCloses #%s\n<details><summary>Task sub-issues</summary>\n\n' "$2"
-    for t in $tasks; do echo "Closes #$t"; done
-    printf '\n</details>\n<!-- issue-links:end -->')
+  block=$(printf '<!-- issue-links:start -->\n---\nCloses #%s\n<!-- issue-links:end -->' "$2")
   cur=$(gh api "repos/$repo/pulls/$pr" -q '.body // ""')
   new=$(awk '/<!-- issue-links:start -->/{skip=1} !skip{print} /<!-- issue-links:end -->/{skip=0}' <<<"$cur")
   new=$(printf '%s\n\n%s' "$new" "$block")

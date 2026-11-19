@@ -157,7 +157,9 @@ Owner setup:
 2. Run each routine in its own environment.
 3. Add the `locksmith-*[bot]` logins to the author filter of the GitHub triggers (`Worker (events)` and `Lead`), next to `tomer555`.
 
-On the owner's Mac, the **optimizer** (`docs/agents/optimizer.md`, desktop scheduled task, 07:00 and 20:00, replaced the local lead 2026-11-19) runs as the owner in its own worktree `~/locksmith-optimizer`, detached at `origin/main`. It is the only agent that reads routine run logs (`RemoteTrigger`); it audits the schedules, agent communication and run efficiency, fixes repo causes in a `claude/optimizer-*` PR, and may only edit routine prompts; other routine changes go to the owner as `needs-owner`.
+On the owner's Mac, the **optimizer** (`docs/agents/optimizer.md`, desktop scheduled task, 07:00 and 20:00, replaced the local lead 2026-11-19) runs as the owner in its own worktree `~/locksmith-optimizer`, detached at `origin/main`. It is the only agent that reads routine run logs (`RemoteTrigger`); it audits the schedules, agent communication and run efficiency, logs each cause on the pinned `harness-backlog` issue, and on Saturday at 07:00 builds the one weekly agent-system release (`claude/harness-release-<YYYY-WW>`), which the owner merges. It may only edit routine prompts; other routine changes go to the owner as `needs-owner`.
+
+**Agent System v3 (#470, 2026-11-19).** Agent-system files (`docs/agents`, `.claude/skills`, agent scripts, workflows) change only in that weekly release or on a `*hotfix-*` branch (red main, a security fix, every run failing), for owner sessions too; `scripts/check-task-edits.sh` enforces it and merge-gate gate 5 leaves those PRs to the owner. An owner `needs-owner` issue parks a change only when its next task is a `Gate:` task, so gates block just their own tasks. Each change has one tracking issue; per-task issues are retired.
 
 Cloud runs never see the app keys; they see the one-hour installation token, which reaches only this repo with the access above. Revoke a key in the app's settings page.
 

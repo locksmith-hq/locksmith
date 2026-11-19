@@ -44,3 +44,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.2, 3.3 - done; 3.1 - built, not ticked
 - Verified: live `ADVERSARIAL_REQUIRE_ALL=1 run.sh gateway G1|G2|G3` -> PASS; `cargo nextest -p ls-gateway` 62/62; `just ci` -> exit 0 (680 passed); Opus evaluator PASS for 3.2, 3.3 and the gateway fix
 - Notes for next session: G2 found a real leak (gateway ignored `Transfer-Encoding: gzip, chunked`); fixed in relay.rs (commit 2f92851) with tests. Evaluator FAILed 3.1 because dump_proc wrote the gateway and api process environ (real host tokens) to artifacts; fixed (private copy in GW_WORK, only names kept) and G1 re-passes live, but it needs a re-evaluation before ticking 3.1. Minor: G2 should assert `[REDACTED` on successful replies; add unit tests for `chunked;x=1`, identity, non-ASCII TE. Next: 3.4-3.7 (G4-G6), then group 4.
+
+## 2026-11-19 worker (harriet)
+- Task: 3.1, 3.4 - done
+- Verified: live `ADVERSARIAL_REQUIRE_ALL=1 run.sh gateway` -> G1-G3 PASS, G4 RESIDUAL (registered), 0 stale; `run.sh selftest` PASS; `run_test.sh` 19/19; `just ci` -> exit 0; Opus evaluator PASS for 3.1 (after NUL-split fix for multi-line env values) and 3.4 (attempt 2: decoded MCP `.view` files and per-file register `artifacts` list)
+- Notes for next session: 3.5-3.7 (G5, G6, gateway verify) then group 4. Register entries now carry optional `artifacts`; design.md decision 5 does not yet document that field (add when allowed). When 4.1 lands, the base32/utf16/json-u entries in residuals.toml must be removed (they go STALE). G2 minor items from the last entry still open.

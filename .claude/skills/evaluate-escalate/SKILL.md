@@ -7,8 +7,8 @@ description: The implement → independent evaluate → escalate-one-tier loop f
 
 ## Tiers (Agent tool `model`)
 - `haiku`: isolated, well-defined work and repetitive edits.
-- `sonnet`: default for untagged tasks.
-- `opus`: tasks tagged `[opus]`, and anything touching secrets, crypto, auth, RLS, the gateway or adversarial gates.
+- `sonnet`: the default, including most code near secrets, auth or the gateway (plumbing, routing, CLI, tests).
+- `opus`: only hard, complex tasks: tagged `[opus]`, or a Sonnet attempt that failed evaluation (step 5). Touching a secret path alone is not a reason.
 
 You may implement small tasks yourself (`self: true` in run-log); step 3 still applies.
 

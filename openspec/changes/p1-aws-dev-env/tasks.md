@@ -6,9 +6,9 @@
 - [x] 1.3 Verify: the brief's totals reproduce from its own table (`bash scripts/aws-cost-check.sh` or a documented calculation).
 
 ## 2. Tooling and layout [sonnet]
-- [ ] 2.1 Teach `scripts/tree-check.sh` the `infra/tofu/{guardrails,base,session}` layout; add `just aws-validate` (`tofu fmt -check`, `tofu validate` with no backend).
-- [ ] 2.2 Plan policy: rule file rejecting ALB, NAT gateway, interface endpoints, Secrets Manager, Route 53 zones, log retention over 1 day, large instances; tests with sample plan JSON.
-- [ ] 2.3 Verify: `just aws-validate` and the policy test pass; a planted ALB fails.
+- [x] 2.1 Teach `scripts/tree-check.sh` the `infra/tofu/{guardrails,base,session}` layout; add `just aws-validate` (`tofu fmt -check`, `tofu validate` with no backend).
+- [x] 2.2 Plan policy: rule file rejecting ALB, NAT gateway, interface endpoints, Secrets Manager, Route 53 zones, log retention over 1 day, large instances; tests with sample plan JSON.
+- [x] 2.3 Verify: `just aws-validate` and the policy test pass; a planted ALB fails.
 
 ## 3. Base stack [sonnet]
 - [ ] 3.1 `infra/tofu/base`: state backend bootstrap notes, KMS key and alias, S3 (checkpoints with Object Lock governance, artifacts), ECR repos, tags `project=locksmith, env=dev`.

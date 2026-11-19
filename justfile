@@ -260,3 +260,9 @@ test name:
           elif grep -q 'just test-web' <<<"$cov"; then run just test-web; fi
         fi ;;
     esac
+
+# OpenTofu offline checks: fmt, validate (no backend) for each root, plan-policy tests. Needs `tofu`.
+aws-validate:
+    tofu fmt -check -recursive infra/tofu
+    for m in guardrails base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
+    python3 -I infra/tofu/policy/test_check_plan.py

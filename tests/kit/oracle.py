@@ -364,9 +364,11 @@ class Matcher:
             # header costs an attempt. Stopping early on any limit marks the scan incomplete.
             start = members = attempts = 0
             buf = memoryview(data)
-            # Back-to-back members decode to one stream, so a canary split across them is
-            # whole there: each run of adjacent members is scanned joined, at its first offset.
-            runs = {}  # end offset of a run's last member -> (first offset, outputs)
+            # Back-to-back members decode to one stream (gzip -dc; Python's gzip also skips NUL
+            # padding between them), so a canary split across them is whole there: each run of
+            # adjacent members is scanned joined, at its first offset.
+            runs = collections.defaultdict(list)  # end of a run's last member -> [(first, outputs)]
+            done = []  # runs that cannot grow: their last member did not end cleanly
             while True:
                 i = data.find(GZIP_MAGIC, start)
                 if i < 0:
@@ -382,10 +384,19 @@ class Matcher:
                     continue
                 out, end = res
                 members += 1
-                first, outs = runs.pop(i, (i, []))
+                prev = max((e for e in runs if e <= i), default=None)
+                if prev is not None and (prev == i or not data[prev:i].strip(b"\0")):
+                    first, outs = runs[prev].pop()
+                    if not runs[prev]:
+                        del runs[prev]
+                else:
+                    first, outs = i, []
                 outs.append(out)
-                runs[end if end is not None else ("open", i)] = (first, outs)
-            for first, outs in runs.values():
+                if end is None:
+                    done.append((first, outs))
+                else:
+                    runs[end].append((first, outs))
+            for first, outs in done + [r for rs in runs.values() for r in rs]:
                 for name, _off in self._find(b"".join(outs), depth + 1, state):
                     hits.append(("gzip/" + name, first))
         return hits
@@ -926,8 +937,13 @@ def gzip_limit_checks(tmp):
     capped_ok = bool(m.incomplete)
     hits = m.find(GZIP_MAGIC * 4 + member, input_budget=4 * GZIP_IN_CHUNK)
     # A canary split across back-to-back members, as gzip -dc joins them: 2 and one per byte.
-    for name, parts in (("gzip-split-2", (text[:20], text[20:])), ("gzip-split-bytes", [text[k:k + 1] for k in range(len(text))])):
-        hits = m.find(b"".join(gzip.compress(x) for x in parts))
+    # Python's gzip also joins members across NUL padding.
+    for name, parts, sep in (
+            ("gzip-split-2", (text[:20], text[20:]), b""),
+            ("gzip-split-bytes", [text[k:k + 1] for k in range(len(text))], b""),
+            ("gzip-split-nul-1", (text[:20], text[20:]), b"\0"),
+            ("gzip-split-nul-8192", (text[:20], text[20:]), bytes(8192))):
+        hits = m.find(sep.join(gzip.compress(x) for x in parts))
         yield name, not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
     # A back-reference into the zeros before the member: zlib refuses it, gzip -dc decodes it.
     c = zlib.compressobj(9, zlib.DEFLATED, -15, zdict=GZIP_ZERO_WINDOW)

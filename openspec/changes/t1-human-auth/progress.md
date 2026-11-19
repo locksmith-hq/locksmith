@@ -56,3 +56,8 @@
 - Verified: `cargo nextest run -p smith-cli` 129 passed; clippy -D warnings clean; `just ci` exit 0 (after `npm ci` for stale node_modules); Sonnet evaluator PASS
 - Deviation: oauth2 5.0.0 (ureq) with a ~35-line SyncHttpClient wrapper, because stock ureq 2 maps 4xx to errors and hides authorization_pending/access_denied. deny.toml ignores RUSTSEC-2026-0543 (chrono unmaintained via oauth2). Real keyring store untested (no secret service on VM). Evaluator nit: transient non-zeroized String copy of the access token before SecretString.
 - Notes for next session: 6.4 (web lint/test, smith-cli tests, `just apps-build`), then 7.1. Realm needs a `locksmith-cli` client with the device grant enabled.
+
+## 2026-11-19 worker (b, run 3)
+- Task: 6.4 - done
+- Verified: `npm run lint`, `npm test --workspace apps/web`, `cargo nextest run -p smith-cli` (129), `just apps-build` all exit 0 after merging main in (resolved the App.tsx import conflict, keeping both sides)
+- Notes for next session: only 7.1 remains (`just up`, `auth-e2e`, `adversarial-gate`, `leak-scan`, `audit-verify`, `apps-build`, `just ci`), then archive and mark the PR ready. Run `npm ci` after checking out the branch, not before.

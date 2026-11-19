@@ -31,7 +31,7 @@
 - [x] 6.1 `apps/web`: sign-in redirect with PKCE, callback, return-to, in-memory tokens, signed-in header, sign-out, expiry handling; Vitest tests.
 - [x] 6.2 `apps/desktop`: system-browser flow with loopback redirect; tokens in the OS keystore.
 - [x] 6.3 `smith login --user` with the device grant; token in the keystore.
-- [ ] 6.4 Verify: `npm run lint`, `npm test --workspace apps/web`, `cargo nextest run -p smith-cli`, `just apps-build`.
+- [x] 6.4 Verify: `npm run lint`, `npm test --workspace apps/web`, `cargo nextest run -p smith-cli`, `just apps-build`.
 
 ## 7. Local verification
 - [ ] 7.1 `just up`, `just auth-e2e`, `just adversarial-gate`, `just leak-scan`, `just audit-verify`, `just apps-build`, then `just ci`.

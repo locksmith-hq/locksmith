@@ -24,12 +24,28 @@ allow = [
 ]
 
 [bans]
-deny = [{ name = "openssl" }, { name = "openssl-sys" }]
+deny = [
+  { name = "openssl" },
+  { name = "openssl-sys" },
+  # ls-control-plane is AGPL-3.0: only the AGPL ls-gateway may depend on it, never an Apache-2.0 crate.
+  { crate = "ls-control-plane", wrappers = ["ls-gateway"] },
+  # ls-gateway is AGPL-3.0 and also a library: no crate may depend on it (the wrapper name matches no crate).
+  { crate = "ls-gateway", wrappers = ["no-crate-may-depend-on-ls-gateway"] },
+]
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
 
-# First-party crates are proprietary and unpublished; skip license checks for them.
+# First-party crates are checked too, so an AGPL-3.0 crate cannot become a
+# dependency of an Apache-2.0 crate: only the server services below may be AGPL.
 [licenses.private]
-ignore = true
+ignore = false
+
+[[licenses.exceptions]]
+name = "ls-control-plane"
+allow = ["AGPL-3.0-only"]
+
+[[licenses.exceptions]]
+name = "ls-gateway"
+allow = ["AGPL-3.0-only"]

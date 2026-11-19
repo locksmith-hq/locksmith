@@ -1,0 +1,4 @@
+# Extended regexes that must not appear in tracked files (public-check.sh).
+# Add private identifiers here (owner email, account IDs, private hostnames); never real secret values.
+[A-Za-z0-9._%+-]+@gmail\.com
+\.internal\.locksmith

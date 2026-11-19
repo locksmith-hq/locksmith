@@ -52,8 +52,10 @@ dump_proc() {
 }
 
 # dump_proc_private NAME PID: for processes that inherit the operator's environment (the gateway,
-# the control plane), which holds real credentials: the full files go to GW_WORK (scanned below,
-# never kept) and only variable names, cmdline and status reach the artifacts.
+# the control plane), which holds real credentials: the full files go to GW_WORK/privproc
+# (mode 0600, outside ARTIFACT_DIR, scanned below) and only variable names, cmdline and status
+# reach the artifacts. GW_WORK is removed when the case exits, except with ADVERSARIAL_KEEP=1,
+# which keeps it (with the private copies) in run.sh's kept work directory.
 dump_proc_private() {
   local name="$1" pid="$2" f
   mkdir -p "$GW_WORK/privproc"
@@ -173,7 +175,7 @@ fi
 for cf in "$CANARY_FILE" "$GW_WORK/enrollment.canary"; do
   if python3 -I "$GW_ROOT/tests/kit/oracle.py" scan --canary-file "$cf" "$GW_WORK/privproc" \
     >"$GW_WORK/privproc.scan" 2>&1; then :; else
-    gw_fail "a secret is in the gateway or control plane process files (not kept)"
+    gw_fail "a secret is in the gateway or control plane process files (private copies in GW_WORK/privproc, not in the artifacts)"
   fi
 done
 rc=0

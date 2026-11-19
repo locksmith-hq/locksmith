@@ -47,7 +47,7 @@ work="$(mktemp -d)"
 umask 077
 cleanup() {
   if [[ "${ADVERSARIAL_KEEP:-}" == 1 ]]; then
-    echo "kept: $work (logs, artifacts and canary files, mode 0600; delete when done)" >&2
+    echo "kept: $work (logs, artifacts, canary files and the cases' private work files, mode 0600; delete when done)" >&2
   else
     rm -rf "$work"
   fi
@@ -87,14 +87,17 @@ run_selftest() {
   record "$rc" selftest
 }
 
-# judge <residuals> <case id> <oracle output>: compare the oracle's LEAK lines with the case's
-# entries in the residual register. Prints `RESIDUAL <enc> <label>`, `UNLISTED <enc>` and
-# `STALE <enc>` lines (encoding labels only, never a value). Exit 0 when every hit is listed and
-# every entry was hit, 1 otherwise, 2 when the register is invalid.
+# judge <residuals> <case id> <oracle output> [artifact dir]: compare the oracle's LEAK lines with
+# the case's entries in the residual register. Prints `RESIDUAL <enc> <label>`,
+# `UNLISTED <enc> <file>` and `STALE <enc> [<file>]` lines (encoding labels and artifact paths
+# relative to the artifact dir only, never a value). An entry with `artifacts` matches only hits
+# in those files and is stale for each listed file without a hit. Exit 0 when every hit is listed
+# and every entry was hit, 1 otherwise, 2 when the register is invalid.
 judge() {
   python3 -I - "$@" <<'PY'
-import re, sys
+import os, re, sys
 residuals, case, scan = sys.argv[1:4]
+adir = sys.argv[4] if len(sys.argv) > 4 else ""
 try:
     import tomllib
 except ImportError:
@@ -117,7 +120,7 @@ for n, e in enumerate(entries, 1):
     if not isinstance(e, dict):
         bad.append("entry %d is not a table" % n)
         continue
-    extra = set(e) - {"case", "encoding", "label", "reason"}
+    extra = set(e) - {"case", "encoding", "label", "reason", "artifacts"}
     if extra:
         bad.append("entry %d: unknown key(s) %s" % (n, ", ".join(sorted(extra))))
     for k in ("case", "encoding", "label", "reason"):
@@ -129,6 +132,12 @@ for n, e in enumerate(entries, 1):
         bad.append("entry %d: encoding %r is not an oracle label (no wildcards)" % (n, e["encoding"]))
     if e.get("label") not in LABELS:
         bad.append("entry %d: label must be one of %s" % (n, ", ".join(LABELS)))
+    if "artifacts" in e:
+        a = e["artifacts"]
+        if not isinstance(a, list) or not a or not all(
+                isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*", x)
+                for x in a):
+            bad.append("entry %d: `artifacts` must be a non-empty array of relative file paths (no wildcards)" % n)
 if bad:
     for b in bad:
         print("error: %s: %s" % (residuals, b), file=sys.stderr)
@@ -148,28 +157,40 @@ def forms(label):
     return {label} | {prefix + n for n in names.split("+")}
 
 mine = [e for e in entries if e["case"] == case]
-hits = []
+hits = []  # (oracle label, artifact path), in scan order
 with open(scan, encoding="utf-8", errors="replace") as fh:
     for line in fh:
         parts = line.split()
         if len(parts) >= 3 and parts[0] == "LEAK":
-            if parts[1] not in hits:
-                hits.append(parts[1])
-used = set()
+            path = parts[2].rpartition(":")[0] or parts[2]
+            if adir and os.path.isabs(path):
+                rel = os.path.relpath(path, adir)
+                path = rel if not rel.startswith("..") else path
+            if (parts[1], path) not in hits:
+                hits.append((parts[1], path))
+used = set()  # (entry index, artifact or None)
+shown = set()
+unlisted = set()
 ok = True
-for h in hits:
+for h, path in hits:
     f = forms(h)
-    match = [i for i, e in enumerate(mine) if e["encoding"] in f]
+    match = [i for i, e in enumerate(mine)
+             if e["encoding"] in f and ("artifacts" not in e or path in e["artifacts"])]
     if match:
-        used.update(match)
-        print("RESIDUAL %s %s" % (h, mine[match[0]]["label"]))
-    else:
+        for i in match:
+            used.add((i, path if "artifacts" in mine[i] else None))
+        if h not in shown:
+            shown.add(h)
+            print("RESIDUAL %s %s" % (h, mine[match[0]]["label"]))
+    elif (h, path) not in unlisted:
+        unlisted.add((h, path))
         ok = False
-        print("UNLISTED %s" % h)
+        print("UNLISTED %s %s" % (h, path))
 for i, e in enumerate(mine):
-    if i not in used:
-        ok = False
-        print("STALE %s" % e["encoding"])
+    for a in e.get("artifacts", [None]):
+        if (i, a) not in used:
+            ok = False
+            print("STALE %s %s" % (e["encoding"], a) if a else "STALE %s" % e["encoding"])
 sys.exit(0 if ok else 1)
 PY
 }
@@ -192,7 +213,7 @@ run_case() {
   cat "$scan" >>"$log"
   # The register can excuse oracle hits (exit 1) only; a scan error (exit 2) always fails.
   if [[ -n "$reg" && $case_rc -ne 77 && ($scan_rc -eq 0 || $scan_rc -eq 1) ]]; then
-    judge "$reg" "$id" "$scan" >"$verdict" 2>>"$log" || judge_rc=$?
+    judge "$reg" "$id" "$scan" "$artifact" >"$verdict" 2>>"$log" || judge_rc=$?
     cat "$verdict" >>"$log"
     if [[ $judge_rc -ne 2 ]]; then
       scan_rc=$judge_rc
@@ -221,8 +242,8 @@ run_case() {
     while read -r kind enc label; do
       case "$kind" in
         RESIDUAL) echo "RESIDUAL $id $enc ($label)" ;;
-        UNLISTED) echo "FAIL case $id: unlisted leak $enc" ;;
-        STALE) echo "STALE RESIDUAL $id $enc (registered, no hit)" ;;
+        UNLISTED) echo "FAIL case $id: unlisted leak $enc in $label" ;;
+        STALE) echo "STALE RESIDUAL $id $enc ${label:+in $label }(registered, no hit)" ;;
       esac
     done <"$verdict"
   fi

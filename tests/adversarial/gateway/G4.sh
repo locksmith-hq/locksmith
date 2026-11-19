@@ -6,13 +6,16 @@
 # character per line. A `plain` control call checks that redaction is on (the reply must carry
 # `[REDACTED`), so a leak in another form is the redactor not knowing that form, not a broken
 # binding. The agent relays through `smith relay --show all` (headers and the body bytes as
-# received) and through the `locksmith-mcp` tool `relay_request`; everything it receives (and the
-# bytes it gets by decoding a `body_base64`) goes to ARTIFACT_DIR for the oracle.
+# received, smith-enc-FORM.out) and through the `locksmith-mcp` tool `relay_request` (the raw
+# JSON-RPC replies, mcp-enc.out). The tool result is a JSON document inside the JSON-RPC text, so
+# its body arrives escaped twice; gw_unwrap writes each result as the agent reads it once decoded
+# (status, headers, then the body, or the decoded `body_base64`) to mcp-enc-FORM.view.
 #
 # Forms the redactor does not catch are oracle hits; design decision 4 leaves some of them to
 # containment and task 4.1 teaches `ls-redact` the others. Each expected hit is registered in
-# residuals.toml, so run.sh reports it as RESIDUAL; a hit that is not registered fails, and a
-# registered form that stops leaking fails as STALE RESIDUAL until its entry is removed.
+# residuals.toml per route and form (its `artifacts` name the files that must hit), so run.sh
+# reports it as RESIDUAL; a hit that is not registered for its file fails, and a registered
+# form that stops leaking on one route fails as STALE RESIDUAL until its entry is changed.
 #
 # Checks, as in G2: each reply is relayed (2xx from the gateway) or refused with
 # `response_withheld`; the ledger has one `relay.outcome` per call, `redaction_failed` per refusal
@@ -69,6 +72,16 @@ for f in "${forms[@]}"; do
 done
 gw_mcp enc "$GW_WORK/mcp-calls.jsonl" || gw_fail "locksmith-mcp failed (see mcp-enc.err)"
 gw_unwrap "$ARTIFACT_DIR/mcp-enc.out"
+# Name each decoded tool result after its form (call ids are 1.. in form order).
+id=0
+for f in "${forms[@]}"; do
+  id=$((id + 1))
+  [[ -f "$ARTIFACT_DIR/mcp-enc-$id.view" ]] || gw_fail "no decoded MCP reply for $f"
+  mv "$ARTIFACT_DIR/mcp-enc-$id.view" "$ARTIFACT_DIR/mcp-enc-$f.view"
+done
+[[ ! -e "$ARTIFACT_DIR/mcp-enc.out.body" ]] || gw_fail "an MCP reply was decoded outside a tool result"
+grep -q '\[REDACTED' "$ARTIFACT_DIR/mcp-enc-plain.view" ||
+  gw_fail "the plain control reply over MCP was not redacted (see mcp-enc-plain.view)"
 python3 -I - "$ARTIFACT_DIR/mcp-enc.out" "${forms[@]}" >"$GW_WORK/mcp-results.txt" <<'PY' || gw_fail "unexpected MCP replies"
 import json, sys
 path, forms = sys.argv[1], sys.argv[2:]

@@ -385,21 +385,32 @@ print(n)
 ' "$1" "$2" "${3:-}" "$GW_AGENT_ID"
 }
 
-# gw_unwrap FILE...: for each saved relay reply (smith --json output, a raw /v1/relay response or
-# MCP replies), also write the bytes an agent gets by decoding `body_base64` to FILE.body, so the
-# oracle judges the body as the agent can trivially read it.
+# gw_unwrap FILE...: for each saved relay reply, also write the bytes an agent gets by decoding
+# it, so the oracle judges the reply as the agent can trivially read it:
+#   - MCP replies (JSON-RPC lines): the `relay_request` tool result is a JSON document inside the
+#     result's text, so it arrives escaped twice. Each tool result whose text is a relayed
+#     response goes to FILE-<id>.view (FILE without .out): `HTTP <status>`, the header lines
+#     `name: value`, a blank line and the body bytes (`body` as UTF-8, or `body_base64` decoded),
+#     the same layout as `smith relay --show all`. A refusal (isError) gets a view of its text.
+#   - anything else (smith --json output, a raw /v1/relay response): the decoded `body_base64`
+#     bytes go to FILE.body.
 gw_unwrap() {
   python3 -I - "$@" <<'PY'
 import base64, json, sys
+
+def b64(b):
+    try:
+        return base64.b64decode(b)
+    except ValueError:
+        return None
 
 def walk(v, out):
     if isinstance(v, dict):
         b = v.get("body_base64")
         if isinstance(b, str):
-            try:
-                out.append(base64.b64decode(b))
-            except ValueError:
-                pass
+            d = b64(b)
+            if d is not None:
+                out.append(d)
         for x in v.values():
             walk(x, out)
     elif isinstance(v, list):
@@ -411,6 +422,34 @@ def walk(v, out):
         except ValueError:
             pass
 
+def view(text):
+    """The bytes an agent reads from one MCP tool result's text."""
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        return text.encode("utf-8", "surrogatepass")
+    if not isinstance(doc, dict) or "status" not in doc:
+        return text.encode("utf-8", "surrogatepass")
+    lines = [b"HTTP %s" % str(doc.get("status")).encode()]
+    hdrs = doc.get("headers") or []
+    if isinstance(hdrs, dict):
+        hdrs = list(hdrs.items())
+    for h in hdrs:
+        if isinstance(h, (list, tuple)) and len(h) == 2:
+            lines.append(("%s: %s" % (h[0], h[1])).encode("utf-8", "surrogatepass"))
+    body = b""
+    if isinstance(doc.get("body"), str):
+        body = doc["body"].encode("utf-8", "surrogatepass")
+    elif isinstance(doc.get("body_base64"), str):
+        body = b64(doc["body_base64"]) or b""
+    return b"\n".join(lines) + b"\n\n" + body
+
+def mcp_result(msg):
+    r = msg.get("result") if isinstance(msg, dict) else None
+    if not isinstance(r, dict) or not isinstance(r.get("content"), list):
+        return None
+    return "".join(c.get("text", "") for c in r["content"] if isinstance(c, dict))
+
 for p in sys.argv[1:]:
     out = []
     try:
@@ -418,13 +457,22 @@ for p in sys.argv[1:]:
     except OSError:
         continue
     try:
-        walk(json.loads(text), out)
+        docs = [json.loads(text)]
     except ValueError:
+        docs = []
         for line in text.splitlines():
             try:
-                walk(json.loads(line), out)
+                docs.append(json.loads(line))
             except ValueError:
                 pass
+    stem = p[:-4] if p.endswith(".out") else p
+    for d in docs:
+        t = mcp_result(d)
+        if t is not None and "id" in d:
+            with open("%s-%s.view" % (stem, d["id"]), "wb") as fh:
+                fh.write(view(t))
+        else:
+            walk(d, out)
     if out:
         with open(p + ".body", "wb") as fh:
             fh.write(b"\n".join(out))

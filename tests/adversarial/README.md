@@ -15,9 +15,10 @@ in order, e.g. `run.sh A3 A3b`)
   canary secret, a binding, an agent and a grant, starts a gateway and logs the agent in with
   `smith`. Hits are judged against the residual register `gateway/residuals.toml` (format in
   its header): an unlisted hit is `FAIL`, a listed hit is `RESIDUAL`, and a listed entry
-  without a hit is `STALE RESIDUAL` and fails.
-- `ADVERSARIAL_KEEP=1` keeps the run's work directory (logs, artifacts, canary files) and prints
-  its path.
+  without a hit is `STALE RESIDUAL` and fails. An entry with `artifacts` is judged per listed
+  file (one per route and form).
+- `ADVERSARIAL_KEEP=1` keeps the run's work directory (logs, artifacts, canary files and the
+  cases' private work files, mode 0600) and prints its path.
 - `run_test.sh` is the harness self-check: planted cases for the gateway target and the register.
 - `--agent claude` sets `LIVE_AGENT=claude` for cases. Without the `claude` CLI or
   `ANTHROPIC_API_KEY` it prints `skip live` and the cases stay scripted.

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Harness self-check for `run.sh gateway` and the residual register (S6 task 2.3). Offline: it
 # plants gateway cases and a register in a temporary directory (ADVERSARIAL_GATEWAY_DIR) and
-# checks that an unlisted leak fails, a listed form reports RESIDUAL, a stale entry fails, a
-# register entry for a missing case fails, a bad register fails, case filters work, skips follow
+# checks that an unlisted leak fails, a listed form reports RESIDUAL, a stale entry fails, an
+# entry with `artifacts` is judged per listed file, a register entry for a missing case fails, a bad register fails, case filters work, skips follow
 # ADVERSARIAL_REQUIRE_ALL, lib.sh skips with `skip: stack not running`, ADVERSARIAL_KEEP=1 keeps
 # the work directory, and run.sh never prints a canary. Usage: tests/adversarial/run_test.sh
 set -euo pipefail
@@ -37,6 +37,10 @@ plant G4-stale 'echo "nothing here" >"$ARTIFACT_DIR/out.txt"'
 plant G5-mixed 'printf "%s\n" "$c" | rev >"$ARTIFACT_DIR/a.txt"; printf "%s" "$c" | base64 >"$ARTIFACT_DIR/b.txt"'
 plant G6-skip 'echo "skip: planted skip"; exit 77'
 plant G7-joined 'printf "%s" "$c" | gzip >"$ARTIFACT_DIR/out.bin"'
+# Per-route entries (`artifacts`): both routes leak; one route stops; a third file leaks.
+plant G10-routes 'printf "%s\n" "$c" | rev >"$ARTIFACT_DIR/smith.out"; printf "%s\n" "$c" | rev >"$ARTIFACT_DIR/mcp.view"'
+plant G11-oneroute 'printf "%s\n" "$c" | rev >"$ARTIFACT_DIR/smith.out"; echo "nothing here" >"$ARTIFACT_DIR/mcp.view"'
+plant G12-otherfile 'printf "%s\n" "$c" | rev >"$ARTIFACT_DIR/smith.out"; printf "%s\n" "$c" | rev >"$ARTIFACT_DIR/mcp.view"; printf "%s\n" "$c" | rev >"$ARTIFACT_DIR/extra.txt"'
 # A case that uses the real lib.sh against a control plane that is not there.
 cat >"$t/g/G8-nostack.sh" <<EOF
 #!/usr/bin/env bash
@@ -58,6 +62,9 @@ entry() { # entry <case> <encoding>
   # The canary text is base64url, so one plain copy also hits b64url-offset0: list each label.
   entry G7-joined gzip/utf8
   entry G7-joined gzip/b64url-offset0
+  for c in G10-routes G11-oneroute G12-otherfile; do
+    printf '[[residual]]\ncase = "%s"\nencoding = "text-reversed"\nlabel = "containment"\nreason = "planted"\nartifacts = ["smith.out", "mcp.view"]\n\n' "$c"
+  done
 } >"$t/g/residuals.toml"
 
 # gw <out-name> [env...] -- [run.sh args]: run run.sh with the planted directory.
@@ -108,6 +115,16 @@ gw joined -- gateway G7-joined
 check joined "an entry matches one name of a joined label in a view (gzip/utf8)" \
   bash -c "grep -q '^RESIDUAL G7-joined gzip/utf8' '$t/joined.out' && grep -qx 'RESIDUAL case G7-joined' '$t/joined.out' && [[ \$(cat '$t/joined.rc') == 0 ]]"
 
+gw routes -- gateway G10-routes
+check routes "an entry with artifacts reports RESIDUAL when every listed file leaks" \
+  bash -c "grep -qF 'RESIDUAL G10-routes text-reversed (containment)' '$t/routes.out' && grep -qx 'RESIDUAL case G10-routes' '$t/routes.out' && [[ \$(cat '$t/routes.rc') == 0 ]]"
+gw oneroute -- gateway G11-oneroute
+check oneroute "a listed file without a hit is STALE RESIDUAL even when another listed file leaks" \
+  bash -c "grep -qF 'STALE RESIDUAL G11-oneroute text-reversed in mcp.view (registered, no hit)' '$t/oneroute.out' && grep -qx 'FAIL case G11-oneroute' '$t/oneroute.out' && [[ \$(cat '$t/oneroute.rc') == 1 ]]"
+gw otherfile -- gateway G12-otherfile
+check otherfile "an entry with artifacts does not excuse the same encoding in another file" \
+  bash -c "grep -qF 'FAIL case G12-otherfile: unlisted leak text-reversed in extra.txt' '$t/otherfile.out' && grep -qx 'FAIL case G12-otherfile' '$t/otherfile.out' && [[ \$(cat '$t/otherfile.rc') == 1 ]]"
+
 gw skip -- gateway G6-skip G8-nostack
 check skip "skips are SKIP without ADVERSARIAL_REQUIRE_ALL; lib.sh says stack not running" \
   bash -c "grep -qx 'SKIP case G6-skip (planted skip)' '$t/skip.out' && grep -q '^SKIP case G8-nostack (stack not running' '$t/skip.out' && [[ \$(cat '$t/skip.rc') == 0 ]]"
@@ -125,10 +142,10 @@ check filtered2 "filtered run ignores entries of cases it did not run" rc_is fil
 
 # A bad register (no reason, unknown label, wildcard) fails before any case runs.
 cp "$t/g/residuals.toml" "$t/residuals.good"
-printf '[[residual]]\ncase = "G3-listed"\nencoding = "*"\nlabel = "hope"\n' >>"$t/g/residuals.toml"
+printf '[[residual]]\ncase = "G3-listed"\nencoding = "*"\nlabel = "hope"\nartifacts = ["../x"]\n' >>"$t/g/residuals.toml"
 gw badreg -- gateway G1-clean
 check badreg "invalid register fails the run" \
-  bash -c "grep -q 'residual register' '$t/badreg.out' && grep -q 'reason. is missing' '$t/badreg.out' && grep -q 'no wildcards' '$t/badreg.out' && grep -q 'label must be one of' '$t/badreg.out' && [[ \$(cat '$t/badreg.rc') == 1 ]]"
+  bash -c "grep -q 'residual register' '$t/badreg.out' && grep -q 'reason. is missing' '$t/badreg.out' && grep -q 'no wildcards' '$t/badreg.out' && grep -q 'label must be one of' '$t/badreg.out' && grep -q 'artifacts. must be' '$t/badreg.out' && [[ \$(cat '$t/badreg.rc') == 1 ]]"
 cp "$t/residuals.good" "$t/g/residuals.toml"
 
 gw nocase -- gateway G42

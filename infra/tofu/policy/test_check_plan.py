@@ -43,6 +43,13 @@ class PolicyTest(unittest.TestCase):
                   res("aws_instance", instance_type="m5.4xlarge")):
             self.assertEqual(run(plan(p)).returncode, 1, p)
 
+    def test_rds_managed_master_password_fails(self):
+        r = run(plan(res("aws_rds_cluster", manage_master_user_password=True)))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("manage_master_user_password", r.stderr)
+        self.assertEqual(run(plan(res("aws_rds_cluster", manage_master_user_password=None,
+                                      iam_database_authentication_enabled=True))).returncode, 0)
+
     def test_gateway_endpoint_and_nested_module(self):
         self.assertEqual(run(plan(res("aws_vpc_endpoint", vpc_endpoint_type="Gateway"))).returncode, 0)
         nested = {"planned_values": {"root_module": {"child_modules": [{"resources": [res("aws_nat_gateway")]}]}}}

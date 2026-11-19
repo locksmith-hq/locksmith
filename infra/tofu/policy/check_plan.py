@@ -3,7 +3,8 @@
 
 Usage: check_plan.py plan.json [plan.json ...]; exit 1 on any violation.
 Bans (decision A0-16): ALB/NLB, NAT gateway, interface VPC endpoints, Secrets
-Manager, Route 53 zones, log retention over 1 day, large instances.
+Manager (including RDS-managed master passwords), Route 53 zones, log retention
+over 1 day, large instances.
 """
 import json
 import re
@@ -34,6 +35,8 @@ def check(plan):
         t, addr, v = r["type"], r["address"], r.get("values") or {}
         if t in BANNED_TYPES:
             errs.append(f"{addr}: {BANNED_TYPES[t]} is banned")
+        if t in ("aws_rds_cluster", "aws_db_instance") and v.get("manage_master_user_password"):
+            errs.append(f"{addr}: manage_master_user_password creates a Secrets Manager secret, banned")
         if t == "aws_vpc_endpoint" and v.get("vpc_endpoint_type") == "Interface":
             errs.append(f"{addr}: interface VPC endpoint is banned")
         if t == "aws_cloudwatch_log_group":

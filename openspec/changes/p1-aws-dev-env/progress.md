@@ -18,3 +18,8 @@
 - Cause: `tofu init` fetches hashicorp/aws from registry.opentofu.org, which the VM proxy blocks (000); releases.hashicorp.com and GitHub release zips are reachable.
 - Fix: `scripts/tofu-setup.sh` installs tofu 1.10.7 (SHA256SUMS) and mirrors hashicorp/aws 6.73.0 (HashiCorp-signed SHA256SUMS, pinned fingerprint) into a filesystem mirror; `just aws-validate` sets TF_CLI_CONFIG_FILE. Modules pin `aws ~> 6.73`. Design decision 9.
 - Notes for next session: no owner network change needed. To bump the provider, set AWS_PROVIDER_VERSION in the script and the module constraint together. `.terraform.lock.hcl` is gitignored (mirror lock has one platform's hash only). Task 1.2 (owner cost approval P1-1) is still a gate; offline tasks 3-5 may proceed.
+
+## 2026-11-19 worker
+- Task: 3.1, 3.2, 3.3, 3.4 - done (attempt 2, Sonnet -> Opus; attempt 1 failed: RDS managed secret = Secrets Manager, no moto smoke)
+- Verified: `just aws-validate` -> 3x valid + 5 policy tests; `just aws-moto-smoke` -> moto-smoke: OK (11 resources; Object Lock GOVERNANCE 1d, alias, SSE-KMS); `just ci` -> exit 0; Opus evaluator PASS
+- Notes for next session: Aurora master password is a public placeholder replaced once at create by a local-exec (needs `aws` CLI on the applier; moves to `master_password_wo` when tofu >= 1.11); `check_plan.py` rejects manage_master_user_password. Imported clusters would keep the placeholder (README note worth adding). Task 4.3 workflow must provide the aws CLI. 1.2 gate still open. Next: 4.1, 4.2, 5.x.

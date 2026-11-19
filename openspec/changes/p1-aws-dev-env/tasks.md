@@ -11,10 +11,10 @@
 - [x] 2.3 Verify: `just aws-validate` and the policy test pass; a planted ALB fails.
 
 ## 3. Base stack [sonnet]
-- [ ] 3.1 `infra/tofu/base`: state backend bootstrap notes, KMS key and alias, S3 (checkpoints with Object Lock governance, artifacts), ECR repos, tags `project=locksmith, env=dev`.
-- [ ] 3.2 Aurora Serverless v2 (PG18 or recorded fallback, min 0 ACU auto-pause), private subnets, security group open only to the session tasks.
-- [ ] 3.3 Cognito Essentials pool, hosted domain prefix, `locksmith-web`, `locksmith-desktop`, `smith-cli` clients; outputs issuer URL and client ids (no secrets).
-- [ ] 3.4 Verify: `just aws-validate`; moto-backed smoke of the S3 and KMS modules where supported.
+- [x] 3.1 `infra/tofu/base`: state backend bootstrap notes, KMS key and alias, S3 (checkpoints with Object Lock governance, artifacts), ECR repos, tags `project=locksmith, env=dev`.
+- [x] 3.2 Aurora Serverless v2 (PG18 or recorded fallback, min 0 ACU auto-pause), private subnets, security group open only to the session tasks.
+- [x] 3.3 Cognito Essentials pool, hosted domain prefix, `locksmith-web`, `locksmith-desktop`, `smith-cli` clients; outputs issuer URL and client ids (no secrets).
+- [x] 3.4 Verify: `just aws-validate`; moto-backed smoke of the S3 and KMS modules where supported.
 
 ## 4. Guardrails and OIDC apply [sonnet]
 - [ ] 4.1 `infra/tofu/guardrails` (owner-applied): $5 Budget with $1/$3 email and deny-create action, SCPs, Cost Anomaly Detection.

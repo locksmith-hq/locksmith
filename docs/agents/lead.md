@@ -26,6 +26,8 @@ Take open `for-lead` issues, then review diffs merged in the window (`merge-revi
 - in-flight change: lock it, untick the task, add a `lead` progress entry;
 - new work: at most one `refactor-<area>` change per run (`openspec-propose` on `claude/planning-<id>`), unless an open planning PR covers it.
 
+Keep the roadmap's `Needs` column right on `claude/lead-<date>`: the ids whose code a row needs to start (`-` for none). Workers plan exactly what it allows, so a wrong entry idles them or starts work too early.
+
 Close each `for-lead` issue with what you did.
 
 Quality work never adds `needs-rescue` or `needs-owner`.

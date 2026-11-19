@@ -22,10 +22,11 @@ jqs() { jq -r "$@"; }
 # Roadmap rows: phase US id US tier US outcome US gate (US = \x1f, so empty fields survive `read`)
 rows=$(awk -F'|' '
   /^## Phase/ { p=$0; sub(/^## /,"",p); sub(/ *\(.*$/,"",p); next }
+  /^\| *# *\|/ { gc=0; for (i=2; i<=NF; i++) if ($i ~ /Local gate/) gc=i; next }
   p && /^\| *[A-Z][0-9]+ *\|/ {
     c=$3; id=c; sub(/^[^`]*`/,"",id); sub(/`.*$/,"",id)
     tier=""; if (c ~ /\[opus\]/) tier="opus"; else if (c ~ /\[haiku\]/) tier="haiku"
-    o=$4; g=$5; gsub(/^ +| +$/,"",o); gsub(/^ +| +$/,"",g)
+    o=$4; g=(gc ? $gc : ""); gsub(/^ +| +$/,"",o); gsub(/^ +| +$/,"",g)
     printf "%s\x1f%s\x1f%s\x1f%s\x1f%s\n", p, id, tier, o, g }' docs/roadmap.md)
 phases=$(awk '/^## Phase/{p=$0; sub(/^## /,"",p); d=p; sub(/ *\(.*$/,"",p); sub(/^[^(]*\(?/,"",d); sub(/\)$/,"",d); print p"\t"d}' docs/roadmap.md)
 

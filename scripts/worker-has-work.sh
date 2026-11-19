@@ -29,10 +29,12 @@ while IFS=$'\t' read -r id state _; do
   esac
 done <<<"$status"
 
-# Plan ahead: with fewer than two takeable changes and no open planning PR, writing the next one is work.
+# Plan ahead: with fewer than three takeable changes (one per scheduled worker; owner 2026-11-19: parallel work
+# first), no open planning PR, and a roadmap row whose Needs are met, writing that row is work.
+next=$(bash "$(dirname "$0")/change-status.sh" --plannable | head -1)
 takeable=$(grep -cE $'\t(ready|stackable)\t' <<<"$status" || true)
 plans=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[]|select(.head.ref|startswith("claude/planning-"))|[.number, any(.labels[]; .name=="ready-to-merge")]|@tsv')
-[ "${takeable:-0}" -lt 2 ] && [ -z "$plans" ] && work+=("fewer than 2 changes ready: plan the next one")
+[ "${takeable:-0}" -lt 3 ] && [ -z "$plans" ] && [ -n "$next" ] && work+=("fewer than 3 changes ready: plan the next one ($next)")
 # An unlabelled planning PR is invisible to the merge queue and also suppresses planning, so workers would idle forever.
 while IFS=$'\t' read -r pr labelled; do
   [ "$labelled" = false ] && work+=("planning PR #$pr is not marked ready")

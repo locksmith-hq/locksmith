@@ -9,7 +9,10 @@
 #   claimed    another worker holds the change lock (detail: holder)
 #   review     every task ticked on the branch; waiting for the merge queue
 #   finished   every task ticked on main but not archived
-# Usage: scripts/change-status.sh [--ready]   (--ready prints only ids a worker may take now)
+# Usage: scripts/change-status.sh [--ready|--plannable]
+#   --ready      prints only ids a worker may take now
+#   --plannable  prints unwritten roadmap rows that can start today, in roadmap order: every id in the row's
+#                `Needs` column is archived or fully ticked on its branch (`-` = needs nothing)
 # Dependencies: `x-depends_on: [id, ...]` in the change's .openspec.yaml (x- keeps openspec validate quiet).
 # OFFLINE=1 skips GitHub lookups (parked, claimed); used by the self-test.
 set -uo pipefail
@@ -26,6 +29,22 @@ tasks_of() {
 all_ticked() { ! grep -qE '^\s*- \[ \]' <<<"$1"; }
 archived() { compgen -G "openspec/changes/archive/*-$1" >/dev/null; }
 deps_of() { sed -nE 's/^x-depends_on:[[:space:]]*\[(.*)\][[:space:]]*$/\1/p' "openspec/changes/$1/.openspec.yaml" 2>/dev/null | tr ',' '\n' | tr -d ' "'"'" | grep -v '^$'; }
+
+if [ "${1:-}" = --plannable ]; then
+  awk -F'|' '
+    /^\| *# *\|/ { n=0; for (i=2; i<=NF; i++) if ($i ~ /^ *Needs *$/) n=i; next }
+    n && /^\| *[A-Z][0-9]+ *\|/ { id=$3; sub(/^[^`]*`/,"",id); sub(/`.*$/,"",id); d=$n; gsub(/[,`]/," ",d); print id, d }' docs/roadmap.md |
+  while read -r id needs; do
+    { [ -e "openspec/changes/$id" ] || archived "$id"; } && continue  # already written
+    ok=1
+    for d in $needs; do
+      [ "$d" = - ] && continue
+      archived "$d" || { [ -f "openspec/changes/$d/tasks.md" ] && all_ticked "$(tasks_of "$d")"; } || ok=0
+    done
+    [ "$ok" = 1 ] && echo "$id"
+  done
+  exit 0
+fi
 
 # Roadmap order first, then any change the roadmap does not name.
 # shellcheck disable=SC2016 # literal backticks

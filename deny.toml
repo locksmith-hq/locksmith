@@ -28,8 +28,9 @@ deny = [
   { name = "openssl" },
   { name = "openssl-sys" },
   # ls-control-plane is AGPL-3.0: only the AGPL ls-gateway may depend on it, never an Apache-2.0 crate.
-  # (ls-gateway is a leaf binary nothing depends on; cargo-deny cannot ban a workspace root with wrappers.)
   { crate = "ls-control-plane", wrappers = ["ls-gateway"] },
+  # ls-gateway is AGPL-3.0 and also a library: no crate may depend on it (the wrapper name matches no crate).
+  { crate = "ls-gateway", wrappers = ["no-crate-may-depend-on-ls-gateway"] },
 ]
 
 [sources]

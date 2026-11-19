@@ -70,24 +70,29 @@ desktop-install:
 compose := "docker compose -f infra/compose/compose.yaml --env-file infra/compose/.env.example"
 
 # `up` also writes the audit checkpoint public key to the verifier config (S5 task 4.1).
+# Includes the Keycloak issuer and mail catcher (compose profile `auth`, T1); `up-lite` skips them.
 up:
+    {{compose}} --profile auth up -d --wait
+    bash scripts/audit-verifier-config.sh
+
+up-lite:
     {{compose}} up -d --wait
     bash scripts/audit-verifier-config.sh
 
 down:
-    {{compose}} down
+    {{compose}} --profile auth down
 
 reset:
-    {{compose}} down -v
+    {{compose}} --profile auth down -v
 
 logs svc:
-    {{compose}} logs --tail=200 {{svc}}
+    {{compose}} --profile auth logs --tail=200 {{svc}}
 
 psql *args:
     {{compose}} exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"' -- "$@"
 
 ps:
-    {{compose}} ps
+    {{compose}} --profile auth ps
 
 # Verify the running stack (needs `just up`).
 harness-check:
@@ -189,6 +194,10 @@ api:
     set -a; . "$root/infra/compose/.env.example"; set +a
     export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
+
+# T1 sign-up, verify, sign-in (auth code + PKCE), reset and API calls against Keycloak (needs `just up` and `just api`).
+auth-e2e:
+    python3 -I scripts/auth-e2e.py
 
 # Run locksmith-gateway against `just up` and `just api`. Needs LOCKSMITH_GATEWAY_BINDINGS (a TOML
 # file naming the org and bindings; see tests/e2e/tests/relay.rs for the shape). The gateway connects

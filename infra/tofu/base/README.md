@@ -15,3 +15,6 @@ Always-on dev resources: KMS key and alias, S3 (checkpoints with Object Lock gov
 - `aurora_engine_version` defaults to PG18 (`18.1`). If us-east-1 rejects it, set the newest supported major and record the fallback in `openspec/changes/p1-aws-dev-env/progress.md`.
 - Cognito clients are public (PKCE, code flow, no secret). Domain prefix must be unique; override `cognito_domain_prefix` if taken.
 - Checkpoint objects are locked in governance mode for `checkpoint_retention_days` (1 by default), so `tofu destroy` of the bucket needs `s3:BypassGovernanceRetention` or waiting out the window.
+
+## GitHub OIDC apply role (task 4.2)
+`oidc.tf` creates the GitHub OIDC provider and `locksmith-dev-github-apply`. Its trust policy (`policies/github-apply-trust.json.tftpl`) allows only `aud = sts.amazonaws.com` and the single exact subject `repo:locksmith-hq/locksmith:environment:aws-base-apply`, so only the dispatched apply workflow job that runs in that GitHub environment (required reviewers, deployment branch limited to main) can assume it. The first apply of this role is done by the owner; after that the workflow can apply `base`. The role explicitly denies Organizations, Budgets, Cost Explorer, account, SSO and IAM role/provider changes, so CI cannot weaken the guardrails or its own trust. `python3 -I infra/tofu/policy/test_base_oidc.py` checks this offline.

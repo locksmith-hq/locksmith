@@ -15,3 +15,5 @@ output "aurora_endpoint" { value = aws_rds_cluster.main.endpoint }
 output "cognito_issuer_url" { value = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main.id}" }
 output "cognito_hosted_domain" { value = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com" }
 output "cognito_client_ids" { value = { for k, c in aws_cognito_user_pool_client.this : k => c.id } }
+
+output "github_apply_role_arn" { value = aws_iam_role.github_apply.arn }

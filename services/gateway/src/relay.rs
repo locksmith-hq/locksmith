@@ -130,6 +130,7 @@ pub struct Relay {
     resolver: Arc<dyn Resolver>,
     audit: Arc<dyn AuditSink>,
     options: RelayOptions,
+    git: crate::git::GitState,
 }
 
 impl Relay {
@@ -151,7 +152,26 @@ impl Relay {
             resolver,
             audit,
             options,
+            git: crate::git::GitState::default(),
         }
+    }
+
+    /// Replace the Git route's timeouts and token cache (D1).
+    pub fn with_git(mut self, git: crate::git::GitState) -> Self {
+        self.git = git;
+        self
+    }
+
+    pub(crate) fn git(&self) -> &crate::git::GitState {
+        &self.git
+    }
+
+    pub(crate) fn decryptor(&self) -> &Decryptor {
+        &self.decryptor
+    }
+
+    pub(crate) fn resolver(&self) -> &dyn Resolver {
+        self.resolver.as_ref()
     }
 
     pub fn options(&self) -> &RelayOptions {

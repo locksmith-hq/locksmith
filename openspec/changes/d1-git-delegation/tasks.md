@@ -5,10 +5,10 @@
 - [x] 1.2 Verify: `cargo nextest run -p ls-gateway git_binding` passes.
 
 ## 2. Streaming route [sonnet]
-- [ ] 2.1 `services/gateway/src/git.rs`: path allow-list (info/refs, upload-pack, receive-pack), service-to-grant mapping, binding and egress check before any decrypt.
-- [ ] 2.2 Stream request and response bodies to the upstream with the injected credential (PAT first); never follow redirects; bounded timeouts.
-- [ ] 2.3 App installation token support reusing `ls-proxy::github`.
-- [ ] 2.4 Verify: `cargo nextest run -p ls-gateway git` against a `git http-backend` fixture: clone, push, unbound repo 403, fetch-only grant cannot push, redirect not followed.
+- [x] 2.1 `services/gateway/src/git.rs`: path allow-list (info/refs, upload-pack, receive-pack), service-to-grant mapping, binding and egress check before any decrypt.
+- [x] 2.2 Stream request and response bodies to the upstream with the injected credential (PAT first); never follow redirects; bounded timeouts.
+- [x] 2.3 App installation token support reusing `ls-proxy::github`.
+- [x] 2.4 Verify: `cargo nextest run -p ls-gateway git` against a `git http-backend` fixture: clone, push, unbound repo 403, fetch-only grant cannot push, redirect not followed.
 
 ## 3. Redaction and audit [sonnet]
 - [ ] 3.1 Redact the credential in upstream headers and text error bodies; ledger events `git.fetch`, `git.push` and denials without credential or pack data.

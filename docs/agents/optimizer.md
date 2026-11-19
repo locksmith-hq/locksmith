@@ -38,7 +38,15 @@ Give each the session link, step and cause, with evidence.
 
 Make one table per worker: runs per class, PRs opened and merged, tasks ticked, minutes per shipped run. Compare with your last #12 table.
 
-## 4. Fix
+## 4. Usage (Max plan)
+All routines share the owner's Max subscription: a rolling 5-hour limit and a weekly limit. Hitting either stops every agent. For each routine, from `RemoteTrigger get` and the run logs: model, `effort_level`, runs, active minutes (first to last event), turns, and subagent tokens and tiers from `run-metadata`.
+- **Limits hit:** search the run logs for rate-limit or usage-limit errors, 429s and `rate_limit_event`s. Any hit is a top cause.
+- **Peak 5h window:** the busiest 5 hours of overlapping runs, by model. Weight Opus over Sonnet over Haiku.
+- **Weekly pace:** active minutes by model over 7 days, projected to the weekly reset (Saturday 10:00). Flag a pace that would use up the week early.
+- **Fit:** flag Opus or high effort on idle or routine runs, an expensive orchestrator whose subagents did the work, and idle runs that still spent minutes. Flag the opposite too: repeated escalations or failures on a model that is too small.
+Recommend the cheapest model, effort and cadence that keep the output; these are owner-only (§5).
+
+## 5. Fix
 For each cause, give its status: `fixed in #`, `fix pending #`, or fix failed (fix again). A cause seen 2+ times with no fix is never minor. Fix the top causes by time lost × frequency:
 - **Repo:** scripts, skills and role files, but never protected files. Branch `claude/optimizer-<date>` from origin/main.
   - Prefer a script, then a skill gotcha, then a role-file edit, then a lesson (max 5). Agent-doc words must not grow.
@@ -46,11 +54,12 @@ For each cause, give its status: `fixed in #`, `fix pending #`, or fix failed (f
 - **Routine prompts:** `RemoteTrigger update` only to make a prompt match the repo rules. Quote the old and new lines in your report.
 - **Owner only:** changes to cadence, model, triggers, tokens, enabled state, a new or deleted routine, or a protected file. Open a `needs-owner` issue with the numbers and an `Action:` line (a protected file gets its PR, `Action: merge #<n>`), then send a push.
 
-## 5. Report
+## 6. Report
 Post one #12 comment. It starts with `<!-- agent -->` and `Optimizer: <N> sessions, <R> routines, <K> flagged`, then:
 - the setup findings;
 - the latencies;
 - the worker tables;
+- the usage table (per routine: model, effort, runs, minutes, tokens) with the peak 5h window and weekly pace;
 - each flagged run with its status;
 - prompt changes (old → new);
 - the `run-log` skill's Activity list.

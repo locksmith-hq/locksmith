@@ -19,9 +19,9 @@
 - [x] 3.7 Verify: `just up && just api`, then `ADVERSARIAL_REQUIRE_ALL=1 bash tests/adversarial/run.sh gateway` reports only `PASS` (G4 may report `RESIDUAL` for registered forms).
 
 ## 4. Redactor hardening [opus]
-- [ ] 4.1 `ls-redact`: add base32 (RFC 4648, padded and unpadded, upper and lower), UTF-16LE, UTF-16BE and `\u`-escaped forms to the matcher, with the same 8-byte minimum and streaming behaviour; unit tests per form, split across chunks.
-- [ ] 4.2 Gateway relay uses the new forms for headers and body; a relay test per form.
-- [ ] 4.3 Verify: `cargo nextest run -p ls-redact -p ls-gateway`, then `bash tests/adversarial/run.sh gateway G4` shows those forms no longer leak and no stale residual.
+- [x] 4.1 `ls-redact`: add base32 (RFC 4648, padded and unpadded, upper and lower), UTF-16LE, UTF-16BE and `\u`-escaped forms to the matcher, with the same 8-byte minimum and streaming behaviour; unit tests per form, split across chunks.
+- [x] 4.2 Gateway relay uses the new forms for headers and body; a relay test per form.
+- [x] 4.3 Verify: `cargo nextest run -p ls-redact -p ls-gateway`, then `bash tests/adversarial/run.sh gateway G4` shows those forms no longer leak and no stale residual.
 
 ## 5. Fast tier in just ci [opus]
 - [ ] 5.1 `services/gateway` adversarial test module: the G2 to G4 payloads against the in-process relay (fake KMS and material, wiremock provider and attacker host); writes what the caller received to a temp dir and runs `python3 -I tests/kit/oracle.py scan` on it; reads `residuals.toml` with the same rules; no Docker or network.

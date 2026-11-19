@@ -20,7 +20,7 @@
 //! 8. render the binding's header template, send through a client pinned to the checked
 //!    addresses that follows no redirects;
 //! 9. read the response (identity encoding only, size-bounded), redact headers and body with
-//!    `ls-redact` (plain, base64, URL, hex, JSON forms), re-check that nothing matches, and
+//!    `ls-redact` (plain, base64, URL, hex, JSON, base32, UTF-16 and \u-escaped forms), re-check that nothing matches, and
 //!    withhold the response with `502` if any of that fails (fail closed);
 //! 10. append `relay.outcome` naming the attempt, retried up to [`RelayOptions::outcome_retries`]
 //!     times (idempotent on the attempt id). If it still fails, a successful response is
@@ -1341,6 +1341,108 @@ mod tests {
         let decoded = B64.decode(env.body_base64.expect("binary body")).unwrap();
         assert_clean("binary body", &decoded);
         assert!(decoded.ends_with(b"[REDACTED:SECRET]"));
+        h.assert_audit_clean();
+    }
+
+    /// Task 4.2: base32 (RFC 4648, padded or not, both cases), UTF-16LE/BE and `\u`-escaped
+    /// forms of the value never reach the caller, in the body or in a header.
+    #[tokio::test]
+    async fn echoed_secret_is_redacted_in_base32_utf16_and_json_u() {
+        fn b32(pad: bool, lower: bool) -> Vec<u8> {
+            const A: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+            let mut out = Vec::new();
+            for g in VALUE.chunks(5) {
+                let mut n = 0u64;
+                for i in 0..5 {
+                    n = (n << 8) | u64::from(*g.get(i).unwrap_or(&0));
+                }
+                let chars = (g.len() * 8).div_ceil(5);
+                for i in 0..8 {
+                    if i < chars {
+                        let c = A[((n >> (35 - 5 * i)) & 31) as usize];
+                        out.push(if lower { c.to_ascii_lowercase() } else { c });
+                    } else if pad {
+                        out.push(b'=');
+                    }
+                }
+            }
+            out
+        }
+        fn u16s(be: bool) -> Vec<u8> {
+            VALUE
+                .iter()
+                .flat_map(|&b| if be { [0, b] } else { [b, 0] })
+                .collect()
+        }
+        fn ju(upper: bool) -> Vec<u8> {
+            VALUE
+                .iter()
+                .flat_map(|&b| {
+                    if upper {
+                        format!("\\u{b:04X}")
+                    } else {
+                        format!("\\u{b:04x}")
+                    }
+                    .into_bytes()
+                })
+                .collect()
+        }
+        let h = harness(Setup::default()).await;
+        let mut cases: Vec<(&str, Vec<u8>)> = vec![
+            ("b32", b32(true, false)),
+            ("b32-nopad", b32(false, false)),
+            ("b32-lower", b32(true, true)),
+            ("b32-lower-nopad", b32(false, true)),
+            ("utf16le", u16s(false)),
+            ("utf16be", u16s(true)),
+            ("json-u", ju(false)),
+            ("json-u-upper", ju(true)),
+        ];
+        for (name, enc) in &mut cases {
+            let mut body = b"pre ".to_vec();
+            body.append(enc);
+            body.extend_from_slice(b" post");
+            Mock::given(method("GET"))
+                .and(path(format!("/echo/{name}")))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(body.clone()))
+                .mount(&h.upstream)
+                .await;
+            let (status, raw) = h
+                .relay_get(SECRET, &format!("{}/echo/{name}", h.origin()))
+                .await;
+            assert_eq!(status, StatusCode::OK, "{name}");
+            let env = envelope(&raw);
+            let got = match (env.body, env.body_base64) {
+                (Some(t), _) => t.into_bytes(),
+                (None, Some(b)) => B64.decode(b).unwrap(),
+                _ => panic!("{name}: no body"),
+            };
+            assert!(
+                String::from_utf8_lossy(&got).contains("[REDACTED:SECRET]"),
+                "{name}: no marker"
+            );
+            assert_clean(name, &got);
+        }
+        // Headers (ASCII forms only).
+        let b32h = String::from_utf8(b32(false, true)).unwrap();
+        let juh = String::from_utf8(ju(false)).unwrap();
+        Mock::given(method("GET"))
+            .and(path("/echo-headers-new"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("x-echo-b32", b32h.as_str())
+                    .insert_header("x-echo-ju", juh.as_str()),
+            )
+            .mount(&h.upstream)
+            .await;
+        let (_, raw) = h
+            .relay_get(SECRET, &format!("{}/echo-headers-new", h.origin()))
+            .await;
+        let env = envelope(&raw);
+        for n in ["x-echo-b32", "x-echo-ju"] {
+            let v = &env.headers.iter().find(|(k, _)| k == n).unwrap().1;
+            assert_eq!(v, "[REDACTED:SECRET]", "{n}");
+        }
         h.assert_audit_clean();
     }
 

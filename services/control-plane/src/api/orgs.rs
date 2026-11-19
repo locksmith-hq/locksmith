@@ -57,6 +57,7 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Org> {
 #[utoipa::path(
     post,
     path = "/v1/orgs",
+    operation_id = "create_org",
     tag = "orgs",
     summary = "Create an org (dev only)",
     request_body = NewOrg,
@@ -97,6 +98,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/v1/orgs/{org_id}",
+    operation_id = "get_org",
     tag = "orgs",
     summary = "Get the bound org",
     params(("org_id" = Uuid, Path, description = "Org id")),

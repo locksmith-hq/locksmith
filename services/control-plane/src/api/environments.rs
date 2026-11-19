@@ -56,6 +56,7 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Environment> {
 #[utoipa::path(
     post,
     path = "/v1/projects/{project_id}/environments",
+    operation_id = "create_environment",
     tag = "environments",
     summary = "Create an environment",
     params(("project_id" = Uuid, Path, description = "Project id")),
@@ -107,6 +108,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/v1/projects/{project_id}/environments/{environment_id}",
+    operation_id = "get_environment",
     tag = "environments",
     summary = "Get an environment",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id")),
@@ -144,6 +146,7 @@ pub async fn get_one(
 #[utoipa::path(
     get,
     path = "/v1/projects/{project_id}/environments",
+    operation_id = "list_environments",
     tag = "environments",
     summary = "List environments",
     params(("project_id" = Uuid, Path, description = "Project id"), PageParams),
@@ -190,6 +193,7 @@ pub async fn list(
 #[utoipa::path(
     patch,
     path = "/v1/projects/{project_id}/environments/{environment_id}",
+    operation_id = "update_environment",
     tag = "environments",
     summary = "Update an environment",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id")),
@@ -234,6 +238,7 @@ pub async fn patch(
 #[utoipa::path(
     delete,
     path = "/v1/projects/{project_id}/environments/{environment_id}",
+    operation_id = "delete_environment",
     tag = "environments",
     summary = "Delete an environment",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id")),

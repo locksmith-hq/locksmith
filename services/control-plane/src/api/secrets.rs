@@ -71,6 +71,7 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Secret> {
 #[utoipa::path(
     post,
     path = "/v1/projects/{project_id}/environments/{environment_id}/secrets",
+    operation_id = "create_secret",
     tag = "secrets",
     summary = "Create a secret (metadata only, never a value)",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id")),
@@ -131,6 +132,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+    operation_id = "get_secret",
     tag = "secrets",
     summary = "Get secret metadata",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
@@ -170,6 +172,7 @@ pub async fn get_one(
 #[utoipa::path(
     get,
     path = "/v1/projects/{project_id}/environments/{environment_id}/secrets",
+    operation_id = "list_secrets",
     tag = "secrets",
     summary = "List secrets",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), PageParams),
@@ -222,6 +225,7 @@ pub async fn list(
 #[utoipa::path(
     patch,
     path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+    operation_id = "update_secret",
     tag = "secrets",
     summary = "Update secret metadata",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),
@@ -268,6 +272,7 @@ pub async fn patch(
 #[utoipa::path(
     delete,
     path = "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+    operation_id = "delete_secret",
     tag = "secrets",
     summary = "Delete a secret",
     params(("project_id" = Uuid, Path, description = "Project id"), ("environment_id" = Uuid, Path, description = "Environment id"), ("secret_id" = Uuid, Path, description = "Secret id")),

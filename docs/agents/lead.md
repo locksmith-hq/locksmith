@@ -25,7 +25,7 @@ Check worker sessions via `Claude_Code_Remote`: `list_triggers` `last_run`; `lis
 
 Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > new skill (`skill-creator` skill, for procedures workers repeat or improvise) > role-file edit > lesson (`lessons.md`, max 5). Except new skills, agent-doc words must not grow. Revert 7+ day-old fixes whose metric didn't move.
 
-**Actions minutes:** run `scripts/actions-usage.py` with `bg.sh` (over 2 min); log four lines. On ALERT or rising minutes: `needs-owner` issue with numbers, then a protected fix.
+**Actions minutes:** run `scripts/actions-usage.py` via `bg.sh`; log four lines. On ALERT or rising minutes: `needs-owner` issue with numbers, then a protected fix.
 
 ## 3. Code
 Take open `for-lead` issues, then review diffs merged in the window (`merge-review` covers security) for duplication, reinvented wheels (cite a source), readability or layering drift, and over-specific code (solved twice, or a roadmap change would rewrite it). Findings cite evidence, landing as:

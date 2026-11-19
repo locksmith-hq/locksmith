@@ -7,7 +7,7 @@ Skip idle passes. Window: since the newest `lead` agent-log comment not `answere
 ## 0. Owner replies
 For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
 - **Not approved:** reply (`<!-- agent -->` first) with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
-- **Approved:** apply it on `claude/planning-<date>` (marked ready): OpenSpec changes and tasks, roadmap order or `x-priority` (the board syncs from them), a line in `owner.md` or `openspec/decisions.md`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
+- **Approved:** apply it, marked ready: OpenSpec edits and `x-priority` on `claude/planning-<date>` (merge-gate exempts only `openspec/changes/`); roadmap order and a line in `owner.md` or `openspec/decisions.md` on `claude/lead-<date>`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
 
 Woken for a reply: step 0 only, outcome `answered`.
 

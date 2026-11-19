@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 aho-corasick = "1"
 base64 = "0.22"
+data-encoding = "2"
 inventory = "0.3"
 ls-diag = { path = "../ls-diag" }
 serde = { version = "1.0.229", features = ["derive"] }

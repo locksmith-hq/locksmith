@@ -2526,10 +2526,13 @@ dependencies = [
 name = "ls-e2e"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "ls-proxy",
  "reqwest",
  "serde_json",
  "tokio",
  "tokio-postgres",
+ "ureq",
+ "zeroize",
 ]
 
 [[package]]

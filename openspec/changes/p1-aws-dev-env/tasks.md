@@ -1,9 +1,9 @@
 # Tasks: P1 AWS dev environment
 
 ## 1. Cost brief and gate [sonnet]
-- [ ] 1.1 Write `docs/design/aws-dev-cost.md`: each resource with a cited price page, monthly idle and session cost, and options (Aurora PG18 vs fallback, Cognito hosted domain). Owner-facing, with an Artifact brief draft.
+- [x] 1.1 Write `docs/design/aws-dev-cost.md`: each resource with a cited price page, monthly idle and session cost, and options (Aurora PG18 vs fallback, Cognito hosted domain). Owner-facing, with an Artifact brief draft.
 - [ ] 1.2 Gate: confirm `openspec/decisions.md` records owner approval of the cost brief (P1-1). Otherwise stop applying anything and report to the lead; offline tasks 2 to 4 may continue.
-- [ ] 1.3 Verify: the brief's totals reproduce from its own table (`bash scripts/aws-cost-check.sh` or a documented calculation).
+- [x] 1.3 Verify: the brief's totals reproduce from its own table (`bash scripts/aws-cost-check.sh` or a documented calculation).
 
 ## 2. Tooling and layout [sonnet]
 - [ ] 2.1 Teach `scripts/tree-check.sh` the `infra/tofu/{guardrails,base,session}` layout; add `just aws-validate` (`tofu fmt -check`, `tofu validate` with no backend).

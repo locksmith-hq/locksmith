@@ -173,7 +173,7 @@ Cloud runs never see the app keys; they see the one-hour installation token, whi
 ## Routing and debates
 `docs/agents/routing.json` says who may ask whom: roles (GitHub App logins, routine trigger, fire-token secret) and channels (issue labels: who opens, who is woken on open, on owner reply, on close). `scripts/route.sh` reads it for `wake-agents.yml` and enforces debates. Both are owner-only (task-edit guard).
 
-The PM owns what and when; the lead owns how. A disagreement becomes a `debate` issue (`debate` skill). Turns alternate, each side gets at most `turns` (3), and the guard trusts logins, not text, so no agent can speak for the other side or skip the cap. Agreement is recorded in git by the lead; agree-to-disagree or the cap turns the issue into a `needs-owner` decision with both positions side by side. At most 2×turns+1 wake-ups per debate.
+The PM owns what and when; the lead owns how. A disagreement becomes a `debate` issue (`debate` skill). Turns alternate, each side gets at most `turns` (3), and roles come from GitHub App logins, so no agent can speak for the other side or skip the cap (while identities are paused, from a `<!-- role: x -->` marker instead). Agreement is recorded in git by the lead; agree-to-disagree or the cap turns the issue into a `needs-owner` decision with both positions side by side. At most 2×turns+1 wake-ups per debate.
 
 To extend: add a role (logins, trigger, secret) or a channel to `routing.json`, pass the new secret in `wake-agents.yml`, add the label to its prefilter, and extend `route.sh selftest`.
 

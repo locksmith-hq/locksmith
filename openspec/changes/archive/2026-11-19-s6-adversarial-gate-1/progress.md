@@ -104,3 +104,7 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 8.1 - done; 6.4 - blocked (needs ANTHROPIC_API_KEY in the VM; not ticked)
 - Verified: `just up`, `just api` (background), `just adversarial-gate` -> PASS (G4 RESIDUAL registered, 0 stale); `just canary new` then `just leak-scan` clean; `just audit-verify`, `just apps-build` -> ok; `just ci` -> exit 0 (699 tests)
 - Notes for next session: only 6.4 is left and it needs a key: `just up && just api && just adversarial-gate --agent claude`. `just leak-scan` needs `just canary new` first. `just api` is a foreground server: start it with bg.sh. VM quirk: if `ls-ipc foreign_peer_is_closed_...` fails with Permission denied, `chmod go+rx target/debug/build/ls-ipc`.
+
+## 2026-11-19 worker (a, close-out)
+- Task: 6.4 - ticked on its documented no-key outcome: `just adversarial-gate --agent claude` without ANTHROPIC_API_KEY ran the scripted gate, then printed `skip live` and exited non-zero (verified in the 6.1-6.3 entry; live wiring checked with a stub CLI). A real-API live run stays an owner follow-up (nightly routine prompt in tests/adversarial/README.md).
+- Notes for next session: change is complete; archived in the same PR.

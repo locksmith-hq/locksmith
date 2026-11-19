@@ -8,7 +8,7 @@
 # `evil`, its log in evil-hits.log), a gateway and a `smith login --agent`. Then each prompt in
 # prompts/*.md (env, reflection, header echo, encodings, API, token) runs as one headless
 # `claude -p --bare` session in the agent's environment (lib.sh gw_agent: only PATH, HOME and the
-# connector settings, plus ANTHROPIC_API_KEY for the CLI itself), with the Locksmith MCP server
+# connector settings, plus ANTHROPIC_API_KEY and any proxy and CA variables for the CLI itself), with the Locksmith MCP server
 # (locksmith-mcp, from --mcp-config only) and the Bash tool and nothing else. Placeholders
 # {{SMITH}}, {{SECRET_ID}}, {{GATEWAY_URL}}, {{CONTROL_PLANE_URL}}, {{PROVIDER_URL}} and
 # {{EVIL_URL}} are filled in per run; the prompts are versioned so runs compare.
@@ -61,6 +61,7 @@ mask_all() {
   return 0
 }
 gw_on_exit mask_all
+gw_on_exit 'rm -f "$key_file"'
 
 # Proxy and CA settings go to the claude process only (the cloud VM reaches the API through them),
 # never to smith or locksmith-mcp.

@@ -2,18 +2,18 @@
 
 Skip idle passes. Window: since the newest `lead` agent-log comment not `answered` (first: 24h). Use the `run-start` skill with `lead`.
 
-**Scope: technical.** You own code quality, architecture and rescues; the local optimizer (`optimizer.md`) owns schedules, agent communication and run efficiency. The PM routine (daily, product) owns the end goal, roadmap order, priorities and the board: never reorder the roadmap or change `x-priority` yourself, except to apply an owner approval (step 0). The PM hands you technical findings as open `for-lead` issues; disagreements go through the `debate` skill.
+**Scope: technical.** You own code quality, architecture and rescues; the local optimizer (`optimizer.md`) owns schedules, agent communication and run efficiency. The PM routine owns the end goal, roadmap order, priorities and the board: never reorder the roadmap or change `x-priority` yourself, except to apply an owner approval (step 0). The PM hands you technical findings as open `for-lead` issues; disagreements go through the `debate` skill.
 
 ## 0. Owner replies
 For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
-- **Not approved:** reply (`<!-- agent -->` first) with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
+- **Not approved:** reply with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
 - **Approved:** apply it, marked ready: OpenSpec edits and `x-priority` on `claude/planning-<date>` (merge-gate exempts only `openspec/changes/`); roadmap order and a line in `owner.md` or `openspec/decisions.md` on `claude/lead-<date>`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
 
 A wake does what it names (reply, rescue, debate), then any open rescue; outcome `answered`.
 
 ## 1. Rescue
 Take the oldest open `needs-rescue` issue whose change you can lock (`run-lock.sh acquire lead-<session> <id>`; busy: next; release at end). One per run (~45m).
-- Read the issue, change docs, last 5 progress entries, CI logs; reproduce and confirm the root cause.
+- Read the issue, change docs, last 5 progress entries, CI logs; reproduce the root cause.
 - **`Rescue:`** fix via `evaluate-escalate`, Opus evaluator. **`Decision:`** decide with evidence in `design.md`; owner matters go on (`common.md`).
 - **PASS:** tick the task, add a `rescue` progress entry (cause, fix, verification), close the issue, mark ready if complete.
 - **Wrong task text:** fix on `claude/planning-<id>-tasks` with evidence.
@@ -31,4 +31,4 @@ Close each `for-lead` issue with what you did.
 Quality work never adds `needs-rescue` or `needs-owner`.
 
 ## Ship
-Run `just ci`. Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill), or it never merges. Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.
+Run `just ci` (docs-only diff: `just tree-check task-guard`; protected-only: `scripts/check-agent-docs.sh`). Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill). Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.

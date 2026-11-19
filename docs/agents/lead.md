@@ -33,4 +33,4 @@ Close each `for-lead` issue with what you did.
 Quality work never adds `needs-rescue` or `needs-owner`.
 
 ## Ship
-Run `just ci` (docs-only diff: `just tree-check task-guard`; protected-only: `scripts/check-agent-docs.sh`). Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill). Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.
+Run `just ci` (docs-only diff: `just tree-check task-guard`; protected-only: `scripts/check-agent-docs.sh`). Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill). Then, every run (idle too), run `bash scripts/issues-sync.sh`: it brings the GitHub issues and board in step with the roadmap and OpenSpec on main while the `change-sync` workflow is off; note a failure in the run log. Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.

@@ -45,7 +45,6 @@ load() { gh api --paginate "repos/$repo/issues?labels=$1&state=all&per_page=100"
   -q '.[]|{n:.number,id:.id,t:.title,s:.state,m:(.milestone.number // 0),ty:(.type.name // ""),l:[.labels[].name],b:(.body // "")}|@json'; }
 changes=$(load change); tasks=$(load task)
 issue_of() { jq -rs --arg p "$1:" '[.[]|select(.t|startswith($p))]|sort_by(.n)|.[0]|select(.!=null)|@json' <<<"$changes"; }
-status=$(bash "$here/change-status.sh")
 blockers=$(gh api "repos/$repo/issues?state=open&per_page=100" \
   -q '.[]|select(any(.labels[]; .name=="needs-owner" or .name=="needs-rescue"))|"\(.id)\t\(.number)\t\((.title+" "+(.body // ""))|gsub("\n";" "))"')
 

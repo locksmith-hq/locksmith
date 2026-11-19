@@ -87,7 +87,9 @@ while IFS=$'\t' read -r -u 3 phase id; do   # fd 3: gh inside the loop must not 
   left=$(tasks_md "$id" | grep -cE '^[[:space:]]*- \[ \]'); [ -d "openspec/changes/$id" ] || left=$est_tasks
   days=$(( (left + pace - 1) / pace )); [ "$days" -lt 1 ] && days=1
   lane_take "$days"
-  start=""; [ "$cstate" = claimed ] && start=$today
+  # Started: some task is ticked (start = the change's first commit; only ever moves earlier) or it is claimed now.
+  start=""; tasks_md "$id" | grep -qE '^[[:space:]]*- \[[xX]\]' && start=$(git log --format=%cs -- "openspec/changes/$id" | tail -1)
+  [ -z "$start" ] && [ "$cstate" = claimed ] && start=$today
   [ -z "$start" ] && start="~$(day $(( end - days )))"
   set_fields "$n" "$pri" "$start" "$(day "$end")"
 

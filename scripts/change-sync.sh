@@ -46,10 +46,10 @@ parked_block() { # <owner|rescue> <blocker-issue> <id>
     echo "- **You:** open #$2, pick an option or reply \`approved\`."
     echo "- **Meanwhile:** workers continue on other changes."
   else
-    echo "## ⏸ Parked: stuck, the lead is rescuing it"; echo
-    echo "- **Stuck on:** tasks ${title#Rescue: "$3" } (#$2)"
+    echo "## ⏸ Parked: waiting for the lead"; echo
+    echo "- **On:** $title (#$2)"
     echo "- **Why:** ${why:-see #$2}"
-    echo "- **Next:** the lead retries at 09:35 and 23:35. After two failed rescues it comes to you as a \`needs-owner\` issue."
+    echo "- **Next:** the lead was woken to fix or decide it; closing #$2 wakes a worker. Only the lead brings it to you, as a \`needs-owner\` issue."
     echo "- **You:** nothing yet."
   fi
   echo

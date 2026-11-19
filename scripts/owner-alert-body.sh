@@ -15,5 +15,8 @@ printf '@%s decision needed: %s\n\n' "$OWNER" "$TITLE"
 [ -n "$summary" ] && printf '%s\n\n' "$summary"
 printf -- '- Change: %s\n' "${change:-not named}"
 printf -- '- Brief: %s\n' "${briefs:-none prepared}"
+# An "Action:" line says exactly what the owner must do (merge a PR, run a command); approving alone doesn't do it.
+action=$(printf '%s\n' "${BODY:-}" | sed -nE 's/^[*_[:space:]-]*Action:[*_[:space:]]*(.+)$/\1/p' | head -1)
 # shellcheck disable=SC2016 # literal backticks for markdown
-printf '\nReply `approved`, or reply with concerns. Only the named change waits; the other agents keep working.\n'
+if [ -n "$action" ]; then printf -- '- **You:** %s\n\nReply when it is done, or with concerns.\n' "$action"
+else printf '\nReply `approved`, or reply with concerns. Only the named change waits; the other agents keep working.\n'; fi

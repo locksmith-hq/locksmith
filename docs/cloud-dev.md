@@ -114,7 +114,7 @@ The design follows Anthropic's long-running agent harness (https://www.anthropic
 - State lives in git and the `agent-log` issue, not in model memory.
 - Each run starts by checking CI and running a baseline `just ci`.
 - A task is ticked only after its verification command passes.
-- An attempt cap stops runaway runs, and a task stuck across three runs becomes a `needs-owner` issue.
+- An attempt cap stops runaway runs, and a stuck task becomes a `needs-rescue` issue for the lead; only the lead raises `needs-owner`.
 - `scripts/check-task-edits.sh` allows agents only to tick tasks, never to rewrite them, because the article found models edit Markdown task lists.
 - CI is the independent verifier the agent cannot fake.
 
@@ -130,7 +130,7 @@ Except the workers (events, plus every 4 hours, 24/7), routines avoid peak hours
 | [Daily summary](https://claude.ai/code/routines/trig_01E29QPqddtqyaTR1FUjLKxT) | Haiku 5.5 | Default | daily 17:30 | updates the one daily-summary Artifact and sends a push; read-only, REST API only (GraphQL is blocked in cloud sessions) |
 | [Weekly review](https://claude.ai/code/routines/trig_01NUtSWtRzUGw2AMQUpQrQZT) | Sonnet 5.5 + Opus reviewer | `locksmith-research` | Sat 10:35 (after the Saturday 10:00 weekly reset) | re-verify finished work, quality review, write the next change |
 | [Daily health check](https://claude.ai/code/routines/trig_012bR8F2aWP91W3D9xGDpVUn) | Haiku 5.5 | Default | daily 08:30 | detects silent failures: worker silent for more than 24h, red CI on main, owner decisions waiting more than 3 days, finished PRs waiting more than 2 days; stays silent when healthy |
-| [Lead (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-research` | daily 09:35, 23:35 (passes with nothing to do are skipped), plus GitHub: issue opened with label `needs-rescue`, author `tomer555`; API: `wake-agents.yml` fires it on every owner reply on a `needs-owner` issue (secret `LEAD_FIRE_TOKEN`) | tech lead (`docs/agents/lead.md`, replaced Rescue and the Learning loop 2026-11-17): rescues the oldest `needs-rescue` issue; reviews run metadata for stuck, slow or wasteful runs and fixes the causes in scripts or skills; reviews code merged since its last run for duplication, reinvented wheels, readability drift and over-specific solutions, and turns findings into fixes, unticked tasks or a `refactor-*` change |
+| [Lead (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-research` | daily 09:35, 23:35 (passes with nothing to do are skipped), plus API: `wake-agents.yml` fires it per `docs/agents/routing.json`: a new `needs-rescue` issue, an owner reply on `needs-owner`, a debate turn (secret `LEAD_FIRE_TOKEN`) | tech lead (`docs/agents/lead.md`, replaced Rescue and the Learning loop 2026-11-17): rescues the oldest `needs-rescue` issue; reviews run metadata for stuck, slow or wasteful runs and fixes the causes in scripts or skills; reviews code merged since its last run for duplication, reinvented wheels, readability drift and over-specific solutions, and turns findings into fixes, unticked tasks or a `refactor-*` change |
 | [Monthly research refresh](https://claude.ai/code/routines/trig_016jEjKwShdcdfhWKBcp8kHs) | Sonnet 5.5 | `locksmith-research` | 1st of month, 10:35 | re-checks OSS versions and licences, `cargo audit` and `npm audit`, new MCP servers, Infisical changes; draft PR only if something changed |
 
 GitHub triggers (web UI only; one per routine): the API stores filters as `filter.clauses[]` of `{field, operator, values}` with fields like `pr.author`, `pr.labels`, `pr.base_branch`, `pr.draft` and operators like `FILTER_OP_IN`, but `RemoteTrigger` cannot list or delete triggers. Not available as triggers: issue comments, CI results. The review stays in GitHub Actions because gate 6 trusts only the Claude bot identity; agents act as `tomer555` and could forge a routine's verdict.
@@ -167,8 +167,15 @@ Cloud runs never see the app keys; they see the one-hour installation token, whi
 1. **Worker attempt 1.** The task runs on its tagged tier, then the worker runs the verification command and `just ci`.
 2. **Independent evaluator.** A separate subagent (Sonnet, or Opus for `[opus]` tasks) checks the diff against the task, the spec and the security rules, and answers PASS or FAIL. This follows the evaluator-optimizer pattern.
 3. **Worker attempt 2,** one tier up (Haiku, then Sonnet, then Opus), given the evaluator's reasons.
-4. **`needs-rescue` issue.** The Opus lead routine reproduces the failure, finds the root cause, fixes it and has the fix evaluated.
-5. **`needs-owner` and a push notification.** This happens only after 2 failed Opus attempts, or when the task itself is wrong. The daily health check reports rescue issues that sit unhandled for more than 24 hours.
+4. **`needs-rescue` issue,** the only way a worker asks for help: `Rescue:` when stuck, `Decision:` for an owner matter. `wake-agents.yml` wakes the Opus lead at once; it fixes or decides in git and closes the issue, which wakes a worker to continue the parked change.
+5. **`needs-owner` and a push notification,** raised only by the lead: when its own two Opus attempts fail (same run), for an owner matter, or for a PM–lead debate that ended without agreement. The daily health check reports rescue issues unhandled for more than 2 hours.
+
+## Routing and debates
+`docs/agents/routing.json` says who may ask whom: roles (GitHub App logins, routine trigger, fire-token secret) and channels (issue labels: who opens, who is woken on open, on owner reply, on close). `scripts/route.sh` reads it for `wake-agents.yml` and enforces debates. Both are owner-only (task-edit guard).
+
+The PM owns what and when; the lead owns how. A disagreement becomes a `debate` issue (`debate` skill). Turns alternate, each side gets at most `turns` (3), and the guard trusts logins, not text, so no agent can speak for the other side or skip the cap. Agreement is recorded in git by the lead; agree-to-disagree or the cap turns the issue into a `needs-owner` decision with both positions side by side. At most 2×turns+1 wake-ups per debate.
+
+To extend: add a role (logins, trigger, secret) or a channel to `routing.json`, pass the new secret in `wake-agents.yml`, add the label to its prefilter, and extend `route.sh selftest`.
 
 ## How the owner is alerted
 Agents act as the owner's GitHub account, and GitHub never notifies anyone about their own activity. So:

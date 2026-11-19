@@ -2,6 +2,7 @@
 //! Canary secret values below must never show up in any output except where stated.
 
 use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Child, Output};
@@ -180,8 +181,12 @@ fn export_writes_0600_and_refuses_piped_stdout() {
         "",
     );
     assert!(o.status.success(), "{}", s(&o.stderr));
-    let mode = std::fs::metadata(&out).unwrap().permissions().mode() & 0o777;
-    assert_eq!(mode, 0o600);
+    assert!(ls_platform::fs::is_private(&out).unwrap());
+    #[cfg(unix)]
+    assert_eq!(
+        std::fs::metadata(&out).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
     let body = std::fs::read_to_string(&out).unwrap();
     assert!(body.contains(&format!("A_KEY={VALUE}")), "{body}");
     assert!(!contains(&o.stdout, VALUE) && !contains(&o.stderr, VALUE));
@@ -222,6 +227,7 @@ fn export_writes_0600_and_refuses_piped_stdout() {
     assert!(!contains(&o.stdout, VALUE));
 }
 
+#[cfg(unix)]
 #[test]
 fn world_readable_vault_exits_1() {
     let h = Home::new();

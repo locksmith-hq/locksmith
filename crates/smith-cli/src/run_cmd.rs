@@ -7,13 +7,20 @@ use crate::{Fail, binding};
 use clap::Args;
 use ls_core::ExitCode;
 use ls_redact::{Redactor, Secret};
+#[cfg(unix)]
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+#[cfg(unix)]
 use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM, SIGWINCH};
-use std::ffi::{OsStr, OsString};
+#[cfg(unix)]
+use std::ffi::OsStr;
+use std::ffi::OsString;
+#[cfg(unix)]
 use std::io::{IsTerminal, Read, Write};
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::process::ExitStatusExt;
+#[cfg(unix)]
 use std::process::{Command, Stdio};
+#[cfg(unix)]
 use std::sync::{Arc, Mutex};
 
 const EXPLAIN: &str = "\
@@ -130,6 +137,14 @@ pub fn run(o: &Opts, a: RunArgs) -> Result<ExitCode, Fail> {
         print!("{EXPLAIN}");
         return Ok(ExitCode::Ok);
     }
+    if !cfg!(unix) {
+        // Refused before anything is unlocked: no child spawning with injected secrets, and no
+        // stdio passing to the daemon, exist off Unix yet (x1 task 2.1 is compile-only).
+        return Err(Fail(
+            ExitCode::Failure,
+            "smith run is not supported on this OS yet".into(),
+        ));
+    }
     if crate::session::in_session() {
         let keys = a.only;
         return crate::session::run_via_daemon(
@@ -232,11 +247,31 @@ pub fn run(o: &Opts, a: RunArgs) -> Result<ExitCode, Fail> {
     std::process::exit(code); // child's code; not an ExitCode variant
 }
 
+/// Shell-style exit code of a finished child: its code, or 128 + signal on Unix.
+pub(crate) fn exit_code(st: std::process::ExitStatus) -> i32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        st.code().unwrap_or_else(|| 128 + st.signal().unwrap_or(0))
+    }
+    #[cfg(not(unix))]
+    st.code().unwrap_or(1)
+}
+
+/// Off Unix `run` refuses before unlocking (see [`run`]); this is never reached there.
+#[cfg(not(unix))]
+fn exec(cmd: &[String], vars: &[(OsString, Vec<u8>)], r: &Redactor) -> i32 {
+    let _ = (cmd, vars, r);
+    126
+}
+
+#[cfg(unix)]
 fn spawn_fail(prog: &str, e: &dyn std::fmt::Display, missing: bool) -> i32 {
     eprintln!("smith: cannot run {prog}: {e}");
     if missing { 127 } else { 126 }
 }
 
+#[cfg(unix)]
 fn exec(cmd: &[String], vars: &[(OsString, Vec<u8>)], r: &Redactor) -> i32 {
     let stale: Vec<OsString> = std::env::vars_os()
         .map(|(k, _)| k)
@@ -249,6 +284,7 @@ fn exec(cmd: &[String], vars: &[(OsString, Vec<u8>)], r: &Redactor) -> i32 {
     }
 }
 
+#[cfg(unix)]
 fn pipe(cmd: &[String], vars: &[(OsString, Vec<u8>)], stale: &[OsString], r: &Redactor) -> i32 {
     let mut c = Command::new(&cmd[0]);
     c.args(&cmd[1..])
@@ -270,12 +306,10 @@ fn pipe(cmd: &[String], vars: &[(OsString, Vec<u8>)], stale: &[OsString], r: &Re
         s.spawn(|| ls_redact::relay(so, std::io::stdout(), r));
         ls_redact::relay(se, std::io::stderr(), r);
     });
-    match child.wait() {
-        Ok(st) => st.code().unwrap_or_else(|| 128 + st.signal().unwrap_or(0)),
-        Err(_) => 1,
-    }
+    child.wait().map_or(1, exit_code)
 }
 
+#[cfg(unix)]
 fn pty(cmd: &[String], vars: &[(OsString, Vec<u8>)], stale: &[OsString], r: &Redactor) -> i32 {
     let size = |(rows, cols)| PtySize {
         rows,
@@ -349,6 +383,7 @@ fn pty(cmd: &[String], vars: &[(OsString, Vec<u8>)], stale: &[OsString], r: &Red
 }
 
 // shortcut: portable-pty reports a killed child only by strsignal() text; common signals mapped.
+#[cfg(unix)]
 fn signal_number(name: &str) -> i32 {
     [
         ("Hangup", 1),
@@ -369,6 +404,13 @@ fn signal_number(name: &str) -> i32 {
 
 /// SIGWINCH resizes the pty; in PTY mode SIGINT is forwarded too (raw mode turns terminal ^C
 /// into a byte). In pipe mode the child shares our terminal and gets ^C itself, so SIGINT is swallowed.
+/// Off Unix: nothing to forward (a console Ctrl-C already reaches the whole process group).
+#[cfg(not(unix))]
+pub(crate) fn forward_signals(pid: u32, pty: bool, resize: Option<Box<dyn Fn() + Send>>) {
+    let _ = (pid, pty, resize);
+}
+
+#[cfg(unix)]
 pub(crate) fn forward_signals(pid: u32, pty: bool, resize: Option<Box<dyn Fn() + Send>>) {
     let Ok(mut sigs) = signal_hook::iterator::Signals::new([SIGINT, SIGTERM, SIGHUP, SIGWINCH])
     else {

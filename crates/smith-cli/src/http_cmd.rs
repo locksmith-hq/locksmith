@@ -299,16 +299,21 @@ fn trust_state_path(cfg: &Path) -> PathBuf {
     cfg.join("http").join("ca-trust")
 }
 
-fn write_file(path: &Path, body: &[u8], mode: u32) -> Result<(), Fail> {
-    use std::os::unix::fs::OpenOptionsExt;
+/// Write `body` to `path`, truncating. `private`: owner-only (0600 on Unix, an owner-only ACL on
+/// Windows); otherwise world-readable (0644 on Unix, the directory's inherited ACL on Windows).
+fn write_file(path: &Path, body: &[u8], private: bool) -> Result<(), Fail> {
     let io = |e: std::io::Error| fail(ExitCode::Failure, format!("{}: {e}", path.display()));
-    let mut f = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(mode)
-        .open(path)
-        .map_err(io)?;
+    let mut f = if private {
+        ls_platform::fs::PrivateFile::new()
+            .truncate(true)
+            .open(path)
+    } else {
+        let mut o = std::fs::OpenOptions::new();
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o644);
+        o.write(true).create(true).truncate(true).open(path)
+    }
+    .map_err(io)?;
     std::io::Write::write_all(&mut f, body).map_err(io)
 }
 
@@ -349,7 +354,10 @@ fn linux_store() -> Option<(&'static str, &'static [&'static str])> {
 
 /// `sudo` unless already root; asks first unless `yes`.
 fn privileged(cmds: &[Vec<String>], yes: bool) -> Result<(), Fail> {
+    #[cfg(unix)]
     let root = ls_platform::current_uid() == 0;
+    #[cfg(not(unix))]
+    let root = false;
     let shown: Vec<String> = cmds
         .iter()
         .map(|c| format!("{}{}", if root { "" } else { "sudo " }, c.join(" ")))
@@ -467,19 +475,19 @@ fn ca_install(o: &Opts, a: CaArgs) -> Result<ExitCode, Fail> {
     crate::audit_cmds::record(&v, "CA_INSTALL", hosts.join(","), "http_ca")?;
     drop(v);
     let dir = cert_path.parent().expect("has parent");
-    ls_core::ensure_private_dir(dir).map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    ls_platform::fs::ensure_private_dir(dir).map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
     write_file(
         &ca::hosts_path(&cfg),
         format!("{}\n", hosts.join("\n")).as_bytes(),
-        0o600,
+        true,
     )?;
-    write_file(&cert_path, new.cert_pem.as_bytes(), 0o644)?;
+    write_file(&cert_path, new.cert_pem.as_bytes(), false)?;
     let trust = if a.no_trust_store {
         "none".to_string()
     } else {
         trust_install(&cert_path, a.yes)?
     };
-    write_file(&trust_state_path(&cfg), trust.as_bytes(), 0o600)?;
+    write_file(&trust_state_path(&cfg), trust.as_bytes(), true)?;
     let port = relay_port();
     if o.json {
         println!(

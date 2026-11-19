@@ -28,6 +28,10 @@ apps-build: desktop-test
     npm run build
     cd apps/desktop && npm exec -- tauri build --debug --no-bundle
 
+# Plants a build error in each app and checks apps-build's npm build step fails on it.
+apps-build-test:
+    scripts/apps-build.test.sh
+
 # Regenerate packages/api-types from crates/ls-ipc (ts-rs).
 api-types:
     cargo test -p ls-ipc --features ts export_bindings

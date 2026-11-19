@@ -27,9 +27,9 @@ pub fn apply(root: &Path, c: &Change) -> std::io::Result<()> {
         std::fs::create_dir_all(d)?;
     }
     std::fs::write(&f, &c.after)?;
+    // Windows has no exec bit (a no-op there); git runs hooks regardless.
     if c.exec {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o755))?;
+        ls_platform::fs::set_executable(&f)?;
     }
     Ok(())
 }

@@ -5,15 +5,31 @@ use crate::input::{self, Opts};
 use crate::{Fail, run_cmd};
 use clap::{Args, Subcommand};
 use ls_core::ExitCode;
-use ls_ipc::{Client, ErrorCode, Passphrase, Request, Response, RunSpec, write_frame};
+use ls_ipc::{Client, ErrorCode, Passphrase, Request, Response, RunSpec, Transport};
 use serde_json::json;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 fn fail(c: ExitCode, m: impl Into<String>) -> Fail {
     Fail(c, m.into())
+}
+
+/// Run `c` in its own process group so it outlives the terminal (and its Ctrl-C). Windows: a
+/// new process group without a console.
+pub(crate) fn detach(c: &mut Command) -> &mut Command {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        c.process_group(0)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        c.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS)
+    }
 }
 
 pub fn exit_of(c: ErrorCode) -> ExitCode {
@@ -60,11 +76,12 @@ pub fn connect(start: bool) -> Result<Client, Fail> {
     })?;
     // shortcut: own process group instead of a new session (setsid needs unsafe); enough to
     // survive terminal hangups.
-    Command::new(exe)
+    let mut daemon = Command::new(exe);
+    daemon
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .process_group(0)
+        .stderr(Stdio::null());
+    detach(&mut daemon)
         .spawn()
         .map_err(|e| fail(ExitCode::Failure, format!("cannot start locksmithd: {e}")))?;
     let t = Instant::now();
@@ -164,10 +181,7 @@ pub fn session(o: &Opts, cmd: SessionCmd) -> Result<ExitCode, Fail> {
     {
         Ok(mut child) => {
             run_cmd::forward_signals(child.id(), false, None);
-            child.wait().map_or(1, |st| {
-                use std::os::unix::process::ExitStatusExt;
-                st.code().unwrap_or_else(|| 128 + st.signal().unwrap_or(0))
-            })
+            child.wait().map_or(1, run_cmd::exit_code)
         }
         Err(e) => {
             eprintln!("smith: cannot run {}: {e}", a.cmd[0]);
@@ -286,8 +300,8 @@ pub fn in_session() -> bool {
         let Ok(mut c) = connect(false) else {
             return false;
         };
-        let _ = c.stream.set_read_timeout(Some(Duration::from_secs(2)));
-        let _ = c.stream.set_write_timeout(Some(Duration::from_secs(2)));
+        let _ = Transport::set_read_timeout(&c.stream, Some(Duration::from_secs(2)));
+        let _ = Transport::set_write_timeout(&c.stream, Some(Duration::from_secs(2)));
         matches!(c.call(&Request::LeaseKeys), Ok(Response::Keys { .. }))
     })
 }
@@ -400,9 +414,9 @@ fn run_spec_code(
     c.send(&Request::Run(spec))
         .map_err(|e| fail(ExitCode::Locked, format!("locksmithd: {e}")))?;
     // If the daemon already refused, the error reply is still readable below.
-    if let Err(e) = ls_platform::proc::send_fds(&c.stream, &[0, 1, 2]) {
+    if let Err(e) = pass_stdio(&c) {
         // The daemon may already have refused the request: prefer its reply if one is there.
-        let _ = c.stream.set_read_timeout(Some(Duration::from_secs(2)));
+        let _ = Transport::set_read_timeout(&c.stream, Some(Duration::from_secs(2)));
         if let Ok(Response::Error { code, message }) = c.recv() {
             return Err(fail(exit_of(code), message));
         }
@@ -411,21 +425,7 @@ fn run_spec_code(
             format!("cannot pass stdio to locksmithd: {e}"),
         ));
     }
-    let mut tx = c
-        .stream
-        .try_clone()
-        .map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
-    if let Ok(mut sigs) = signal_hook::iterator::Signals::new([
-        signal_hook::consts::SIGINT,
-        signal_hook::consts::SIGTERM,
-        signal_hook::consts::SIGHUP,
-    ]) {
-        std::thread::spawn(move || {
-            for sig in sigs.forever() {
-                let _ = write_frame(&mut tx, &Request::Signal { sig });
-            }
-        });
-    }
+    forward_signal_frames(&c)?;
     loop {
         match c.recv() {
             Ok(Response::RunStarted { .. }) => {}
@@ -435,6 +435,48 @@ fn run_spec_code(
             Err(e) => return Err(fail(ExitCode::Locked, format!("lost locksmithd: {e}"))),
         }
     }
+}
+
+/// Hand our stdin, stdout and stderr to the daemon (SCM_RIGHTS) for a `Request::Run` child.
+#[cfg(unix)]
+fn pass_stdio(c: &Client) -> std::io::Result<()> {
+    ls_platform::proc::send_fds(&c.stream, &[0, 1, 2])
+}
+
+/// No descriptor passing off Unix yet: the run is refused (the daemon refuses it too).
+#[cfg(not(unix))]
+fn pass_stdio(c: &Client) -> std::io::Result<()> {
+    let _ = c;
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "passing stdio to locksmithd is not supported on this OS yet",
+    ))
+}
+
+/// Forward SIGINT, SIGTERM and SIGHUP to the daemon-run child as `Request::Signal` frames.
+#[cfg(unix)]
+fn forward_signal_frames(c: &Client) -> Result<(), Fail> {
+    let mut tx =
+        Transport::try_clone(&c.stream).map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    if let Ok(mut sigs) = signal_hook::iterator::Signals::new([
+        signal_hook::consts::SIGINT,
+        signal_hook::consts::SIGTERM,
+        signal_hook::consts::SIGHUP,
+    ]) {
+        std::thread::spawn(move || {
+            for sig in sigs.forever() {
+                let _ = ls_ipc::write_frame(&mut tx, &Request::Signal { sig });
+            }
+        });
+    }
+    Ok(())
+}
+
+/// Unreachable off Unix (`pass_stdio` fails first); nothing to forward there.
+#[cfg(not(unix))]
+fn forward_signal_frames(c: &Client) -> Result<(), Fail> {
+    let _ = c;
+    Ok(())
 }
 
 // ---- smith daemon install|uninstall|status ----
@@ -494,7 +536,11 @@ fn unit_path() -> PathBuf {
 pub fn daemon(cmd: DaemonCmd) -> Result<ExitCode, Fail> {
     let mac = cfg!(target_os = "macos");
     let path = unit_path();
+    // launchctl's per-user domain; only used on macOS.
+    #[cfg(unix)]
     let domain = format!("gui/{}", ls_platform::current_uid());
+    #[cfg(not(unix))]
+    let domain = String::new();
     match cmd {
         DaemonCmd::Install => {
             let bin = sibling("locksmithd")?;

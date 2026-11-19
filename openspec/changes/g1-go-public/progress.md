@@ -14,3 +14,8 @@
 - Task: 6.1 - done (5.2 remains: needs-owner issue is the lead's to raise; worker opened a needs-rescue Decision issue)
 - Verified: just ci -> exit 0 (after merging main); just up + public-check.sh + just apps-build + just down -> exit 0
 - Notes for next session: once 5.2 is done (lead opens needs-owner with Artifact brief, owner approval recorded), tick it and archive the change in the same PR.
+
+## 2026-11-19 09:30 lead
+- Task: 5.2 - blocked (owner)
+- Verified: gitleaks detect --redact (355 commits) -> no leaks; bash scripts/public-check.sh -> OK
+- Notes for next session: rescue #348 closed; owner decision raised as #349 with Artifact brief and push. On `approved`, record the line in openspec/decisions.md, tick 5.2 and archive in PR #344. Option B (hide harness) would need a history rewrite.

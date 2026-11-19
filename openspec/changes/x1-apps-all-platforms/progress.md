@@ -83,3 +83,8 @@
 - Task: 3.2 daemon health call and `scripts/desktop-smoke.sh` - done
 - Verified: `just desktop-test` green (11 tests, incl. new `health_*`); `tauri build --debug --no-bundle` built; smoke script exit 0 against a live `locksmithd`, exit 1 with the daemon down
 - Notes for next session: 3.3 (apps-build host-OS build plus planted-error test), 3.4, 4.1 (needs-owner for ci-platforms patch), 4.2, 5.1 remain. Full `just ci` not yet rerun on this commit.
+
+## 2026-11-19 josie worker
+- Task: 3.3 and 3.4 - done
+- Verified: `just apps-build` exit 0 (web + docs build, desktop `tauri build --debug --no-bundle`); new `scripts/apps-build.test.sh` (`just apps-build-test`) plants a TS error in apps/web and apps/desktop, asserts the build fails, then passes once removed; `scripts/desktop-smoke.sh` exit 0 against a live `locksmithd` (LOCKSMITH_HOME temp dir) and exit 1 with the daemon down
+- Notes for next session: 4.1 next (ci-platforms.yml patch in PR description plus a needs-owner issue; workflows are protected, do not edit them). Then 4.2 (waits on owner), 5.1 (`just up`, smoke, apps-build, `just ci`).

@@ -14,8 +14,8 @@
 ## 3. Desktop on all platforms [sonnet]
 - [x] 3.1 Add the Windows branch of `secure_input.rs` and tray handling in `apps/desktop/src-tauri`; confirm the Tauri config bundles on Windows.
 - [x] 3.2 Add a daemon health IPC call and `scripts/desktop-smoke.sh` (launch headless, wait for health, exit 0, non-zero when the daemon is down).
-- [ ] 3.3 Extend `just apps-build` to build web plus desktop on the host OS; add a test that it fails on a planted error.
-- [ ] 3.4 Verify: `just apps-build` and `bash scripts/desktop-smoke.sh` on Linux.
+- [x] 3.3 Extend `just apps-build` to build web plus desktop on the host OS; add a test that it fails on a planted error.
+- [x] 3.4 Verify: `just apps-build` and `bash scripts/desktop-smoke.sh` on Linux.
 
 ## 4. Platform CI [sonnet]
 - [ ] 4.1 Prepare the `ci-platforms.yml` change (drop the Windows exclusions, add `cargo test --workspace` to the Windows job, add Linux and Windows Tauri bundle jobs) as a patch in the PR description and open a `needs-owner` issue, because workflows are protected.

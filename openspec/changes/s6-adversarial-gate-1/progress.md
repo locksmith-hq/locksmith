@@ -59,3 +59,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.5 - done
 - Verified: live `ADVERSARIAL_REQUIRE_ALL=1 bash tests/adversarial/run.sh gateway G5` -> PASS (605 calls); first live run had 14 failures, all test bugs (bearer_of kept the "Bearer " prefix; braced real UUID parses as the same id, so the probe now uses a random braced id); Opus evaluator PASS; `just ci` -> exit 0
 - Notes for next session: 3.6 (G6 token abuse) next, then 3.7. Stack was brought up with `just up && just api`.
+
+## 2026-11-19 worker
+- Task: 3.6 - blocked (G6.sh built and live-passing, not ticked)
+- Verified: live `ADVERSARIAL_REQUIRE_ALL=1 run.sh gateway` -> G1-G3, G5, G6 PASS, G4 RESIDUAL (registered), 0 stale; Opus evaluator FAIL on one point only (below), other defects fixed
+- Notes for next session: 3.6 says every refusal gets a `denied` ledger event, but the gateway records nothing for 401 token failures (relay.rs `unauthenticated_caller_is_refused_first`) and the control plane records nothing for internal-route 401s; G6 asserts the ledger only for the revoke replay (`relay.denied`/`no_grant`, exactly +1, no new `relay.attempt`). Lead must narrow 3.6 to the revoke scenario or require the gateway to audit auth failures. Real clock expiry cannot be minted live (TTL fixed 15 min); covered by auth.rs and relay.rs unit tests. Then 3.7 and group 4. Stack: `just up && just api`.

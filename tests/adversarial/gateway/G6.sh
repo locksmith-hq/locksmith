@@ -9,13 +9,18 @@
 #     `kid`, an empty and a truncated token;
 #   - another org: a real token minted for an agent of a second org (refused: the gateway serves
 #     one org);
-#   - internal routes: the agent token at /internal/v1 routes of the control plane (401);
+#   - internal routes: the agent token at /internal/v1 routes of the control plane (401; those
+#     routes also answer 401 with no token, so this shows the token gives no extra access);
 #   - revoke: DELETE the grant, wait past the gateway's grant-cache TTL (10 s), replay the same
 #     still-valid token: refused 403 `denied`.
 # Expiry by the clock (a correctly signed token past its `exp`) cannot be minted here: the TTL
 # is fixed at 15 minutes in the control plane and the signing key is not available to the case.
 # It is covered by `forged_expired_wrong_audience_and_wrong_org_are_refused` in
-# services/gateway/src/auth.rs (task 5 adds the in-process variant).
+# services/gateway/src/auth.rs and, with no decrypt/fetch/upstream call, by
+# `unauthenticated_caller_is_refused_first` in services/gateway/src/relay.rs.
+# KNOWN GAP (task 3.6 asks for a `denied` ledger event per refusal): the gateway records nothing
+# for a 401 token failure and the control plane records nothing for internal-route 401s, so only
+# the revoke replay is asserted in the ledger. See progress.md / the needs-rescue Decision.
 # Checks: every refused probe is 401 or 403 and never 200; no decrypt: the ledger's
 # `relay.attempt` count does not move across the refused probes; after the revoke one
 # `relay.denied` event is appended for the agent; the provider sees exactly one request.
@@ -41,7 +46,9 @@ relay_with() {
 expect_refused() {
   local name="$1" status="$2"
   echo "$name gateway=$status" >>"$ARTIFACT_DIR/results.txt"
-  [[ "$status" == 401 || "$status" == 403 ]] || gw_fail "$name: gateway answered $status (expected 401 or 403)"
+  [[ "$status" == 401 ]] || gw_fail "$name: gateway answered $status (expected 401 unauthenticated)"
+  python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("error")=="unauthenticated" else 1)' \
+    "$ARTIFACT_DIR/raw-$name.out" 2>/dev/null || gw_fail "$name: not an unauthenticated error"
 }
 
 # Baseline.
@@ -106,15 +113,14 @@ doc = json.load(open(sys.argv[1]))
 json.dump({"enrollment_secret": doc["enrollment_secret"]}, open(sys.argv[2], "w"))
 PY
 rm -f "$GW_BODY"
-gw_cp POST /v1/agent-tokens "$GW_WORK/enroll-b.json" tokenb
+GW_CP_PRIVATE=1 gw_cp POST /v1/agent-tokens "$GW_WORK/enroll-b.json" tokenb
 [[ "$GW_STATUS" == 200 || "$GW_STATUS" == 201 ]] || gw_fail "org B token mint returned $GW_STATUS"
 python3 -I - "$GW_BODY" "$GW_WORK/tok-b.hdr" <<'PY'
 import json, sys
 doc = json.load(open(sys.argv[1]))
 open(sys.argv[2], "w").write("Authorization: Bearer %s\n" % doc["access_token"])
-doc["access_token"] = "<masked>"
-json.dump(doc, open(sys.argv[1], "w"))
 PY
+rm -f "$GW_BODY"
 rm -f "$GW_WORK/enroll-b.json"
 GW_ORG="$saved_org"
 expect_refused "other-org-token" "$(relay_with "$GW_WORK/tok-b.hdr" other-org-token)"
@@ -128,7 +134,7 @@ for spec in "GET /internal/v1/agents/$GW_AGENT_ID/grants" \
   st="$(gw_curl -X "$1" -H "@$auth" -H "X-Locksmith-Dev-Org: $GW_ORG" -H 'Content-Type: application/json' \
     --data-binary '{}' -o "$ARTIFACT_DIR/internal-$(echo "$2" | tr '/{}' '___' | cut -c1-60).out" -w '%{http_code}' \
     "$GW_API$2" 2>/dev/null || echo 000)"
-  echo "internal $1 gateway=$st" >>"$ARTIFACT_DIR/results.txt"
+  echo "internal $1 $2 control-plane=$st" >>"$ARTIFACT_DIR/results.txt"
   [[ "$st" == 401 ]] || gw_fail "agent token at $1 internal route: $st (expected 401)"
 done
 
@@ -138,6 +144,8 @@ attempts_refused="$(gw_ledger_count "$GW_LEDGER" relay.attempt)"
 [[ "$attempts_refused" == "$attempts_ok" ]] || gw_fail "relay.attempt moved across refused probes: $attempts_ok -> $attempts_refused"
 
 # Revoke the grant, wait past the cache TTL, replay the still-valid token.
+denied_before="$(gw_ledger_count "$GW_LEDGER" relay.denied)"
+[[ "$denied_before" == 0 ]] || gw_fail "relay.denied before the revoke: $denied_before (expected 0)"
 gw_cp DELETE "/v1/agents/$GW_AGENT_ID/grants/$GW_GRANT_ID" "" revoke
 [[ "$GW_STATUS" == 204 ]] || gw_fail "grant revoke returned $GW_STATUS"
 sleep 12
@@ -150,7 +158,7 @@ gw_ledger after
 attempts_after="$(gw_ledger_count "$GW_LEDGER" relay.attempt)"
 denied_after="$(gw_ledger_count "$GW_LEDGER" relay.denied)"
 [[ "$attempts_after" == "$attempts_ok" ]] || gw_fail "relay.attempt moved after revoke: $attempts_ok -> $attempts_after"
-[[ "$denied_after" -ge 1 ]] || gw_fail "no relay.denied event after the revoked replay"
+[[ "$denied_after" == 1 ]] || gw_fail "relay.denied after the revoked replay: $denied_after (expected exactly 1)"
 
 # Provider: exactly the one baseline request, the key in the bound header only.
 hits="$(grep -c . "$ARTIFACT_DIR/provider-hits.log" || true)"

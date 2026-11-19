@@ -21,3 +21,9 @@
 - Task: 3.1-3.4 - done
 - Verified: `cargo nextest run -p ls-control-plane users` (8) and `-p ls-tenant-lint` (5) pass; `just ci` exit 0 (725 tests); Sonnet evaluator PASS
 - Notes for next session: `users.resolve` runs in `Database::with_login` (advisory lock per identity; users RLS admits the bound login identity and verified email). Open risk: two different identities with the same verified email signing in concurrently for the first time can each create an org (add an email-keyed lock if it matters). Every human request does a DB read in the extractor (no cache). 3.3 exemption for resend-verification/sign-out routes is needed when those routes exist. Next: 4.x (Keycloak) and 5.x; 6.1+ web.
+
+## 2026-11-19 worker (a)
+- Task: 4.1, 4.2, 4.3 - done
+- Verified: `just up` (Keycloak keycloak/keycloak:26.0.8 from Docker Hub, quay.io is blocked; mailpit v1.21.8), `just api` in background, `just auth-e2e` -> all checks passed (re-run by the worker after the implementer); `just ci` -> exit 0; Sonnet evaluator PASS
+- Deviation: 4.2 social flows only test the `kc_idp_hint` redirect up to the provider authorize URL with a placeholder client id (no mock IdP); device grant is started, not approved; unverified-user 403 is covered by unit tests, as Keycloak issues no token to unverified users.
+- Notes for next session: 5.x (ledger auth events, G7 adversarial case), then 6.1-6.4 web/desktop/CLI. `just up` now starts the `auth` profile; `just up-lite` skips it. Stack: `just up && just api`.

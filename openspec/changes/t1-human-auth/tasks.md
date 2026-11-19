@@ -17,9 +17,9 @@
 - [x] 3.4 Verify: `cargo nextest run -p ls-control-plane users` and `cargo nextest run -p ls-tenant-lint`.
 
 ## 4. Local issuer [sonnet]
-- [ ] 4.1 Keycloak in `infra/compose` (profile `auth`), realm JSON with the `locksmith-web`, `locksmith-desktop` and `smith-cli` clients, test users, a mail catcher for verification and reset mails, and Google/GitHub identity-provider stubs with placeholder client ids (no secrets).
-- [ ] 4.2 `just auth-e2e` script: password sign-up, verify, sign-in, reset, token call to the API; social flows use Keycloak's mock IdP.
-- [ ] 4.3 Verify: `just up && just auth-e2e`.
+- [x] 4.1 Keycloak in `infra/compose` (profile `auth`), realm JSON with the `locksmith-web`, `locksmith-desktop` and `smith-cli` clients, test users, a mail catcher for verification and reset mails, and Google/GitHub identity-provider stubs with placeholder client ids (no secrets).
+- [x] 4.2 `just auth-e2e` script: password sign-up, verify, sign-in, reset, token call to the API; social flows use Keycloak's mock IdP.
+- [x] 4.3 Verify: `just up && just auth-e2e`.
 
 ## 5. Audit and leak safety [sonnet]
 - [ ] 5.1 Ledger events `auth.sign_in`, `auth.sign_out`, `auth.verify_failed`, `org.personal_created` without credentials.

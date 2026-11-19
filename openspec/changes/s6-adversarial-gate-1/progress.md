@@ -99,3 +99,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 7.1, 7.2, 7.3 - done
 - Verified: web and desktop org audit pages get an outcome filter (All, Denied, Redaction failed; client-side over the loaded events, `denied` also matches `relay.denied`); tests added in both App.test.tsx; `npm run lint` and `npm test` in apps/web, `npm test` in apps/desktop pass; `just apps-build` exit 0; `just ci` exit 0
 - Notes for next session: remaining are 6.4 (needs ANTHROPIC_API_KEY: `just up && just api && just adversarial-gate --agent claude`) and 8.1. The filter only sees events already loaded (Load more pages on); a server-side outcome filter would need an API change.
+
+## 2026-11-19 16:58 worker
+- Task: 8.1 - done; 6.4 - blocked (needs ANTHROPIC_API_KEY in the VM; not ticked)
+- Verified: `just up`, `just api` (background), `just adversarial-gate` -> PASS (G4 RESIDUAL registered, 0 stale); `just canary new` then `just leak-scan` clean; `just audit-verify`, `just apps-build` -> ok; `just ci` -> exit 0 (699 tests)
+- Notes for next session: only 6.4 is left and it needs a key: `just up && just api && just adversarial-gate --agent claude`. `just leak-scan` needs `just canary new` first. `just api` is a foreground server: start it with bg.sh. VM quirk: if `ls-ipc foreign_peer_is_closed_...` fails with Permission denied, `chmod go+rx target/debug/build/ls-ipc`.

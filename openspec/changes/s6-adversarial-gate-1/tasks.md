@@ -39,4 +39,4 @@
 - [x] 7.3 Verify: `npm run lint`, `npm test --workspace apps/web`, and `just apps-build`.
 
 ## 8. Local verification
-- [ ] 8.1 `just up`, `just api`, `just adversarial-gate`, `just leak-scan`, `just audit-verify`, `just apps-build`, then `just ci`.
+- [x] 8.1 `just up`, `just api`, `just adversarial-gate`, `just leak-scan`, `just audit-verify`, `just apps-build`, then `just ci`.

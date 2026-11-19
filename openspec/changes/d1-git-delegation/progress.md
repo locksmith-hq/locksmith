@@ -21,3 +21,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.1, 3.2, 3.3 - done
 - Verified: `cargo nextest run -p ls-gateway git_redact` -> 7 passed; `just adversarial-gate` PASS (G7 added); `just audit-verify` ok; `just lint` ok; `just test-rust` 718/719 (only `ls-ipc foreign_peer_is_closed...` fails: root VM cannot setuid to nobody, unrelated); Sonnet evaluator PASS
 - Notes for next session: one `git.fetch`/`git.push`/`git.denied` event per call (new closed kinds in ls-audit, control-plane internal API, OpenAPI and TS schema); fold into design.md. 2xx `application/x-git-*` streams are relayed raw (headers scanned only), a documented limit. Plain `cargo test -p ls-gateway git_` is flaky in a shared process (passes under nextest or --test-threads=1); check whether pre-existing. Group 4 next (`smith git setup`).
+
+## 2026-11-19 worker
+- Task: 4.1 `smith git setup --gateway <url>` (insteadOf include + `gateway-credential` helper returning the agent token), teardown removes it, `git.gateway` doctor check.
+- Verified: `cargo nextest run -p smith-cli git` (8 pass), clippy on smith-cli and ls-connector clean. Full `just ci` not run this slice.
+- Notes for next session: 4.2 (console/desktop bindings page with Vitest), 4.3, then groups 5 and 6.

@@ -189,6 +189,20 @@ impl State {
         Ok(())
     }
 
+    /// Gateway base URL (no trailing slash).
+    pub fn gateway_url(&self) -> &str {
+        &self.gateway_url
+    }
+
+    /// Git credential-helper answer (`username=` / `password=` lines). The only place the token
+    /// leaves this crate, and only toward Git, which sends it to the gateway as the Basic password.
+    pub fn git_credential_lines(&self) -> Zeroizing<String> {
+        Zeroizing::new(format!(
+            "username=locksmith-agent\npassword={}\n",
+            self.token.expose_secret()
+        ))
+    }
+
     /// Redactor for this agent's own token.
     pub fn redactor(&self) -> Redactor {
         Redactor::new(&[Secret::new("TOKEN", self.token.expose_secret().as_bytes())])

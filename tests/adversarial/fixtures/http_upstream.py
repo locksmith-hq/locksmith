@@ -5,7 +5,8 @@ Usage: python3 -I http_upstream.py ROLE PORT_FILE HITS_FILE [CANARY_FILE]
 ROLE is `api` (the real provider, which the relay may send the key to) or `evil` (an attacker's
 host). Listens on 127.0.0.1 (random port, written to PORT_FILE). Every request appends one line
 to HITS_FILE. For `api` the line has the method, path, header names and `key=ok` when the
-canary (CANARY_FILE) arrived in a header or the query, `key=no` otherwise. For `evil` the
+canary (CANARY_FILE) arrived in a header or the query, `key=no` otherwise, then `where=` and the
+places the canary arrived in (header names, `path`, `query`, `body`; `-` for none). For `evil` the
 line holds the whole raw request, because whatever reaches an attacker's host is the
 attacker's: if the real key ever got there, the oracle finds it in HITS_FILE.
 
@@ -19,6 +20,13 @@ Location, WWW-Authenticate). The query selects how the body is sent:
   te=gzip                    Transfer-Encoding: gzip, chunked (no Content-Encoding)
   split=1                    chunked, one byte per chunk with pauses (cross-chunk redaction)
   sse=1                      text/event-stream, dripped in pieces 60 ms apart
+  redirect=301|302|303|307|308 &to=URL   that status with `Location: URL` and the usual echo
+  g4=FORM                    (G4) only the credential of the Authorization header (the value
+                             after the scheme) in one form, with no other echo:
+                             plain, b32, b32-lower (unpadded), utf16le, utf16be, json-u (\\uXXXX
+                             escapes), html-dec, html-hex, qp (every octet =XX, soft line breaks),
+                             gzip (no Content-Encoding), reversed, split-headers (X-Part-1..4)
+                             or char-lines (one character per line)
 """
 import base64
 import gzip
@@ -82,6 +90,42 @@ def zstd_raw(data):
     return bytes(out)
 
 
+def g4_form(form, cred):
+    """(extra headers, content type, body) for one G4 encoding of the credential text."""
+    raw = cred.encode("latin-1")
+    text = "text/plain; charset=utf-8"
+    if form == "plain":
+        return [], text, raw + b"\n"
+    if form == "b32":
+        return [], text, base64.b32encode(raw) + b"\n"
+    if form == "b32-lower":
+        return [], text, base64.b32encode(raw).lower().rstrip(b"=") + b"\n"
+    if form in ("utf16le", "utf16be"):
+        codec = "utf-16-le" if form == "utf16le" else "utf-16-be"
+        return [], "text/plain; charset=" + codec, cred.encode(codec)
+    if form == "json-u":
+        return [], "application/json", ('{"token":"%s"}\n' % "".join("\\u%04x" % ord(c) for c in cred)).encode()
+    if form == "html-dec":
+        return [], "text/html", ("<p>%s</p>\n" % "".join("&#%d;" % ord(c) for c in cred)).encode()
+    if form == "html-hex":
+        return [], "text/html", ("<p>%s</p>\n" % "".join("&#x%x;" % ord(c) for c in cred)).encode()
+    if form == "qp":
+        enc = "".join("=%02X" % b for b in raw)
+        # RFC 2045 soft line breaks, at most 76 characters per line.
+        lines = [enc[i:i + 24] for i in range(0, len(enc), 24)]
+        return [], text, ("=\r\n".join(lines) + "\r\n").encode()
+    if form == "gzip":
+        return [], "application/octet-stream", gzip.compress(raw + b"\n")
+    if form == "reversed":
+        return [], text, raw[::-1] + b"\n"
+    if form == "split-headers":
+        n = -(-len(cred) // 4)
+        return [("X-Part-%d" % (i + 1), cred[i * n:(i + 1) * n]) for i in range(4)], text, b"ok\n"
+    if form == "char-lines":
+        return [], text, "\n".join(cred).encode("latin-1") + b"\n"
+    raise ValueError("unknown g4 form")
+
+
 ENCODE = {
     "gzip": gzip.compress,
     "deflate": zlib.compress,
@@ -142,12 +186,33 @@ class H(BaseHTTPRequestHandler):
                 seen += [base64.b64decode(v.split(" ", 1)[1] + "==").decode("latin-1", "replace")
                          for v in self.headers.get_all("Authorization", []) if v.lower().startswith("basic ")]
                 ok = "ok" if canary and any(canary in v for v in seen) else "no"
-                f.write(("%s %s headers=%s key=%s\n" % (self.command, self.path.split("?")[0], names, ok)).encode())
+                where = []
+                if canary:
+                    path, _, query = self.path.partition("?")
+                    for k, v in self.headers.items():
+                        dec = v
+                        if v.lower().startswith("basic "):
+                            try:
+                                dec = base64.b64decode(v.split(" ", 1)[1] + "==").decode("latin-1", "replace")
+                            except ValueError:
+                                pass
+                        if canary in v or canary in dec:
+                            where.append(k.lower())
+                    if canary in urllib.parse.unquote(path):
+                        where.append("path")
+                    if canary in urllib.parse.unquote(query):
+                        where.append("query")
+                    if canary.encode() in data:
+                        where.append("body")
+                f.write(("%s %s headers=%s key=%s where=%s\n" % (
+                    self.command, self.path.split("?")[0], names, ok, ",".join(where) or "-")).encode())
 
     def serve(self):
         data = self.body()
         self.hit(data)
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        if q.get("g4"):
+            return self.g4(q["g4"][0])
         lines = ["role: %s" % role, "request: %s %s" % (self.command, self.path)]
         for k, v in self.headers.items():
             lines += forms(k, v)
@@ -189,6 +254,18 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(payload)
             return
+        if q.get("redirect"):
+            # A redirect toward another host; the relay must not follow it.
+            code = int(q["redirect"][0])
+            self.send_response(code)
+            for k, v in hdrs:
+                if k != "Location":
+                    self.send_header(k, v)
+            self.send_header("Location", q.get("to", ["/"])[0])
+            self.send_header("Content-Length", str(len(text)))
+            self.end_headers()
+            self.wfile.write(text)
+            return
         payload = text
         if enc:
             for e in enc.split(","):
@@ -198,6 +275,24 @@ class H(BaseHTTPRequestHandler):
         for k, v in hdrs:
             self.send_header(k, v)
         self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def g4(self, form):
+        _scheme, _, cred = self.headers.get("Authorization", "").partition(" ")
+        try:
+            extra, ctype, payload = g4_form(form, cred)
+        except ValueError:
+            self.send_response(400)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        for k, v in extra:
+            self.send_header(k, v)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(payload)
 

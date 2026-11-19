@@ -16,3 +16,4 @@ infra/compose/.canaries
 infra/compose/.audit-verifier.json
 # Audit ledger export written by `just audit-export` (one local stack's ledger)
 infra/compose/.audit-export/
+__pycache__/

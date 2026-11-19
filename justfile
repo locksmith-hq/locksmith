@@ -226,6 +226,12 @@ connector-smoke:
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
 
+# S6 stack adversarial gate (needs `just up` and `just api`; fails fast without them): every
+# gateway case with skips as failures, then `leak-scan` over the stack, the audit export and the
+# kept artifacts. `--agent claude` adds the live prompts (no claude CLI or key: `skip live`, fails).
+adversarial-gate *args:
+    @bash tests/adversarial/gate.sh "$@"
+
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
     cargo nextest run -p ls-e2e

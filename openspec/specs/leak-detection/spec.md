@@ -24,3 +24,14 @@ TBD - created by archiving change f1-test-kit. Update Purpose after archive.
 #### Scenario: Empty coverage fails
 - **WHEN** a configured source is unreachable
 - **THEN** `just leak-scan` exits non-zero with `SOURCE-UNREACHABLE <name>`
+
+### Requirement: Oracle scans extended encodings
+The canary oracle SHALL also find a canary, and the canary text, as base32, UTF-16LE, UTF-16BE, `\u` JSON escapes, HTML numeric entities, quoted-printable and inside a gzip stream with or without a `Content-Encoding` label, reversed, and in a separator-stripped view of the scanned text (whitespace and header framing removed) that finds a canary split across headers or one character per line. Its self-test SHALL cover every form, and its output SHALL still never print the canary.
+
+#### Scenario: Self-test covers new forms
+- **WHEN** `run.sh selftest` runs
+- **THEN** the oracle finds a planted canary in each new form and reports the form name
+
+#### Scenario: Clean file stays clean
+- **WHEN** the oracle scans a file of random bytes and text with no canary
+- **THEN** it reports no hit for any new form

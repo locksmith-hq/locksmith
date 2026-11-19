@@ -1,0 +1,137 @@
+# Residual register for the gateway cases (`run.sh gateway`): known leak paths the gate accepts
+# for now, each with the protection that still applies. Design decision 5 of
+# openspec/changes/s6-adversarial-gate-1.
+#
+# One [[residual]] table per (case, encoding):
+#   case      the case id, the file name without .sh (e.g. "G4")
+#   encoding  an oracle label as printed in `LEAK <encoding> ...`, e.g. "text-reversed",
+#             "html-entity/utf8" or "gzip/utf8". A label the oracle joins with "+" (encodings
+#             with the same needle, e.g. "utf8+percent+json") matches the whole label or the view
+#             path with any one of its names. No wildcards. One leaked copy can give several
+#             labels (the canary text is itself base64url, so plain text also hits
+#             `b64url-offset0`); list each label the oracle prints for the form.
+#   label     prevention, containment or detection: what still protects the secret
+#   reason    why this form is not redacted, and why that is acceptable for now
+#   artifacts optional: the files (paths relative to the case's ARTIFACT_DIR, no wildcards) the
+#             hit is expected in, one per route and form. The entry then excuses this encoding
+#             only in those files, and each listed file without a hit is stale on its own.
+#
+# run.sh: a hit not listed for its case (and file) is FAIL; a listed hit is RESIDUAL (the run
+# passes); a listed entry (or listed file) with no hit is STALE RESIDUAL and fails until it is
+# changed. In a full `run.sh gateway`, an entry whose case does not exist is stale too.
+#
+# G4 seeds (task 3.4). The canary text is itself base64url, so each form of the plain canary hits
+# twice: `<view>/utf8` (the oracle joins it as `utf8+percent+json`) and `<view>/b64url-offset0`
+# (joined with `b64-offset0` when the two needles agree). Both are listed per form. Each form is
+# listed per route: smith-enc-FORM.out (smith relay) and mcp-enc-FORM.view (the decoded MCP tool
+# result); forms that survive JSON escaping also hit the raw JSON-RPC replies, mcp-enc.out.
+
+# HTML entities
+[[residual]]
+case = "G4"
+encoding = "html-entity/utf8"
+label = "containment"
+reason = "Decision 4 leaves HTML numeric entities to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-html-dec.out",
+  "smith-enc-html-hex.out",
+  "mcp-enc-html-dec.view",
+  "mcp-enc-html-hex.view",
+  "mcp-enc.out",
+]
+
+# HTML entities
+[[residual]]
+case = "G4"
+encoding = "html-entity/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves HTML numeric entities to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-html-dec.out",
+  "smith-enc-html-hex.out",
+  "mcp-enc-html-dec.view",
+  "mcp-enc-html-hex.view",
+  "mcp-enc.out",
+]
+
+# quoted-printable
+[[residual]]
+case = "G4"
+encoding = "qp/utf8"
+label = "containment"
+reason = "Decision 4 leaves quoted-printable to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-qp.out",
+  "mcp-enc-qp.view",
+]
+
+# quoted-printable
+[[residual]]
+case = "G4"
+encoding = "qp/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves quoted-printable to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-qp.out",
+  "mcp-enc-qp.view",
+]
+
+# unlabelled gzip
+[[residual]]
+case = "G4"
+encoding = "gzip/utf8"
+label = "containment"
+reason = "Decision 4 leaves a gzip body without a Content-Encoding label to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-gzip.out",
+  "mcp-enc-gzip.view",
+]
+
+# unlabelled gzip
+[[residual]]
+case = "G4"
+encoding = "gzip/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves a gzip body without a Content-Encoding label to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-gzip.out",
+  "mcp-enc-gzip.view",
+]
+
+# reversed
+[[residual]]
+case = "G4"
+encoding = "text-reversed"
+label = "containment"
+reason = "Decision 4 leaves the reversed value to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-reversed.out",
+  "mcp-enc-reversed.view",
+  "mcp-enc.out",
+]
+
+# split
+[[residual]]
+case = "G4"
+encoding = "stripped/utf8"
+label = "containment"
+reason = "Decision 4 leaves a value split across headers or written one character per line to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-split-headers.out",
+  "smith-enc-char-lines.out",
+  "mcp-enc-split-headers.view",
+  "mcp-enc-char-lines.view",
+]
+
+# split
+[[residual]]
+case = "G4"
+encoding = "stripped/b64url-offset0"
+label = "containment"
+reason = "Decision 4 leaves a value split across headers or written one character per line to containment: matching every transform an upstream can apply has no end and grows false positives; the binding limits the key to the bound upstream the owner trusts."
+artifacts = [
+  "smith-enc-split-headers.out",
+  "smith-enc-char-lines.out",
+  "mcp-enc-split-headers.view",
+  "mcp-enc-char-lines.view",
+]

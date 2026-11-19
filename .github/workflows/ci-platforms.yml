@@ -23,7 +23,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      # macOS runners have no Docker or Postgres: the `portable` profile skips stack and testcontainers tests.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.152
+      - run: cargo nextest run --workspace --profile portable
+      - run: cargo test --workspace --exclude ls-e2e --doc
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

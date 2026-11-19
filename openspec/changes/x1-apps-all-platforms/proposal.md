@@ -1,7 +1,7 @@
 # X1 apps on all platforms
 
 ## Why
-The desktop app (Tauri) and `ls-ipc` only run on Unix: IPC uses Unix domain sockets, and the manual `ci-platforms` Windows job excludes `ls-vault`, `smith-cli`, `ls-ipc`, `ls-broker` and `locksmithd` with a "rejoin later" shortcut. Every later phase would add more platform debt. X1 pays it once so that from here each phase ends green on macOS, Linux and Windows.
+The desktop app (Tauri) and `ls-ipc` only run on Unix: IPC uses Unix domain sockets, and the manual `ci-platforms` Windows job excludes `ls-vault`, `smith-cli`, `ls-ipc`, `ls-broker` and `locksmithd` with a "rejoin later" shortcut. Every later phase would add more platform debt. X1 pays it on macOS and Linux so that from here each phase ends green on both. Owner decision [#320](https://github.com/locksmith-hq/locksmith/issues/320): Windows is not built or tested for now, to keep development fast; Windows parity comes later (GA hardening).
 
 ## What changes
 - `ls-ipc` gets a Windows named-pipe transport behind the same API as the Unix socket one; peer-identity checks have a Windows implementation.
@@ -11,10 +11,10 @@ The desktop app (Tauri) and `ls-ipc` only run on Unix: IPC uses Unix domain sock
 - `ci-platforms` runs the Tauri bundle on all three OSes and the result is recorded in `progress.md`.
 
 ## Usable outcome
-A user on macOS, Linux or Windows can install the desktop app, start it, and see it talk to the local daemon; every later change inherits a green three-OS gate.
+A user on macOS or Linux can install the desktop app, start it, and see it talk to the local daemon; every later change inherits a green macOS and Linux gate. Windows code already written (named pipes, ACLs, dialog) stays behind `cfg(windows)` and compile-checked only.
 
 ## Out of scope
-Code signing and notarisation, installers and auto-update (P2), new desktop features, Windows services, any change to the secret or crypto design.
+Windows runtime verification, Windows CI changes and Windows bundles (deferred, [#320](https://github.com/locksmith-hq/locksmith/issues/320)); code signing and notarisation, installers and auto-update (P2), new desktop features, Windows services, any change to the secret or crypto design.
 
 ## Depends on
 Nothing unmerged. It ports `ls-ipc`, the vault, the daemon and the Tauri shell, none of which S4 changes; S4's desktop agents view is web frontend code inside the Tauri webview and runs unchanged on every OS. Any S4 conflict in `apps/desktop` is resolved by the merge queue.

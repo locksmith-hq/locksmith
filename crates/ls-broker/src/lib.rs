@@ -443,7 +443,8 @@ impl Leases {
     }
 }
 
-#[cfg(test)]
+// Unix process trees, `sleep` children and socket pairs; peer attestation fails closed on Windows.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use ls_platform::proc::id_of;

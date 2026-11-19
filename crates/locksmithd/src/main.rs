@@ -970,10 +970,10 @@ fn main() {
     ls_platform::proc::deny_debugger_attach();
 
     let dir = ls_ipc::runtime_dir();
-    if let Err(e) = ls_core::ensure_private_dir(&dir) {
+    if let Err(e) = ls_platform::fs::ensure_private_dir(&dir) {
         die(format!("cannot create {}: {e}", dir.display()));
     }
-    if !ls_core::is_private_dir(&dir).unwrap_or(false) {
+    if !ls_platform::fs::is_private(&dir).unwrap_or(false) {
         die(format!("{} is not private (0700)", dir.display()));
     }
     let sock = ls_ipc::socket_path();
@@ -984,11 +984,8 @@ fn main() {
         ));
     }
 
-    let mut lock = ls_core::private_open_options()
+    let mut lock = ls_platform::fs::PrivateFile::new()
         .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
         .open(dir.join(LOCK_FILE))
         .unwrap_or_else(|e| die(format!("cannot open lock file: {e}")));
     if lock.try_lock().is_err() {

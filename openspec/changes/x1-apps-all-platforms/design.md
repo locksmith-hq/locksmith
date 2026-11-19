@@ -17,7 +17,7 @@ Observed: `crates/ls-ipc/src/lib.rs` uses `std::os::unix::net`; `apps/desktop/sr
 | `tokio` (`net::windows::named_pipe`) | MIT | 1.54.1 (already in Cargo.lock) | 2026-10-21 | named-pipe server and client; chosen in spike 1.1 | permissive |
 | `windows-sys` | MIT OR Apache-2.0 | 0.61.2 (already in Cargo.lock) | 2025-10-06 | SDDL DACL, pipe peer PID, token SID lookup and compare | permissive |
 | `interprocess` (rejected in spike 1.1) | 0BSD OR Apache-2.0; deps `recvmsg` 1.0.0 and `doctest-file` 1.1.1 are 0BSD only | 2.4.8 | 2026-11-08 | not used: extra deps and 0BSD (not in `deny.toml`) for no capability tokio plus `windows-sys` lacks | permissive, but needs a `deny.toml` change |
-| `openssl-src` | MIT/Apache-2.0 | 400.0.2+4.0.3 (latest, not yet tried) | 2026-10-01 | vendored OpenSSL for SQLCipher | permissive; note `deny.toml` bans `openssl-sys`, which a vendored build pulls in |
+| `openssl-src` | MIT/Apache-2.0 | 300.6.1+3.6.3 (resolved in Cargo.lock; `openssl-sys` 0.9.118 requires `^300.2`, so the 400.x line, latest 400.0.2+4.0.3, is not used) | 2026-06-09 | vendored OpenSSL for SQLCipher, Windows only | permissive; `openssl-sys` is let in only through `libsqlite3-sys` (`deny.toml` wrapper, see above) |
 | `tauri` 2 | MIT/Apache-2.0 | already used | existing | desktop shell | permissive |
 Built in-house: only the thin transport trait and the peer-identity check; searched crates.io for a maintained peer-credential crate first (2026-11-18: "peer credentials", "peercred", "named pipe client sid"). The hits are Unix-only (`unix-cred`, `uds` last released 2023-12-31) or application crates, so no Windows peer-SID crate exists to reuse.
 

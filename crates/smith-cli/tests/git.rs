@@ -651,6 +651,7 @@ fn setup_and_teardown_leave_no_residue() {
     assert_eq!(std::fs::read(&gc).unwrap(), before, "~/.gitconfig changed");
 }
 
+#[cfg(unix)] // the fake `gh` is a /bin/sh script
 #[test]
 fn gh_output_is_redacted_and_audited() {
     let e = Env::new(false);

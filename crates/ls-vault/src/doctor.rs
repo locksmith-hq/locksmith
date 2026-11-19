@@ -103,6 +103,7 @@ mod tests {
     use ls_crypto::SecretKey32;
     use ls_crypto::aead::Sealed;
     use ls_crypto::kdf::KdfParams;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     const WEAK: KdfParams = KdfParams {
@@ -128,8 +129,7 @@ mod tests {
 
     /// Writes a well-formed header without a real KDF run; `recovery` empty means no recovery wrap.
     fn fake_header(dir: &Path, kdf: KdfParams, recovery: Vec<u8>) {
-        std::fs::create_dir_all(dir).unwrap();
-        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        ls_platform::fs::ensure_private_dir(dir).unwrap();
         let wrap = |ct: Vec<u8>| SealedDto::from(&Sealed { nonce: [0; 12], ct });
         let body = Body {
             format: FORMAT,
@@ -169,6 +169,7 @@ mod tests {
         assert_eq!(present_at(&t.0).status, Status::Ok);
     }
 
+    #[cfg(unix)]
     #[test]
     fn perms_fail_on_world_readable_dir_then_pass() {
         let t = Tmp::new("perms");

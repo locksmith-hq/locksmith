@@ -13,6 +13,7 @@ workspace = true
 # same rustls/ring/OS-trust-store setup as ls-envelope so no aws-lc-rs build is added.
 [dependencies]
 ls-core = { path = "../ls-core" }
+ls-platform = { path = "../ls-platform" }
 ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "blocking"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }

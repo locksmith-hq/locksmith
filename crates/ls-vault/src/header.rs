@@ -93,9 +93,7 @@ pub fn write(dir: &Path, body: &Body, vk: &SecretKey32) -> Result<(), Error> {
         mac,
     });
     let tmp = dir.join("vault.header.tmp");
-    let mut f = ls_core::private_open_options()
-        .write(true)
-        .create(true)
+    let mut f = ls_platform::fs::PrivateFile::new()
         .truncate(true)
         .open(&tmp)?;
     f.write_all(&bytes)?;

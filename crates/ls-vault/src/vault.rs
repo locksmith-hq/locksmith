@@ -159,19 +159,51 @@ fn check_name(kind: &str, n: &str) -> Result<()> {
     }
 }
 
-/// Refuses when the vault dir or any file in it is accessible to group or other, is owned by
-/// another user, or (for entries inside the dir) is a symlink that could redirect vault I/O.
-/// Off Unix there is no ACL check yet (Windows: x1 task 2.2), so an existing vault dir is refused.
+/// Refuses when the vault dir or any file in it is accessible to another user, is owned by
+/// another user, or (for entries inside the dir) is a symlink or junction that could redirect
+/// vault I/O. Windows: owner SID and DACL via `ls_platform::fs`; anything it cannot read or
+/// classify is refused.
 #[cfg(not(unix))]
 pub fn check_perms(dir: &Path) -> Result<()> {
+    use ls_platform::fs::{
+        is_owned_by_current_user, is_private, private_dir_fix, private_file_fix,
+    };
+    let not_owned =
+        |p: &Path| Error::Perms(format!("{} is not owned by the current user", p.display()));
+    let bad = |p: &Path, fix: String| {
+        Error::Perms(format!(
+            "{} is accessible to other users; fix with: {fix}",
+            p.display()
+        ))
+    };
     match std::fs::metadata(dir) {
-        Ok(_) => Err(Error::Perms(format!(
-            "cannot verify that {} is private: vault permission checks are not implemented on this OS yet",
-            dir.display()
-        ))),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e.into()),
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
     }
+    if !is_owned_by_current_user(dir)? {
+        return Err(not_owned(dir));
+    }
+    if !is_private(dir)? {
+        return Err(bad(dir, private_dir_fix(dir)));
+    }
+    for entry in std::fs::read_dir(dir)? {
+        let p = entry?.path();
+        let md = std::fs::symlink_metadata(&p)?;
+        if md.file_type().is_symlink() {
+            return Err(Error::Perms(format!(
+                "{} is a symlink; vault files must be regular files",
+                p.display()
+            )));
+        }
+        if !is_owned_by_current_user(&p)? {
+            return Err(not_owned(&p));
+        }
+        if md.is_file() && !is_private(&p)? {
+            return Err(bad(&p, private_file_fix(&p)));
+        }
+    }
+    Ok(())
 }
 
 /// Refuses when the vault dir or any file in it is accessible to group or other, is owned by
@@ -229,11 +261,7 @@ pub fn exists(dir: &Path) -> bool {
 }
 
 fn private_file(p: &Path) -> Result<()> {
-    ls_core::private_open_options()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(p)?;
+    ls_platform::fs::PrivateFile::new().open(p)?;
     Ok(())
 }
 
@@ -261,7 +289,7 @@ fn migrate(conn: &mut Connection, db_path: &Path, migrations: &[&str]) -> Result
         name.push(format!(".bak-{}", now()));
         let bak = PathBuf::from(name);
         std::fs::copy(db_path, &bak)?;
-        ls_core::make_file_private(&bak)?;
+        ls_platform::fs::set_private_file(&bak)?;
     }
     for (i, sql) in migrations.iter().enumerate().skip(cur as usize) {
         let tx = conn.transaction()?;
@@ -334,7 +362,7 @@ impl Vault {
         allow_weak: bool,
         phrase: &RecoveryPhrase,
     ) -> Result<Self> {
-        ls_core::ensure_private_dir(dir)?;
+        ls_platform::fs::ensure_private_dir(dir)?;
         check_perms(dir)?;
         if exists(dir) {
             return Err(Error::AlreadyExists("vault".into()));
@@ -737,6 +765,7 @@ impl Vault {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     const WEAK: KdfParams = KdfParams {
@@ -964,6 +993,7 @@ mod tests {
         assert!(v.list_secrets(None, None).unwrap().is_empty());
     }
 
+    #[cfg(unix)]
     #[test]
     fn perms_are_enforced() {
         let t = Tmp::new("perms");
@@ -1025,7 +1055,7 @@ mod tests {
         assert!(check_perms(&t.0).is_ok(), "backup must be 0600");
     }
 
-    #[cfg(test)]
+    #[cfg(unix)]
     mod perms_hardening_tests {
         use super::*;
 

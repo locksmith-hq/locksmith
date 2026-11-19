@@ -1,6 +1,8 @@
 //! e2e for `smith init` and the pre-commit installer, with the real `git` and `smith`.
 //! lefthook and pre-commit (the framework) are not installed in CI, so for those two the test
 //! runs the command our config step declares, the way the manager would.
+//! Unix only: the hooks and the `smith` shim are `/bin/sh` scripts with exec bits.
+#![cfg(unix)]
 
 mod common;
 use common::*;

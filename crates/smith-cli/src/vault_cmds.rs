@@ -703,8 +703,7 @@ fn export(o: &Opts, a: ExportArgs) -> Result<(), Fail> {
     }
     match &a.out {
         Some(p) => {
-            let mut f = ls_core::private_open_options()
-                .write(true)
+            let mut f = ls_platform::fs::PrivateFile::new()
                 .create_new(true)
                 .open(p)
                 .map_err(|e| {

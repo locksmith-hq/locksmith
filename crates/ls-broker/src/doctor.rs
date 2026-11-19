@@ -33,12 +33,12 @@ fn socket_perms_at(runtime: &Path, socket: &Path) -> Outcome {
     if !runtime.exists() {
         return Outcome::skip(format!("{} not created yet", runtime.display()));
     }
-    match ls_core::is_private_dir(runtime) {
+    match ls_platform::fs::is_private(runtime) {
         Ok(true) => {}
         Ok(false) => {
             return Outcome::fail(
                 format!("{} is readable by other users", runtime.display()),
-                format!("chmod 700 '{}'", runtime.display()),
+                ls_platform::fs::private_dir_fix(runtime),
             );
         }
         Err(e) => {
@@ -55,14 +55,14 @@ fn socket_perms_at(runtime: &Path, socket: &Path) -> Outcome {
         Outcome::ok("runtime directory is private; the daemon pipe is current-user only")
     }
     #[cfg(unix)]
-    match std::fs::metadata(socket) {
-        Ok(m) if std::os::unix::fs::PermissionsExt::mode(&m.permissions()) & 0o077 != 0 => {
-            Outcome::fail(
-                "daemon socket is accessible to other users",
-                format!("chmod 600 '{}'", socket.display()),
-            )
+    match ls_platform::fs::is_private(socket) {
+        Ok(false) => Outcome::fail(
+            "daemon socket is accessible to other users",
+            ls_platform::fs::private_file_fix(socket),
+        ),
+        Ok(true) => {
+            Outcome::ok("runtime directory and daemon socket are private to the current user")
         }
-        Ok(_) => Outcome::ok("runtime directory and daemon socket are private to the current user"),
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             Outcome::ok("runtime directory is private (0700)")
         }
@@ -193,7 +193,8 @@ inventory::submit! { Check { id: "platform.ptrace_scope", run: ptrace_scope } }
 inventory::submit! { Check { id: "platform.core_dumps", run: core_dumps } }
 inventory::submit! { Check { id: "audit.chain", run: audit_chain } }
 
-#[cfg(test)]
+// Unix modes, uids and symlinks throughout; Windows ACL paths are covered in ls_platform::fs.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use ls_diag::Status;

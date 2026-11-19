@@ -178,6 +178,7 @@ impl Home {
 
     /// A directory holding a `smith` wrapper that supplies the passphrase and this home, so
     /// git hooks (which have no terminal) can run the real binary. Returns the directory.
+    #[cfg(unix)]
     pub fn smith_shim(&self) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let d = self.0.join("shim");

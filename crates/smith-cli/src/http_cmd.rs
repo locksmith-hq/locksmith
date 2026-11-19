@@ -299,21 +299,21 @@ fn trust_state_path(cfg: &Path) -> PathBuf {
     cfg.join("http").join("ca-trust")
 }
 
-/// Write `body` to `path` with Unix `mode`. Windows: the file inherits its directory's ACL until
-/// x1 task 2.2 adds an owner-only one.
-fn write_file(path: &Path, body: &[u8], mode: u32) -> Result<(), Fail> {
+/// Write `body` to `path`, truncating. `private`: owner-only (0600 on Unix, an owner-only ACL on
+/// Windows); otherwise world-readable (0644 on Unix, the directory's inherited ACL on Windows).
+fn write_file(path: &Path, body: &[u8], private: bool) -> Result<(), Fail> {
     let io = |e: std::io::Error| fail(ExitCode::Failure, format!("{}: {e}", path.display()));
-    let mut o = std::fs::OpenOptions::new();
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut o, mode);
-    #[cfg(not(unix))]
-    let _ = mode;
-    let mut f = o
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(path)
-        .map_err(io)?;
+    let mut f = if private {
+        ls_platform::fs::PrivateFile::new()
+            .truncate(true)
+            .open(path)
+    } else {
+        let mut o = std::fs::OpenOptions::new();
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o644);
+        o.write(true).create(true).truncate(true).open(path)
+    }
+    .map_err(io)?;
     std::io::Write::write_all(&mut f, body).map_err(io)
 }
 
@@ -475,19 +475,19 @@ fn ca_install(o: &Opts, a: CaArgs) -> Result<ExitCode, Fail> {
     crate::audit_cmds::record(&v, "CA_INSTALL", hosts.join(","), "http_ca")?;
     drop(v);
     let dir = cert_path.parent().expect("has parent");
-    ls_core::ensure_private_dir(dir).map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    ls_platform::fs::ensure_private_dir(dir).map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
     write_file(
         &ca::hosts_path(&cfg),
         format!("{}\n", hosts.join("\n")).as_bytes(),
-        0o600,
+        true,
     )?;
-    write_file(&cert_path, new.cert_pem.as_bytes(), 0o644)?;
+    write_file(&cert_path, new.cert_pem.as_bytes(), false)?;
     let trust = if a.no_trust_store {
         "none".to_string()
     } else {
         trust_install(&cert_path, a.yes)?
     };
-    write_file(&trust_state_path(&cfg), trust.as_bytes(), 0o600)?;
+    write_file(&trust_state_path(&cfg), trust.as_bytes(), true)?;
     let port = relay_port();
     if o.json {
         println!(

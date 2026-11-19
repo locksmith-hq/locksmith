@@ -259,7 +259,7 @@ def gzip_body(data, i, state):
 
 
 def gunzip_member(buf, i, state):
-    """Decode the gzip member at buf[i:], or return None if it does not decode to anything.
+    """Decode the gzip member at buf[i:] to (output, end), or None if it decodes to nothing.
 
     Input goes to zlib in GZIP_IN_CHUNK pieces, each charged to state["input"]; output is
     charged to state["budget"]. Stopping at either limit before the member's end sets
@@ -302,7 +302,10 @@ def gunzip_member(buf, i, state):
     state["budget"] -= got
     if not got and not d.eof:
         return None
-    return b"".join(outs)
+    # Where the member ends (deflate end plus the 8-byte trailer), so a member that starts
+    # there joins it as `gzip -dc` joins them; None if the member did not end cleanly.
+    end = pos - len(d.unused_data) + 8 if d.eof and not d.unconsumed_tail else None
+    return b"".join(outs), end
 
 
 class Matcher:
@@ -361,6 +364,9 @@ class Matcher:
             # header costs an attempt. Stopping early on any limit marks the scan incomplete.
             start = members = attempts = 0
             buf = memoryview(data)
+            # Back-to-back members decode to one stream, so a canary split across them is
+            # whole there: each run of adjacent members is scanned joined, at its first offset.
+            runs = {}  # end offset of a run's last member -> (first offset, outputs)
             while True:
                 i = data.find(GZIP_MAGIC, start)
                 if i < 0:
@@ -371,12 +377,17 @@ class Matcher:
                     break
                 start = i + 1
                 attempts += 1
-                out = gunzip_member(buf, i, state)
-                if out is None:
+                res = gunzip_member(buf, i, state)
+                if res is None:
                     continue
+                out, end = res
                 members += 1
-                for name, _off in self._find(out, depth + 1, state):
-                    hits.append(("gzip/" + name, i))
+                first, outs = runs.pop(i, (i, []))
+                outs.append(out)
+                runs[end if end is not None else ("open", i)] = (first, outs)
+            for first, outs in runs.values():
+                for name, _off in self._find(b"".join(outs), depth + 1, state):
+                    hits.append(("gzip/" + name, first))
         return hits
 
     def safe(self, text):
@@ -914,6 +925,10 @@ def gzip_limit_checks(tmp):
     m.find(data, input_budget=4 << 20)
     capped_ok = bool(m.incomplete)
     hits = m.find(GZIP_MAGIC * 4 + member, input_budget=4 * GZIP_IN_CHUNK)
+    # A canary split across back-to-back members, as gzip -dc joins them: 2 and one per byte.
+    for name, parts in (("gzip-split-2", (text[:20], text[20:])), ("gzip-split-bytes", [text[k:k + 1] for k in range(len(text))])):
+        hits = m.find(b"".join(gzip.compress(x) for x in parts))
+        yield name, not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
     # A back-reference into the zeros before the member: zlib refuses it, gzip -dc decodes it.
     c = zlib.compressobj(9, zlib.DEFLATED, -15, zdict=GZIP_ZERO_WINDOW)
     body = c.compress(bytes(300) + text) + c.flush()

@@ -11,6 +11,7 @@ git fetch -q origin || echo "WARN   git-fetch      failed"
 # on 2026-11-19 claimed the already-archived s5. Move a clean, fully pushed scratch checkout to origin/main.
 b=$(git branch --show-current)
 if { [ -z "$b" ] || [[ "$b" == claude/* && ! "$b" =~ ^claude/(change|planning|lead|fix-main)- ]]; } &&
+  ! git rev-parse -q --verify "origin/$b" >/dev/null &&
   [ -z "$(git status --porcelain)" ] && [ -z "$(git rev-list -n1 HEAD --not --remotes)" ] &&
   [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
   if [ -n "$b" ]; then git checkout -q -B "$b" origin/main; else git checkout -q --detach origin/main; fi &&

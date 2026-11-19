@@ -16,9 +16,9 @@ if [[ "$branch" == claude/* ]] && git rev-parse -q --verify origin/main >/dev/nu
   paths=(.github/workflows 'scripts/check-task-edits*' scripts/merge-gate.sh scripts/check-agent-docs.sh
          AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents
          .claude/skills/merge-queue .claude/skills/merge-review docs/agents/merge.md docs/agents/common.md scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh scripts/dates-sync.sh
-         scripts/route.sh docs/agents/routing.json)
-  # Lead branches may improve other skills, role files, lessons and helper scripts.
-  [[ "$branch" == claude/lead-* ]] || paths+=(docs/agents .claude/skills scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
+         scripts/route.sh docs/agents/routing.json docs/agents/optimizer.md)
+  # Lead and optimizer branches may improve other skills, role files, lessons and helper scripts.
+  [[ "$branch" == claude/lead-* || "$branch" == claude/optimizer-* ]] || paths+=(docs/agents .claude/skills scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
   # owner.md and openspec/decisions.md: agents may only append (new owner decisions), never edit existing lines.
   ob=$(git merge-base HEAD origin/main)
   for f in docs/agents/owner.md openspec/decisions.md; do

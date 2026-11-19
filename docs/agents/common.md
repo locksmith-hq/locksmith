@@ -22,7 +22,7 @@ Every routine reads this file and its role file from origin/main.
   - Verify locally first; the VM is free.
 - **Tokens.** Read only what the current step needs. Use the `long-commands` skill for anything slow or flaky.
 
-## Help: only the lead asks the owner
+## Help: only the lead (and the optimizer) asks the owner
 The owner is needed only for
 - admin setup only the owner can do: secrets and tokens, GitHub settings, AWS accounts and guardrails, billing, routines;
 - a big, hard-to-reverse decision: a paid service, licence, security model, data format, or contradicting `openspec/decisions.md`;
@@ -33,7 +33,7 @@ Decide the rest yourself, with evidence in design.md. Only the affected change w
 
 - **Workers** never contact the owner; they open `needs-rescue` (`evaluate-escalate` skill; `Decision:` titles for owner matters). The lead answers in git and closes it, which wakes a worker.
 - **PM and lead** settle what-versus-how disagreements with the `debate` skill; an unsettled one goes to the owner through the lead.
-- **The lead** raises owner matters: a `needs-owner` issue (one-sentence first line, `Change: <id>`, options, recommendation, any Artifact brief, and `Action:` naming exactly what the owner must do); `owner-alert` emails it. Send a `PushNotification` (≤200 characters) or write "push: unavailable". Close it once the action is verified.
+- **The lead** raises owner matters: a `needs-owner` issue (one-sentence first line, `Change: <id>`, options, recommendation, any Artifact brief, and `Action:` naming exactly what the owner must do); `owner-alert` emails it. Send a `PushNotification` (≤200 characters) or write "push: unavailable". Close it once verified.
 
 Never raise one for progress or retryable failures.
 

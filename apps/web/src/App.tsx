@@ -1,34 +1,68 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createAuth, defaultConfig, type AuthService, type AuthState } from "./auth";
 import { createClient, type Agent, type AgentGrant, type AuditEvent, type AuditStatus, type Client } from "@locksmith/control-plane-client";
 
-const ORG_KEY = "locksmith.org"; // an org id is not a secret; the enrollment secret is never stored
-
-function loadOrg(): string {
-  try { return localStorage.getItem(ORG_KEY) ?? ""; } catch { return ""; }
-}
-function saveOrg(v: string) {
-  try { localStorage.setItem(ORG_KEY, v); } catch { /* storage unavailable */ }
-}
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
-export function App({ client: injected }: { client?: Client }) {
-  const [org, setOrg] = useState(loadOrg);
-  const client = injected ?? (org ? createClient(org) : null);
+let defaultAuth: AuthService | undefined;
+const getDefaultAuth = () => (defaultAuth ??= createAuth(defaultConfig()));
+
+// `client` (tests, embedding) bypasses sign-in; otherwise the console is gated on an OIDC session.
+export function App({ client, auth }: { client?: Client; auth?: AuthService }) {
+  if (client) return <Console client={client} />;
+  return <AuthGate auth={auth ?? getDefaultAuth()} />;
+}
+
+function AuthGate({ auth }: { auth: AuthService }) {
+  const [state, setState] = useState<AuthState>(auth.getState());
+  useEffect(() => {
+    const off = auth.subscribe(setState);
+    setState(auth.getState());
+    void auth.start();
+    return off;
+  }, [auth]);
+  const client = useMemo(() => createClient("", "", () => auth.token()), [auth]);
+
+  if (state.status === "loading") return <main><p>Signing in…</p></main>;
+  if (state.status === "signed-out") return <SignIn auth={auth} notice={state.notice} />;
+  return (
+    <Console
+      client={client}
+      header={
+        <div aria-label="Account">
+          <span data-testid="signed-in-as">{state.user.email ?? state.user.name ?? "Signed in"}</span>
+          <button onClick={() => void auth.signOut()}>Sign out</button>
+        </div>
+      }
+    />
+  );
+}
+
+function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
+  return (
+    <main>
+      <h1>Locksmith</h1>
+      {notice && <p role="alert">{notice}</p>}
+      <section aria-label="Sign in">
+        <button onClick={() => void auth.signIn("github")}>Continue with GitHub</button>
+        <button onClick={() => void auth.signIn("google")}>Continue with Google</button>
+        <button onClick={() => void auth.signIn("email")}>Continue with email</button>
+      </section>
+    </main>
+  );
+}
+
+function Console({ client, header }: { client: Client; header?: ReactNode }) {
   const [page, setPage] = useState<"agents" | "audit">("agents");
   return (
     <main>
       <h1>Locksmith</h1>
+      {header}
       <nav aria-label="Pages">
         <button aria-pressed={page === "agents"} onClick={() => setPage("agents")}>Agents</button>
         <button aria-pressed={page === "audit"} onClick={() => setPage("audit")}>Audit</button>
       </nav>
-      {!injected && (
-        <label>
-          Org id
-          <input value={org} onChange={(e) => { setOrg(e.target.value.trim()); saveOrg(e.target.value.trim()); }} />
-        </label>
-      )}
-      {client ? (page === "audit" ? <Audit client={client} /> : <Agents client={client} />) : <p>Enter an org id to continue.</p>}
+      {page === "audit" ? <Audit client={client} /> : <Agents client={client} />}
     </main>
   );
 }

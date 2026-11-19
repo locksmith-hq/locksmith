@@ -38,3 +38,9 @@
 - Task: 5.2, 5.3 - done
 - Verified: `bash tests/adversarial/run.sh gateway G7` PASS (real Keycloak token; forged, dev-header-off, agent/internal routes all 401); `just leak-scan` clean; `just audit-verify` ok; `just ci` exit 0 (first run had one load-induced timeout in smith-cli http test, passes alone and on rerun)
 - Notes for next session: expired-but-signed token not testable from a case (unit-covered); sign-out replay not asserted (stateless by design). Next: 6.1-6.4 web/desktop/CLI, then 7.1.
+
+## 2026-11-19 worker (b, run 2)
+- Task: 6.1 - done
+- Verified: `npm test --workspace apps/web` 19 passed (10 new); `just ci` exit 0; Sonnet evaluator PASS
+- Deviation: oidc-client-ts 3.5.0 with InMemoryWebStorage; only PKCE state (no tokens) uses sessionStorage. Overview landing and "Get started" checklist not built yet; dev Org id input removed (org comes from the bearer).
+- Notes for next session: 6.2 desktop (loopback + keyring), 6.3 `smith login --user` (device grant), 6.4, then 7.1. Follow-up: Overview landing page and checklist from decision 9.

@@ -30,7 +30,7 @@
 | reqwest | MIT OR Apache-2.0 | 0.13.5 (lockfile; rustls, no default features) | 2026-09-08 | JWKS fetch | not AGPL |
 | keyring | MIT/Apache-2.0 | **[verify]** | **[verify]** | desktop token storage | not AGPL |
 | Keycloak | Apache-2.0 | 26.0.8 (image `keycloak/keycloak:26.0.8`, Docker Hub; `quay.io` is blocked in the agent VM) | 26.0.8 (26.0.x line) | local issuer, compose only (`start-dev`), not shipped | not AGPL |
-| openid-client or oidc-client-ts (web) | MIT / Apache-2.0 | **[verify]** | **[verify]** | PKCE flow in `apps/web` | not AGPL |
+| oidc-client-ts (web) | Apache-2.0 | 3.5.0 (pinned in `apps/web/package.json`; depends only on `jwt-decode`) | 2026-03-13 | PKCE flow in `apps/web`; `InMemoryWebStorage` user store, so tokens never reach web storage (only the transient PKCE state, which holds no token, uses `sessionStorage`) | not AGPL |
 
 Built in-house: the JWKS cache and the `OrgBinding` extractor (about 200 lines). Searched first: `openidconnect`, `axum-oidc` and `jwks-client` crates; they bundle a client flow or an unmaintained cache. The choice between them and the small in-house cache is re-checked at task 1.1.
 

@@ -160,6 +160,10 @@ GZIP_MAX_DEPTH = 3
 # bytes cost attempts x size. Reaching the cap marks the scan incomplete (fail closed).
 GZIP_MAX_INPUT = 2 * MAX_BYTES
 GZIP_IN_CHUNK = 64 * 1024
+# GNU gzip treats the window before a member's first byte as zeros; zlib refuses such a
+# back-reference ("invalid distance too far back"). Inflating with this preset dictionary
+# decodes what `gzip -dc` shows.
+GZIP_ZERO_WINDOW = bytes(32768)
 
 
 def view_offsets(pattern, repl, data, voffs):
@@ -227,6 +231,33 @@ def salvage(d, chunk, room):
     return b"".join(outs)
 
 
+def gzip_body(data, i, state):
+    """Return where the deflate data of the gzip header at data[i:] starts, or None if the
+    header is malformed or cut short. Bytes searched for a name or comment end are charged to
+    state["input"]; running out of it first marks the scan incomplete."""
+    n = len(data)
+    if i + 10 > n or data[i + 3] & 0xE0:  # reserved flag bits: gzip -dc refuses them
+        return None
+    flg, p = data[i + 3], i + 10
+    if flg & 4:  # FEXTRA
+        if p + 2 > n:
+            return None
+        p += 2 + data[p] + (data[p + 1] << 8)
+    for bit in (8, 16):  # FNAME, FCOMMENT: NUL-terminated
+        if flg & bit and p < n:
+            limit = min(n, p + max(state["input"], 0))
+            q = data.find(b"\0", p, limit)
+            state["input"] -= (q + 1 if q >= 0 else limit) - p
+            if q < 0:
+                if limit < n:
+                    state["incomplete"] = "gzip budget exhausted, not fully scanned"
+                return None
+            p = q + 1
+    if flg & 2:  # FHCRC
+        p += 2
+    return p if p < n else None
+
+
 def gunzip_member(buf, i, state):
     """Decode the gzip member at buf[i:], or return None if it does not decode to anything.
 
@@ -235,8 +266,13 @@ def gunzip_member(buf, i, state):
     state["incomplete"]. A member cut short by the end of the data, or damaged (zlib error), is
     returned as far as it decodes.
     """
-    d = zlib.decompressobj(31)  # wbits 31: a gzip header
-    pos, outs, got = i, [], 0
+    pos = gzip_body(buf.obj, i, state)
+    if pos is None:
+        return None
+    # Raw deflate after the header; the trailer (CRC, size) is not checked, as a damaged
+    # trailer does not stop `gzip -dc` from writing the data.
+    d = zlib.decompressobj(-15, zdict=GZIP_ZERO_WINDOW)
+    outs, got = [], 0
     while not d.eof:
         room = state["budget"] - got
         if room <= 0:  # max_length 0 would mean unlimited
@@ -878,6 +914,18 @@ def gzip_limit_checks(tmp):
     m.find(data, input_budget=4 << 20)
     capped_ok = bool(m.incomplete)
     hits = m.find(GZIP_MAGIC * 4 + member, input_budget=4 * GZIP_IN_CHUNK)
+    # A back-reference into the zeros before the member: zlib refuses it, gzip -dc decodes it.
+    c = zlib.compressobj(9, zlib.DEFLATED, -15, zdict=GZIP_ZERO_WINDOW)
+    body = c.compress(bytes(300) + text) + c.flush()
+    zero_ref = (b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff" + body
+                + zlib.crc32(bytes(300) + text).to_bytes(4, "little") + (300 + len(text)).to_bytes(4, "little"))
+    try:
+        zlib.decompress(zero_ref, 31)
+        zero_ok = False  # the plant must be one plain zlib refuses
+    except zlib.error:
+        hits = m.find(zero_ref)
+        zero_ok = not m.incomplete and any(h[0].startswith("gzip/") for h in hits)
+    yield "gzip-zero-window", zero_ok
     # A damaged member still shows what it decodes to, as `gzip -dc` does: a bad CRC, and a
     # corrupt byte after the canary in a member larger than one input chunk.
     pad = secrets.token_bytes(GZIP_IN_CHUNK).hex().encode()

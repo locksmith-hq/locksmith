@@ -624,18 +624,17 @@ async fn run(
     let status = resp.status().as_u16();
 
     // 9. Read (bounded), refuse encodings that cannot be scanned, redact, re-check.
-    let encoded = resp
-        .headers()
-        .get_all(reqwest::header::CONTENT_ENCODING)
-        .iter()
-        .any(|v| {
-            v.to_str()
-                .map(|s| {
-                    s.split(',')
-                        .any(|c| !c.trim().is_empty() && !c.trim().eq_ignore_ascii_case("identity"))
-                })
-                .unwrap_or(true)
-        });
+    // `Transfer-Encoding` is checked too: hyper removes only `chunked`, so `gzip, chunked`
+    // with no `Content-Encoding` would hand over a compressed body the redactor cannot read.
+    let encoded = names_coding_other_than(
+        resp.headers(),
+        reqwest::header::CONTENT_ENCODING,
+        "identity",
+    ) || names_coding_other_than(
+        resp.headers(),
+        reqwest::header::TRANSFER_ENCODING,
+        "chunked",
+    );
     if encoded {
         return Err(Failure::redaction(status));
     }
@@ -690,6 +689,24 @@ async fn run(
         headers: out_headers,
         body,
         body_base64,
+    })
+}
+
+/// Whether any `name` header lists a coding other than `allowed` (case-insensitive), across
+/// every value and comma-separated entry. A value that is not visible ASCII counts as one.
+fn names_coding_other_than(
+    headers: &reqwest::header::HeaderMap,
+    name: HeaderName,
+    allowed: &str,
+) -> bool {
+    headers.get_all(name).iter().any(|v| {
+        v.to_str()
+            .map(|s| {
+                s.split(',')
+                    .map(str::trim)
+                    .any(|c| !c.is_empty() && !c.eq_ignore_ascii_case(allowed))
+            })
+            .unwrap_or(true)
     })
 }
 
@@ -1845,6 +1862,82 @@ mod tests {
                 .get("accept-encoding")
                 .is_some_and(|v| v == "identity")
         }));
+    }
+
+    /// A raw HTTP/1.1 upstream on `port` (wiremock's hyper would rewrite `Transfer-Encoding`):
+    /// each connection gets `head` (status line and headers, no blank line) and `body`, chunked.
+    fn raw_upstream(port: u16, head: &'static str, body: Vec<u8>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+                let mut req = Vec::new();
+                let mut buf = [0u8; 1024];
+                while !req.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => req.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let mut out = format!("{head}\r\nconnection: close\r\n\r\n").into_bytes();
+                out.extend_from_slice(format!("{:x}\r\n", body.len()).as_bytes());
+                out.extend_from_slice(&body);
+                out.extend_from_slice(b"\r\n0\r\n\r\n");
+                let _ = stream.write_all(&out);
+            }
+        });
+    }
+
+    /// Adversarial case G2: a `Transfer-Encoding` coding other than `chunked` (here with no
+    /// `Content-Encoding`) is withheld as `redaction_failed`, in any case, list or header split.
+    #[tokio::test]
+    async fn non_chunked_transfer_codings_are_withheld() {
+        for head in [
+            "HTTP/1.1 200 OK\r\ntransfer-encoding: gzip, chunked",
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: GZip ,Chunked",
+            "HTTP/1.1 200 OK\r\ntransfer-encoding: gzip\r\ntransfer-encoding: chunked",
+        ] {
+            let h = harness(Setup::default()).await;
+            raw_upstream(h.dead_port, head, VALUE.to_vec());
+            let (status, raw) = h.relay_get(DEAD, &format!("{}/x", h.dead_origin())).await;
+            assert_eq!(status, StatusCode::BAD_GATEWAY, "{head:?}");
+            assert!(String::from_utf8_lossy(&raw).contains("response_withheld"));
+            assert_clean("withheld response", &raw);
+            assert_eq!(h.outcomes(), ["redaction_failed"], "{head:?}");
+            assert!(h.closing().iter().all(|(_, e)| e.status == Some(200)));
+            h.assert_audit_clean();
+        }
+    }
+
+    /// A plain `Transfer-Encoding: chunked` response still relays, redacted, without the header.
+    #[tokio::test]
+    async fn chunked_transfer_encoding_still_relays() {
+        let h = harness(Setup::default()).await;
+        raw_upstream(
+            h.dead_port,
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: Chunked\r\ncontent-type: text/plain",
+            [b"hello ", VALUE, b" bye"].concat(),
+        );
+        let (status, raw) = h.relay_get(DEAD, &format!("{}/x", h.dead_origin())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_clean("chunked response", &raw);
+        let env = envelope(&raw);
+        assert_eq!(env.status, 200);
+        let body = env.body.expect("text body");
+        assert!(
+            body.starts_with("hello ") && body.ends_with(" bye"),
+            "body relayed"
+        );
+        assert!(body.contains("[REDACTED:SECRET]"));
+        assert!(
+            env.headers
+                .iter()
+                .all(|(n, _)| !n.eq_ignore_ascii_case("transfer-encoding")),
+            "hop-by-hop header dropped"
+        );
+        assert_eq!(h.outcomes(), ["ok"]);
+        h.assert_audit_clean();
     }
 
     /// Spec "Failure paths do not leak": unwrap failure, unreachable upstream, upstream timeout.

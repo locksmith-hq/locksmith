@@ -8,6 +8,9 @@ export type AgentEnrollment = components["schemas"]["AgentEnrollment"];
 export type AgentGrant = components["schemas"]["AgentGrant"];
 export type NewAgent = components["schemas"]["NewAgent"];
 export type NewAgentGrant = components["schemas"]["NewAgentGrant"];
+export type AuditEvent = components["schemas"]["AuditEvent"];
+export type AuditEventPage = components["schemas"]["AuditEventPage"];
+export type AuditStatus = components["schemas"]["AuditStatus"];
 export type Problem = components["schemas"]["Problem"];
 
 export class ApiError extends Error {
@@ -24,6 +27,9 @@ export interface Client {
   listGrants(agentId: string): Promise<AgentGrant[]>;
   createGrant(agentId: string, body: NewAgentGrant): Promise<AgentGrant>;
   revokeGrant(agentId: string, grantId: string): Promise<void>;
+  /** One page of audit events, newest first. Pass the previous page's `next` as `cursor`. */
+  listAuditEvents(opts?: { cursor?: string | null; limit?: number }): Promise<AuditEventPage>;
+  auditStatus(): Promise<AuditStatus>;
 }
 
 export function createClient(orgId: string, baseUrl = ""): Client {
@@ -67,6 +73,14 @@ export function createClient(orgId: string, baseUrl = ""): Client {
     rotateEnrollment: (id) => req("POST", `${a(id)}/enrollment-secret`),
     listGrants: (id) => all<AgentGrant>(`${a(id)}/grants`),
     createGrant: (id, b) => req("POST", `${a(id)}/grants`, b),
+    listAuditEvents: ({ cursor, limit } = {}) => {
+      const q = new URLSearchParams();
+      if (limit) q.set("limit", String(limit));
+      if (cursor) q.set("cursor", cursor);
+      const qs = q.toString();
+      return req("GET", `/v1/audit/events${qs ? `?${qs}` : ""}`);
+    },
+    auditStatus: () => req("GET", "/v1/audit/status"),
     revokeGrant: (id, g) => req("DELETE", `${a(id)}/grants/${encodeURIComponent(g)}`),
   };
 }

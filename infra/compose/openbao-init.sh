@@ -5,6 +5,9 @@
 # openspec/changes/s2-envelope-crypto design decision 4:
 #   control-plane token: update on transit/encrypt/gateway only (wrap, never unwrap)
 #   gateway test token:  update on transit/decrypt/gateway only (unwrap)
+# and the S5 checkpoint signer (openspec/changes/s5-audit-ledger design decision 4):
+#   key audit-checkpoint: ed25519, not exportable (only its public key can be read)
+#   audit-checkpoint token: update on transit/sign/audit-checkpoint only (sign, nothing else)
 # Token ids are fixed dev-only fixtures from .env.example, never real credentials.
 # Dev mode is in-memory; because this runs as the healthcheck, a restarted server is set up again.
 # Re-run by hand: docker compose -f infra/compose/compose.yaml exec openbao sh /openbao-init.sh
@@ -13,6 +16,7 @@ set -eu
 : "${BAO_ADDR:?}" "${BAO_TOKEN:?}"
 CP_TOKEN="${OPENBAO_CONTROL_PLANE_TOKEN:-dev-only-control-plane}"
 GW_TOKEN="${OPENBAO_GATEWAY_TOKEN:-dev-only-gateway}"
+CK_TOKEN="${OPENBAO_AUDIT_CHECKPOINT_TOKEN:-dev-only-audit-checkpoint}"
 
 if bao secrets list -format=json | grep -q '"transit/"'; then
   echo "transit: already enabled"
@@ -28,12 +32,21 @@ else
   echo "key gateway: created (aes256-gcm96)"
 fi
 
+if bao read -format=json transit/keys/audit-checkpoint >/dev/null 2>&1; then
+  echo "key audit-checkpoint: exists"
+else
+  bao write -f transit/keys/audit-checkpoint type=ed25519 exportable=false >/dev/null
+  echo "key audit-checkpoint: created (ed25519)"
+fi
+
 # Policies are rewritten every run (same content, so idempotent).
 printf 'path "transit/encrypt/gateway" {\n  capabilities = ["update"]\n}\n' \
   | bao policy write control-plane - >/dev/null
 printf 'path "transit/decrypt/gateway" {\n  capabilities = ["update"]\n}\n' \
   | bao policy write gateway - >/dev/null
-echo "policies: control-plane, gateway written"
+printf 'path "transit/sign/audit-checkpoint" {\n  capabilities = ["update"]\n}\n' \
+  | bao policy write audit-checkpoint - >/dev/null
+echo "policies: control-plane, gateway, audit-checkpoint written"
 
 # Tokens: created with fixed ids only if missing. Orphans without the default policy so each
 # holds exactly one transit capability. The values are never printed.
@@ -54,4 +67,5 @@ ensure_token() {
 }
 ensure_token control-plane "$CP_TOKEN"
 ensure_token gateway "$GW_TOKEN"
+ensure_token audit-checkpoint "$CK_TOKEN"
 echo "openbao-init: done"

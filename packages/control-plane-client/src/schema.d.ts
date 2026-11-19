@@ -61,6 +61,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append a relay event to the org's audit ledger (gateway only)
+         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
+         */
+        post: operations["append_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/secrets/{secret_id}/versions/{version}/material": {
         parameters: {
             query?: never;
@@ -207,6 +227,40 @@ export interface paths {
          * @description The gateway caches grants for at most 10 seconds; the revocation takes effect within that window.
          */
         delete: operations["delete_grant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List audit events, newest first */
+        get: operations["list_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audit/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the audit chain status */
+        get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -464,6 +518,101 @@ export interface components {
              */
             enrollment_secret: string;
         };
+        /** @description Where an event landed in the org's chain. */
+        AppendedEvent: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int64
+             * @description The event's sequence number in the org's chain, starting at 1.
+             */
+            seq: number;
+        };
+        /** @description The newest signed checkpoint of the org's chain. */
+        AuditCheckpoint: {
+            /** Format: date-time */
+            at: string;
+            /** @description The chain digest at `seq`, lowercase hex. */
+            digest: string;
+            /** @description Signing key name and version, e.g. `audit-checkpoint:1`. */
+            key_id: string;
+            /**
+             * Format: int64
+             * @description Chain position the checkpoint covers.
+             */
+            seq: number;
+        };
+        /** @description One audit event. */
+        AuditEvent: {
+            /** @description `agent:<id>`, `user:<id>` or `service:<code>`. */
+            actor: string;
+            /** Format: date-time */
+            at: string;
+            /** @description Identifier-typed attributes (ids, hosts, codes, integers) only. */
+            attrs: Record<string, never>;
+            /** @description This event's SHA-256 chain digest, lowercase hex. */
+            digest: string;
+            /** Format: uuid */
+            id: string;
+            /** @description Static event code, e.g. `relay.attempt` or `agent.created`. */
+            kind: string;
+            outcome: string;
+            /** @description SHA-256 chain digest of the previous event, lowercase hex (64 zeros for `seq` 1). */
+            prev_digest: string;
+            /**
+             * Format: int64
+             * @description Position in the org's chain, starting at 1 with no gaps.
+             */
+            seq: number;
+            /** @description `secret:<id>`, `agent:<id>`, `grant:<id>`, ...; absent when the event has no target. */
+            target?: string | null;
+        };
+        /** @description One page of events, newest first. `next` is absent on the last page. */
+        AuditEventPage: {
+            items: components["schemas"]["AuditEvent"][];
+            next?: string | null;
+        };
+        /** @description Chain status of the bound org. */
+        AuditStatus: {
+            /**
+             * Format: int64
+             * @description Seq of the newest event (0 when the org has none).
+             */
+            head_seq: number;
+            latest_checkpoint?: components["schemas"]["AuditCheckpoint"] | null;
+            latest_verify?: components["schemas"]["AuditVerifyRun"] | null;
+        };
+        /** @description The newest `locksmith-audit verify` run recorded for the org. */
+        AuditVerifyRun: {
+            /** @description `sequence`, `link`, `hash` or `checkpoint`, when the run failed. */
+            break_kind?: string | null;
+            /**
+             * Format: int64
+             * @description The first broken seq, when the run failed.
+             */
+            broken_seq?: number | null;
+            /** Format: int64 */
+            checkpoints: number;
+            /**
+             * Format: int64
+             * @description Events and checkpoints the run walked.
+             */
+            events: number;
+            /** Format: date-time */
+            finished_at: string;
+            /** Format: uuid */
+            id: string;
+            /** @description `db` or `dir`. */
+            mode: string;
+            ok: boolean;
+            /** Format: date-time */
+            started_at: string;
+            /**
+             * Format: int64
+             * @description Set when the chain ends before the latest checkpoint.
+             */
+            truncated_at?: number | null;
+        };
         Environment: {
             /** Format: date-time */
             created_at: string;
@@ -528,6 +677,49 @@ export interface components {
         NewProject: {
             description?: string;
             name: string;
+        };
+        /**
+         * @description One relay event from the gateway. Ids, codes, a host and numbers only: there is no field
+         *     for a URL, path, query string, header, body or value.
+         */
+        NewRelayEvent: {
+            /**
+             * Format: uuid
+             * @description The agent whose verified token made the call (the event's actor).
+             */
+            agent_id: string;
+            /**
+             * Format: uuid
+             * @description Links the `relay.outcome` event to its `relay.attempt` event (the `id` the attempt's
+             *     append returned). Required for `relay.outcome`, and its idempotency key: an outcome
+             *     resent for the same attempt returns the stored event instead of appending another.
+             */
+            attempt_id?: string | null;
+            /**
+             * @description Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or
+             *     query.
+             */
+            host?: string | null;
+            kind: components["schemas"]["RelayEventKind"];
+            method?: components["schemas"]["RelayMethod"] | null;
+            outcome: components["schemas"]["RelayOutcome"];
+            /**
+             * Format: int32
+             * @description Upstream port, when the URL names one explicitly.
+             */
+            port?: number | null;
+            /**
+             * Format: uuid
+             * @description The secret the call used (the event's target).
+             */
+            secret_id: string;
+            /**
+             * Format: int32
+             * @description Upstream HTTP status, when a response was received.
+             */
+            status?: number | null;
+            /** Format: int32 */
+            version?: number | null;
         };
         NewSecret: {
             description?: string;
@@ -659,6 +851,21 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description The kind of a relay event.
+         * @enum {string}
+         */
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied";
+        /**
+         * @description The upstream request method.
+         * @enum {string}
+         */
+        RelayMethod: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
+        /**
+         * @description The outcome of a relay event (the gateway's outcome codes, plus `pending` for an attempt).
+         * @enum {string}
+         */
+        RelayOutcome: "pending" | "ok" | "no_grant" | "grants_unavailable" | "denied" | "denied_address" | "material_error" | "decrypt_failed" | "inject_failed" | "upstream_unreachable" | "upstream_timeout" | "upstream_error" | "redaction_failed";
         Secret: {
             /** Format: date-time */
             created_at: string;
@@ -796,6 +1003,96 @@ export interface operations {
             };
             /** @description Not found (including another org's secret) */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    append_event: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the event belongs to (the agent token's `org`) */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewRelayEvent"];
+            };
+        };
+        responses: {
+            /** @description `relay.outcome` already recorded for this `attempt_id` with the same fields; nothing appended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendedEvent"];
+                };
+            };
+            /** @description Appended */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendedEvent"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `relay.outcome` already recorded for this `attempt_id` with different fields */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1428,6 +1725,114 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_events: {
+        parameters: {
+            query?: {
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: number;
+                /** @description Opaque cursor: the `next` value of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of audit events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditStatus"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

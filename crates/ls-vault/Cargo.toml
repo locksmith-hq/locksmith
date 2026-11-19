@@ -12,6 +12,7 @@ workspace = true
 ls-platform = { path = "../ls-platform" }
 ls-core = { path = "../ls-core" }
 ls-crypto = { path = "../ls-crypto" }
+ls-audit = { path = "../ls-audit" }
 ls-diag = { path = "../ls-diag" }
 ciborium = "0.2"
 getrandom = "0.2"

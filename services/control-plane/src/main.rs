@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ls_control_plane::agent_token::AgentTokenSigner;
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::auth::ServiceToken;
+use ls_control_plane::checkpoint::{self, CheckpointJob, Schedule};
 use ls_control_plane::config::{self, Config};
 use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
 use ls_control_plane::kms;
@@ -72,7 +73,7 @@ async fn main() -> ExitCode {
     let probe = database.spawn_readiness_probe(readiness.clone(), PROBE_INTERVAL);
     let migrations = tokio::spawn(migrate::run_until_done(owner_options, readiness.clone()));
 
-    let mut state = AppState::new(config.dev_auth, readiness, database.clone());
+    let mut state = AppState::new(config.dev_auth, readiness.clone(), database.clone());
     match config.kms.as_ref().map(kms::openbao) {
         Some(Ok(wrapper)) => {
             tracing::info!("OpenBao transit configured for secret version DEK wrapping");
@@ -87,6 +88,27 @@ async fn main() -> ExitCode {
             config::ENV_OPENBAO_ADDR
         ),
     }
+    // S5: the audit checkpoint job signs through OpenBao transit with a sign-only token.
+    let checkpoints = match config.audit_checkpoint.as_ref().map(checkpoint::openbao) {
+        Some(Ok(signer)) => {
+            tracing::info!("OpenBao transit configured for audit checkpoint signing");
+            Some(
+                CheckpointJob::new(database.clone(), signer, Schedule::default())
+                    .spawn(readiness.clone()),
+            )
+        }
+        Some(Err(e)) => {
+            tracing::error!(error = %e, "invalid OpenBao audit checkpoint configuration");
+            return ExitCode::FAILURE;
+        }
+        None => {
+            tracing::warn!(
+                "{} is not set: audit checkpoints are not signed",
+                config::ENV_AUDIT_CHECKPOINT_TOKEN
+            );
+            None
+        }
+    };
     match config.gateway_service_token {
         Some(token) => state = state.with_service_token(ServiceToken::new(token)),
         None => tracing::warn!(
@@ -142,6 +164,9 @@ async fn main() -> ExitCode {
         .await;
     migrations.abort();
     probe.abort();
+    if let Some(job) = checkpoints {
+        job.abort();
+    }
     database.close().await;
     let _ = tokio::task::spawn_blocking(move || telemetry.shutdown()).await;
     match served {

@@ -4,19 +4,27 @@
 
 use crate::{Actor, Daemon, deny_response, deny_rule, err, now, rec};
 use ls_ipc::{ErrorCode, Frame, Request, Response, RunSpec, read_frame, write_frame};
-use ls_platform::proc::{Peer, id_of, recv_fds};
+use ls_platform::proc::Peer;
+#[cfg(unix)]
+use ls_platform::proc::{id_of, recv_fds};
 use ls_redact::binding::{Binding, parse, secret_line};
 use ls_redact::{Redactor, Secret, relay};
 use ls_vault::Error as VErr;
+#[cfg(unix)]
 use std::ffi::OsStr;
+#[cfg(unix)]
 use std::fs::File;
+#[cfg(unix)]
 use std::io::Write;
-use std::os::unix::ffi::OsStrExt;
-use std::os::unix::net::UnixStream;
-use std::os::unix::process::ExitStatusExt;
+#[cfg(unix)]
+use std::os::unix::{ffi::OsStrExt, net::UnixStream, process::ExitStatusExt};
+#[cfg(unix)]
 use std::process::{Command, Stdio};
+#[cfg(unix)]
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+#[cfg(unix)]
+use std::time::Duration;
+use std::time::Instant;
 
 struct Prepared {
     lease: String,
@@ -288,6 +296,26 @@ fn read_values(
     Ok(vars)
 }
 
+/// Off Unix the client's stdio cannot be passed to the daemon yet (no SCM_RIGHTS), so `run` is
+/// refused before any secret is read.
+#[cfg(not(unix))]
+pub fn run(
+    _d: &Daemon,
+    _peer: &Peer,
+    _actor: &Actor,
+    mut s: ls_ipc::DefaultTransport,
+    _spec: RunSpec,
+) {
+    let _ = write_frame(
+        &mut s,
+        &err(
+            ErrorCode::BadRequest,
+            "smith run is not supported on this OS yet",
+        ),
+    );
+}
+
+#[cfg(unix)]
 pub fn run(d: &Daemon, peer: &Peer, actor: &Actor, mut s: UnixStream, spec: RunSpec) {
     // The client sends its stdio right after the request; take it before replying. Bounded, so
     // a client that never sends them cannot pin this thread.

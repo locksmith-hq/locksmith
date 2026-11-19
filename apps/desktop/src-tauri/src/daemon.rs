@@ -70,6 +70,14 @@ impl Daemon {
         }
     }
 
+    /// Liveness probe for the headless smoke test: the daemon answers `Ping` with its version.
+    pub fn health(&self) -> Result<String> {
+        match self.call(&Request::Ping)? {
+            Response::Pong { version } => Ok(version),
+            r => Err(unexpected(r)),
+        }
+    }
+
     pub fn lock(&self) -> Result<()> {
         self.ok(&Request::Lock)
     }
@@ -176,7 +184,7 @@ impl Daemon {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))] // the mock daemon is a UnixListener
 mod tests {
     use super::*;
     use ls_ipc::{Frame, read_frame, write_frame};
@@ -294,6 +302,25 @@ mod tests {
         assert_eq!(json, r#"{"code":"Denied","message":"wrong passphrase"}"#);
         assert!(!json.contains(SECRET));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn health_reports_version_and_fails_when_daemon_is_down() {
+        let (d, _rx, dir) = mock_daemon("health", |_| Response::Pong {
+            version: "1.2.3".into(),
+        });
+        assert_eq!(d.health().unwrap(), "1.2.3");
+        let (d2, _rx2, dir2) = mock_daemon("health-bad", |_| Response::Ok);
+        assert_eq!(d2.health().unwrap_err().code, CommandErrorCode::Unexpected);
+        let gone = Daemon {
+            socket: dir.join("missing.sock"),
+        };
+        assert_eq!(
+            gone.health().unwrap_err().code,
+            CommandErrorCode::Unavailable
+        );
+        let _ = std::fs::remove_dir_all(dir);
+        let _ = std::fs::remove_dir_all(dir2);
     }
 
     #[test]

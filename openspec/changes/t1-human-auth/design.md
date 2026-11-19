@@ -21,6 +21,7 @@
 | 6 | **Users table keyed by `(issuer, subject)`; personal org created in one transaction with `INSERT ... ON CONFLICT`.** Identity linking only by verified email. | Keying by email (account takeover on unverified email); creating orgs lazily on the first org call (races). | Account-takeover class documented in OIDC Core §5.7 (`sub` is the stable key). |
 | 7 | **Dev header off by default; release build refuses to start if on.** | Keeping it on in dev images (it would ship). | Current `auth.rs` header comment. |
 | 8 | **Claims used:** `iss`, `aud`, `exp`, `sub`, `email`, `email_verified`. No role claims (T6/T2 own roles). | Trusting issuer-supplied groups now (couples policy to an issuer). | A0-15. |
+| 9 | **Sign-in UX is option C (owner-approved, [#397](https://github.com/locksmith-hq/locksmith/issues/397)):** our own first screen offers "Continue with GitHub / Google / email"; GitHub and Google go straight to that provider through the issuer's hint parameter (`kc_idp_hint` for Keycloak, `identity_provider` for Cognito); email goes to the issuer's hosted page with our theme. A self-hoster's own OIDC issuer gets one "Continue" button. First run: land on the hub Overview, personal org created automatically with no setup form, and a dismissible "Get started" checklist (`smith login --user`, desktop app, first agent). Visual style uses the existing desktop and hub mockup tokens. | A: hosted page only (issuer's layout, weaker first impression). B: our own password pages via the issuer API (passwords through our code, needs a non-PKCE flow that contradicts decision 4, rebuilds MFA, reset and lockout; 2 to 3x the work). | Owner reply "Approved C" on #397 (2026-11-19); brief https://claude.ai/artifact/4H2DZtpZTEufP1euDYBQeY. Keeps credentials, MFA and recovery with the issuer (decision 4, A0-15). |
 
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
@@ -38,7 +39,7 @@ Built in-house: the JWKS cache and the `OrgBinding` extractor (about 200 lines).
 - [JWKS fetch becomes a DoS lever] → cache with a single-flight refresh and a minimum refresh interval.
 - [Keycloak adds startup time and RAM to `just up`] → profile it behind a compose profile `auth`; `just up` starts it, `just up-lite` skips it.
 - [Email linking enables takeover] → link only on `email_verified=true` from a trusted issuer; otherwise create a separate user.
-- [Looks and flows chosen before the owner has approved them] → pages are functional and unstyled; see Open Questions.
+- [Looks and flows drift from the approved direction] → pages follow decision 9 (option C, #397) and the existing mockup tokens.
 
 ## How an agent debugs this
 - `just up` (with Keycloak), `just api`; `curl` the realm at `http://localhost:<port>/realms/locksmith/.well-known/openid-configuration`.
@@ -47,6 +48,6 @@ Built in-house: the JWKS cache and the `OrgBinding` extractor (about 200 lines).
 - `just auth-e2e` runs the flows; `just leak-scan` and `just audit-verify` afterwards.
 
 ## Open Questions
-- **Owner approval needed before building pages:** the first sign-in and onboarding UX and visual style (owner decision 2026-11-18). The lead should obtain an Artifact brief with two or three options before tasks 6.x start; tasks 1 to 5 do not depend on it.
+- ~~Owner approval needed before building pages~~ **Resolved 2026-11-19:** the owner approved option C for sign-in and the shared first run ([#397](https://github.com/locksmith-hq/locksmith/issues/397)); see decision 9 and `openspec/decisions.md` T1-1. Tasks 6.x may start once groups 1 to 5 are done.
 - Cognito's GitHub path (decision 3) is deferred to P1; no AWS action in T1.
 - Whether the hosted console should use a BFF cookie session instead of in-memory tokens (decision 5).

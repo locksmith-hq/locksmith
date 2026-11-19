@@ -1,0 +1,100 @@
+# Progress: x1-apps-all-platforms
+
+## 2026-11-18 04:09 worker
+- Task: planning (proposal, spec, design, tasks) - done
+- Verified: openspec validate x1-apps-all-platforms -> valid
+- Notes for next session: Windows crates cannot be tested in the Linux VM; workflow edits to ci-platforms.yml are protected (task 4.1 needs a needs-owner issue). Spike 1.1 picks the named-pipe crate.
+
+## 2026-11-18 04:11 worker
+- Task: planning review fix - done
+- Verified: openspec validate x1-apps-all-platforms -> valid
+- Notes for next session: review FAIL on 725b8cf (no Windows cargo test / smoke); tasks 4.1/4.2 widened; await re-review then merge.
+
+## 2026-11-18 04:12 UTC worker
+- Task: none - blocked
+- Verified: merge-gate.sh 219 -> GATE FAIL 6 (review verdict FAIL on 725b8cf, before the fix commits 88de4b8 and 56740ce); gates 1-5 ok
+- Notes for next session: the review FAIL predates the Windows test fix. Check that merge-review posts a verdict for 56740ce (or the current head) before re-running the gate. Do not push a no-op to re-trigger review.
+
+## 2026-11-18 worker
+- Task: 1.1 - blocked
+- Verified: crates.io metadata only: interprocess 2.4.8 (0BSD OR Apache-2.0, updated 2026-11-08), tokio 1.54.1 (MIT, already in workspace); no Windows target or toolchain in the VM, so the round-trip and peer-SID spike could not run. Task not ticked.
+- Notes for next session: ls-ipc (crates/ls-ipc/src/lib.rs) uses std::os::unix::net::UnixStream directly (Client.stream is public), so the transport trait (1.2) must change that field. Install the x86_64-pc-windows-gnu target and mingw if the network allows; otherwise 1.1 and 1.3 need a Windows runner (owner decision via ci-platforms). Opus tier needed for 1.x-2.x.
+
+## 2026-11-18 worker
+- Task: 1.1 - spike done, compile-verified only (not ticked)
+- Verified: a throwaway crate outside the repo with both candidates (server and client round trip, current-user-only SDDL DACL, peer-SID check both ways through windows-sys) passes `cargo +1.100.0 check`, `clippy` (0 warnings) and `build` for x86_64-pc-windows-gnu; the .exe links. `cargo deny check` with deny.toml: tokio variant all ok, interprocess variant rejects 0BSD (recvmsg 1.0.0, doctest-file 1.1.1). Versions from crates.io: tokio 1.54.1 MIT 2026-10-21; windows-sys 0.61.2 MIT OR Apache-2.0 2025-10-06; interprocess 2.4.8 0BSD OR Apache-2.0 2026-11-08; openssl-src 400.0.2+4.0.3 2026-10-01. NOT verified: the round trip was not run (no Windows host or wine); task 4.2 must run it on a Windows runner.
+- Choice: tokio named pipes plus windows-sys. Both are already in Cargo.lock and add no crates; interprocess adds 5 crates and needs 0BSD allowed. What interprocess offers (safe SDDL, `client_process_id`) costs one `unsafe` call and about 30 lines with windows-sys.
+- Notes for next session: with tokio, build SECURITY_ATTRIBUTES per instance (raw pointers are !Send) and pass them to every new instance. deny.toml bans openssl-sys, which conflicts with the vendored-OpenSSL decision for SQLCipher; resolve that before 2.1.
+
+## 2026-11-18 worker
+- Task: 1.1 - blocked (spike recorded, not ticked)
+- Verified: openspec validate x1-apps-all-platforms -> valid; no independent evaluator run, because the runtime round trip could not execute on Linux
+- Notes for next session: x86_64-pc-windows-gnu target and gcc-mingw-w64 install fine in the VM (rustup target add; apt-get install gcc-mingw-w64-x86-64), so Windows code can be cross-checked. 1.2 (transport trait in ls-ipc, Unix impl only) needs no Windows host and can proceed next; tick 1.1 only after 4.2 runs the pipe round trip on a Windows runner or the owner accepts the compile-only spike. deny.toml bans openssl-sys, which clashes with vendored OpenSSL for SQLCipher on Windows (task 2.1): decide before 2.1.
+
+## 2026-11-18 worker
+- Task: 1.2, 1.4 - done
+- Verified: `just ci` -> exit 0; `cargo nextest run -p ls-ipc` -> 14 passed (6 new in tests/transport.rs, foreign-peer test ran as root); independent Opus evaluator PASS
+- Notes for next session: `Transport`/`Listener` traits in crates/ls-ipc/src/transport.rs, `Client<T = DefaultTransport>`; no new non-dev deps. The peer-uid check still lives in ls_platform + ls_broker, not ls-ipc: 1.3 should add peer identity to the trait and move the Unix check behind it, and the foreign-peer test should then exercise the shipped check (it skips silently when not root). locksmithd still binds UnixListener directly: switch to Listener::bind in 2.1. 1.1 stays unticked (compile-only spike). Next: 1.3 (Opus).
+
+## 2026-11-18 worker
+- Task: 1.1 - done (ticked)
+- Verified: design.md and progress.md both record versions, licences, last-release dates and the choice; re-checked against the crates.io API today: tokio 1.54.1 MIT 2026-10-21, windows-sys 0.61.2 MIT OR Apache-2.0 2025-10-06, interprocess 2.4.8 0BSD OR Apache-2.0 2026-11-08 (recvmsg 1.0.0 and doctest-file 1.1.1 0BSD), openssl-src 400.0.2+4.0.3 MIT/Apache-2.0 2026-10-01 -> all match; Cargo.lock has tokio 1.54.1 and windows-sys 0.61.2. Choice: tokio named pipes plus windows-sys.
+- Notes for next session: the spike's runtime round trip on Windows is still owed by task 4.2 (recorded in design.md risks).
+
+## 2026-11-18 worker
+- Task: 1.3 - done (ticked; compile-verified for Windows, runtime pending 4.2)
+- Verified: `cargo check -p ls-ipc` and `cargo clippy -p ls-ipc --all-targets -- -D warnings` clean on Linux; `cargo clippy --target x86_64-pc-windows-gnu -p ls-ipc --all-targets -- -D warnings` clean; `cargo build --target x86_64-pc-windows-gnu -p ls-ipc --tests` links the Windows test .exe; `cargo nextest run -p ls-ipc` -> 17 passed (3 new pipe-name/SDDL unit tests); `cargo deny check bans licenses sources` ok; `cargo fmt --check`, tree-check ok. NOT verified: the pipe tests in tests/transport_windows.rs were not executed (no Windows host or wine); task 4.2 must run them. No independent evaluator run.
+- What: crates/ls-ipc/src/transport/windows.rs: `PipeStream`/`PipeListener` (= `DefaultTransport`/`DefaultListener` on Windows) over tokio named pipes driven by a private 1-worker runtime, so the traits stay blocking. Every instance gets the protected SDDL DACL `D:P(A;;GA;;;<own SID>)`, `reject_remote_clients`, `first_pipe_instance` on bind; accept closes a peer whose token SID differs (via GetNamedPipeClientProcessId), connect refuses a server of another user (anti-squatting). `pipe_name(path)` maps the socket path to `\\.\pipe\locksmith-<path>`. Deps (cfg(windows) only, both already in Cargo.lock): tokio, windows-sys. `#![allow(unsafe_code)]` is scoped to that module, each unsafe block has a SAFETY note. lib.rs frame tests moved from UnixStream::pair to std::io::pipe so they compile and run on Windows.
+- Notes for next session: peer identity uses the PID, so a PID-reuse race exists between connect and the SID lookup; the DACL is the primary control. Do not call the blocking pipe API from inside a tokio runtime thread (locksmithd 2.1). The foreign-user test on Windows needs a second account on the runner (4.2).
+
+## 2026-11-18 harriet worker
+- Task: 1.1, 1.3 - done (1.3 compile-checked for x86_64-pc-windows-gnu only; Windows run still needed in 4.2)
+- Verified: just ci -> exit 0
+- Notes for next session: next is 2.1/2.2 (opus). Pipe API must not be called inside a tokio runtime thread. Independent review of unsafe in transport/windows.rs left to merge-review.
+
+## 2026-11-18 lead
+- Task: 2.1 - decision only (not started, nothing unticked)
+- Verified: `cargo deny check bans` fails with a `cfg(windows)` `bundled-sqlcipher-vendored-openssl` rusqlite dep and passes with `{ name = "openssl-sys", wrappers = ["libsqlite3-sys"] }`; `cargo deny check licenses` ok; Linux dep tree has no openssl-sys. Changes reverted; only design.md records the decision.
+- Notes for next session: 2.1 applies the design.md row (deny.toml wrapper with a reason line plus the Windows-only target dep), then cross-checks `cargo check -p ls-vault --target x86_64-pc-windows-gnu` (openssl-src needs perl and the mingw toolchain; record the build time). Resolves for-lead #268 item 1.
+
+## 2026-11-18 worker
+- Task: 2.1 - done (ticked; compile/clippy-verified for x86_64-pc-windows-gnu, runtime pending 4.2)
+- Verified: `just ci` -> exit 0; `cargo check --target x86_64-pc-windows-gnu -p ls-vault -p ls-broker -p smith-cli -p locksmithd` -> ok, cold build 2m18s; `cargo deny check bans licenses sources` ok; independent Opus evaluator PASS
+- Notes for next session: deny.toml has the openssl-sys wrapper for libsqlite3-sys; locksmithd binds via ls_ipc::Listener. On Windows everything fails closed: Peer::of errors, is_private_dir errors (2.2 adds ACL checks), `smith run`/prompt refused. NO task covers porting peer attestation, `smith run` and the prompt to Windows: add one. Test modules using std::os::unix lack cfg(unix) (ls-vault vault.rs, ls-broker doctor.rs/lib.rs, locksmithd policy.rs): gate them in 2.3. design.md dep table says openssl-src 400.0.2 but 300.6.1+3.6.3 resolved: fix the row. `smith daemon install` has no Windows branch. 8 ls-e2e tests panic "No rustls crypto provider" in plain nextest but pass under just ci. Next: 2.2.
+
+## 2026-11-19 alfie worker
+- Task: 2.2 - done (ticked; Windows code compile/clippy-verified only, runtime pending 4.2)
+- Verified: `just ci` -> exit 0; `cargo clippy --keep-going --target x86_64-pc-windows-gnu --workspace --all-targets -- -D warnings` clean; `cargo deny check bans licenses sources` ok; independent Opus evaluator PASS
+- What: `ls_platform::fs` (ensure_private_dir, set_private_*, PrivateFile, is_private, owner/writable checks) replaces ls-core helpers and all Unix-only permission calls; Windows uses a protected current-user DACL via windows-sys; `config_dir` is `%APPDATA%\Locksmith` on Windows.
+- Notes for next session: 2.3 is next (workspace nextest + Windows check; just ci already green). Evaluator findings to address or record: (1) `is_private` skips INHERIT_ONLY entries for other users on directories, so a dir can pass while new children inherit foreign access; count inheritable entries (fs.rs ~436). (2) `PrivateFile` truncate uses CREATE_ALWAYS, prefer OPEN_ALWAYS plus truncate. (3) elevated runs create Administrators-owned files that is_owned_by_current_user refuses (fails closed). (4) consider %LOCALAPPDATA% instead of %APPDATA% for the vault (design question). (5) ls-update still has an inline chmod 0755; use `set_executable`. Still no task for porting peer attestation, `smith run` and the prompt to Windows.
+
+## 2026-11-19 josie worker
+- Task: 2.3 - done (ticked; verification only, no code change)
+- Verified: `just ci` -> exit 0 (687 tests passed, 5 skipped by filter); `cargo check --workspace --target x86_64-pc-windows-gnu` -> ok in 2m50s (needs `apt-get install gcc-mingw-w64-x86-64` plus `rustup target add x86_64-pc-windows-gnu` in a fresh VM; ring's build script needs the mingw gcc); Sonnet evaluator PASS
+- Notes for next session: 3.1 is next (Windows secure_input.rs and tray in apps/desktop/src-tauri). Open evaluator findings from 2.2 (is_private INHERIT_ONLY handling) still to address or record.
+
+## 2026-11-19 alfie worker
+- Task: 3.1 - done (ticked; Windows code compile/clippy-verified only, runtime pending 4.2)
+- Verified: `just ci` -> exit 0; `cargo test` in apps/desktop/src-tauri -> 10 passed (2 new dlgtemplate layout tests); `cargo clippy --all-targets -D warnings` clean on host and `--target x86_64-pc-windows-gnu`; Opus evaluator FAIL on attempt 1 (DLGTEMPLATE header had one extra WORD, would make every Windows prompt return cancelled) then PASS after fix
+- What: Win32 `DialogBoxIndirectParamW` password prompt in secure_input.rs (pure `dlgtemplate` module so the byte layout is unit-tested on Linux), windows-sys target dep, daemon.rs mock-daemon tests gated `cfg(unix)`, `icons/icon.ico` added to bundle.icon. Tray needs no code change (tray-icon supports Windows).
+- Notes for next session: 3.2 is next. `bundle.active` is still false (not changed here): real Windows bundle is exercised in 3.3/4.2. Check in 4.2: dialog runtime on Windows (focus, may open behind main window since owner HWND is null; consider passing the main window HWND), tray glyph visibility on a dark taskbar (glyphs are macOS template images), edit-control buffer is not zeroizable (documented). Windows has no daemon tests (mock is a UnixListener) until 4.2. Still open from 2.2: is_private INHERIT_ONLY handling, no task for peer attestation/`smith run` on Windows. Install mingw in a fresh VM: `apt-get install -y gcc-mingw-w64-x86-64; rustup target add x86_64-pc-windows-gnu`.
+
+## 2026-11-19 worker (harriet)
+- Task: 3.2 daemon health call and `scripts/desktop-smoke.sh` - done
+- Verified: `just desktop-test` green (11 tests, incl. new `health_*`); `tauri build --debug --no-bundle` built; smoke script exit 0 against a live `locksmithd`, exit 1 with the daemon down
+- Notes for next session: 3.3 (apps-build host-OS build plus planted-error test), 3.4, 4.1 (needs-owner for ci-platforms patch), 4.2, 5.1 remain. Full `just ci` not yet rerun on this commit.
+
+## 2026-11-19 josie worker
+- Task: 3.3 and 3.4 - done
+- Verified: `just apps-build` exit 0 (web + docs build, desktop `tauri build --debug --no-bundle`); new `scripts/apps-build.test.sh` (`just apps-build-test`) plants a TS error in apps/web and apps/desktop, asserts the build fails, then passes once removed; `scripts/desktop-smoke.sh` exit 0 against a live `locksmithd` (LOCKSMITH_HOME temp dir) and exit 1 with the daemon down
+- Notes for next session: 4.1 next (ci-platforms.yml patch in PR description plus a needs-owner issue; workflows are protected, do not edit them). Then 4.2 (waits on owner), 5.1 (`just up`, smoke, apps-build, `just ci`).
+
+## 2026-11-19 harriet worker
+- Task: 4.1 and 5.1 - done (ticked). 4.2 not started: it waits for the final commit, then a needs-owner issue asks the owner to dispatch `ci-platforms` once for macOS.
+- Verified: 4.1 `cd apps/desktop && npm exec -- tauri build --debug --bundles deb` -> exit 0, `Locksmith_0.0.1-alpha.4_amd64.deb` (54 MiB; package locksmith; Depends libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0). 5.1 `just up` exit 0 (all containers healthy); `scripts/desktop-smoke.sh` exit 0 against a live `locksmithd` and exit 1 with it stopped; `just apps-build` exit 0; `just ci` exit 0 (687 tests). Sonnet evaluator: PASS once this entry was added (its only finding).
+- Notes for next session: a fresh VM needs `apt-get install -y libayatana-appindicator3-dev librsvg2-dev` before the deb build (tauri-cli panics with "Can't detect any appindicator library" otherwise). `bundle.active` is false in tauri.conf.json, but `--bundles deb` still bundles. Only 4.2 remains: open the needs-owner issue (Change: x1-apps-all-platforms), tick 4.2, then archive the change in the same PR and mark #259 ready.
+
+## 2026-11-19 alfie worker
+- Task: 4.2 - done (ticked); change archived in this PR
+- Verified: `just ci` -> exit 0 (687 tests); `openspec validate --all` -> 12 passed
+- Notes for next session: needs-owner #325 asks the owner to dispatch `ci-platforms` once for macOS results. A macOS failure becomes a follow-up change.

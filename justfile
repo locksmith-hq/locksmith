@@ -14,6 +14,11 @@ test-rust:
     cargo nextest run --workspace --exclude ls-e2e -E 'not (package(a0-spikes) & binary(rls))'
     cargo test --workspace --exclude ls-e2e --doc
 
+# Rust tests without Docker or the `just up` stack (macOS ci-platforms); filter in .config/nextest.toml.
+test-rust-portable:
+    cargo nextest run --workspace --profile portable
+    cargo test --workspace --exclude ls-e2e --doc
+
 test-web:
     npm run build && npm test
 
@@ -27,6 +32,10 @@ desktop-test:
 apps-build: desktop-test
     npm run build
     cd apps/desktop && npm exec -- tauri build --debug --no-bundle
+
+# Plants a build error in each app and checks apps-build's npm build step fails on it.
+apps-build-test:
+    scripts/apps-build.test.sh
 
 # Regenerate packages/api-types from crates/ls-ipc (ts-rs).
 api-types:

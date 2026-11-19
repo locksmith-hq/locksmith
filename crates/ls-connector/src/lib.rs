@@ -118,7 +118,8 @@ impl State {
     pub fn save(&self) -> Result<()> {
         let path = Self::path();
         let dir = path.parent().map(PathBuf::from).unwrap_or_default();
-        ls_core::ensure_private_dir(&dir).map_err(|_| fail("cannot create the state directory"))?;
+        ls_platform::fs::ensure_private_dir(&dir)
+            .map_err(|_| fail("cannot create the state directory"))?;
         let mut body = Zeroizing::new(
             serde_json::to_vec(&StateOut {
                 access_token: self.token.expose_secret(),
@@ -130,15 +131,10 @@ impl State {
         );
         let tmp = dir.join(format!(".{STATE_FILE}.{}.tmp", std::process::id()));
         let write = || -> std::io::Result<()> {
-            let mut opts = std::fs::OpenOptions::new();
-            opts.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                opts.mode(0o600);
-            }
             let _ = std::fs::remove_file(&tmp);
-            let mut f = opts.open(&tmp)?;
+            let mut f = ls_platform::fs::PrivateFile::new()
+                .create_new(true)
+                .open(&tmp)?;
             f.write_all(&body)?;
             f.sync_all()?;
             std::fs::rename(&tmp, &path)
@@ -158,18 +154,13 @@ impl State {
         let raw = std::fs::read(&path)
             .map(Zeroizing::new)
             .map_err(|_| fail("not logged in: run `smith login --agent`"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&path)
-                .map(|m| m.permissions().mode())
-                .unwrap_or(0);
-            if mode & 0o077 != 0 {
-                return Err(fail(
-                    "the agent state file is accessible to others (expected mode 0600); \
-                     run `smith login --agent` again",
-                ));
-            }
+        // Unix: no group/other mode bits (0600); Windows: owner-only ACL. An unreadable ACL fails
+        // closed like an open one.
+        if !ls_platform::fs::is_private(&path).unwrap_or(false) {
+            return Err(fail(
+                "the agent state file is accessible to others (expected mode 0600 or an \
+                 owner-only ACL); run `smith login --agent` again",
+            ));
         }
         let s: StateIn = serde_json::from_slice(&raw)
             .map_err(|_| fail("the agent state file is unreadable: run `smith login --agent`"))?;

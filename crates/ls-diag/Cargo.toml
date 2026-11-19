@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 ls-core = { path = "../ls-core" }
+ls-platform = { path = "../ls-platform" }
 inventory = "0.3"
 serde = { version = "1", features = ["derive"] }
 

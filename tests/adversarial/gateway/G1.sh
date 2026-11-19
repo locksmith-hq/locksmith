@@ -45,10 +45,24 @@ gw_find_pid() {
 dump_proc() {
   local name="$1" pid="$2" f
   for f in environ cmdline status; do
-    cat "/proc/$pid/$f" >"$P/$name.$f" 2>/dev/null || echo "unreadable" >"$P/$name.$f"
+    cat "/proc/$pid/$f" >"$P/$name.$f" 2>/dev/null || gw_fail "cannot read /proc/$pid/$f ($name)"
   done
   tr '\0' '\n' <"$P/$name.environ" >"$P/$name.environ.txt" || true
   tr '\0' ' ' <"$P/$name.cmdline" >"$P/$name.cmdline.txt" || true
+}
+
+# dump_proc_private NAME PID: for processes that inherit the operator's environment (the gateway,
+# the control plane), which holds real credentials: the full files go to GW_WORK (scanned below,
+# never kept) and only variable names, cmdline and status reach the artifacts.
+dump_proc_private() {
+  local name="$1" pid="$2" f
+  mkdir -p "$GW_WORK/privproc"
+  for f in environ cmdline status; do
+    cat "/proc/$pid/$f" >"$GW_WORK/privproc/$name.$f" 2>/dev/null || gw_fail "cannot read /proc/$pid/$f ($name)"
+  done
+  tr '\0' '\n' <"$GW_WORK/privproc/$name.environ" | sed 's/=.*//' >"$P/$name.environ-names.txt"
+  tr '\0' ' ' <"$GW_WORK/privproc/$name.cmdline" >"$P/$name.cmdline.txt"
+  cp "$GW_WORK/privproc/$name.status" "$P/$name.status"
 }
 
 # 1. A second login with the enrollment secret on stdin (the documented non-env path): catch the
@@ -106,9 +120,9 @@ n="$(grep -c 'key=ok where=authorization$' "$ARTIFACT_DIR/provider-hits.log" || 
 [[ "$n" -ge 2 ]] || gw_fail "the provider did not receive the key in the bound header for both relays ($n)"
 
 # 4. The gateway and the control plane, after they served the relays.
-dump_proc gateway "$GW_GATEWAY_PID"
+dump_proc_private gateway "$GW_GATEWAY_PID"
 for pid in $(pgrep -x locksmith-api 2>/dev/null || true); do
-  [[ -r "/proc/$pid/environ" ]] && dump_proc "locksmith-api-$pid" "$pid"
+  [[ -r "/proc/$pid/environ" ]] && dump_proc_private "locksmith-api-$pid" "$pid"
 done
 
 # 5. The agent's own environment and shell, and an interactive shell whose history is saved.
@@ -149,6 +163,12 @@ if python3 -I "$GW_ROOT/tests/kit/oracle.py" scan --canary-file "$GW_WORK/enroll
   "$GW_WORK/enroll-probe" >"$GW_WORK/enroll-probe.scan" 2>&1; then
   gw_fail "the enrollment check cannot see a planted enrollment secret"
 fi
+for cf in "$CANARY_FILE" "$GW_WORK/enrollment.canary"; do
+  if python3 -I "$GW_ROOT/tests/kit/oracle.py" scan --canary-file "$cf" "$GW_WORK/privproc" \
+    >"$GW_WORK/privproc.scan" 2>&1; then :; else
+    gw_fail "a secret is in the gateway or control plane process files (not kept)"
+  fi
+done
 rc=0
 python3 -I "$GW_ROOT/tests/kit/oracle.py" scan --canary-file "$GW_WORK/enrollment.canary" \
   "$ARTIFACT_DIR" >"$ARTIFACT_DIR/enrollment.scan" 2>&1 || rc=$?

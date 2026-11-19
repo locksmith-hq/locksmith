@@ -7,6 +7,7 @@ Skip idle passes. Window: since the newest `lead` agent-log comment not `answere
 ## 0. Owner replies
 For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
 - **Not approved:** reply with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
+- **Owner must act again:** update the body's `Action:`; remove and re-add `needs-owner`.
 - **Approved:** apply it, marked ready: OpenSpec edits and `x-priority` on `claude/planning-<date>` (merge-gate exempts only `openspec/changes/`); roadmap order and a line in `owner.md` or `openspec/decisions.md` on `claude/lead-<date>`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
 
 A wake does what it names (reply, rescue, debate), then any open rescue; outcome `answered`.
@@ -19,6 +20,7 @@ Take the oldest open `needs-rescue` issue whose change you can lock (`run-lock.s
 - **Wrong task text:** fix on `claude/planning-<id>-tasks` with evidence.
 - **FAIL** (both attempts): comment `rescue-attempt` and add `needs-owner` now.
 - **Protected fix:** a `needs-owner` issue needing a protected-file edit gets a linked PR on `claude/lead-<date>`; its `Action:` is the merge.
+- Open PRs with protected files (merge-gate) need a `needs-owner` issue; `Action:` merge.
 
 ## 2. Code
 Take open `for-lead` issues, then review diffs merged in the window (`merge-review` covers security) for duplication, reinvented wheels (cite a source), readability or layering drift, and over-specific code (solved twice, or a roadmap change would rewrite it). Findings cite evidence, landing as:

@@ -4,11 +4,21 @@
 shows up in anything the attack produced. Case ids follow `A0`…`A9` from
 `docs/roadmap.md`.
 
-Usage: `run.sh <case|selftest|all>... [--agent claude]` (several targets run in order, e.g.
-`run.sh A3 A3b`)
+Usage: `run.sh <case|selftest|all|gateway [G<n>...]>... [--agent claude]` (several targets run
+in order, e.g. `run.sh A3 A3b`)
 
 - `selftest` checks the oracle against every encoding it scans for.
-- `all` runs the selftest, then every `cases/*.sh`.
+- `all` runs the selftest, then every `cases/*.sh`. It never runs the gateway cases.
+- `gateway` runs every `gateway/G*.sh` (or only the named ones, e.g. `run.sh gateway G2 G4`)
+  against the local stack (`just up`, `just api`) with the same case contract. The cases source
+  `gateway/lib.sh`, which skips with `skip: stack not running` and otherwise creates an org, a
+  canary secret, a binding, an agent and a grant, starts a gateway and logs the agent in with
+  `smith`. Hits are judged against the residual register `gateway/residuals.toml` (format in
+  its header): an unlisted hit is `FAIL`, a listed hit is `RESIDUAL`, and a listed entry
+  without a hit is `STALE RESIDUAL` and fails.
+- `ADVERSARIAL_KEEP=1` keeps the run's work directory (logs, artifacts, canary files) and prints
+  its path.
+- `run_test.sh` is the harness self-check: planted cases for the gateway target and the register.
 - `--agent claude` sets `LIVE_AGENT=claude` for cases. Without the `claude` CLI or
   `ANTHROPIC_API_KEY` it prints `skip live` and the cases stay scripted.
 

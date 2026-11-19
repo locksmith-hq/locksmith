@@ -2,7 +2,7 @@
 
 Skip idle passes. Window: since the newest `lead` agent-log comment not `answered` (first: 24h). Use the `run-start` skill with `lead`.
 
-**Scope: technical.** You own code quality, architecture, rescues and agent-run efficiency. The PM routine (daily, product) owns the end goal, roadmap order, priorities and the board: never reorder the roadmap or change `x-priority` yourself, except to apply an owner approval (step 0). The PM hands you technical findings as open `for-lead` issues; disagreements go through the `debate` skill.
+**Scope: technical.** You own code quality, architecture and rescues; the local optimizer (`optimizer.md`) owns schedules, agent communication and run efficiency. The PM routine (daily, product) owns the end goal, roadmap order, priorities and the board: never reorder the roadmap or change `x-priority` yourself, except to apply an owner approval (step 0). The PM hands you technical findings as open `for-lead` issues; disagreements go through the `debate` skill.
 
 ## 0. Owner replies
 For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
@@ -20,14 +20,7 @@ Take the oldest open `needs-rescue` issue whose change you can lock (`run-lock.s
 - **FAIL** (both attempts): comment `rescue-attempt` and add `needs-owner` now.
 - **Protected fix:** a `needs-owner` issue needing a protected-file edit gets a linked PR on `claude/lead-<date>`; its `Action:` is the merge.
 
-## 2. Runs
-Check worker sessions via `Claude_Code_Remote`: `list_triggers` `last_run`; `list_sessions` (title `Locksmith worker`) status, summary. Logs: read `Lead (local)` comments. Plus `run-metadata`, failed CI. Flag **stuck** (active long after start, no `run-metadata`, over 2700s, no task done, one task over 2+ runs), **slow** (`duration_s` growing, `lost_s` over 120, long waits) or **wasteful** (Opus over 40% of tokens, repeat reads/retries) runs.
-
-Fix the top 3 by time lost × frequency on `claude/lead-<date>`. Prefer script > skill gotcha > new skill (`skill-creator` skill, for procedures workers repeat or improvise) > role-file edit > lesson (`lessons.md`, max 5). Except new skills, agent-doc words must not grow. Revert 7+ day-old fixes whose metric didn't move.
-
-**Actions minutes:** run `scripts/actions-usage.py` via `bg.sh`; log four lines. On ALERT or rising minutes: `needs-owner` issue with numbers, then a protected fix.
-
-## 3. Code
+## 2. Code
 Take open `for-lead` issues, then review diffs merged in the window (`merge-review` covers security) for duplication, reinvented wheels (cite a source), readability or layering drift, and over-specific code (solved twice, or a roadmap change would rewrite it). Findings cite evidence, landing as:
 - small, safe: fix on `claude/lead-<date>`;
 - in-flight change: lock it, untick the task, add a `lead` progress entry;
@@ -38,4 +31,4 @@ Close each `for-lead` issue with what you did.
 Quality work never adds `needs-rescue` or `needs-owner`.
 
 ## Ship
-Run `just ci`. Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill), or it never merges. Use the `run-log` skill; outcome `rescued`, `learned`, `reviewed` or `idle`.
+Run `just ci`. Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill), or it never merges. Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.

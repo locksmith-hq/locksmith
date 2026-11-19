@@ -3,7 +3,7 @@ name = "ls-gateway"
 description = "Locksmith gateway: relays HTTP calls with a secret injected the caller never sees."
 edition.workspace = true
 version.workspace = true
-license.workspace = true
+license = "AGPL-3.0-only"
 publish.workspace = true
 
 [lints]

@@ -6,9 +6,9 @@
 - [x] 1.3 Verify: `gitleaks detect --no-banner --redact` over the full history exits 0.
 
 ## 2. Licences [sonnet]
-- [ ] 2.1 Add `LICENSE` (AGPL-3.0) and `LICENSE-APACHE` files, set each manifest's `license`, replace `UNLICENSED`, and write `THIRD_PARTY.md` for vendored data.
-- [ ] 2.2 Extend `deny.toml` so an AGPL dependency cannot enter an Apache-2.0 crate.
-- [ ] 2.3 Verify: `cargo deny check licenses` passes and fails on a planted AGPL dependency in a scratch crate.
+- [x] 2.1 Add `LICENSE` (AGPL-3.0) and `LICENSE-APACHE` files, set each manifest's `license`, replace `UNLICENSED`, and write `THIRD_PARTY.md` for vendored data.
+- [x] 2.2 Extend `deny.toml` so an AGPL dependency cannot enter an Apache-2.0 crate.
+- [x] 2.3 Verify: `cargo deny check licenses` passes and fails on a planted AGPL dependency in a scratch crate.
 
 ## 3. Public docs [sonnet]
 - [ ] 3.1 Rewrite `README.md` (product, security promise with honest protection labels, `just up` quick start, layout, licences); retire the M0–M16 text.

@@ -3,11 +3,11 @@
 # Claude Code notes
 
 ## Subagent model tiers
-- **Opus** (`model: opus`): secrets, crypto, the vault, authorization and audit paths, relays, adversarial gates, protocol work, and cross-cutting design or merge reviews.
-- **Sonnet** (`model: sonnet`): feature code outside the secret paths, CLI, doctor checks, integration tests, CI fixes and refactors. This is the default tier.
+- **Sonnet** (`model: sonnet`): the default for all work, including feature code on secret paths, CLI, doctor checks, integration tests, CI fixes and refactors.
+- **Opus** (`model: opus`): only hard, complex work: new crypto or protocol design, subtle security reasoning, cross-cutting design, merge reviews, and tasks Sonnet already failed.
 - **Haiku** (`model: haiku`): the fast execution engineer, for clearly defined isolated tasks, search, running tests, and repetitive edits.
 
-When unsure, go one tier up. Split a mixed task so each part runs on the right tier.
+When unsure, use Sonnet and escalate only if it fails evaluation. Split a mixed task so each part runs on the right tier.
 
 ## Skills
 Repeatable procedures live as skills in `.claude/skills/`, each with scripts. Use the skill instead of improvising:

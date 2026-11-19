@@ -38,8 +38,9 @@ context: |
   - Agent transparency: every datastore, log and trace in the local stack is reachable by the coding
     agent through an MCP server or a `just` command (read-only by default). Prefer an existing MCP.
   - Token frugality: every task is tagged with its model tier: [haiku] fast execution (isolated, well-defined,
-    research, tests, repetitive), [sonnet] default feature work, [opus]
-    (secrets, crypto, auth, gateway, adversarial gates, cross-cutting design).
+    research, tests, repetitive), [sonnet] default feature work, including most work on secret,
+    auth and gateway paths, [opus] only hard, complex tasks (new crypto or protocol design, subtle security
+    reasoning, cross-cutting design). Most tasks should be [sonnet] or [haiku].
 
 rules:
   proposal:

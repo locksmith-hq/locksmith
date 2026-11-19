@@ -1,6 +1,6 @@
 # Locksmith hub: technical design (proposal, 2026-11-19)
 
-Status: **proposal for the owner**. Nothing here is decided. It turns the console mockup
+Status: **the five decisions in section 13 were approved by the owner on 2026-11-19** ([#363](https://github.com/locksmith-hq/locksmith/issues/363), recorded as H1-1 to H1-5 in `openspec/decisions.md`). The rest is design for the changes that follow. It turns the console mockup
 (`apps/web/src/mockup/`, open `apps/web/mockup.html` under `vite`) into an architecture, a data
 model, and a set of changes to `docs/roadmap.md` and OpenSpec. Lines marked **Decision needed**
 must be approved through a `needs-owner` issue and appended to `openspec/decisions.md` before any
@@ -274,9 +274,9 @@ console into slices that land with the features they show.
 | 1 | `s6-adversarial-gate-1`, `x1-apps-all-platforms` | As written. | Already in flight. |
 | 2 | `t1-human-auth` | Sign up and sign in; a personal org is created; the API verifies JWTs. | Nothing can be exposed to the internet while the org comes from a dev header. |
 | 3 | `p1-aws-dev-env` (moved up, narrowed) | `control-plane`, `gateway` and Postgres run in the AWS dev account behind Cognito; `just aws-up` and `just aws-down`. | The earliest point at which the cloud is safe to open. Still inside the A0-16 budget. |
-| 4 | `t3a-console-shell` (new, replaces the start of T3) | The mockup's shell on the real API: hub home, projects, environments, secret names and versions, agents, grants, activity. Design tokens move to `packages/ui`. | First thing a person can click in the cloud. Read and manage; no value entry yet. |
-| 5 | `t3b-secret-write` (new) | Add a secret or a new version from the browser, sealed in the browser (D-1). | Needs the WebAssembly build and the spec change; kept apart so it gets its own security review. |
-| 6 | `t3c-sessions-and-revoke` (new) | Live sessions listed, revoke one, revoke all, pause agents (`agent_tokens`, `org_controls`). | Completes "see and stop anything at once", the product's promise. |
+| 4 | `t3-console-mvp` (T3, narrowed) | The mockup's shell on the real API: hub home, projects, environments, secret names and versions, agents, grants, activity. Design tokens move to `packages/ui`. | First thing a person can click in the cloud. Read and manage; no value entry yet. |
+| 5 | `t7-secret-write` (T7, new) | Add a secret or a new version from the browser, sealed in the browser (D-1). | Needs the WebAssembly build and the spec change; kept apart so it gets its own security review. |
+| 6 | `t8-sessions-and-revoke` (T8, new) | Live sessions listed, revoke one, revoke all, pause agents (`agent_tokens`, `org_controls`). | Completes "see and stop anything at once", the product's promise. |
 | 7 | `t6-org-members` | As written, plus project members and the built-in roles. | Teams. |
 | 8 | `t2-policy-engine` | Narrowed to start: the three guardrails (`org_guardrails`) enforced when a grant is made. A general engine only when a customer needs a rule those three cannot express. | |
 | 9 | `t4-access-proposals` | As written; the Approvals queue. | |
@@ -291,17 +291,17 @@ to aim at. Step 10 adds "and Slack tells you".
 
 ### 7.3 Changes to existing OpenSpec material
 
-- **`docs/roadmap.md`:** reorder as above; split the T3 row into T3a, T3b, T3c; add N1 and M1 rows;
+- **`docs/roadmap.md`:** reorder as above; narrow the T3 row and add T7 and T8; add N1 and M1 rows;
   move P1 to phase 2. Roadmap rows generate the GitHub issues, so issues 90 (T3) and 97 (P1) change
   with it.
-- **`openspec/specs/envelope-encryption`:** modified by `t3b-secret-write` (D-1).
-- **`openspec/specs/agent-connector`:** `t3c` adds revocation and pause; `m1` adds the remote MCP
+- **`openspec/specs/envelope-encryption`:** modified by `t7-secret-write` (D-1).
+- **`openspec/specs/agent-connector`:** `t8` adds revocation and pause; `m1` adds the remote MCP
   requirements.
 - **`openspec/specs/control-plane-api`:** every change above adds routes; the dev-header
   requirement is removed by T1.
 - **New capability specs:** `human-auth` (T1), `org-membership` (T6), `access-policy` (T2),
-  `console` (T3a onward), `notifications` (N1), `remote-mcp` (M1), `cloud-dev-environment` (P1).
-- **`DESIGN.md`:** it still describes the older "Keying Schedule" look. `t3a` should replace it
+  `console` (T3 onward), `notifications` (N1), `remote-mcp` (M1), `cloud-dev-environment` (P1).
+- **`DESIGN.md`:** it still describes the older "Keying Schedule" look. T3 should replace it
   with the shipped "Gatehouse" system plus the console additions, generated from the built result.
 - **`PRODUCT.md`:** add the web console as a surface and the hub as the product shape, after D-4.
 
@@ -357,8 +357,8 @@ a demo. The current $5 a month cap does not allow always-on.
 
 ## 9. From mockup to product code
 
-- The mockup is throwaway and stays out of the build. It is the reference for `t3a`.
-- `t3a` moves the Gatehouse tokens and the shared components into `packages/ui`, so the desktop
+- The mockup is throwaway and stays out of the build. It is the reference for T3.
+- T3 moves the Gatehouse tokens and the shared components into `packages/ui`, so the desktop
   app and the console use one source.
 - Each real page replaces its sample store with calls through `packages/control-plane-client`,
   generated from `openapi.json`. The mockup's stores already separate data from pages, which makes
@@ -419,7 +419,7 @@ right default is not a setting.
 | Sign-in: passkeys, forced single sign-on, sign-out timer | Not in T1; passkeys were moved out of it. | Email, Google, GitHub, a second step. |
 | Detail pages that only repeated their row | No new information. | The list row. |
 
-## 13. Decisions requested
+## 13. Decisions (approved 2026-11-19, #363)
 
 | # | Decision | Recommendation |
 |---|---|---|

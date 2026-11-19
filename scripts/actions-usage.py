@@ -134,6 +134,8 @@ def main():
     for r in month:
         if ts(r["created_at"]) >= week:
             per[r["name"]].append(r)
+    with ThreadPoolExecutor(16) as ex:  # ~1000 job lookups a week; serially they ran past 5 minutes
+        list(ex.map(run_minutes, [r for rs in per.values() for r in rs]))
     print("\nLast 7 days by workflow: runs, minutes, avg, max")
     for name, rs in sorted(per.items(), key=lambda kv: -sum(map(run_minutes, kv[1]))):
         mins = [run_minutes(r) for r in rs]

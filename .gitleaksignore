@@ -46,3 +46,7 @@ daaca0ee540ad43a11439db70d1f8ef878483db8:crates/ls-proxy/tests/aws_relay.rs:aws-
 daaca0ee540ad43a11439db70d1f8ef878483db8:crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
 # Fixed known-answer test vector secret_id in ls-envelope v1.json, same vector as the entries above (g1 triage 1.1).
 06be8e94fb9afa7911e98e3a891aac46f4db174c:crates/ls-envelope/vectors/v1.json:generic-api-key:50
+# Working-tree (no-git) fingerprints of the same fake fixtures, for scripts/public-check.sh canary scan.
+crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
+crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
+crates/ls-envelope/vectors/v1.json:generic-api-key:50

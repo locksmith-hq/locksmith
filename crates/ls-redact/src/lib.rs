@@ -10,6 +10,7 @@ pub mod doctor;
 use aho_corasick::{AhoCorasick, MatchKind};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
+use data_encoding::{BASE32, BASE32_NOPAD, HEXLOWER, HEXUPPER};
 use std::io::{Read, Write};
 use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::time::Duration;
@@ -71,35 +72,16 @@ fn percent(v: &[u8], upper: bool) -> Vec<u8> {
 }
 
 fn hex(v: &[u8], upper: bool) -> Vec<u8> {
-    v.iter()
-        .flat_map(|b| {
-            if upper {
-                format!("{b:02X}")
-            } else {
-                format!("{b:02x}")
-            }
-            .into_bytes()
-        })
-        .collect()
+    let enc = if upper { &HEXUPPER } else { &HEXLOWER };
+    enc.encode(v).into_bytes()
 }
 
 /// RFC 4648 base32 (alphabet A-Z2-7) of the whole value; `pad` adds the `=` padding.
 fn base32(v: &[u8], pad: bool, lower: bool) -> Vec<u8> {
-    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    let mut out = Vec::with_capacity(v.len().div_ceil(5) * 8);
-    for group in v.chunks(5) {
-        let mut buf = [0u8; 5];
-        buf[..group.len()].copy_from_slice(group);
-        let n = u64::from_be_bytes([0, 0, 0, buf[0], buf[1], buf[2], buf[3], buf[4]]);
-        let chars = (group.len() * 8).div_ceil(5);
-        for i in 0..8 {
-            if i < chars {
-                let c = ALPHABET[((n >> (35 - 5 * i)) & 31) as usize];
-                out.push(if lower { c.to_ascii_lowercase() } else { c });
-            } else if pad {
-                out.push(b'=');
-            }
-        }
+    let enc = if pad { &BASE32 } else { &BASE32_NOPAD };
+    let mut out = enc.encode(v).into_bytes();
+    if lower {
+        out.make_ascii_lowercase();
     }
     out
 }

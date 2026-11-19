@@ -13,6 +13,11 @@ export type AuditEventPage = components["schemas"]["AuditEventPage"];
 export type AuditStatus = components["schemas"]["AuditStatus"];
 export type Problem = components["schemas"]["Problem"];
 
+/** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
+export type AuditOutcomeFilter = "all" | "denied" | "redaction_failed";
+export const auditOutcomeMatches = (e: AuditEvent, f: AuditOutcomeFilter): boolean =>
+  f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);

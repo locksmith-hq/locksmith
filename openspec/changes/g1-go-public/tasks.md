@@ -25,4 +25,4 @@
 - [x] 5.3 Verify: `bash scripts/public-check.sh` passes and the checklist covers every item in #307.
 
 ## 6. Local verification [sonnet]
-- [ ] 6.1 Run `just up`, `bash scripts/public-check.sh`, `just apps-build`, then `just ci`.
+- [x] 6.1 Run `just up`, `bash scripts/public-check.sh`, `just apps-build`, then `just ci`.

@@ -23,7 +23,8 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
 5. **Local, then cloud.** AWS `dev` arrives only in phase 4. Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
 6. **Apps are built every change.** The web console and the desktop app (Tauri) grow with each slice
    instead of arriving at the end. Every change's Local verification runs `just apps-build`; the last
-   change of each phase also runs the manual `ci-platforms` workflow on macOS, Linux and Windows.
+   change of each phase also runs the manual `ci-platforms` workflow on macOS and Linux (Windows parity is
+   deferred to GA hardening, owner decision [#320](https://github.com/locksmith-hq/locksmith/issues/320)).
 7. **Model tiers.** Sonnet runs by default. Tasks marked `[opus]` touch crypto, auth, the gateway or adversarial gates.
 
 Status: ☐ not started · ◐ in progress · ☑ archived. Only the next one or two changes are written in
@@ -48,7 +49,7 @@ uses what the previous one taught us.
 | S4 | `s4-agent-connector` | Agent identity plus short-lived token. `smith` and `locksmith-mcp` list grants and route tool calls through the gateway. **First demo: Claude Code calls a real API (e.g. Langfuse) with no key on the laptop.** | Live headless `claude -p` run, `just leak-scan` on the transcript | ☑ |
 | S5 | `s5-audit-ledger` | Append-only, hash-chained audit per org. `just audit-verify` checks it and an export goes to a file sink. | Tamper test | ☑ |
 | S6 | `s6-adversarial-gate-1` [opus] | Scripted and live-agent extraction attempts against S1–S5 (env, reflection, header echo, encodings). | Suite green in CI and nightly | ☐ |
-| X1 | `x1-apps-all-platforms` | The desktop app builds and launches on macOS, Linux and Windows (`ls-ipc` over a Windows named pipe), and the web console builds; `ci-platforms` builds the Tauri bundle on all three. From here every phase ends green on all three. | `just apps-build` locally, `ci-platforms` green on all three | ☐ |
+| X1 | `x1-apps-all-platforms` | The desktop app builds and launches on macOS and Linux, and the web console builds; `ci-platforms` builds the macOS bundle and the Linux bundle is built locally. Windows code (named pipe, ACLs) stays compile-checked only; runtime parity is deferred to GA hardening ([#320](https://github.com/locksmith-hq/locksmith/issues/320)). | `just apps-build` locally, `ci-platforms` green on macOS | ☐ |
 | H1 | `h1-test-recipes` | Every crate, service, app, package and integration has a documented test recipe: `docs/testing.md` maps each one to its command, `just test <name>` runs it, and tree-check fails when a new component has no entry. | `just test <name>` for every listed component, tree-check fails on a planted unlisted crate | ☑ |
 
 ## Phase 2: Team product
@@ -86,4 +87,4 @@ SAML and SCIM, billing, SOC2 programme, local-only mode for solo developers.
 
 ## Phase 6: GA hardening
 
-External pentest, full adversarial suite, Windows connector, docs and landing site.
+External pentest, full adversarial suite, Windows parity (desktop, daemon and CLI tested on Windows; [#320](https://github.com/locksmith-hq/locksmith/issues/320)), Windows connector, docs and landing site.

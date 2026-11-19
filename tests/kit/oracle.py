@@ -258,6 +258,19 @@ def gzip_body(data, i, state):
     return p if p < n else None
 
 
+def nul_run_start(data, i):
+    """Return the start of the run of NUL bytes that ends at data[i] (i if there is none). Runs
+    before distinct member starts do not overlap, so all calls together read the data once."""
+    z = i
+    while z > 0:
+        block = data[max(0, z - 4096):z]
+        kept = len(block.rstrip(b"\0"))
+        z -= len(block) - kept
+        if kept:
+            break
+    return z
+
+
 def gunzip_member(buf, i, state):
     """Decode the gzip member at buf[i:] to (output, end), or None if it decodes to nothing.
 
@@ -387,8 +400,9 @@ class Matcher:
                 # Join every run that ends here or before NUL padding up to here: a false member
                 # inside another member's bytes can end where it does, and either may be the
                 # one gzip -dc decodes.
+                z = nul_run_start(data, i)
                 joined = [(first, outs + [out])
-                          for e in [e for e in runs if e <= i and data.count(b"\0", e, i) == i - e]
+                          for e in [e for e in runs if z <= e <= i]
                           for first, outs in runs.pop(e)]
                 for run in joined or [(i, [out])]:
                     (done if end is None else runs[end]).append(run)

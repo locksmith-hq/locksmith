@@ -20,7 +20,7 @@ Every control-plane call is still bound to an org by the dev-only `X-Locksmith-D
 - Visual design of the sign-in pages beyond a plain functional layout: brand and look need owner approval before they are built on (owner decision 2026-11-18); see Open Questions in design.md.
 
 ## Depends on
-`s6-adversarial-gate-1` (the gate must be green before a new public auth surface is added; T1 adds its own cases to it).
+`s6-adversarial-gate-1` must merge before T1 merges (the gate must be green before a new public auth surface is added; T1 adds its own cases to it). Only tasks 5.2, 5.3 and 7.1 use it, so groups 1 to 4 run in parallel with S6 (PM 2026-11-19). A worker that reaches 5.2 before S6 has merged stops there and takes another change; this is ordering, not a rescue.
 
 ## Usable outcome
 A person can sign up with email and password or with Google or GitHub, sign in to the web console and the desktop app against the local stack, and every API call is attributed to a verified user in a personal org. Nobody can call the API with the dev header unless dev auth is explicitly on.

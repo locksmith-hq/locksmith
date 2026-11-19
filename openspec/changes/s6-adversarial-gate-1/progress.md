@@ -34,3 +34,8 @@ Append-only session log. Read the last entries and `git log` before starting.
   - Opus evaluator PASS: 0 of about 200 fuzzed damaged members that `gzip -dc` recovers were missed, and every perf probe on inputs up to 50 MB finished in 6 s or less;
   - `just ci` -> see the PR comment.
 - Notes for next session: group 2 next. A minor item is out of scope: the quoted-printable view is linear but takes about 14 s on 50 MB of `=41`.
+
+## 2026-11-19 worker (harriet)
+- Task: 2.1, 2.2, 2.3 - done
+- Verified: `bash tests/adversarial/run.sh selftest` -> PASS; `bash tests/adversarial/run_test.sh` -> 16/16; `ADVERSARIAL_REQUIRE_ALL=1 run.sh all` without stack -> identical to main (A2 fails only because aws CLI is missing in the VM); live stack setup/login/relay check; `just ci` -> exit 0 (678 passed); Opus evaluator PASS
+- Notes for next session: group 3 next (G1-G6 cases using gateway/lib.sh). Evaluator minor items: (a) run.sh failure log tail masks only the plain canary and the case log is not oracle-scanned; (b) `gw_cp` writes the agent response with the enrollment secret to ARTIFACT_DIR/setup/NN-agent.json before masking: write to GW_WORK first; (c) a register entry excuses its (case, encoding) anywhere in the artifacts; (d) the oracle labels one plain canary twice (utf8+percent+json and b64url-offset0), so task 3.4 must list each label. lib.sh rebuilds binaries per case unless LOCKSMITH_*_BIN is set.

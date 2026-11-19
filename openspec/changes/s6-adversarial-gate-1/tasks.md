@@ -5,9 +5,9 @@
 - [x] 1.2 Verify: `bash tests/adversarial/run.sh selftest` and `bash tests/kit/leak_scan_test.sh` (with `just up`) pass.
 
 ## 2. Harness: gateway target and residual register [opus]
-- [ ] 2.1 `run.sh gateway [G<n>...]` runs `tests/adversarial/gateway/G*.sh` with the existing case contract; `all` stays unchanged. A shared `gateway/lib.sh` checks the stack (exit 77 with `skip: stack not running`), creates an org, a canary secret, a binding, an agent and a grant through the control plane, and logs the agent in with `smith`.
-- [ ] 2.2 `gateway/residuals.toml` (case, encoding, label, reason) and its handling in `run.sh`: unlisted hit is `FAIL`, listed hit is `RESIDUAL`, listed entry with no hit is `STALE RESIDUAL` and fails; `ADVERSARIAL_KEEP=1` keeps artifacts.
-- [ ] 2.3 Verify: `bash tests/adversarial/run.sh selftest` plus a harness self-check (a planted case that leaks an unlisted form fails, a listed form reports `RESIDUAL`, a stale entry fails); `ADVERSARIAL_REQUIRE_ALL=1 bash tests/adversarial/run.sh all` without the stack gives the same result as on `main`.
+- [x] 2.1 `run.sh gateway [G<n>...]` runs `tests/adversarial/gateway/G*.sh` with the existing case contract; `all` stays unchanged. A shared `gateway/lib.sh` checks the stack (exit 77 with `skip: stack not running`), creates an org, a canary secret, a binding, an agent and a grant through the control plane, and logs the agent in with `smith`.
+- [x] 2.2 `gateway/residuals.toml` (case, encoding, label, reason) and its handling in `run.sh`: unlisted hit is `FAIL`, listed hit is `RESIDUAL`, listed entry with no hit is `STALE RESIDUAL` and fails; `ADVERSARIAL_KEEP=1` keeps artifacts.
+- [x] 2.3 Verify: `bash tests/adversarial/run.sh selftest` plus a harness self-check (a planted case that leaks an unlisted form fails, a listed form reports `RESIDUAL`, a stale entry fails); `ADVERSARIAL_REQUIRE_ALL=1 bash tests/adversarial/run.sh all` without the stack gives the same result as on `main`.
 
 ## 3. Scripted gateway cases [opus]
 - [ ] 3.1 `G1` environment and files: the agent environment, `/proc/<pid>/environ` and `cmdline` of `smith`, `locksmith-mcp` and the gateway, the `smith` state directory and shell history, after a login and a relay; enrollment secret also checked.

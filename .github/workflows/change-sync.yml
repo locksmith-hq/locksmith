@@ -4,18 +4,9 @@ name: change-sync
 # status:* label, board Status), a milestone per phase, a sub-issue per task, blocked-by links. Hygiene only:
 # no build or test, seconds of Actions time.
 on:
-  push:
-    branches: [main, "claude/change-*"]
-    paths: ["openspec/**", "docs/roadmap.md"]
-  issues:
-    types: [labeled, unlabeled, closed, reopened]
-  issue_comment:
-    types: [created]
-  pull_request:
-    types: [opened, closed, labeled, unlabeled]
+  # Automatic triggers removed: the owner approved keeping change-sync off to save Actions
+  # minutes (#307, #316) until the repo is public. Run it by hand with workflow_dispatch.
   workflow_dispatch:
-  schedule:
-    - cron: "15 3 * * *"   # daily: Target-date forecasts move with the measured pace
 
 permissions:
   contents: read

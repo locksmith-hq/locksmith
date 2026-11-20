@@ -277,6 +277,91 @@ async fn credential_issued_appends_to_the_chain() {
     assert!(text.contains("1900000000"), "{text}");
 }
 
+/// m1-remote-mcp task 3.4: the gateway reads the org's agent-tool overrides (only its own org's,
+/// and only the agent layer), and appends one `mcp.call` per agent MCP call.
+#[tokio::test]
+async fn gateway_reads_agent_tool_settings_and_appends_mcp_calls() {
+    let f = Fixture::start().await;
+    let (a, b) = (f.org("tools-a").await, f.org("tools-b").await);
+    let auth = bearer(TOKEN);
+    // Overrides set in the console: one agent tool on, one hub tool (never returned here).
+    for (uri, on) in [
+        ("/v1/mcp/tools/agent/issue_short_lived_credential", true),
+        ("/v1/mcp/tools/agent/list_my_keys", false),
+        ("/v1/mcp/tools/hub/revoke_grant", true),
+    ] {
+        let r = dev(&f.app, "PUT", uri, a, Some(json!({"enabled": on}))).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    }
+    let get = |org: Option<Uuid>, auth: Option<&str>| {
+        let mut b = Request::builder()
+            .method("GET")
+            .uri("/internal/v1/mcp/agent-tool-settings");
+        if let Some(a) = auth {
+            b = b.header("authorization", a);
+        }
+        if let Some(o) = org {
+            b = b.header("x-locksmith-org", o.to_string());
+        }
+        send(&f.app, b.body(Body::empty()).unwrap())
+    };
+    let r = get(Some(a), Some(&auth)).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    assert_eq!(
+        r.body["items"],
+        json!([
+            {"tool": "issue_short_lived_credential", "enabled": true},
+            {"tool": "list_my_keys", "enabled": false},
+        ])
+    );
+    assert_eq!(get(Some(b), Some(&auth)).await.body["items"], json!([]));
+    assert_eq!(get(Some(a), None).await.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(get(Some(a), Some(&bearer(WRONG))).await.status, StatusCode::UNAUTHORIZED);
+
+    // Calls: a registry name is recorded as is, anything else as `unknown`.
+    let agent = Uuid::now_v7();
+    let call = |body: Value| {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/internal/v1/mcp/agent-calls")
+            .header("content-type", "application/json")
+            .header("authorization", auth.clone())
+            .header("x-locksmith-org", a.to_string())
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        send(&f.app, req)
+    };
+    for body in [
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok"}),
+        json!({"agent_id": agent, "tool": "issue_short_lived_credential", "outcome": "denied", "reason": "tool_off"}),
+        json!({"agent_id": agent, "tool": "SECRET sk_live_abc", "outcome": "denied", "reason": "tool_off"}),
+    ] {
+        assert_eq!(call(body).await.status, StatusCode::CREATED);
+    }
+    for bad in [
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok", "reason": "tool_off"}),
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "denied"}),
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok", "arguments": {"x": 1}}),
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok", "reason": "free text"}),
+    ] {
+        assert_eq!(call(bad).await.status, StatusCode::BAD_REQUEST);
+    }
+    let rows = f.records(a).await;
+    assert_intact(&rows);
+    let seen: Vec<_> = rows
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert_eq!(
+        seen,
+        [("mcp.call", "ok"), ("mcp.call", "denied"), ("mcp.call", "denied")]
+    );
+    let text = f.ledger_text().await;
+    assert!(text.contains("issue_short_lived_credential"), "{text}");
+    assert!(text.contains("unknown"), "{text}");
+    assert!(!text.contains("sk_live_abc"), "client text reached the ledger");
+}
+
 /// A migrated database and the app as `locksmith_app`.
 struct Fixture {
     app: Router,

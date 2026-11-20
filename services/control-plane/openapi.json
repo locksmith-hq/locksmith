@@ -195,6 +195,38 @@
         ],
         "type": "object"
       },
+      "AgentToolSetting": {
+        "description": "One per-org override of an agent-layer MCP tool's default (an `mcp_tool_settings` row).",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "tool": {
+            "description": "A registry tool name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "AgentToolSettingSet": {
+        "description": "The org's agent-layer tool overrides. A tool with no row is at its registry default.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolSetting"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "AppendedEvent": {
         "description": "Where an event landed in the org's chain.",
         "properties": {
@@ -522,6 +554,25 @@
         ],
         "type": "object"
       },
+      "McpCallOutcome": {
+        "description": "The outcome of an agent MCP call.",
+        "enum": [
+          "ok",
+          "denied",
+          "error"
+        ],
+        "type": "string"
+      },
+      "McpCallReason": {
+        "description": "Static reason codes for a refused or failed agent MCP call.",
+        "enum": [
+          "tool_off",
+          "invalid_arguments",
+          "tool_error",
+          "settings_unavailable"
+        ],
+        "type": "string"
+      },
       "McpClient": {
         "description": "A client that signed in to an MCP server. Never carries a token.",
         "properties": {
@@ -697,6 +748,42 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "NewMcpAgentCall": {
+        "additionalProperties": false,
+        "description": "One agent MCP call, as the gateway records it: who, which tool, and how it ended. There is no\nfield for arguments or a result.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent whose verified token made the call (the event's actor).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/McpCallOutcome"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/McpCallReason",
+                "description": "Why a call was `denied` or `error`: a closed set of static codes."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tool": {
+            "description": "The tool name as the client sent it; recorded only when it is a registry tool, else\n`unknown`.",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "tool",
+          "outcome"
         ],
         "type": "object"
       },
@@ -1761,6 +1848,194 @@
           }
         ],
         "summary": "Append a relay event to the org's audit ledger (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/agent-calls": {
+      "post": {
+        "description": "The gateway records every `/mcp` tool call: the agent, the tool (a registry name, else `unknown`), the outcome and a static reason; never arguments or results. Unknown fields are a `400`.",
+        "operationId": "append_agent_mcp_call",
+        "parameters": [
+          {
+            "description": "The org the event belongs to (the agent token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMcpAgentCall"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendedEvent"
+                }
+              }
+            },
+            "description": "Appended"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Append an `mcp.call` event for an agent MCP call (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/agent-tool-settings": {
+      "get": {
+        "description": "The gateway reads this (cached for seconds) to decide which agent tools it lists and runs. Only overrides are returned; the defaults live in the tool registry. Tool names and booleans only.",
+        "operationId": "get_internal_agent_tool_settings",
+        "parameters": [
+          {
+            "description": "The org the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToolSettingSet"
+                }
+              }
+            },
+            "description": "The org's overrides"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found (including another org's secret)"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "List the org's agent-layer MCP tool overrides (gateway only)",
         "tags": [
           "internal"
         ]

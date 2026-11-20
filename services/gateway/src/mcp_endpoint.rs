@@ -34,6 +34,8 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::{AgentAuth, AgentIdentity};
+use crate::audit::{McpCallEvent, McpOutcome, McpReason};
+use crate::mcp_settings::{StaticSettings, ToolSettingsSource};
 use crate::mcp_tools;
 use crate::relay::{Relay, error};
 
@@ -59,7 +61,7 @@ pub const MCP_PATH: &str = "/mcp";
 pub struct McpEndpoint {
     auth: Arc<AgentAuth>,
     allowed_hosts: Vec<String>,
-    tool_settings: Arc<HashMap<String, bool>>,
+    settings: Arc<dyn ToolSettingsSource>,
 }
 
 impl McpEndpoint {
@@ -73,33 +75,40 @@ impl McpEndpoint {
         Self {
             auth,
             allowed_hosts,
-            tool_settings: Arc::new(HashMap::new()),
+            settings: Arc::new(StaticSettings::default()),
         }
     }
 
-    /// Tool switches over the registry defaults (tool name to on/off). Until task 3.4 reads the
-    /// org's `mcp_tool_settings` on every call, this is the gateway's one source of switches;
-    /// without it every tool is at its default, so `issue_short_lived_credential` is off.
+    /// Fixed tool switches over the registry defaults (tool name to on/off), for tests and for a
+    /// gateway without a control plane. Without any, every tool is at its default, so
+    /// `issue_short_lived_credential` is off.
     pub fn with_tool_settings(mut self, settings: HashMap<String, bool>) -> Self {
-        self.tool_settings = Arc::new(settings);
+        self.settings = Arc::new(StaticSettings(settings));
+        self
+    }
+
+    /// The org's switches, read on every list and call (task 3.4): in production the control
+    /// plane's `mcp_tool_settings` through a short cache ([`crate::mcp_settings::SettingsCache`]).
+    pub fn with_settings_source(mut self, source: Arc<dyn ToolSettingsSource>) -> Self {
+        self.settings = source;
         self
     }
 }
 
 /// The gateway MCP server: the registry's agent tools that are on, run as the agent behind the
-/// verified token ([`crate::mcp_tools`]). The switches are the endpoint's
-/// ([`McpEndpoint::with_tool_settings`]); per-org switches and the per-call audit event are
-/// task 3.4. A tool that is off (by default `issue_short_lived_credential`, task 3.3) is neither
-/// listed nor callable.
+/// verified token ([`crate::mcp_tools`]). The switches are read from the endpoint's settings
+/// source on every list and call; a tool that is off (by default `issue_short_lived_credential`,
+/// task 3.3) is neither listed nor callable, and a switch that cannot be read fails closed.
+/// Every call appends one `mcp.call` event.
 #[derive(Clone)]
 struct GatewayMcp {
     relay: Option<Arc<Relay>>,
     registry: Arc<Registry>,
-    settings: Arc<HashMap<String, bool>>,
+    settings: Arc<dyn ToolSettingsSource>,
 }
 
 impl GatewayMcp {
-    fn new(relay: Option<Arc<Relay>>, settings: Arc<HashMap<String, bool>>) -> Self {
+    fn new(relay: Option<Arc<Relay>>, settings: Arc<dyn ToolSettingsSource>) -> Self {
         // The shipped registry carries no value field (tested in `ls-mcp-server`).
         let registry = Registry::new(Layer::Agent, agent_tools())
             .unwrap_or_else(|e| panic!("agent tool registry invalid: {e}"));
@@ -142,9 +151,15 @@ impl ServerHandler for GatewayMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         Self::agent(&context)?;
+        // An unreadable switch lists nothing: never fall back to the defaults.
+        let settings = self
+            .settings
+            .settings()
+            .await
+            .map_err(|_| McpError::internal_error("tool settings unavailable", None))?;
         let tools = self
             .registry
-            .list(&self.settings)
+            .list(&settings)
             .into_iter()
             .map(to_tool)
             .collect();
@@ -160,14 +175,81 @@ impl ServerHandler for GatewayMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let agent = Self::agent(&context)?;
+        // Only a registry name is ever recorded, never client-supplied text.
+        let tool = self.registry.tool_name(&request.name).unwrap_or("unknown");
+        let settings = match self.settings.settings().await {
+            Ok(s) => s,
+            Err(_) => {
+                self.record(
+                    &agent,
+                    tool,
+                    McpOutcome::Denied,
+                    Some(McpReason::SettingsUnavailable),
+                )
+                .await;
+                return Ok(mcp_tools::unavailable_result("settings_unavailable").into());
+            }
+        };
         // An off or unknown tool is refused the same way: not callable.
-        let def = self
-            .registry
-            .authorize(&request.name, &self.settings)
-            .map_err(|_| McpError::invalid_params("unknown tool", None))?;
+        let def = match self.registry.authorize(&request.name, &settings) {
+            Ok(def) => def,
+            Err(_) => {
+                self.record(&agent, tool, McpOutcome::Denied, Some(McpReason::ToolOff))
+                    .await;
+                return Err(McpError::invalid_params("unknown tool", None));
+            }
+        };
         let result =
-            mcp_tools::call(self.relay.as_ref(), &agent, def.name, request.arguments).await?;
-        Ok(result.into())
+            mcp_tools::call(self.relay.as_ref(), &agent, def.name, request.arguments).await;
+        let (outcome, reason) = call_outcome(&result);
+        self.record(&agent, tool, outcome, reason).await;
+        Ok(result?.into())
+    }
+}
+
+/// The audit outcome of a finished call: `ok`; `denied` for a tool error the REST API would give
+/// as `401`/`403`; `error` for any other failure.
+fn call_outcome(
+    result: &Result<rmcp::model::CallToolResult, McpError>,
+) -> (McpOutcome, Option<McpReason>) {
+    match result {
+        Err(_) => (McpOutcome::Error, Some(McpReason::InvalidArguments)),
+        Ok(r) if r.is_error != Some(true) => (McpOutcome::Ok, None),
+        Ok(r) => {
+            let status = r
+                .structured_content
+                .as_ref()
+                .and_then(|v| v.pointer("/error/status"))
+                .and_then(serde_json::Value::as_u64);
+            if matches!(status, Some(401 | 403)) {
+                (McpOutcome::Denied, Some(McpReason::ToolError))
+            } else {
+                (McpOutcome::Error, Some(McpReason::ToolError))
+            }
+        }
+    }
+}
+
+impl GatewayMcp {
+    /// Append the call's `mcp.call` event. A ledger that cannot take it is logged, not fatal:
+    /// the relay and credential events behind a tool already fail closed.
+    async fn record(
+        &self,
+        agent: &AgentIdentity,
+        tool: &'static str,
+        outcome: McpOutcome,
+        reason: Option<McpReason>,
+    ) {
+        let Some(relay) = &self.relay else { return };
+        let event = McpCallEvent {
+            agent_id: agent.agent_id,
+            tool,
+            outcome,
+            reason,
+        };
+        if let Err(e) = relay.audit().append_mcp_call(event).await {
+            tracing::warn!(error = %e, tool, "mcp.call event not appended");
+        }
     }
 }
 
@@ -218,7 +300,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .with_allowed_hosts(endpoint.allowed_hosts.clone())
         .with_legacy_session_mode(true);
     let relay = state.relay();
-    let settings = endpoint.tool_settings.clone();
+    let settings = endpoint.settings.clone();
     let service = StreamableHttpService::new(
         move || Ok(GatewayMcp::new(relay.clone(), settings.clone())),
         Arc::new(LocalSessionManager::default()),

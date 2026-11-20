@@ -922,6 +922,9 @@ mod tests {
     /// Task 3.3 of m1-remote-mcp: `issue_short_lived_credential` and its adversarial cases.
     mod mcp_short_lived;
 
+    /// Task 3.4 of m1-remote-mcp: per-org tool switches and the per-call `mcp.call` event.
+    mod mcp_settings;
+
     fn grant(secret_id: Uuid, name: &str, expires_at: Option<time::OffsetDateTime>) -> Grant {
         Grant {
             grant_id: Uuid::now_v7(),
@@ -1034,6 +1037,8 @@ mod tests {
         value: Vec<u8>,
         /// MCP tool switches over the registry defaults (m1-remote-mcp task 3.3).
         mcp_tools: Vec<(&'static str, bool)>,
+        /// Replaces the fixed switches with a source read on every call (task 3.4).
+        settings_source: Option<Arc<dyn crate::mcp_settings::ToolSettingsSource>>,
     }
 
     impl Default for Setup {
@@ -1047,6 +1052,7 @@ mod tests {
                 grant_ttl: crate::grants::MAX_GRANT_TTL,
                 value: VALUE.to_vec(),
                 mcp_tools: Vec::new(),
+                settings_source: None,
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
@@ -1168,14 +1174,18 @@ mod tests {
             Some(a) => a,
             None => audit.clone(),
         };
-        let mcp = crate::mcp_endpoint::McpEndpoint::new(auth.clone(), &["gateway.test".to_owned()])
-            .with_tool_settings(
-                setup
-                    .mcp_tools
-                    .iter()
-                    .map(|(n, on)| ((*n).to_owned(), *on))
-                    .collect(),
-            );
+        let mut mcp =
+            crate::mcp_endpoint::McpEndpoint::new(auth.clone(), &["gateway.test".to_owned()])
+                .with_tool_settings(
+                    setup
+                        .mcp_tools
+                        .iter()
+                        .map(|(n, on)| ((*n).to_owned(), *on))
+                        .collect(),
+                );
+        if let Some(source) = setup.settings_source {
+            mcp = mcp.with_settings_source(source);
+        }
         let relay = Relay::new(
             auth,
             Arc::new(cache),

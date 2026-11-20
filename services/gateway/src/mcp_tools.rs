@@ -64,6 +64,11 @@ fn tool_error(code: &str, status: u16) -> CallToolResult {
     CallToolResult::structured_error(json!({"error": {"code": code, "status": status}}))
 }
 
+/// The tool error for a call refused before it ran (an unreadable switch).
+pub(crate) fn unavailable_result(code: &str) -> CallToolResult {
+    tool_error(code, 503)
+}
+
 fn parse<T: for<'de> Deserialize<'de>>(args: Option<JsonObject>) -> Result<T, McpError> {
     serde_json::from_value(Value::Object(args.unwrap_or_default()))
         .map_err(|_| McpError::invalid_params("invalid arguments", None))

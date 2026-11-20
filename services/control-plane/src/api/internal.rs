@@ -501,3 +501,181 @@ pub async fn append_event(
         }),
     ))
 }
+
+/// One per-org override of an agent-layer MCP tool's default (an `mcp_tool_settings` row).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AgentToolSetting {
+    /// A registry tool name.
+    pub tool: String,
+    pub enabled: bool,
+}
+
+/// The org's agent-layer tool overrides. A tool with no row is at its registry default.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AgentToolSettingSet {
+    pub items: Vec<AgentToolSetting>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/internal/v1/mcp/agent-tool-settings",
+    operation_id = "get_internal_agent_tool_settings",
+    tag = "internal",
+    summary = "List the org's agent-layer MCP tool overrides (gateway only)",
+    description = "The gateway reads this (cached for seconds) to decide which agent tools it lists and runs. Only overrides are returned; the defaults live in the tool registry. Tool names and booleans only.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the gateway acts for"),
+    ),
+    responses(
+        (status = 200, description = "The org's overrides", body = AgentToolSettingSet),
+        InternalReadErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn agent_tool_settings(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+) -> Result<Json<AgentToolSettingSet>, ApiError> {
+    let org_id = org.org_id;
+    let items = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let rows = sql::query(
+                    "SELECT tool, enabled FROM mcp_tool_settings \
+                     WHERE org_id = $1 AND layer = 'agent' ORDER BY tool",
+                )
+                .bind(org_id)
+                .fetch_all(c)
+                .await?;
+                all(&rows, |r| {
+                    Ok(AgentToolSetting {
+                        tool: r.try_get("tool")?,
+                        enabled: r.try_get("enabled")?,
+                    })
+                })
+            })
+        })
+        .await?;
+    Ok(Json(AgentToolSettingSet { items }))
+}
+
+/// The outcome of an agent MCP call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpCallOutcome {
+    /// The tool ran and returned a result.
+    Ok,
+    /// The tool was off, unknown, or answered a refusal (`401`/`403`).
+    Denied,
+    /// Bad arguments or any other failure.
+    Error,
+}
+
+/// One agent MCP call, as the gateway records it: who, which tool, and how it ended. There is no
+/// field for arguments or a result.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NewMcpAgentCall {
+    /// The agent whose verified token made the call (the event's actor).
+    pub agent_id: Uuid,
+    /// The tool name as the client sent it; recorded only when it is a registry tool, else
+    /// `unknown`.
+    #[schema(max_length = 200)]
+    pub tool: String,
+    pub outcome: McpCallOutcome,
+    /// Why a call was `denied` or `error`: a closed set of static codes.
+    pub reason: Option<McpCallReason>,
+}
+
+/// Static reason codes for a refused or failed agent MCP call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpCallReason {
+    ToolOff,
+    InvalidArguments,
+    ToolError,
+    SettingsUnavailable,
+}
+
+impl McpCallReason {
+    fn code(self) -> Code {
+        match self {
+            Self::ToolOff => Code::new("tool_off"),
+            Self::InvalidArguments => Code::new("invalid_arguments"),
+            Self::ToolError => Code::new("tool_error"),
+            Self::SettingsUnavailable => Code::new("settings_unavailable"),
+        }
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/mcp/agent-calls",
+    operation_id = "append_agent_mcp_call",
+    tag = "internal",
+    summary = "Append an `mcp.call` event for an agent MCP call (gateway only)",
+    description = "The gateway records every `/mcp` tool call: the agent, the tool (a registry name, else `unknown`), the outcome and a static reason; never arguments or results. Unknown fields are a `400`.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to (the agent token's `org`)"),
+    ),
+    request_body = NewMcpAgentCall,
+    responses(
+        (status = 201, description = "Appended", body = AppendedEvent),
+        InternalWriteErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn append_agent_mcp_call(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+    ApiJson(input): ApiJson<NewMcpAgentCall>,
+) -> Result<(StatusCode, Json<AppendedEvent>), ApiError> {
+    use ls_mcp_server::{Layer, Registry, agent_tools};
+    let registry = Registry::new(Layer::Agent, agent_tools())
+        .map_err(|_| ApiError::new(Kind::Internal, "tool registry invalid"))?;
+    // Only a registry name is recorded, never client-supplied text.
+    let tool = registry
+        .tool_name(&input.tool)
+        .and_then(|n| Code::try_new(n).ok())
+        .unwrap_or(Code::new("unknown"));
+    let ok = match input.outcome {
+        McpCallOutcome::Ok => input.reason.is_none(),
+        McpCallOutcome::Denied | McpCallOutcome::Error => input.reason.is_some(),
+    };
+    if !ok {
+        return Err(ApiError::validation("`reason` does not fit `outcome`"));
+    }
+    let mut attrs = Attrs::new()
+        .code(attr::LAYER, Code::new("agent"))
+        .code(attr::TOOL, tool);
+    if let Some(r) = input.reason {
+        attrs = attrs.code(attr::REASON, r.code());
+    }
+    let org_id = org.org_id;
+    let event = Event {
+        kind: kind::MCP_CALL,
+        actor: Actor::Agent(input.agent_id),
+        target: Some(Target::Org(org_id)),
+        outcome: match input.outcome {
+            McpCallOutcome::Ok => outcome::OK,
+            McpCallOutcome::Denied => outcome::DENIED,
+            McpCallOutcome::Error => outcome::ERROR,
+        },
+        attrs,
+    };
+    let a = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move { crate::audit::append(c, org_id, &event).await })
+        })
+        .await
+        .map_err(ApiError::from)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(AppendedEvent {
+            id: a.id,
+            seq: a.seq,
+        }),
+    ))
+}

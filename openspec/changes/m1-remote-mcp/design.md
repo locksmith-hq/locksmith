@@ -55,7 +55,13 @@ Hub design section 6 asks for "a credential the gateway creates on demand, valid
 - Only its SHA-256 is kept, in gateway memory; an expired entry is destroyed on the next lookup or issue, and a restart destroys all of them. A gateway run as several replicas would need a shared store, since a credential works only on the replica that issued it.
 - One `credential.issued` ledger event (agent actor, secret target, `credential_id`, `expires_at`; no version, no credential) is appended before the credential is stored, so a ledger that refuses it means nothing was issued.
 - rmcp logs whole tool results at `debug`, so the gateway caps `rmcp`, `rmcp::service` and `rmcp::transport` at `info` whatever `RUST_LOG` says.
-- The switch is the endpoint's tool settings, default off; task 3.4 replaces it with the org's `mcp_tool_settings`.
+- The switch is the org's `mcp_tool_settings` override (task 3.4), default off.
+
+## Gateway switches and per-call audit (task 3.4)
+- The gateway has no database. It reads the org's agent-layer overrides from the control plane, `GET /internal/v1/mcp/agent-tool-settings` (service token plus the org header), through a cache of at most 10 s (the grant bound), so a console switch applies within seconds. The registry holds the defaults; only overrides are stored.
+- A switch that cannot be read fails closed: `tools/list` errors and `tools/call` returns the typed `settings_unavailable` (503). It never falls back to the defaults, because a tool the org turned off must not come back on when the control plane is unreachable.
+- Every `/mcp` tool call appends one `mcp.call` event through `POST /internal/v1/mcp/agent-calls`: actor the agent, target the org, attributes `layer=agent`, `tool` (a registry name, else `unknown`, so client text never reaches the ledger), the outcome (`ok`, `denied`, `error`) and a static `reason` (`tool_off`, `invalid_arguments`, `tool_error`, `settings_unavailable`). No arguments or results. `denied` covers an off or unknown tool and a tool error that is a `401`/`403`.
+- A ledger that cannot take the `mcp.call` event is logged and does not fail the call: the relay events and `credential.issued` behind a tool already fail closed, and `list_my_keys` and `explain_block` read no secret material.
 
 ## Open questions
 - Remote MCP authorization: client registration (dynamic vs pre-registered), token audience, and how each agent tool stores a token. Unverified; resolved by the research note in task 1.1. If it needs an owner decision, the lead raises it before group 4.

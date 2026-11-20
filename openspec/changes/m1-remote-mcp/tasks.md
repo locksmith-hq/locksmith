@@ -19,8 +19,8 @@
 - [x] 3.1 `/mcp` route on the gateway with agent-token auth (audience `gateway`); tests for expired and wrong-audience tokens.
 - [x] 3.2 Default-on tools: list my keys, relay an HTTP request (reuses the existing relay path and redaction), explain a block.
 - [x] 3.3 [opus] `issue_short_lived_credential`: minutes-long, one job, destroyed after, off by default, audited; adversarial cases that the stored value never appears.
-- [ ] 3.4 Switch enforcement and audit event per call, as on the hub.
-- [ ] 3.5 Verify: `cargo nextest run -p ls-gateway mcp`.
+- [x] 3.4 Switch enforcement and audit event per call, as on the hub.
+- [x] 3.5 Verify: `cargo nextest run -p ls-gateway mcp`.
 
 ## 4. Sign-in and clients [sonnet]
 - [ ] 4.1 Hub OAuth flow per the research note (protected-resource metadata, issuer config for Keycloak locally); an end-to-end test with a scripted MCP client that signs in and lists tools.

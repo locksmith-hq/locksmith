@@ -13,6 +13,11 @@
 //! once the URL's origin has matched the secret's binding (configuration, not caller input), so
 //! a refused caller's host never reaches the ledger.
 //!
+//! Every `/mcp` tool call also appends one `mcp.call` event (m1-remote-mcp task 3.4): the agent,
+//! the tool (a registry name, else `unknown`), the outcome and a static reason; never arguments
+//! or results. A ledger that cannot take it is logged and does not fail the call (the relay and
+//! credential events behind a tool already fail closed).
+//!
 //! An agent MCP `issue_short_lived_credential` call (m1-remote-mcp task 3.3) appends one
 //! `credential.issued` event before the credential becomes usable: the agent, the secret, the
 //! credential's id and its expiry. Never the credential. Nothing here holds the value, a header, a
@@ -30,6 +35,7 @@ const MAX_APPEND_RESPONSE: usize = 16 * 1024;
 
 /// The append endpoint, relative to the control-plane base URL.
 const EVENTS_PATH: &str = "internal/v1/audit/events";
+const MCP_CALLS_PATH: &str = "internal/v1/mcp/agent-calls";
 
 /// What happened to one relay attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,6 +231,66 @@ impl std::error::Error for AuditError {}
 /// Appends relay events. Returns the stored event's id (an attempt's id keys its outcome).
 pub trait AuditSink: Send + Sync {
     fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+
+    /// Append the `mcp.call` event for one `/mcp` tool call (m1-remote-mcp task 3.4).
+    fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+}
+
+/// How an agent MCP call ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpOutcome {
+    Ok,
+    Denied,
+    Error,
+}
+
+impl McpOutcome {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Denied => "denied",
+            Self::Error => "error",
+        }
+    }
+}
+
+/// Why a call was refused or failed: a closed set of static codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpReason {
+    ToolOff,
+    InvalidArguments,
+    ToolError,
+    SettingsUnavailable,
+}
+
+impl McpReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ToolOff => "tool_off",
+            Self::InvalidArguments => "invalid_arguments",
+            Self::ToolError => "tool_error",
+            Self::SettingsUnavailable => "settings_unavailable",
+        }
+    }
+}
+
+/// One agent MCP call: who, which tool (a registry name or `unknown`, never client text) and how
+/// it ended. No arguments, no result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct McpCallEvent {
+    pub agent_id: Uuid,
+    pub tool: &'static str,
+    pub outcome: McpOutcome,
+    pub reason: Option<McpReason>,
+}
+
+#[derive(Serialize)]
+struct WireMcpCall {
+    agent_id: Uuid,
+    tool: &'static str,
+    outcome: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
 }
 
 /// The wire body of `POST /internal/v1/audit/events` (`NewRelayEvent` in `openapi.json`).
@@ -314,9 +380,40 @@ impl HttpAudit {
     }
 }
 
+impl HttpAudit {
+    async fn post_mcp_call(&self, ev: McpCallEvent) -> Result<Uuid, AuditError> {
+        let body = serde_json::to_vec(&WireMcpCall {
+            agent_id: ev.agent_id,
+            tool: ev.tool,
+            outcome: ev.outcome.as_str(),
+            reason: ev.reason.map(McpReason::as_str),
+        })
+        .map_err(|_| AuditError::Rejected)?;
+        let (status, resp) = self
+            .control_plane
+            .internal_post_json(MCP_CALLS_PATH, body, MAX_APPEND_RESPONSE)
+            .await
+            .map_err(|e| match e {
+                Internal::Unavailable => AuditError::Unavailable,
+                _ => AuditError::Rejected,
+            })?;
+        match status {
+            201 => serde_json::from_slice::<Appended>(&resp)
+                .map(|a| a.id)
+                .map_err(|_| AuditError::Rejected),
+            500..=599 => Err(AuditError::Unavailable),
+            _ => Err(AuditError::Rejected),
+        }
+    }
+}
+
 impl AuditSink for HttpAudit {
     fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         Box::pin(self.post(ev))
+    }
+
+    fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        Box::pin(self.post_mcp_call(ev))
     }
 }
 
@@ -331,9 +428,16 @@ pub struct MemoryAudit {
     pub fail_outcomes_first: Mutex<usize>,
     /// Every append tried, failed ones included.
     pub tries: Mutex<usize>,
+    /// The `mcp.call` events appended.
+    pub mcp_calls: Mutex<Vec<McpCallEvent>>,
 }
 
 impl MemoryAudit {
+    /// The `mcp.call` events in order.
+    pub fn mcp_calls(&self) -> Vec<McpCallEvent> {
+        self.mcp_calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
     /// The stored events in order.
     pub fn events(&self) -> Vec<RelayEvent> {
         self.stored().into_iter().map(|(_, e)| e).collect()
@@ -353,6 +457,19 @@ impl MemoryAudit {
 }
 
 impl AuditSink for MemoryAudit {
+    fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        let result = if self.fail {
+            Err(AuditError::Unavailable)
+        } else {
+            self.mcp_calls
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(ev);
+            Ok(Uuid::now_v7())
+        };
+        Box::pin(async move { result })
+    }
+
     fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         *self.tries.lock().unwrap_or_else(|e| e.into_inner()) += 1;
         let result = {

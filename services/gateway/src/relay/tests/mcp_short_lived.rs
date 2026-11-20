@@ -429,6 +429,8 @@ async fn mcp_short_lived_issue_lands_in_the_ledger_without_value_or_credential()
         got,
         [
             ("credential.issued", "ok"),
+            // The MCP call itself (task 3.4): layer and tool only, no arguments.
+            ("mcp.call", "ok"),
             ("relay.attempt", "pending"),
             ("relay.outcome", "ok"),
         ]
@@ -440,6 +442,9 @@ async fn mcp_short_lived_issue_lands_in_the_ledger_without_value_or_credential()
     );
     assert!(attr(row, "expires_at").is_some());
     assert!(attr(row, "version").is_none(), "not version-bound");
+    let call = &rows[1];
+    assert_eq!(attr(call, "layer"), Some("agent"));
+    assert_eq!(attr(call, "tool"), Some("issue_short_lived_credential"));
     let walk = ls_audit::verify(rows.iter().map(ls_audit::Record::link), &[]);
     assert!(walk.ok(), "{walk:?}");
     let text = l.ledger_text().await;

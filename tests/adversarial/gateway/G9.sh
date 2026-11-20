@@ -91,9 +91,12 @@ def text(m):
     r = (m or {}).get("result") or {}
     return "".join(c.get("text", "") for c in r.get("content", []) if isinstance(c, dict))
 
-for i in ("keys", "relay", "explain"):
+for i in ("keys", "relay"):
     if failed(replies.get(i)):
         sys.exit("call %s did not succeed" % i)
+# explain_block is deferred: a typed not_available reply, not a JSON-RPC error.
+if "not_available" not in text(replies.get("explain")) or "error" in (replies.get("explain") or {}):
+    sys.exit("explain_block did not answer not_available")
 for i in ("off1", "off2", "off3", "off4", "off5", "off6", "off7"):
     m = replies.get(i)
     if not failed(m):
@@ -154,7 +157,7 @@ events = [e for e in json.load(open(path)) if e["kind"] == "mcp.call" and e["act
 registry = {"list_my_keys", "relay_http_request", "explain_block", "issue_short_lived_credential"}
 by = {}
 for e in events:
-    attrs = e.get("attrs") or {}
+    attrs = {k: (v.get("code") if isinstance(v, dict) else v) for k, v in (e.get("attrs") or {}).items()}
     extra = set(attrs) - {"layer", "tool", "reason"}
     if extra:
         sys.exit("mcp.call carries unexpected attributes: %s" % sorted(extra))
@@ -174,7 +177,9 @@ if by.get(("unknown", "denied"), 0) < 6:
     sys.exit("fewer than 6 denied mcp.call events for unknown tool names")
 if by.get(("relay_http_request", "denied"), 0) < 1:
     sys.exit("no denied mcp.call for the relay tool after it was turned off")
-for t in ("list_my_keys", "relay_http_request", "explain_block"):
+if by.get(("explain_block", "error"), 0) < 1:
+    sys.exit("no error mcp.call for the deferred explain_block")
+for t in ("list_my_keys", "relay_http_request"):
     if by.get((t, "ok"), 0) < 1:
         sys.exit("no ok mcp.call for %s" % t)
 PY

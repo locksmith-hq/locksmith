@@ -33,8 +33,8 @@
 - [x] 5.3 Verify: `npm test --workspace apps/web --workspace apps/desktop && just apps-build`.
 
 ## 6. Adversarial [sonnet]
-- [ ] 6.1 Add adversarial cases to `tests/`: a tool-list scan for value-like fields on both servers, a sentinel secret that must not appear in any MCP result, log or audit row, and an off-tool call by name.
-- [ ] 6.2 Verify: `just adversarial-gate`.
+- [x] 6.1 Add adversarial cases to `tests/`: a tool-list scan for value-like fields on both servers, a sentinel secret that must not appear in any MCP result, log or audit row, and an off-tool call by name.
+- [x] 6.2 Verify: `just adversarial-gate`.
 
 ## 7. Local verification [sonnet]
 - [ ] 7.1 `just up`, the MCP end-to-end smoke test, `just apps-build`, then `just ci`.

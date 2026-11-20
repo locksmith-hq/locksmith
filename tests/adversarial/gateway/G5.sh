@@ -245,7 +245,8 @@ def opid(method, tmpl):
 
 
 real = {"org_id": A["org"], "project_id": A["project"], "environment_id": A["environment"],
-        "secret_id": A["secret"], "agent_id": A["agent"], "grant_id": A["grant"], "version": 1}
+        "secret_id": A["secret"], "agent_id": A["agent"], "grant_id": A["grant"], "version": 1,
+        "layer": "agent", "tool": "explain_block", "client_row_id": "00000000-0000-7000-8000-000000000001"}
 seq = [0]
 
 
@@ -257,6 +258,8 @@ def name(prefix):
 def valid_body(method, tmpl):
     if method == "PATCH":
         return {"description": "g5 patched"}
+    if method == "PUT" and tmpl == "/v1/mcp/tools/{layer}/{tool}":
+        return {"enabled": True}
     if method != "POST":
         return None
     if tmpl == "/v1/orgs":
@@ -288,8 +291,12 @@ for m, t in [("GET", "/healthz"), ("GET", "/readyz"), ("GET", "/.well-known/jwks
              ("GET", "/v1/orgs/{org_id}"), ("GET", "/v1/projects"), ("GET", P),
              ("GET", P + "/environments"), ("GET", E), ("GET", E + "/secrets"), ("GET", S),
              ("GET", S + "/versions"), ("GET", "/v1/agents"), ("GET", AG), ("GET", AG + "/grants"),
-             ("GET", "/v1/audit/status")]:
+             ("GET", "/v1/audit/status"), ("GET", "/v1/mcp/tools"), ("GET", "/v1/mcp/clients")]:
     valid(m, t)
+valid("PUT", "/v1/mcp/tools/{layer}/{tool}", body=valid_body("PUT", "/v1/mcp/tools/{layer}/{tool}"))
+# No client row exists in the fresh org, so revoke answers 404 (the real revoke is in G10 and the e2e).
+call(api, "valid", opid("POST", "/v1/mcp/clients/{client_row_id}/revoke"), "unknown", "POST",
+     fill("/v1/mcp/clients/{client_row_id}/revoke", real), headers=dev(A["org"]), expect="404")
 call(api, "valid", opid("GET", "/v1/audit/events"), "page", "GET", "/v1/audit/events?limit=5",
      headers=dev(A["org"]))
 valid("POST", "/v1/orgs", body=valid_body("POST", "/v1/orgs"), hdr=False)
@@ -392,6 +399,12 @@ for method, tmpl, o in ops:
             call(api, "auth", oid, label, method, fill(tmpl, real), body=vb, headers=h, expect="401")
         # Cross-org: org B (and an unknown org) with org A's ids.
         for label, org in [("org-b", B["org"]), ("unknown-org", str(uuid.uuid4()))]:
+            if tmpl == "/v1/mcp/tools/{layer}/{tool}":
+                # Names inside the caller's own org, not another org's ids: org B changes only its
+                # own switch (200), an unknown org is refused.
+                call(api, "cross-org", oid, label, method, fill(tmpl, real), body=vb, headers=dev(org),
+                     expect="2xx" if label == "org-b" else "4xx")
+                continue
             if pp:
                 call(api, "cross-org", oid, label, method, fill(tmpl, real), body=vb, headers=dev(org),
                      expect="404")

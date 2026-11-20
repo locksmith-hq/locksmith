@@ -91,9 +91,16 @@ for line in open(sys.argv[1]):
 def failed(m):
     return m is None or "error" in m or bool((m.get("result") or {}).get("isError"))
 
-for i in ("projects", "names", "activity", "agents", "grants", "explain"):
+def text(m):
+    r = (m or {}).get("result") or {}
+    return "".join(c.get("text", "") for c in r.get("content", []) if isinstance(c, dict))
+
+for i in ("projects", "names", "activity", "agents", "grants"):
     if failed(replies.get(i)):
         sys.exit("call %s did not succeed" % i)
+# explain_block is deferred: a typed not_available reply, not a JSON-RPC error.
+if "not_available" not in text(replies.get("explain")) or "error" in (replies.get("explain") or {}):
+    sys.exit("explain_block did not answer not_available")
 for i in ("off1", "off2", "off3", "off4", "off5", "off6", "off7"):
     m = replies.get(i)
     if not failed(m):
@@ -119,7 +126,7 @@ by = {}
 for e in new:
     if e["kind"] != "mcp.call":
         continue
-    attrs = e.get("attrs") or {}
+    attrs = {k: (v.get("code") if isinstance(v, dict) else v) for k, v in (e.get("attrs") or {}).items()}
     extra = set(attrs) - {"layer", "tool", "reason"}
     if extra:
         sys.exit("mcp.call carries unexpected attributes: %s" % sorted(extra))
@@ -130,7 +137,9 @@ for e in new:
         sys.exit("mcp.call names %r (a registry name or unknown only)" % tool)
     by[(tool, e["outcome"])] = by.get((tool, e["outcome"]), 0) + 1
 open(out, "w").write("".join("%s %s %d\n" % (t, o, n) for (t, o), n in sorted(by.items())))
-for t in ("list_projects", "list_secret_names", "read_activity", "list_agents", "list_grants", "explain_block"):
+if by.get(("explain_block", "error"), 0) < 1:
+    sys.exit("no error mcp.call for the deferred explain_block")
+for t in ("list_projects", "list_secret_names", "read_activity", "list_agents", "list_grants"):
     if by.get((t, "ok"), 0) < 1:
         sys.exit("no ok mcp.call for %s" % t)
 if by.get(("revoke_grant", "denied"), 0) < 1 or by.get(("pause_agents", "denied"), 0) < 2:

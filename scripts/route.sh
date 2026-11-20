@@ -71,6 +71,12 @@ replied_just_before() { # <issue> <comment-id> <created_at>; comments from GitHu
         and (($now - (.created_at|fromdateiso8601)) as $d | ($d > 0 or ($d == 0 and .id < $id)) and $d < 60))' >/dev/null 2>&1
 }
 
+# "raiser" means the role named by "<!-- raised-by: <role> -->" in the issue body, else the lead.
+resolve() { # <role or "raiser"> <event.json>
+  [ "$1" = raiser ] || { printf '%s' "$1"; return; }
+  jq -r '(.issue.body // "") | ((capture("<!-- raised-by: (?<r>[a-z]+) -->")?|.r) // "lead")' "$2"
+}
+
 event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   local ev=$1 n labels l to who body
   case "${GITHUB_EVENT_NAME:?}" in
@@ -87,18 +93,24 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
           else to=$(cfgq --arg l "$l" '. as $c|$c.channels[$l].to // empty|select($c.roles[.]|has("trigger"))'); [ -n "$to" ] && printf '%s\t%s #%s opened\n' "$to" "$l" "$n"; fi ;;
         closed)
           for l in $labels; do
-            to=$(cfgq --arg l "$l" '.channels[$l].on_close // empty'); [ -n "$to" ] && printf '%s\t%s #%s closed\n' "$to" "$l" "$n"
+            to=$(resolve "$(cfgq --arg l "$l" '.channels[$l].on_close // empty')" "$ev"); [ -n "$to" ] && printf '%s\t%s #%s closed\n' "$to" "$l" "$n"
           done ;;
       esac ;;
     issue_comment)
-      [ "$(jq -r '.issue.pull_request != null' "$ev")" = true ] && return 0
       n=$(jq -r .issue.number "$ev"); labels=$(jq -r '.issue.labels[].name' "$ev")
       who=$(jq -r .comment.user.login "$ev"); body=$(jq -r .comment.body "$ev")
       id=$(jq -r '.comment.id // 0' "$ev"); at=$(jq -r '.comment.created_at // ""' "$ev")
+      owner=false; cfgq '.roles.owner.logins[]' | grep -qxF "$who" && ! grep -qE "$marker" <<<"$body" && owner=true
+      # Owner tags (@locksmith-lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
+      tags=$([ "$owner" = true ] && grep -oE '@locksmith-[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done)
+      if [ -n "$tags" ]; then
+        for to in $tags; do printf '%s\towner tagged you on #%s: %s\n' "$to" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
+        return 0
+      fi
+      [ "$(jq -r '.issue.pull_request != null' "$ev")" = true ] && return 0
       for l in $labels; do
-        to=$(cfgq --arg l "$l" '.channels[$l].on_reply // empty')
-        if [ -n "$to" ] && cfgq '.roles.owner.logins[]' | grep -qxF "$who" && ! grep -qE "$marker" <<<"$body" &&
-          ! replied_just_before "$n" "$id" "$at"; then
+        to=$(resolve "$(cfgq --arg l "$l" '.channels[$l].on_reply // empty')" "$ev")
+        if [ -n "$to" ] && [ "$owner" = true ] && ! replied_just_before "$n" "$id" "$at"; then
           printf '%s\towner replied on %s #%s\n' "$to" "$l" "$n"
         fi
         [ "$l" = debate ] && debate_input "$n" | decide | awk -v n="$n" '$1=="wake"{r=$2; sub(/^wake [a-z]+ /,""); print r "\tdebate #" n ": " $0}'
@@ -167,6 +179,16 @@ no role marker"
   COMMENTS_JSON=$d/c.json ev 'lead\towner replied on needs-owner #7' issue_comment "${r7}2026-11-19T16:45:00Z\"}}"
   COMMENTS_JSON=$d/c.json ev 'lead\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"id":1,"user":{"login":"tomer555"},"body":"C","created_at":"2026-11-19T16:43:10Z"}}'
   ev '' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}],"pull_request":{}},"comment":{"user":{"login":"tomer555"},"body":"ok"}}'
+  # owner tags: on issues and PRs, any label; several roles; the tag replaces the reply rule; agents and others cannot tag
+  ev 'pm\towner tagged you on #7: u\nresearch\towner tagged you on #7: u' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-pm and @locksmith-research: check this"}}'
+  ev 'worker\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-worker rebase please"}}'
+  ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\n@locksmith-lead"}}'
+  ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"stranger"},"body":"@locksmith-lead"}}'
+  ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"@locksmith-nobody"}}'
+  # no tag: the role that raised the issue gets the reply, else the lead
+  ev 'pm\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"body":"x\n<!-- raised-by: pm -->","labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"yes"}}'
+  ev 'research\tneeds-research #6 opened' issues '{"action":"labeled","label":{"name":"needs-research"},"issue":{"number":6,"labels":[{"name":"needs-research"}]}}'
+  ev 'pm\tneeds-research #6 closed' issues '{"action":"closed","issue":{"number":6,"body":"<!-- raised-by: pm -->","labels":[{"name":"needs-research"}]}}'
   ev 'worker\tCI failed on main' workflow_run '{"workflow_run":{"conclusion":"failure","head_branch":"main","event":"push","pull_requests":[]}}'
   ev '' workflow_run '{"workflow_run":{"conclusion":"failure","head_branch":"feature","event":"pull_request","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"

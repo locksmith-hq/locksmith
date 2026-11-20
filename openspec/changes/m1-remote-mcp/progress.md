@@ -113,3 +113,8 @@
 - Task: m1-remote-mcp 6.1, 6.2 - done. Ran G9/G10 against a live stack (`just up`, `just api`) and fixed wrong assumptions in the cases: `explain_block` is the typed `not_available` reply (audit outcome `error`), audit attrs are `{"code": x}` wrappers, G10 lacked `text()`. G5's sweep learned the new `/v1/mcp/*` routes (tool switches are per-org, so cross-org is "own switch 2xx, unknown org 4xx"; revoke of an unknown client row is 404). No leak assertion was loosened.
 - Verified: `bash tests/adversarial/run.sh gateway G9 G10 G5` pass; `just adversarial-gate` -> PASS (9 passed, 1 residual, leak scan clean); Sonnet evaluator PASS. `just ci`: fmt, lint, test-web, tree-check, task-guard, agent-docs green; test-rust 853/854 - `ls-ipc::transport foreign_peer_is_closed_without_handling_a_request` fails only on this VM (spawning as uid 65534 from /home/user fails, unrelated to this change; friction).
 - Notes for next session: remaining 2.2 (explain_block deferral, lead to accept), 4.2 gateway half + issuer revoke (needs T8 agent revoke), 4.3, 7.x.
+
+## 2026-11-20 15:52 worker
+- Task: m1-remote-mcp - blocked (no implementable task: 2.2 explain_block deferral, 4.2 gateway half needs T8, 4.3 names a nonexistent test `mcp_e2e`; 7.x wait on those)
+- Verified: main CI green; no code changed
+- Notes for next session: rescue issue #519 asks the lead to accept the deferrals and re-word 4.3 (`just mcp-e2e` passed 16/16 in 4.1). After that, run 7.1 and archive.

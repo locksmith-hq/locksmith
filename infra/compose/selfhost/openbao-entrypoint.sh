@@ -54,6 +54,13 @@ fi
 root=$(field root_token)
 bao_root() { BAO_TOKEN="$root" bao "$@"; }
 
+# Right after an unseal the raft node is still electing itself leader; wait until it serves requests.
+n=0
+until bao_root secrets list >/dev/null 2>&1; do
+  n=$((n + 1)); [ "$n" -lt 60 ] || { echo "openbao: no active node after unseal" >&2; exit 1; }
+  sleep 1
+done
+
 bao_root secrets list -format=json | grep -q '"transit/"' || bao_root secrets enable transit >/dev/null
 bao_root read transit/keys/gateway >/dev/null 2>&1 || bao_root write -f transit/keys/gateway type=aes256-gcm96 >/dev/null
 bao_root read transit/keys/audit-checkpoint >/dev/null 2>&1 \
@@ -69,11 +76,14 @@ ensure_token() { # policy-name token-id (the id is a secret: never printed)
   if BAO_TOKEN="$id" bao token lookup >/dev/null 2>&1; then
     echo "token $name: exists"
   else
-    if ! err=$(bao_root token create -id="$id" -policy="$name" -no-default-policy -orphan \
+    if err=$(bao_root token create -id="$id" -policy="$name" -no-default-policy -orphan \
       -display-name="$name" -ttl=87600h 2>&1 >/dev/null); then
+      echo "token $name: created"
+    elif printf '%s' "$err" | grep -q 'duplicate ID'; then
+      echo "token $name: exists"
+    else
       echo "token $name: create failed: $(printf '%s' "$err" | sed "s/$id/<token>/g")" >&2; exit 1
     fi
-    echo "token $name: created"
   fi
 }
 ensure_token control-plane "${OPENBAO_CONTROL_PLANE_TOKEN:-}"

@@ -29,7 +29,7 @@ env_file="$dir/.env"
 fails=0
 ok()  { echo "ok   $*"; }
 bad() { echo "FAIL $*"; fails=$((fails + 1)); }
-dc() { docker compose --env-file "$env_file" -f "$SH/compose.yaml" -f "$SH/compose.smoke.yaml" --profile smoke "$@"; }
+dc() { docker compose --env-file "$env_file" -f "$SH/compose.yaml" -f "$SH/compose.smoke.yaml" --profile smoke --profile bundled-keys "$@"; }
 cleanup() { dc down -v --remove-orphans >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
 get() { { grep -E "^$1=" "$env_file" || true; } | tail -n1 | cut -d= -f2-; }

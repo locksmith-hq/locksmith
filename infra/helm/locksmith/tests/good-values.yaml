@@ -1,0 +1,11 @@
+images:
+  controlPlane: {repository: ghcr.io/locksmith-hq/locksmith-control-plane, digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+  gateway: {repository: ghcr.io/locksmith-hq/locksmith-gateway, tag: v0.1.0}
+secrets:
+  database: {existingSecret: locksmith-db}
+  internal: {existingSecret: locksmith-internal}
+  keyProvider: {existingSecret: locksmith-keys}
+keyProvider: {address: "https://openbao.example.internal:8200"}
+oidc: {issuer: "https://idp.example.com/realms/ls", audience: locksmith, jwksUrl: "https://idp.example.com/jwks"}
+ingress: {enabled: true, host: locksmith.example.com, tls: {enabled: true, secretName: locksmith-tls}}
+migration: {enabled: true, args: [migrate]}

@@ -1,0 +1,101 @@
+# Locksmith chart values. No credential is ever a value here: every secret is read from a Secret you
+# create beforehand and name below (keys are listed next to each name). Postgres 18 and the key
+# provider (OpenBao transit) are not bundled.
+
+# Optional prefix for object names (default: release name).
+nameOverride: ""
+
+images:
+  controlPlane:
+    repository: ghcr.io/locksmith-hq/locksmith-control-plane
+    # Pin by digest for production (sha256:<64 hex>); when empty the tag is used.
+    digest: ""
+    tag: ""            # empty means the chart appVersion
+  gateway:
+    repository: ghcr.io/locksmith-hq/locksmith-gateway
+    digest: ""
+    tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []      # names of existing image pull Secrets
+
+# Names of existing Secrets (required). Required keys in each:
+secrets:
+  # DATABASE_URL (app role, used by both services) and DATABASE_OWNER_URL (migrations, control plane).
+  database:
+    existingSecret: ""
+  # LOCKSMITH_GATEWAY_SERVICE_TOKEN (both services) and LOCKSMITH_AGENT_SIGNING_KEY (control plane).
+  internal:
+    existingSecret: ""
+  # OPENBAO_CONTROL_PLANE_TOKEN, OPENBAO_AUDIT_CHECKPOINT_TOKEN (control plane), OPENBAO_GATEWAY_TOKEN (gateway).
+  keyProvider:
+    existingSecret: ""
+
+keyProvider:
+  # Address of your OpenBao (not a secret).
+  address: ""
+
+# Human sign-in. Issuer, audience and JWKS URL are public values; all empty means sign-in is off.
+oidc:
+  issuer: ""
+  audience: ""
+  jwksUrl: ""
+
+otlpEndpoint: ""
+logLevel: info
+
+controlPlane:
+  replicas: 1
+  port: 8080
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  nodeSelector: {}
+  tolerations: []
+
+gateway:
+  replicas: 1
+  port: 8090
+  # Contents of the gateway bindings file: org id, origins and secret ids only, never values.
+  bindingsToml: |
+    org_id = "00000000-0000-7000-8000-000000000000"
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  nodeSelector: {}
+  tolerations: []
+
+service:
+  type: ClusterIP
+
+# Helm hook Job that runs before install and upgrade. The control plane also applies its migrations
+# itself on start (owner pool, /readyz is 503 until done), so this is off until the image gains a
+# migrate-only mode; set `args` to that mode's arguments when enabling it.
+migration:
+  enabled: false
+  args: []
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: ""
+  tls:
+    enabled: false
+    secretName: ""
+  # Paths sent to the gateway; everything else goes to the control plane.
+  gatewayPathPrefix: /relay
+
+networkPolicy:
+  enabled: true
+  # Egress: DNS always; Postgres, key provider, OIDC and upstreams are allowed to any address on
+  # these ports unless you narrow `egressTo` (a list of NetworkPolicyPeer objects).
+  egressPorts: [5432, 8200, 443, 80]
+  egressTo: []
+  # Namespaces/pods allowed to reach the services (NetworkPolicyPeer list). Empty means any.
+  ingressFrom: []
+
+podSecurity:
+  runAsUser: 10001
+  runAsGroup: 10001

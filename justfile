@@ -319,3 +319,7 @@ selfhost-down *args:
 selfhost-smoke:
     bash scripts/selfhost-bootstrap.test.sh
     bash scripts/selfhost-smoke.sh
+
+# Helm chart (P2): values schema tests, helm lint, template + kubeconform, then a kind install smoke. Stages whose tools are missing are skipped and the run says INCOMPLETE, never PASS.
+helm-test:
+    bash scripts/helm-test.sh

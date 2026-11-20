@@ -1,0 +1,84 @@
+{{- $_ := include "locksmith.requireSecrets" . -}}
+{{- $n := include "locksmith.name" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $n }}-control-plane
+  labels:
+    {{- include "locksmith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+spec:
+  replicas: {{ .Values.controlPlane.replicas }}
+  selector:
+    matchLabels:
+      {{- include "locksmith.selector" (dict "root" . "component" "control-plane") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "locksmith.selector" (dict "root" . "component" "control-plane") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "locksmith.pullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "locksmith.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.controlPlane.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controlPlane.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: control-plane
+          image: {{ include "locksmith.image" (dict "img" .Values.images.controlPlane "root" .) | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- include "locksmith.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: {{ .Values.controlPlane.port }}}
+          env:
+            - {name: LOCKSMITH_BIND, value: {{ printf "0.0.0.0:%v" .Values.controlPlane.port | quote }}}
+            - {name: OPENBAO_ADDR, value: {{ .Values.keyProvider.address | quote }}}
+            - {name: LOCKSMITH_OIDC_ISSUER, value: {{ .Values.oidc.issuer | quote }}}
+            - {name: LOCKSMITH_OIDC_AUDIENCE, value: {{ .Values.oidc.audience | quote }}}
+            - {name: LOCKSMITH_OIDC_JWKS_URL, value: {{ .Values.oidc.jwksUrl | quote }}}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ .Values.otlpEndpoint | quote }}}
+            - {name: RUST_LOG, value: {{ .Values.logLevel | quote }}}
+            {{- include "locksmith.secretEnv" (dict "name" "DATABASE_URL" "secret" .Values.secrets.database.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "DATABASE_OWNER_URL" "secret" .Values.secrets.database.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "LOCKSMITH_GATEWAY_SERVICE_TOKEN" "secret" .Values.secrets.internal.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "LOCKSMITH_AGENT_SIGNING_KEY" "secret" .Values.secrets.internal.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "OPENBAO_CONTROL_PLANE_TOKEN" "secret" .Values.secrets.keyProvider.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "OPENBAO_AUDIT_CHECKPOINT_TOKEN" "secret" .Values.secrets.keyProvider.existingSecret) | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 3
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $n }}-control-plane
+  labels:
+    {{- include "locksmith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "locksmith.selector" (dict "root" . "component" "control-plane") | nindent 4 }}
+  ports:
+    - {name: http, port: {{ .Values.controlPlane.port }}, targetPort: http}

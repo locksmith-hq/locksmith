@@ -37,6 +37,13 @@ A session id is not enough: a revoked client could send a fresh `initialize` and
 - The `Mcp-Session-Id` is only a transport convenience and is never trusted for authorization.
 Task 4.2's test revokes a client, then re-initializes and calls a tool, and asserts `401` each time. The research note (task 1.1) confirms how `client_id` reaches the token for real clients.
 
+## Default tool tables (lead decision, [#508](https://github.com/locksmith-hq/locksmith/issues/508))
+Three sources disagreed: hub design section 6 ("Agent MCP" column), the seven tools of `locksmith-mcp`, and task 3.2. Decision:
+- Section 6 is the source of truth for names and defaults. The seven `locksmith-mcp` tools are its **Local MCP** column and stay in that crate; they are not Agent MCP tools.
+- `ls-mcp-server` registers only the tools this change builds, because the spec says an on tool is listed and callable, so a listed tool must have a handler. Agent: `list_my_keys`, `relay_http_request`, `explain_block` on (task 3.2); `issue_short_lived_credential` off (task 3.3). Hub: `list_projects`, `list_secret_names`, `read_activity`, `list_agents`, `list_grants`, `explain_block` on (task 2.2); `revoke_grant`, `pause_agents` off (task 2.4).
+- The rest of section 6 joins the registry with the change that builds it, with section 6's default: Agent `start_session` (on, `t8-sessions-and-revoke`) and `request_access` (on, `t4-access-proposals`); Hub `list_findings` and `list_waiting_requests` (on) and `approve_or_deny_request` and `rotate_secret` (off), with `t4-access-proposals` and the rotation work.
+- No-value test: a property name is value-like when its last word, after splitting on `_ - .`, spaces and camelCase, is value, secret, password, passphrase, token, credential, key, pem or jwt (or a plural), so `apiKey`, `client-secret` and `accessToken` fail while `secret_id` and `token_expires_at` pass. Open maps (`patternProperties`, `additionalProperties` other than `false`) fail, since their field names are unknown. Every tool must declare an output schema. The one exception is the top-level `credential` output field of `issue_short_lived_credential` (H1-2).
+
 ## Open questions
 - Remote MCP authorization: client registration (dynamic vs pre-registered), token audience, and how each agent tool stores a token. Unverified; resolved by the research note in task 1.1. If it needs an owner decision, the lead raises it before group 4.
 - Which Hub mutating tools ship now: revoke grant and pause agents only if T8 has not landed yet are stubbed behind the switch; otherwise they call the T8 API.

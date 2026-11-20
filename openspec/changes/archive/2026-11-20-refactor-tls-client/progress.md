@@ -12,3 +12,7 @@
 ## 2026-11-20 · worker · 3.2 done, change complete
 - Task 3.2 verified: `just up`, `just api`, `just adversarial-gate` (PASS), `just apps-build` (built), `just ci` (exit 0).
 - Archived the change in this PR.
+## 2026-11-20 worker
+- Task: 1.1,1.2,2.1,2.2,2.3,3.1 - done
+- Verified: `just ci` + `cargo deny check` -> green; evaluator PASS
+- Notes for next session: 3.2 left (just up/api, adversarial-gate, apps-build), then archive. PR #507.

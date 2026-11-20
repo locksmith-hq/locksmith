@@ -24,6 +24,7 @@ use crate::auth::ServiceToken;
 use crate::auth::human::HumanAuth;
 use crate::db::Database;
 use crate::kms::DekWrapper;
+use crate::mcp_endpoint::{self, McpEndpoint};
 use crate::problem::ApiError;
 use crate::readiness::Readiness;
 
@@ -89,6 +90,7 @@ pub struct AppState {
     service_token: Option<Arc<ServiceToken>>,
     agent_signer: Option<Arc<AgentTokenSigner>>,
     human_auth: Option<Arc<HumanAuth>>,
+    mcp: Option<Arc<McpEndpoint>>,
 }
 
 impl AppState {
@@ -102,6 +104,7 @@ impl AppState {
             service_token: None,
             agent_signer: None,
             human_auth: None,
+            mcp: None,
         }
     }
 
@@ -126,6 +129,17 @@ impl AppState {
     /// The human token verifier, if an issuer is configured.
     pub fn human_auth(&self) -> Option<&HumanAuth> {
         self.human_auth.as_deref()
+    }
+
+    /// Serve the hub `/mcp` route with `endpoint` (M1 task 2.1). Without one `/mcp` answers `401`.
+    pub fn with_mcp(mut self, endpoint: McpEndpoint) -> Self {
+        self.mcp = Some(Arc::new(endpoint));
+        self
+    }
+
+    /// The hub MCP endpoint, if one is configured.
+    pub fn mcp(&self) -> Option<&Arc<McpEndpoint>> {
+        self.mcp.as_ref()
     }
 
     /// Accept `token` on the `/internal/v1` routes. Without one they answer `401` (fail closed).
@@ -202,6 +216,7 @@ fn desktop_cors() -> CorsLayer {
 /// Apply the standard layer stack and state to a router.
 pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
     let id_header = HeaderName::from_static(REQUEST_ID_HEADER);
+    let router = router.merge(mcp_endpoint::router(state.mcp()));
     router.with_state(state).layer(
         ServiceBuilder::new()
             .layer(SetRequestIdLayer::new(id_header.clone(), MakeRequestUuid))

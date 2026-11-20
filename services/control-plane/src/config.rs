@@ -36,6 +36,10 @@ pub const ENV_OIDC_AUDIENCE: &str = "LOCKSMITH_OIDC_AUDIENCE";
 /// T1: where the issuer publishes its JWKS (an `http` or `https` URL).
 pub const ENV_OIDC_JWKS_URL: &str = "LOCKSMITH_OIDC_JWKS_URL";
 
+/// M1 2.1: the canonical public URL of the hub `/mcp` route (RFC 8707 resource). MCP tokens must
+/// carry it as `aud`. Needs the `LOCKSMITH_OIDC_*` issuer settings; unset leaves `/mcp` answering `401`.
+pub const ENV_MCP_RESOURCE_URL: &str = "LOCKSMITH_MCP_RESOURCE_URL";
+
 /// Shortest accepted gateway service token, in bytes (a 256-bit random token in hex or base64
 /// is longer). Shorter values are rejected rather than accepted as a guessable credential.
 pub const MIN_SERVICE_TOKEN_BYTES: usize = 32;
@@ -105,6 +109,8 @@ pub struct Config {
     /// The OIDC issuer human tokens are verified against (T1). `None` when
     /// `LOCKSMITH_OIDC_ISSUER` is unset: every bearer token is then refused. Public values only.
     pub human_auth: Option<HumanAuthConfig>,
+    /// The canonical hub MCP resource URL (M1 2.1). `None` when unset. Public value only.
+    pub mcp_resource_url: Option<String>,
 }
 
 /// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
@@ -220,6 +226,16 @@ impl Config {
         };
 
         let human_auth = human_auth_from(&get)?;
+        let mcp_resource_url = match get(ENV_MCP_RESOURCE_URL)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+        {
+            None => None,
+            // The issuer settings verify the token, so the resource URL is useless without them.
+            Some(_) if human_auth.is_none() => return Err(ConfigError::Missing(ENV_OIDC_ISSUER)),
+            Some(v) if !is_http_url(&v) => return Err(ConfigError::Invalid(ENV_MCP_RESOURCE_URL)),
+            Some(v) => Some(v),
+        };
 
         Ok(Self {
             database_url,
@@ -232,6 +248,7 @@ impl Config {
             gateway_service_token,
             agent_signing_key,
             human_auth,
+            mcp_resource_url,
         })
     }
 }
@@ -310,6 +327,29 @@ mod tests {
     fn oidc_is_off_unless_an_issuer_is_set() {
         let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
         assert!(c.human_auth.is_none());
+    }
+
+    #[test]
+    fn mcp_resource_url_needs_the_oidc_issuer_and_a_url() {
+        let url = (ENV_MCP_RESOURCE_URL, "https://hub.example/mcp");
+        let err = Config::from_lookup(lookup(&with(&[url]))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OIDC_ISSUER));
+        let oidc = [
+            (ENV_OIDC_ISSUER, "https://idp.example/realms/x"),
+            (ENV_OIDC_AUDIENCE, "api"),
+            (ENV_OIDC_JWKS_URL, "http://localhost:8081/certs"),
+        ];
+        let mut bad = oidc.to_vec();
+        bad.push((ENV_MCP_RESOURCE_URL, "not a url"));
+        let err = Config::from_lookup(lookup(&with(&bad))).err().unwrap();
+        assert_eq!(err, ConfigError::Invalid(ENV_MCP_RESOURCE_URL));
+        let mut ok = oidc.to_vec();
+        ok.push(url);
+        let c = Config::from_lookup(lookup(&with(&ok))).ok().unwrap();
+        assert_eq!(
+            c.mcp_resource_url.as_deref(),
+            Some("https://hub.example/mcp")
+        );
     }
 
     #[test]

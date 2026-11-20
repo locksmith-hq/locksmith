@@ -161,6 +161,18 @@ async fn main() -> ExitCode {
             config::ENV_OIDC_ISSUER
         ),
     }
+    if let (Some(human), Some(resource)) = (&config.human_auth, &config.mcp_resource_url) {
+        match ls_control_plane::mcp_endpoint::McpEndpoint::new(human, resource) {
+            Ok(endpoint) => {
+                tracing::info!("hub MCP endpoint configured at /mcp");
+                state = state.with_mcp(endpoint);
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "invalid hub MCP configuration ({})", config::ENV_MCP_RESOURCE_URL);
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     let router = app::build(state);
 
     let listener = match tokio::net::TcpListener::bind(config.bind).await {

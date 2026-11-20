@@ -2,8 +2,8 @@
 # First command of every scheduled agent run (see .claude/skills/run-start).
 #   scripts/agent-start.sh <kind> [persona]
 # Starts run metadata, runs preflight, switches to the persona's GitHub App when this environment holds its key
-# (persona is the argument, else AGENT_PERSONA), prints active lessons. Exit 1 on a preflight or identity FAIL.
-# Shortcut: an environment without AGENT_APP_KEY_<PERSONA> still runs as the owner; drop that once every key is set.
+# (persona is the argument, else AGENT_PERSONA; a shared environment needs the argument), prints active lessons. Exit 1 on a preflight or identity FAIL.
+# Shortcut: an environment with no App key at all still runs as the owner; drop that once every key is set.
 set -uo pipefail
 kind="${1:?usage: agent-start.sh <kind> [persona]}"
 # Fresh origin/main first: lessons and gates read it (a stale view cost a worker 120 s, 2026-11-17).
@@ -30,6 +30,9 @@ echo "== identity"
 if [ -n "$persona" ] && [ -n "${!var:-}" ]; then
   # A key is set, so a run must never fall back to the owner: setup undoes itself and prints FAIL on any error.
   bash scripts/agent-identity.sh setup "$persona" || pf=1
+elif compgen -v | grep -q '^AGENT_APP_KEY_'; then
+  # Keys here but none for this persona (often a routine that forgot to pass it): never fall back to the owner.
+  echo "FAIL identity: this environment holds App keys but $([ -n "$persona" ] && echo "no $var" || echo "no persona was passed"); run agent-start.sh $kind <persona>"; pf=1
 elif [ "$kind" = research ] || [ "$persona" = research ]; then
   echo "FAIL identity: research has open internet and never runs as the owner; set $var"; pf=1
 else echo "WARN   identity: no ${persona:+$var }key in this environment; acting as the owner account"; fi

@@ -97,7 +97,7 @@ The repo is public, so standard runners are free. `ci`, `ci-platforms` and `adve
 The design follows Anthropic's long-running agent harness (https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents):
 - Small steps per run; since 2026-11-17 several workers run at once, each on a different change (`scripts/change-status.sh`, per-change locks in `scripts/run-lock.sh`). Each change has a tracking issue kept current by the `change-sync` workflow.
 - State lives in git and the `agent-log` issue, not in model memory.
-- Each run starts by checking CI and running a baseline `just ci`.
+- Each run starts by checking CI; nobody runs `just ci` locally (`just quick` instead).
 - A task is ticked only after its verification command passes.
 - An attempt cap stops runaway runs, and a stuck task becomes a `needs-rescue` issue for the lead; only the lead raises `needs-owner`.
 - `scripts/check-task-edits.sh` allows agents only to tick tasks, never to rewrite them, because the article found models edit Markdown task lists.
@@ -157,7 +157,7 @@ Cloud runs never see the app keys; they see the one-hour installation token, whi
 
 ## Escalation ladder
 
-1. **Worker attempt 1.** The task runs on its tagged tier, then the worker runs the verification command and `just ci`.
+1. **Worker attempt 1.** The task runs on its tagged tier, then the worker runs the verification command and `just quick`.
 2. **Independent evaluator.** A separate subagent (Sonnet, or Opus for `[opus]` tasks) checks the diff against the task, the spec and the security rules, and answers PASS or FAIL. This follows the evaluator-optimizer pattern.
 3. **Worker attempt 2,** one tier up (Haiku, then Sonnet, then Opus), given the evaluator's reasons.
 4. **`needs-rescue` issue,** the only way a worker asks for help: `Rescue:` when stuck, `Decision:` for an owner matter. `wake-agents.yml` wakes the Opus lead at once; it fixes or decides in git and closes the issue, which wakes a worker to continue the parked change.

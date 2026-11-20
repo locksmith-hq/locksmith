@@ -52,3 +52,8 @@
 - Task: m1-remote-mcp 2.3 - done (hub `/mcp` reads the org's `mcp_tool_settings` on every list and call; an off tool is hidden and refused like an unknown one; `initialize` upserts `mcp_clients` keyed by token `client_id`/`azp` and person, never clearing `revoked_at`; tokens with no client id record no row)
 - Verified: `cargo nextest run -p ls-control-plane mcp` -> 21 passed; `just ci` -> exit 0; Sonnet evaluator PASS
 - Notes for next session: 2.2 is still unticked (explain_block is a typed not-available; lead to accept the deferral or add a handler). Next 2.4 (mutating tools) and 2.5 (audit). Revoked-client refusal is 4.2; `HumanIdentity` now carries `client_id`.
+
+## 2026-11-20 worker C
+- Task: m1-remote-mcp 2.4 - done (hub `revoke_grant` calls the console's delete-grant handler as the person, org-scoped, audited by that handler; `pause_agents` returns a typed `not_available` error until T8 lands; both stay off by default)
+- Verified: `cargo nextest run -p ls-control-plane mcp` -> 22 passed; `just ci` -> exit 0; Sonnet evaluator PASS
+- Notes for next session: 2.2 still unticked (explain_block deferral); next 2.5 (audit event per call, which should also replace the DEV_AUTH_ACTOR attribution on MCP revoke), then 2.6.

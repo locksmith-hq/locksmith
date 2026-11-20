@@ -64,11 +64,30 @@ struct GrantsArgs {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RevokeGrantArgs {
+    grant_id: Uuid,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PauseAgentsArgs {
+    // Read so the shape is checked, never stored or echoed.
+    #[allow(dead_code)]
+    agent_ids: Option<Vec<Uuid>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExplainArgs {
     // Read so the shape is checked, never stored or echoed.
     #[allow(dead_code)]
     reason: String,
 }
+
+/// The agent-pause endpoint belongs to change t8-sessions-and-revoke; until it lands the tool
+/// is a typed error (it is off by default, so only an org that switched it on sees this).
+const NOT_AVAILABLE_PAUSE_AGENTS: &str = "Pausing agents is not available yet; it arrives with \
+    the session and revoke change. Revoke the agent's grants instead.";
 
 /// Arguments must match the tool's input schema. The message names no value.
 fn parse<T: DeserializeOwned>(args: Option<JsonObject>) -> Result<T, McpError> {
@@ -140,6 +159,18 @@ pub async fn call(
         "list_grants" => {
             let a: GrantsArgs = parse(args)?;
             Ok(result(list_grants(state, principal, a).await))
+        }
+        "revoke_grant" => {
+            let a: RevokeGrantArgs = parse(args)?;
+            Ok(result(revoke_grant(state, principal, a).await))
+        }
+        "pause_agents" => {
+            let _a: PauseAgentsArgs = parse(args)?;
+            Ok(CallToolResult::structured_error(json!({"error": {
+                "code": "not_available",
+                "status": 501,
+                "message": NOT_AVAILABLE_PAUSE_AGENTS,
+            }})))
         }
         "explain_block" => {
             let _a: ExplainArgs = parse(args)?;
@@ -294,6 +325,34 @@ async fn list_grants(
         })
         .collect();
     Ok(page(items, p.next))
+}
+
+/// Revoke one grant as the person: the console's own delete handler (which appends the audit
+/// event), after looking up the grant's agent inside the person's org.
+async fn revoke_grant(
+    state: &AppState,
+    principal: &McpPrincipal,
+    a: RevokeGrantArgs,
+) -> Result<Value, ApiError> {
+    let org = org_of(state, principal).await?;
+    let grant_id = a.grant_id;
+    let agent_id = state
+        .db()
+        .with_org(org.org_id, move |c| {
+            Box::pin(async move {
+                let row = sql::query("SELECT agent_id FROM agent_grants WHERE id = $1")
+                    .bind(grant_id)
+                    .fetch_optional(&mut *c)
+                    .await?;
+                match row {
+                    Some(r) => Ok::<_, ApiError>(r.try_get::<Uuid, _>("agent_id")?),
+                    None => Err(ApiError::not_found()),
+                }
+            })
+        })
+        .await?;
+    agents::delete_grant(State(state.clone()), org, ApiPath((agent_id, grant_id))).await?;
+    Ok(json!({"grant_id": grant_id, "revoked_at": ts(OffsetDateTime::now_utc())}))
 }
 
 /// The org's hub tool switches (`mcp_tool_settings`): only the overrides of a tool's default.

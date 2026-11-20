@@ -265,7 +265,7 @@ impl ServerHandler for HubMcp {
             .registry
             .authorize(&request.name, &overrides)
             .map_err(|_| McpError::invalid_params("unknown tool", None))?;
-        // Tools that change state are built by task 2.4; until then they have no handler.
+        // Mutating tools (revoke_grant, pause_agents) are handled in `mcp_tools::call`, off by default.
         let result = mcp_tools::call(&self.state, &principal, def.name, request.arguments).await?;
         Ok(result.into())
     }

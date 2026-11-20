@@ -817,3 +817,60 @@ async fn mcp_initialize_records_the_client_and_never_unrevokes_it() {
     let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
     assert_eq!(rows["items"].as_array().unwrap().len(), 2, "{rows}");
 }
+
+#[tokio::test]
+async fn mcp_mutating_tools_work_only_when_switched_on_and_stay_in_the_callers_org() {
+    let (f, mut alice, mut bob, a, _b) = two_people().await;
+    for (who, org) in [
+        ("alice", personal_org(&f, "alice").await),
+        ("bob", personal_org(&f, "bob").await),
+    ] {
+        let _ = who;
+        for tool in ["revoke_grant", "pause_agents"] {
+            rest(
+                &f,
+                "PUT",
+                &format!("/v1/mcp/tools/hub/{tool}"),
+                org,
+                json!({"enabled": true}),
+            )
+            .await;
+        }
+    }
+    // Another org's grant is the same 404 the console gives, and it survives the attempt.
+    let (err, out) = bob.call("revoke_grant", json!({"grant_id": a.grant})).await;
+    assert!(err);
+    assert_eq!(out["error"]["code"], "not-found");
+    let (_, out) = alice
+        .call("list_grants", json!({"agent_id": a.agent}))
+        .await;
+    assert_eq!(out["items"].as_array().unwrap().len(), 1);
+
+    // The owner revokes it; the result matches the registered output schema.
+    let (err, out) = alice
+        .call("revoke_grant", json!({"grant_id": a.grant}))
+        .await;
+    assert!(!err, "{out}");
+    let tools = alice.list_tools().await;
+    let schema =
+        tools.iter().find(|t| t["name"] == "revoke_grant").unwrap()["outputSchema"].clone();
+    conforms(&schema, &out, "revoke_grant");
+    assert_eq!(out["grant_id"], a.grant.to_string());
+    let (_, out) = alice
+        .call("list_grants", json!({"agent_id": a.agent}))
+        .await;
+    assert!(out["items"].as_array().unwrap().is_empty());
+    let (err, out) = alice
+        .call("revoke_grant", json!({"grant_id": a.grant}))
+        .await;
+    assert!(err);
+    assert_eq!(out["error"]["code"], "not-found");
+
+    // Pause waits for the session and revoke change: a typed error, the argument not echoed.
+    let (err, out) = alice
+        .call("pause_agents", json!({"agent_ids": [a.agent]}))
+        .await;
+    assert!(err);
+    assert_eq!(out["error"]["code"], "not_available");
+    assert!(!out.to_string().contains(&a.agent.to_string()));
+}

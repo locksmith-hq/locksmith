@@ -165,15 +165,25 @@ fn build(root: &Path) -> Result<Plan, Fail> {
         let mut after = agents::merge_hooks(a, before.as_deref())
             .map_err(|e| usage(format!("{}: {e}", f.display())))?;
         let mut files = vec![(f, before, None)];
-        let m = agents::mcp_path(a, root);
-        if a == agents::Agent::Codex {
-            after = agents::merge_mcp(a, Some(&after))
-                .map_err(|e| usage(format!("{}: {e}", m.display())))?;
-        } else {
-            let mb = read(&m);
-            let ma = agents::merge_mcp(a, mb.as_deref())
-                .map_err(|e| usage(format!("{}: {e}", m.display())))?;
-            files.push((m, mb, Some(ma)));
+        match agents::mcp_path(a, root) {
+            Some(m) if m == files[0].0 => {
+                after = agents::merge_mcp(a, Some(&after))
+                    .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+            }
+            Some(m) => {
+                let mb = read(&m);
+                let ma = agents::merge_mcp(a, mb.as_deref())
+                    .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+                files.push((m, mb, Some(ma)));
+            }
+            None => {
+                if let Some(h) = agents::mcp_user_hint(a) {
+                    p.notes.push(format!(
+                        "{}: add the locksmith MCP server by hand to {h} (command `locksmith-mcp`)",
+                        a.id()
+                    ));
+                }
+            }
         }
         files[0].2 = Some(after);
         for (f, before, after) in files {
@@ -184,7 +194,7 @@ fn build(root: &Path) -> Result<Plan, Fail> {
                     path,
                     before,
                     after,
-                    exec: false,
+                    exec: a == agents::Agent::Cline && f.ends_with("PreToolUse"),
                 });
             }
         }

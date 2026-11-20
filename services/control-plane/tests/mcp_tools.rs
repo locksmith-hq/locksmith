@@ -1068,7 +1068,10 @@ fn now_secs() -> u64 {
 #[tokio::test]
 async fn mcp_revoking_again_after_a_new_sign_in_cuts_that_sign_in_off() {
     let f = start().await;
-    let token = |at: u64| f.key.token_at("alice", true, Some("client-again"), Some(at));
+    let token = |at: u64| {
+        f.key
+            .token_at("alice", true, Some("client-again"), Some(at))
+    };
     let mut first = Person::raw(&f, token(now_secs() - 60));
     assert_eq!(first.init_status_keep().await, StatusCode::OK);
     let org = personal_org(&f, "alice").await;
@@ -1079,7 +1082,10 @@ async fn mcp_revoking_again_after_a_new_sign_in_cuts_that_sign_in_off() {
     // A sign-in after the first revoke is let through.
     let signed_in_again = now_secs() + 1;
     tokio::time::sleep(std::time::Duration::from_millis(2200)).await;
-    assert_eq!(Person::raw(&f, token(signed_in_again)).init_status().await, StatusCode::OK);
+    assert_eq!(
+        Person::raw(&f, token(signed_in_again)).init_status().await,
+        StatusCode::OK
+    );
     // Revoking again moves the cut-off forward: that sign-in is now refused too.
     rest(&f, "POST", &path, org, json!({})).await;
     assert_eq!(

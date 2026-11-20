@@ -103,3 +103,8 @@
 - Task: m1-remote-mcp 5.2, 5.3 - done (desktop "MCP tools" and "MCP clients" screens on the same client methods as the web: one switch per tool by layer, client list with revoke, 403/empty/not-connected states; 3 new Vitest tests)
 - Verified: `npx vitest run` in apps/desktop -> 28 passed; `just apps-build` -> exit 0; `just ci` -> exit 0
 - Notes for next session: remaining: 2.2 (explain_block deferral), 4.2 gateway half + issuer-side revoke, 4.3, groups 6 and 7.
+
+## 2026-11-20 15:07 worker
+- Task: m1-remote-mcp 6.1 - blocked (code written, NOT ticked): adversarial cases G9 (gateway agent MCP) and G10 (hub MCP) plus `mcp_check.py`, README rows and offline self-checks in `run_test.sh`.
+- Verified: `just ci` -> exit 0; `run_test.sh` and `run.sh selftest` pass; `run.sh gateway G9 G10` skips without a stack. G9/G10 have NOT run against a live stack (no `just up` here), so the wire-format and audit-count assumptions (refusal status codes, >=6 denied/unknown `mcp.call` events in G9, >=3 in G10, 20 s switch pickup, console token accepted) are unproven. No evaluator pass recorded.
+- Notes for next session: run `just up && just api && bash tests/adversarial/run.sh gateway G9 G10`, fix the assumptions, evaluate, then tick 6.1; then 6.2 `just adversarial-gate`. Still open: 2.2 (explain_block deferral, lead to accept), 4.2 gateway half + issuer revoke (needs T8 agent revoke), 4.3, 7.x.

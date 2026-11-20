@@ -6,7 +6,7 @@
 - [x] 1.3 Verify: `just up && curl -fsS localhost:5000/moto-api/` and the spike test pass.
 
 ## 2. Session policy and binding model [sonnet]
-- [ ] 2.1 Define the AWS binding shape (role ARN, region, external id, `vend`, `unrestricted`, max duration) and the grant allow-list in the gateway config and control-plane types with fixture data; document in design.md.
+- [x] 2.1 Define the AWS binding shape (role ARN, region, external id, `vend`, `unrestricted`, max duration) and the grant allow-list in the gateway config and control-plane types with fixture data; document in design.md.
 - [x] 2.2 `render_session_policy(grant)`: actions and resources only, empty grant refused, size limit checked (STS 2048 packed characters); proptest that output never widens the grant.
 - [x] 2.3 Verify: `cargo nextest run -p ls-gateway aws_policy`.
 

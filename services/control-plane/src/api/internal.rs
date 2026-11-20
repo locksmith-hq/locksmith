@@ -28,7 +28,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::agents::{GrantMode, grant_cols, optional_utc};
+use super::agents::{GrantMode, GrantScope, grant_cols, optional_utc, scope_from_row};
 use super::extract::{ApiJson, ApiPath};
 use super::responses::{InternalReadErrors, InternalWriteErrors};
 use super::{all, exists_or_404, one};
@@ -125,6 +125,8 @@ pub struct ActiveGrant {
     pub secret_id: Uuid,
     pub secret_name: String,
     pub mode: GrantMode,
+    /// The allow-list of a `delegate` grant; `null` for `relay`.
+    pub scope: Option<GrantScope>,
     /// `null` when the grant does not expire. The gateway must still refuse it at or after this
     /// time, even while cached.
     #[serde(with = "time::serde::rfc3339::option")]
@@ -186,6 +188,7 @@ pub async fn agent_grants(
                         secret_id: r.try_get("secret_id")?,
                         secret_name: r.try_get("secret_name")?,
                         mode: GrantMode::parse(r.try_get::<&str, _>("mode")?)?,
+                        scope: scope_from_row(r)?,
                         expires_at: optional_utc(r, "expires_at")?,
                     })
                 })

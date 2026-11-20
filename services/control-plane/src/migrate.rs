@@ -59,6 +59,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         include_str!("../migrations/0010_audit_checkpoint_jobs.sql"),
     ),
     (11, "users", include_str!("../migrations/0011_users.sql")),
+    (
+        12,
+        "grant delegate",
+        include_str!("../migrations/0012_grant_delegate.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

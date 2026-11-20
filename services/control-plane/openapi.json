@@ -19,6 +19,17 @@
           "mode": {
             "$ref": "#/components/schemas/GrantMode"
           },
+          "scope": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GrantScope",
+                "description": "The allow-list of a `delegate` grant; `null` for `relay`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "secret_id": {
             "format": "uuid",
             "type": "string"
@@ -109,6 +120,17 @@
           },
           "mode": {
             "$ref": "#/components/schemas/GrantMode"
+          },
+          "scope": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GrantScope",
+                "description": "The allow-list of a `delegate` grant; `null` for `relay`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "secret_id": {
             "format": "uuid",
@@ -463,11 +485,42 @@
         "type": "object"
       },
       "GrantMode": {
-        "description": "How a grant lets the agent use the secret. S4 has relay only.",
+        "description": "How a grant lets the agent use the secret.",
         "enum": [
-          "relay"
+          "relay",
+          "delegate"
         ],
         "type": "string"
+      },
+      "GrantScope": {
+        "additionalProperties": false,
+        "description": "The allow-list a `delegate` grant carries: what the vended credentials may do.",
+        "properties": {
+          "actions": {
+            "description": "IAM actions, for example `s3:GetObject`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "max_duration_secs": {
+            "description": "Upper bound on a credential's lifetime in seconds.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "resources": {
+            "description": "Resource ARNs the actions apply to.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       },
       "Jwk": {
         "description": "One public key in the JWKS (RFC 7517, RFC 8037 `OKP`/`Ed25519`).",
@@ -551,6 +604,17 @@
           "mode": {
             "$ref": "#/components/schemas/GrantMode",
             "description": "Defaults to `relay`."
+          },
+          "scope": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GrantScope",
+                "description": "Required for `delegate` (the allow-list), and refused for `relay`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "secret_id": {
             "description": "The secret the agent may relay (same org).",
@@ -824,6 +888,17 @@
                 },
                 "mode": {
                   "$ref": "#/components/schemas/GrantMode"
+                },
+                "scope": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/GrantScope",
+                      "description": "The allow-list of a `delegate` grant; `null` for `relay`."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "secret_id": {
                   "format": "uuid",

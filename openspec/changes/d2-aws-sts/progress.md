@@ -31,3 +31,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (PR #480 conflicts with main: aws_bindings + git_bindings) - done
 - Verified: just ci -> exit 0 after merging origin/main (kept both fields in config.rs, relay.rs, git_fixture_tests.rs)
 - Notes for next session: task 2.1 still blocked on d1 `delegate` GrantMode (see earlier entry).
+
+## 2026-11-20 worker
+- Task: 2.1 - done (migration 0012: `delegate` grant mode + `scope` jsonb; `GrantScope` validated on grant create; scope served on the internal grants lookup; openapi.json regenerated; control-plane tests added/updated)
+- Verified: `cargo nextest run -p ls-control-plane` -> 133 passed; `just ci` -> exit 0
+- Notes for next session: group 3 next (opus). Gateway `Grant` in `services/gateway/src/grants.rs` still ignores `scope`; add `scope: Option<AwsGrantScope>` there in 3.1 (it has no deny_unknown_fields, so nothing breaks meanwhile). New embedded migrations must also be listed in `services/control-plane/src/migrate.rs` and tenancy.rs expects the version list.

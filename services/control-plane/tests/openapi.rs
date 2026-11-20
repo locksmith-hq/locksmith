@@ -386,5 +386,5 @@ fn agent_routes_are_documented() {
         );
     }
     let mode = &spec["components"]["schemas"]["GrantMode"];
-    assert_eq!(mode["enum"], serde_json::json!(["relay"]));
+    assert_eq!(mode["enum"], serde_json::json!(["relay", "delegate"]));
 }

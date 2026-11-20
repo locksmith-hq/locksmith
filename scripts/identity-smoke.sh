@@ -15,7 +15,7 @@ step() { # <name> <command...>: run it, print PASS/FAIL
 }
 is() { [ "$1" = "$2" ] || { echo "got '$1', want '$2'"; return 1; }; }
 
-step identity bash scripts/agent-identity.sh setup "$persona"; [ "$fail" = 0 ] || exit 1
+bash scripts/agent-identity.sh setup "$persona" >/dev/null || exit 1; echo "PASS identity"  # setup prints its own FAIL line
 step git-author is "$(git config --local user.name)" "$bot"
 step installation-repo is "$(gh api /installation/repositories -q '.repositories[0].full_name')" "$repo"
 

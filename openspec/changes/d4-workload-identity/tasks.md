@@ -1,8 +1,8 @@
 # Tasks: D4 workload identity
 
 ## 1. Policy model and storage [sonnet]
-- [ ] 1.1 Migration `0012_workload_identities.sql` (shape in design.md): RLS enabled and forced, `tenant_isolation` policy, composite FK to `agents (org_id, id)` with cascade, grants to `locksmith_app`; covered by the existing tenant lint.
-- [ ] 1.2 `services/control-plane/src/workload.rs`: `IssuerKind`, `Condition`, create-time validation (https issuer, fixed GitHub issuer, subject pin required, bare `*` refused, trailing-`*` only, audience required) as pure functions with unit tests; `lsw_` handle encode/parse mirroring `enrollment.rs`.
+- [x] 1.1 Migration `0012_workload_identities.sql` (shape in design.md): RLS enabled and forced, `tenant_isolation` policy, composite FK to `agents (org_id, id)` with cascade, grants to `locksmith_app`; covered by the existing tenant lint.
+- [x] 1.2 `services/control-plane/src/workload.rs`: `IssuerKind`, `Condition`, create-time validation (https issuer, fixed GitHub issuer, subject pin required, bare `*` refused, trailing-`*` only, audience required) as pure functions with unit tests; `lsw_` handle encode/parse mirroring `enrollment.rs`.
 - [ ] 1.3 Handlers `POST/GET /v1/workload-identities`, `GET/DELETE /v1/workload-identities/{id}` under human auth and `with_org`, utoipa annotations, `workload_identity.created` and `.deleted` audit events (add codes in `crates/ls-audit/src/event.rs`).
 - [ ] 1.4 Regenerate the OpenAPI document and `packages/control-plane-client` types (`just api-types`); add fixtures for the new routes.
 - [ ] 1.5 Verify: `cargo nextest run -p ls-control-plane workload` and `cargo nextest run -p ls-control-plane tenant_lint` (cross-org agent id is `404`, unpinned policy is `422`).

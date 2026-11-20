@@ -119,8 +119,8 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       who=$(jq -r .comment.user.login "$ev"); body=$(jq -r .comment.body "$ev")
       id=$(jq -r '.comment.id // 0' "$ev"); at=$(jq -r '.comment.created_at // ""' "$ev")
       owner=false; cfgq '.roles.owner.logins[]' | grep -qxF "$who" && ! grep -qE "$marker" <<<"$body" && owner=true
-      # Owner tags (@locksmith-lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
-      tags=$([ "$owner" = true ] && grep -oE '@locksmith-[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done)
+      # Owner tags (@locksmith-lead or the org team @locksmith-hq/lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
+      tags=$([ "$owner" = true ] && grep -oE '@locksmith-(hq/)?[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done)
       if [ -n "$tags" ]; then
         for to in $tags; do printf '%s\towner tagged you on #%s: %s\n' "$to" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
         return 0
@@ -201,6 +201,7 @@ no role marker"
   ev 'pm\towner tagged you on #7: u\nresearch\towner tagged you on #7: u' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-pm and @locksmith-research: check this"}}'
   ev 'worker-a\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-worker rebase please"}}'
   ev 'worker-c\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-harriet rebase please"}}'
+  ev 'worker-b\towner tagged you on #8: u\nlead\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-hq/lead and @locksmith-hq/josie: look"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\n@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"stranger"},"body":"@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"@locksmith-nobody"}}'

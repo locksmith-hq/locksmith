@@ -32,3 +32,8 @@
 - Verified: scratch crate `cargo build` -> Finished (not committed); crates.io API for licence and date; no repo code changed
 - Notes for next session: 1.4 (migration and OpenAPI) next. Host allowlist must be set for public hostnames in 2.1/3.1. Spike did not send a live MCP request.
 - 2026-11-20 · worker A: tasks 1.4 (migration 0012, /v1/mcp tools+clients API, OpenAPI, client types, fixtures) and 1.5 done; just ci green, independent evaluator PASS. Next: group 2 (/mcp route on control plane). Not built: audit events for switch/revoke changes (task 2.5), mcp_clients initialize upsert (2.3).
+
+## 2026-11-20 07:25 worker
+- Task: 1.4, 1.5 - done
+- Verified: just ci -> green; cargo nextest -p ls-mcp-server -> 13 passed; npm test control-plane-client -> 5 passed
+- Notes for next session: group 2 next (/mcp route, OIDC auth, read tools). initialize upsert of mcp_clients is task 2.3; audit for switch/revoke changes is task 2.5.

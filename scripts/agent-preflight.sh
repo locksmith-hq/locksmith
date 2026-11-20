@@ -38,8 +38,8 @@ if command -v openspec >/dev/null; then say OK openspec; else say WARN openspec 
 # npm deps (test-web needs them; npm ci takes minutes, so run it in the background)
 # Stale = package-lock.json changed after the last install (npm writes node_modules/.package-lock.json):
 # the cached VM image predates new workspace packages, which broke web lint in 3 runs on 2026-11-18.
-if [ ! -d node_modules ]; then say WARN node_modules "missing: run 'npm ci' in the background before just ci"
-elif [ package-lock.json -nt node_modules/.package-lock.json ]; then say WARN node_modules "stale (package-lock.json is newer): run 'npm ci' in the background before just ci"
+if [ ! -d node_modules ]; then say WARN node_modules "missing: run 'npm ci' in the background before web tests"
+elif [ package-lock.json -nt node_modules/.package-lock.json ]; then say WARN node_modules "stale (package-lock.json is newer): run 'npm ci' in the background before web tests"
 else say OK node_modules; fi
 
 # container registries (ghcr.io returned 403 in the Claude cloud sandbox on 2026-11-16)

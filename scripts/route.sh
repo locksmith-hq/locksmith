@@ -120,11 +120,14 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       id=$(jq -r '.comment.id // 0' "$ev"); at=$(jq -r '.comment.created_at // ""' "$ev")
       owner=false; cfgq '.roles.owner.logins[]' | grep -qxF "$who" && ! grep -qE "$marker" <<<"$body" && owner=true
       # Owner tags (@locksmith-lead or the org team @locksmith-hq/lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
-      tags=$([ "$owner" = true ] && grep -oE '@locksmith-(hq/)?[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done)
+      # The research bot (open internet, comments only) tags the roles its answer is for; it never wakes itself.
+      src=owner; [ "$owner" = false ] && [ "$(role_of "$who")" = research ] && src=research
+      tags=$({ [ "$owner" = true ] || [ "$src" = research ]; } && grep -oE '@locksmith-(hq/)?[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done | grep -vx "$([ "$src" = research ] && echo research)")
       if [ -n "$tags" ]; then
-        for to in $tags; do printf '%s\towner tagged you on #%s: %s\n' "$to" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
+        for to in $tags; do printf '%s\t%s tagged you on #%s: %s\n' "$to" "$src" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
         return 0
       fi
+      [ "$src" = research ] && return 0
       [ "$(jq -r '.issue.pull_request != null' "$ev")" = true ] && return 0
       for l in $labels; do
         to=$(resolve "$(cfgq --arg l "$l" '.channels[$l].on_reply // empty')" "$ev")
@@ -205,6 +208,11 @@ no role marker"
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\n@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"stranger"},"body":"@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"@locksmith-nobody"}}'
+  # research (Ada) informs: her comment's tags wake those roles, never herself; other bots cannot tag
+  ev 'worker-b\tresearch tagged you on #6: u\npm\tresearch tagged you on #6: u' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-research"}]},"comment":{"html_url":"u","user":{"login":"locksmith-ada[bot]"},"body":"Answer: yes.\n@locksmith-pm @locksmith-josie @locksmith-ada"}}'
+  ev '' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"locksmith-ada[bot]"},"body":"no tags"}}'
+  ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"locksmith-alfie[bot]"},"body":"@locksmith-lead"}}'
+  ev 'research\towner tagged you on #9: u' issue_comment '{"issue":{"number":9,"labels":[]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-ada what does X cost?"}}'
   # no tag: the role that raised the issue gets the reply, else the lead
   ev 'pm\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"body":"x\n<!-- raised-by: pm -->","labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"yes"}}'
   ev 'research\tneeds-research #6 opened' issues '{"action":"labeled","label":{"name":"needs-research"},"issue":{"number":6,"labels":[{"name":"needs-research"}]}}'

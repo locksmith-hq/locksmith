@@ -2,6 +2,30 @@ set positional-arguments
 
 ci: fmt lint test-rust test-web tree-check task-guard public-check
 
+# Fast local check: fmt + lint only for files committed on this branch since `base`.
+# The full `just ci` runs in GitHub Actions on every PR.
+quick base="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    files=$(git diff --name-only --diff-filter=ACMR "$1"...HEAD)
+    [ -n "$files" ] || { echo "quick: no committed changes vs $1"; exit 0; }
+    rs=$(grep '\.rs$' <<<"$files" || true)
+    if [ -n "$rs" ]; then
+      rustfmt --check $rs
+      # Clippy only the crates that own a changed file (nearest Cargo.toml), in one run so deps build once.
+      dirs=$(for f in $rs; do d=$(dirname "$f"); until [ -f "$d/Cargo.toml" ] || [ "$d" = . ]; do d=$(dirname "$d"); done; echo "$d"; done | sort -u)
+      pkgs=""
+      for d in $dirs; do
+        case "$d" in
+          apps/desktop/*) cargo clippy --manifest-path "$d/Cargo.toml" --all-targets -- -D warnings ;; # not in the workspace
+          .) pkgs="--workspace" ;;
+          *) pkgs="$pkgs -p $(sed -n 's/^name *= *"\(.*\)"/\1/p' "$d/Cargo.toml" | head -1)" ;;
+        esac
+      done
+      if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
+    fi
+    if grep -q '^apps/web/' <<<"$files"; then npm run lint -w apps/web; fi
+
 fmt:
     cargo fmt --all --check
 

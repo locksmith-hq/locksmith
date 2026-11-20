@@ -60,4 +60,4 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just leak-scan` checks for leaked canary secrets after a run.
 - `just adversarial-gate [--agent claude]` (needs `just up` and `just api`) runs the S6 gateway attack cases with skips counted as failures, then `just leak-scan` over the stack, the audit export and the artifacts; `--agent claude` adds the live prompts. See [tests/adversarial/README.md](../tests/adversarial/README.md).
 - `just selfhost-up [--external-keys] [--tls] [--demo-oidc]` bootstraps secrets and starts the self-host bundle (`infra/compose/selfhost`); `just selfhost-down` stops it. `just selfhost-smoke` runs `bash scripts/selfhost-bootstrap.test.sh` (no Docker) and then a fresh stack in its own project (needs `just images`); it checks the relay, restart persistence, secrets mode and that no secret reaches the logs.
-- `just ci` is the full pre-push check (no stack needed).
+- `just ci` is the full suite; the PR's required checks run it. Locally, run `just quick` before pushing.

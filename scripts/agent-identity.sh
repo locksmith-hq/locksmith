@@ -21,6 +21,7 @@ ids() { # <persona> -> "app_id installation_id bot_user_id" (none of these is se
     josie) echo "5817281 183325900 358306063" ;;
     harriet) echo "5817284 183325994 358306137" ;;
     walt) echo "5817292 183326090 358306238" ;;
+    ada) echo "5853454 184141394 359289580" ;;
     *) return 1 ;;
   esac
 }

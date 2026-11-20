@@ -26,7 +26,7 @@
 
    If the numbers justify it, propose cadence or tier changes in a `needs-owner` issue.
 3. **Re-verify each open `claude/change-*` branch.**
-   - With a haiku subagent, run `just ci` and the verification commands of the ticked tasks.
+   - With a haiku subagent, run the verification commands of the ticked tasks; the PR's CI checks cover `just ci`.
    - Untick anything that fails.
    - Append a `review` progress entry.
 4. **Plan ahead.** Do this only if `bash scripts/change-status.sh --ready` lists fewer than three changes.

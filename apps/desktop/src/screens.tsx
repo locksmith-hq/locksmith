@@ -3,7 +3,7 @@ import type {
   AuditEvent, AuditVerifyView, HttpTokenInfo, LeaseInfo, RelayInfo, SourceKind, StatusView,
 } from "@locksmith/api-types";
 import * as api from "./api";
-import { auditOutcomeMatches, type AuditOutcomeFilter } from "@locksmith/control-plane-client";
+import { ApiError, auditOutcomeMatches, type AuditOutcomeFilter, type Client, type Environment, type Project, type Secret, type SecretVersion } from "@locksmith/control-plane-client";
 import { Icon, type IconName } from "@locksmith/ui";
 
 export interface ScreenProps {
@@ -11,7 +11,7 @@ export interface ScreenProps {
   /** Runs an action, shows its rejection under the vault banner and refreshes status. */
   act: <T>(fn: () => Promise<T>, label?: (r: T) => string) => Promise<void>;
   /** Switches the main screen. */
-  go: (tab: "Overview" | "Sessions" | "Keys" | "Tokens" | "Agents" | "Relays" | "Audit") => void;
+  go: (tab: "Overview" | "Sessions" | "Keys" | "Tokens" | "Agents" | "Projects" | "Secrets" | "Relays" | "Audit") => void;
 }
 
 export const msg = (e: unknown) =>
@@ -89,6 +89,7 @@ export function Overview({ st, act, go }: ScreenProps) {
   // A wider window than the rows shown, so ended rows can find their REVOKE time.
   const ev = useLoad(() => api.auditList(40), [st]);
   const ver = useLoad(api.auditVerify, []);
+  const cp = useCpCounts();
   const [striking, setStriking] = useState<string | null>(null);
   const now = nowSecs();
   const live = (st?.leases.filter((l) => l.state === "active") ?? []).sort((a, b) => a.expires_at - b.expires_at);
@@ -113,6 +114,15 @@ export function Overview({ st, act, go }: ScreenProps) {
       </div>
       {!st ? <Loading what="sessions" /> : (
         <Timeline live={live} ended={ended} events={ev.data ?? []} now={now} locked={st.locked} striking={striking} onRevoke={revokeOne} />
+      )}
+
+      {cp && (
+        <section aria-label="Control plane counts">
+          <div className="sec-h spaced"><h2>Control plane</h2></div>
+          <p className="quiet-state" data-testid="cp-counts">
+            Projects: <b data-testid="count-projects">{cp.projects ?? "n/a"}</b> · Agents: <b data-testid="count-agents">{cp.agents ?? "n/a"}</b>
+          </p>
+        </section>
       )}
 
       <div className="sec-h spaced">
@@ -730,5 +740,209 @@ export function OrgAudit(_: ScreenProps) {
         </>
       )}
     </section>
+  );
+}
+
+/** Control-plane counts for the Overview, best effort: a failed count shows "n/a", never an error. */
+function useCpCounts() {
+  const [c, setC] = useState<{ projects?: number; agents?: number } | null>(null);
+  useEffect(() => {
+    const client = api.agentsClient();
+    if (!client) return;
+    let live = true;
+    void Promise.allSettled([(async () => (await client.listProjects()).length)(), (async () => (await client.listAgents()).length)()])
+      .then(([p, a]) => { if (live) setC({ projects: p.status === "fulfilled" ? p.value : undefined, agents: a.status === "fulfilled" ? a.value : undefined }); });
+    return () => { live = false; };
+  }, []);
+  return c;
+}
+
+/** Control-plane errors in words: 403 and 409 say what to do, anything else shows its message. */
+const cpErr = (e: unknown) =>
+  e instanceof ApiError && e.status === 403 ? "Not allowed: your role cannot do this in this org."
+  : e instanceof ApiError && e.status === 409 ? `Conflict: ${e.message || "that name is already taken, or the item still has contents"}.`
+  : msg(e);
+
+const NoClient = ({ what }: { what: string }) => <Empty icon="key">Connect a control plane on the Agents screen to see {what}.</Empty>;
+
+/** Row actions shared by projects and environments: rename, and delete with a confirm step. */
+function RowActions({ name, onRename, onDelete }: { name: string; onRename: (n: string) => Promise<unknown>; onDelete: () => Promise<unknown> }) {
+  const [mode, setMode] = useState<"" | "edit" | "confirm">("");
+  const [value, setValue] = useState(name);
+  if (mode === "edit") {
+    return (
+      <form onSubmit={(e) => { e.preventDefault(); void onRename(value).then(() => setMode(""), () => {}); }}>
+        <input aria-label={`New name for ${name}`} required value={value} onChange={(e) => setValue(e.target.value)} />
+        <button type="submit" className="btn sm">Save</button>
+        <button type="button" className="btn sm quiet" onClick={() => setMode("")}>Cancel</button>
+      </form>
+    );
+  }
+  if (mode === "confirm") {
+    return (
+      <span role="alertdialog" aria-label={`Delete ${name}?`}>
+        Delete {name}?{" "}
+        <button type="button" className="btn sm danger-text" onClick={() => void onDelete().then(() => setMode(""), () => setMode(""))}>Confirm delete</button>
+        <button type="button" className="btn sm quiet" onClick={() => setMode("")}>Cancel</button>
+      </span>
+    );
+  }
+  return (
+    <>
+      <button type="button" className="btn sm" onClick={() => setMode("edit")}>Rename {name}</button>
+      <button type="button" className="btn sm danger-text" onClick={() => setMode("confirm")}>Delete {name}</button>
+    </>
+  );
+}
+
+function CreateForm({ label, onCreate }: { label: string; onCreate: (name: string) => Promise<unknown> }) {
+  const [name, setName] = useState("");
+  return (
+    <form className="card" aria-label={`Create ${label}`} onSubmit={(e) => { e.preventDefault(); void onCreate(name).then(() => setName(""), () => {}); }}>
+      <input aria-label={`${label} name`} required value={name} onChange={(e) => setName(e.target.value)} />
+      <button type="submit" className="btn primary sm">Create {label}</button>
+    </form>
+  );
+}
+
+/** Loads a control-plane list, reloads after each mutation, and keeps the error from the last failure. */
+function useCpList<T>(fn: () => Promise<T[]>, deps: unknown[]) {
+  const [items, setItems] = useState<T[] | null>(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    try { setItems(await fn()); } catch (e) { setErr(cpErr(e)); setItems((cur) => cur ?? []); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  useEffect(() => { setItems(null); void load(); }, [load]);
+  /** Runs a mutation; a rejection is shown and rethrown-free so forms keep their input. */
+  const run = async (f: () => Promise<unknown>) => {
+    setErr("");
+    try { await f(); } catch (e) { setErr(cpErr(e)); throw e; }
+    await load();
+  };
+  return { items, err, run };
+}
+
+/** Projects, and the environments of the selected project, from the control plane. */
+export function Projects(_: ScreenProps) {
+  const client = api.agentsClient();
+  if (!client) return <section className="screen" aria-labelledby="h-projects"><Head id="h-projects" title="Projects" /><NoClient what="projects" /></section>;
+  return <ProjectsView client={client} />;
+}
+
+function ProjectsView({ client }: { client: Client }) {
+  const [sel, setSel] = useState<Project | null>(null);
+  const ps = useCpList(() => client.listProjects(), [client]);
+  const es = useCpList<Environment>(() => (sel ? client.listEnvironments(sel.id) : Promise.resolve([])), [client, sel?.id]);
+  return (
+    <section className="screen" aria-labelledby="h-projects">
+      <Head id="h-projects" title="Projects" sub="Projects hold environments, and environments hold secrets." />
+      {ps.err && <Alert>{ps.err}</Alert>}
+      <CreateForm label="project" onCreate={(n) => ps.run(() => client.createProject({ name: n }))} />
+      {!ps.items ? <Loading what="projects" /> : ps.items.length === 0 ? <Empty icon="key"><b>No projects yet.</b></Empty> : (
+        <ul>
+          {ps.items.map((p) => (
+            <li key={p.id}>
+              <button type="button" className="link" aria-pressed={sel?.id === p.id} onClick={() => setSel(p)}>{p.name}</button>
+              <RowActions name={p.name}
+                onRename={(name) => ps.run(() => client.updateProject(p.id, { name }))}
+                onDelete={() => ps.run(async () => { await client.deleteProject(p.id); if (sel?.id === p.id) setSel(null); })} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {sel && (
+        <section aria-label={`Environments of ${sel.name}`}>
+          <div className="sec-h spaced"><h2>Environments of {sel.name}</h2></div>
+          {es.err && <Alert>{es.err}</Alert>}
+          <CreateForm label="environment" onCreate={(n) => es.run(() => client.createEnvironment(sel.id, { name: n }))} />
+          {!es.items ? <Loading what="environments" /> : es.items.length === 0 ? <Empty icon="key"><b>No environments yet.</b></Empty> : (
+            <ul>
+              {es.items.map((e) => (
+                <li key={e.id}>
+                  {e.name}
+                  <RowActions name={e.name}
+                    onRename={(name) => es.run(() => client.updateEnvironment(sel.id, e.id, { name }))}
+                    onDelete={() => es.run(() => client.deleteEnvironment(sel.id, e.id))} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
+
+/** Secret metadata from the control plane: names, descriptions, version counts. Never a value or key material. */
+export function Secrets(_: ScreenProps) {
+  const client = api.agentsClient();
+  if (!client) return <section className="screen" aria-labelledby="h-secrets"><Head id="h-secrets" title="Secrets" /><NoClient what="secret metadata" /></section>;
+  return <SecretsView client={client} />;
+}
+
+function SecretsView({ client }: { client: Client }) {
+  const [pid, setPid] = useState("");
+  const [eid, setEid] = useState("");
+  const [open, setOpen] = useState<Secret | null>(null);
+  const ps = useCpList(() => client.listProjects(), [client]);
+  const project = pid || ps.items?.[0]?.id || "";
+  const es = useCpList<Environment>(() => (project ? client.listEnvironments(project) : Promise.resolve([])), [client, project]);
+  const env = eid || es.items?.[0]?.id || "";
+  const ss = useCpList<Secret>(() => (project && env ? client.listSecrets(project, env) : Promise.resolve([])), [client, project, env]);
+  return (
+    <section className="screen" aria-labelledby="h-secrets">
+      <Head id="h-secrets" title="Secrets" sub="Metadata only. Secret values never leave the vault and are not shown here." />
+      {(ps.err || es.err || ss.err) && <Alert>{ps.err || es.err || ss.err}</Alert>}
+      {!ps.items ? <Loading what="projects" /> : ps.items.length === 0 ? <Empty icon="key"><b>No projects yet, so no secrets.</b></Empty> : (
+        <>
+          <label>Project{" "}
+            <select aria-label="Project" value={project} onChange={(e) => { setPid(e.target.value); setEid(""); setOpen(null); }}>
+              {ps.items.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          {es.items && es.items.length === 0 ? <Empty icon="key">No environments in this project.</Empty> : es.items && (
+            <label>Environment{" "}
+              <select aria-label="Environment" value={env} onChange={(e) => { setEid(e.target.value); setOpen(null); }}>
+                {es.items.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+          )}
+          {env && (!ss.items ? <Loading what="secrets" /> : ss.items.length === 0 ? <Empty icon="key">No secrets in this environment.</Empty> : (
+            <ul>
+              {ss.items.map((s) => (
+                <li key={s.id}>
+                  <button type="button" className="link" onClick={() => setOpen(s)}>{s.name}</button> ({plural(s.version_count, "version")})
+                </li>
+              ))}
+            </ul>
+          ))}
+          {open && <SecretDetail client={client} secret={open} onClose={() => setOpen(null)} />}
+        </>
+      )}
+    </section>
+  );
+}
+
+function SecretDetail({ client, secret, onClose }: { client: Client; secret: Secret; onClose: () => void }) {
+  const { project_id: p, environment_id: e, id } = secret;
+  const s = useLoad(() => client.getSecret(p, e, id), [p, e, id]);
+  const v = useLoad<SecretVersion[]>(() => client.listSecretVersions(p, e, id), [p, e, id]);
+  const d = s.data ?? secret;
+  return (
+    <div className="card" role="region" aria-label={`Secret ${secret.name}`}>
+      <b>{d.name}</b>
+      {d.description && <p>{d.description}</p>}
+      <p className="muted small">Updated {d.updated_at}</p>
+      {s.alert}{v.alert}
+      {!v.data && !v.err ? <Loading what="versions" /> : v.data && (v.data.length === 0 ? <p className="quiet-state">No versions yet.</p> : (
+        <table className="grid">
+          <caption className="sr-only">Versions of {secret.name}</caption>
+          <thead><tr><th className="num">Version</th><th>Key</th><th>Created</th></tr></thead>
+          <tbody>{v.data.map((x) => <tr key={x.version}><td className="num mono">{x.version}</td><td className="mono">{x.key_id}</td><td className="mono nowrap">{x.created_at}</td></tr>)}</tbody>
+        </table>
+      ))}
+      <button type="button" className="btn sm quiet" onClick={onClose}>Close</button>
+    </div>
   );
 }

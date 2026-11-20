@@ -26,9 +26,9 @@
 - [x] 4.5 Verify: `npm test --workspace apps/web`.
 
 ## 5. Desktop surface [sonnet]
-- [ ] 5.1 Desktop Projects and Environments views in `apps/desktop/src` using the shared client methods from 1.2; Vitest tests including `403`, `409` and empty states.
-- [ ] 5.2 Desktop Overview counts and Secrets metadata view (no value routes); Vitest test that no value or material request is made.
-- [ ] 5.3 Verify: `npm test --workspace apps/desktop && just apps-build`.
+- [x] 5.1 Desktop Projects and Environments views in `apps/desktop/src` using the shared client methods from 1.2; Vitest tests including `403`, `409` and empty states.
+- [x] 5.2 Desktop Overview counts and Secrets metadata view (no value routes); Vitest test that no value or material request is made.
+- [x] 5.3 Verify: `npm test --workspace apps/desktop && just apps-build`.
 
 ## 6. End-to-end [sonnet]
 - [ ] 6.1 Playwright setup, `just web-e2e` recipe (starts `just up` with the auth profile): sign in as a test user, create a project and environment, register an agent, create and revoke a grant, see activity.

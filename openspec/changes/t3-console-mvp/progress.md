@@ -23,3 +23,8 @@
 - Task: 4.1-4.5 - done (Secrets list/detail with versions, metadata only; Agents, Grants and Activity moved to routed pages in apps/web/src/pages; App/Shell import cycle gone)
 - Verified: `npm test --workspace apps/web` -> 38 passed; tsc clean; just ci -> exit 0; evaluator PASS (sonnet)
 - Notes for next session: gap: no test that the enrollment secret is absent from the react-query cache (structurally safe: Agents uses useState). Group 5 (desktop) next; 6.4 is an owner gate.
+
+## 2026-11-20 worker
+- Task: 5.1-5.3 - done (desktop Projects/Environments views with create/rename/confirm-delete; Overview project+agent counts; Secrets metadata view; no value or material routes)
+- Verified: `npm test --workspace apps/desktop` -> 33 passed; tsc clean; `just apps-build` -> ok; just ci -> exit 0; evaluator PASS (sonnet)
+- Notes for next session: Overview has no secrets count (would need per-env listing). Group 6 (Playwright e2e, `just web-e2e`) next; 6.4 is an owner gate (layout approval), so 6.1-6.3 can proceed but 6.4+ park on it.

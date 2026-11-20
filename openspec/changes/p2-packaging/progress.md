@@ -34,3 +34,8 @@
 - Task: merge-conflict fix on PR #534 - done
 - Verified: just quick -> ok
 - Notes for next session: 22 tasks still unticked; docs/testing.md conflict resolved keeping both selfhost and ci lines.
+
+## 2026-11-20 20:16 worker
+- Task: p2-packaging CI fix - done (flake)
+- Verified: cargo test -p locksmith-audit --test export -> 3 passed locally; CI failure was only locksmith-audit::export incremental_export_writes_each_event_once_and_verifies_offline (1 of 773), branch does not touch audit; main merged in (already up to date)
+- Notes for next session: flaky audit export test (docker-backed); the App token cannot re-run jobs (403), so this log push re-triggers CI. If it fails again on the same test, open a needs-rescue.

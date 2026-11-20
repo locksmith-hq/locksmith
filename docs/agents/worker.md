@@ -3,7 +3,7 @@
 Each run unblocks finished work, then takes several tasks (each up to 30 minutes of work) for about 40 minutes, across as many changes and PRs as fit.
 
 0. **Start.**
-   - Run `bash scripts/worker-has-work.sh`. If it prints `idle`, stop and post nothing.
+   - Run `bash scripts/worker-has-work.sh`. If it prints `idle` and you were not woken by an owner tag, stop and post nothing.
    - Use the `run-start` skill with `worker`.
    - Use the `merge-queue` skill: mark planning PRs ready, then main CI, then unblock ready PRs (merge-on-green merges them).
    - Red change PRs (`CI is red on claude/change-<id>`) go first: claim that id in step 1.

@@ -116,6 +116,7 @@ Except the workers (events, plus every 2 hours, 24/7), routines avoid peak hours
 | [Daily summary](https://claude.ai/code/routines/trig_01E29QPqddtqyaTR1FUjLKxT) | Haiku 5.5 | Default | daily 08:00 and 18:00 | updates the one daily-summary Artifact and sends a push; read-only, REST API only (GraphQL is blocked in cloud sessions) |
 | [PM (Walt)](https://claude.ai/code/routines/trig_01Dja9jHSJRqbcepRAGz9GUQ) | Opus 5.5 | its own environment | daily 08:00, plus API: `wake-agents.yml` fires it for a debate turn (secret `PM_FIRE_TOKEN`) | product: end goal, roadmap order, priorities and the board; hands technical findings to the lead as `for-lead` issues |
 | [Lead (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-research` | daily 09:35, 23:35 (passes with nothing to do are skipped), plus API: `wake-agents.yml` fires it per `docs/agents/routing.json`: a new `needs-rescue` issue, an owner reply on `needs-owner`, a debate turn (secret `LEAD_FIRE_TOKEN`) | tech lead (`docs/agents/lead.md`, replaced Rescue and the Learning loop 2026-11-17): rescues the oldest `needs-rescue` issue; reviews code merged since its last run for duplication, reinvented wheels, readability drift and over-specific solutions, and turns findings into fixes, unticked tasks or a `refactor-*` change |
+| Research | Sonnet 5.5 | Default (open internet) | no schedule; API only: `wake-agents.yml` fires it for an owner `@locksmith-research` tag or a `needs-research` issue (secret `RESEARCH_FIRE_TOKEN`; put its trigger id in `routing.json`) | answers one question per wake-up with sourced findings as a comment (`docs/agents/research.md`); never pushes code. Its own App (`locksmith-research`: issues write, contents read) limits what an injected web page can do |
 
 GitHub triggers (web UI only; one per routine): the API stores filters as `filter.clauses[]` of `{field, operator, values}` with fields like `pr.author`, `pr.labels`, `pr.base_branch`, `pr.draft` and operators like `FILTER_OP_IN`, but `RemoteTrigger` cannot list or delete triggers. Not available as triggers: issue comments, CI results. The review stays in GitHub Actions because gate 6 trusts only the Claude bot identity; agents act as `tomer555` and could forge a routine's verdict.
 
@@ -133,14 +134,20 @@ Agents are named by role (Worker A, B, C, Worker (events), PM, Lead). Each role 
 | Worker (events) | `locksmith-harriet` | code, PRs, issues (write) |
 | PM | `locksmith-walt` | PRs, issues (write); code (read) |
 
-**Paused (2026-11-18):** runs act as the owner account. `cloud-setup.sh` no longer calls `agent-identity.sh setup` and `agent-start.sh` no longer checks the identity, because the installation-token mint was not working yet. The text below describes the design to restore.
+**Key per environment (owner, 2026-11-20).** The 2026-11-18 pause had one cause: a network secret is a fixed header, but the token request needs a JWT signed with the App's private key, and GitHub caps that JWT at 10 minutes. Like Renovate's self-hosted setup, each run now signs a fresh JWT from the App key and swaps it for a one-hour installation token. An environment without the key still runs as the owner (`agent-start.sh` warns) until every key is set.
 
-How a run takes its app identity: each routine has its own cloud environment (`locksmith-dev` for Workers A and C, `locksmith-josie` for B, `locksmith-harriet` for events, `locksmith-lead`, `locksmith-walt` for the PM) with `AGENT_PERSONA=<persona>`. The setup script (`scripts/cloud-setup.sh`) calls `scripts/agent-identity.sh setup` once, and `scripts/agent-start.sh` only checks the git author is the persona's bot, failing the run otherwise. That script mints a one-hour installation token (in the cloud the environment's network secret adds the app's auth to that request; locally it signs with `AGENT_APP_KEY_<PERSONA>` or the Keychain key), sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If no token comes back or it is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
+How a run takes its app identity: each routine has its own cloud environment (`locksmith-dev` for Workers A and C, `locksmith-josie` for B, `locksmith-harriet` for events, `locksmith-lead`, `locksmith-walt` for the PM) with `AGENT_PERSONA=<persona>` and `AGENT_APP_KEY_<PERSONA>`. `scripts/agent-start.sh` calls `scripts/agent-identity.sh setup` at the start of every run. That script mints a one-hour installation token (signed with `AGENT_APP_KEY_<PERSONA>`, or locally the Keychain key), sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If no token comes back or it is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
 
 Owner setup:
-1. In each routine's environment, replace the `REPLACE_ME` value of the network secret on `api.github.com/app/installations/`. Never put app keys in environment variables.
+1. In each routine's environment, set `AGENT_APP_KEY_<PERSONA>` to the base64 of that App's private key (`base64 -i key.pem`), only that routine's key, and delete the old network secret on `api.github.com/app/installations/`. A new App without a row in `agent-identity.sh` also sets `AGENT_APP_IDS="<app_id> <installation_id> <bot_user_id>"`.
 2. Run each routine in its own environment.
 3. Add the `locksmith-*[bot]` logins to the author filter of the GitHub triggers (`Worker (events)` and `Lead`), next to `tomer555`.
+
+**Identity test (before any real routine switches).** A test App and environment prove the identity without touching the schedules:
+1. Create the App `locksmith-test` (Contents, Issues, Pull requests: write; Metadata: read; webhooks off) and install it on this repo only.
+2. Create the cloud environment `locksmith-identity-test` (copy of `locksmith-dev`) with `AGENT_PERSONA=test`, `AGENT_APP_KEY_TEST` and `AGENT_APP_IDS="<app_id> <installation_id> <bot_user_id>"` (bot user id: `gh api users/locksmith-test%5Bbot%5D -q .id`).
+3. Create a routine "Identity test" in it with no schedule and the prompt `Run bash scripts/identity-smoke.sh and report its output.` Run it by hand.
+It sets up the identity, pushes an empty commit, opens a PR, comments, labels and closes it, checking each is authored by `locksmith-test[bot]`. When it passes, set the real keys one routine at a time; delete the test App's key afterwards.
 
 On the owner's Mac, the **optimizer** (`docs/agents/optimizer.md`, desktop scheduled task, 07:00 and 20:00, replaced the local lead 2026-11-19) runs as the owner in its own worktree `~/locksmith-optimizer`, detached at `origin/main`. It is the only agent that reads routine run logs (`RemoteTrigger`); it audits the schedules, agent communication and run efficiency, logs each cause on the pinned `harness-backlog` issue, and on Saturday at 07:00 builds the one weekly agent-system release (`claude/harness-release-<YYYY-WW>`), which the owner merges. It may only edit routine prompts; other routine changes go to the owner as `needs-owner`.
 
@@ -158,6 +165,8 @@ Cloud runs never see the app keys; they see the one-hour installation token, whi
 
 ## Routing and debates
 `docs/agents/routing.json` says who may ask whom: roles (GitHub App logins, routine trigger, fire-token secret) and channels (issue labels: who opens, who is woken on open, on owner reply, on close). `scripts/route.sh` reads it for `wake-agents.yml` and enforces debates. Both are owner-only (task-edit guard).
+
+**Owner tags.** An owner comment containing `@locksmith-lead`, `@locksmith-pm`, `@locksmith-worker` or `@locksmith-research`, on any issue or PR, wakes exactly those roles (`mentions` in `routing.json`). GitHub sends Apps nothing for a mention, so this is a text match, like `@claude`. Without a tag, an owner reply on `needs-owner` wakes the role named by the issue's `<!-- raised-by: x -->` marker (else the lead). Owner setup: create free orgs with those four names, so no stranger can register one and get notified by every tag.
 
 The PM owns what and when; the lead owns how. A disagreement becomes a `debate` issue (`debate` skill). Turns alternate, each side gets at most `turns` (3), and roles come from GitHub App logins, so no agent can speak for the other side or skip the cap (while identities are paused, from a `<!-- role: x -->` marker instead). Agreement is recorded in git by the lead; agree-to-disagree or the cap turns the issue into a `needs-owner` decision with both positions side by side. At most 2×turns+1 wake-ups per debate.
 
@@ -187,7 +196,7 @@ Agent guidance lives in repo skills (`.claude/skills/`), so each run loads only 
 - `check-task-edits.sh` and `check-agent-docs.sh` are the guards.
 
 `scripts/check-agent-docs.sh` caps the instruction size in CI:
-- `common.md`: 600 words
+- `common.md`: 660 words
 - each role file: 400 words
 - each skill: 500 words
 - active lessons: 5

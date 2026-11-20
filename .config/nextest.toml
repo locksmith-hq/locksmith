@@ -25,10 +25,14 @@ not (
 """
 
 # moto's IAM enforcement mode (`POST /moto-api/reset-auth`) is server-global, so tests that talk
-# to moto run one at a time across processes. Add later moto test binaries to this filter.
+# to moto run one at a time across processes. Add later moto test binaries to these filters.
 [test-groups]
 moto = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = "package(ls-e2e) & binary(aws_sts_moto)"
+test-group = "moto"
+
+[[profile.default.overrides]]
+filter = "package(ls-gateway) & test(/^aws::tests::aws_moto_/)"
 test-group = "moto"

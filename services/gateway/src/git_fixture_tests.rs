@@ -323,6 +323,7 @@ fn grant(secret_id: Uuid) -> Grant {
         secret_id,
         secret_name: "GIT".to_owned(),
         mode: "relay".to_owned(),
+        scope: None,
         expires_at: None,
     }
 }

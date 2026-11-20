@@ -47,10 +47,77 @@ pub struct AwsBinding {
     /// Cap on the lifetime of vended credentials, seconds.
     #[serde(default = "default_max_duration")]
     pub max_duration_secs: u32,
+    /// Version of the base-credential secret decrypted for the STS call. Default 1.
+    #[serde(default = "default_version")]
+    pub version: u32,
 }
 
 fn default_max_duration() -> u32 {
     DEFAULT_DURATION_SECS
+}
+
+fn default_version() -> u32 {
+    1
+}
+
+/// An AWS region code: lowercase letters, digits and inner hyphens (`us-east-1`).
+pub fn valid_region(r: &str) -> bool {
+    !r.is_empty()
+        && r.len() <= 32
+        && !r.starts_with('-')
+        && !r.ends_with('-')
+        && r.contains('-')
+        && r.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// `arn:<partition>:iam::<12 digits>:role/<path/>name`.
+fn valid_role_arn(arn: &str) -> bool {
+    let Some(rest) = arn.strip_prefix("arn:aws") else {
+        return false;
+    };
+    let Some((partition, rest)) = rest.split_once(":iam::") else {
+        return false;
+    };
+    let Some((account, role)) = rest.split_once(":role/") else {
+        return false;
+    };
+    partition
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b == b'-')
+        && account.len() == 12
+        && account.bytes().all(|b| b.is_ascii_digit())
+        && !role.is_empty()
+        && role.len() <= 512
+        && role
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"+=,.@_-/".contains(&b))
+}
+
+impl AwsBinding {
+    /// Name of the first invalid field, for the config error.
+    pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        if !valid_role_arn(&self.role_arn) {
+            return Err("aws_binding.role_arn");
+        }
+        if !valid_region(&self.region) {
+            return Err("aws_binding.region");
+        }
+        if self
+            .external_id
+            .as_deref()
+            .is_some_and(|x| !(2..=1224).contains(&x.len()) || x.chars().any(char::is_control))
+        {
+            return Err("aws_binding.external_id");
+        }
+        if !(MIN_DURATION_SECS..=MAX_DURATION_SECS).contains(&self.max_duration_secs) {
+            return Err("aws_binding.max_duration_secs");
+        }
+        if self.version == 0 {
+            return Err("aws_binding.version");
+        }
+        Ok(())
+    }
 }
 
 /// The allow-list a `delegate` grant carries.
@@ -193,7 +260,17 @@ max_duration_secs = 1800
     #[test]
     fn aws_policy_binding_fixture_parses_with_defaults() {
         let b = binding(false);
-        assert!(b.vend && !b.unrestricted && b.max_duration_secs == 1800);
+        assert!(b.vend && !b.unrestricted && b.max_duration_secs == 1800 && b.version == 1);
+        assert_eq!(b.validate(), Ok(()));
+        for (from, to, field) in [
+            ("role/locksmith-agent", "user/x", "aws_binding.role_arn"),
+            ("us-east-1", "US EAST", "aws_binding.region"),
+            ("ext-1", "x", "aws_binding.external_id"),
+            ("1800", "7200", "aws_binding.max_duration_secs"),
+        ] {
+            let bad: AwsBinding = toml::from_str(&FIXTURE.replace(from, to)).unwrap();
+            assert_eq!(bad.validate(), Err(field), "{field}");
+        }
         let bad = toml::from_str::<AwsBinding>(&format!("{FIXTURE}\nextra = 1"));
         assert!(bad.is_err(), "unknown fields rejected");
     }

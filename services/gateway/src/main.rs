@@ -122,6 +122,15 @@ async fn main() -> ExitCode {
     // internal append endpoint, with the same service token.
     let audit = Arc::new(HttpAudit::new(control_plane));
     let binding_count = config.bindings.bindings.len();
+    if config.aws_sts_endpoint.is_some() {
+        tracing::warn!(
+            "{} is set: AWS credentials are requested from a non-AWS STS endpoint (local use only)",
+            config::ENV_AWS_STS_ENDPOINT
+        );
+    }
+    let aws = ls_gateway::aws::AwsOptions {
+        sts_endpoint: config.aws_sts_endpoint.clone(),
+    };
     let relay = Relay::new(
         auth,
         grants,
@@ -130,7 +139,8 @@ async fn main() -> ExitCode {
         Arc::new(SystemResolver),
         audit,
         RelayOptions::default(),
-    );
+    )
+    .with_aws(aws);
 
     let router = app::build(AppState::new(readiness).with_relay(Arc::new(relay)));
     let listener = match tokio::net::TcpListener::bind(config.bind).await {

@@ -478,6 +478,7 @@ export interface components {
             /** Format: uuid */
             grant_id: string;
             mode: components["schemas"]["GrantMode"];
+            scope?: components["schemas"]["GrantScope"] | null;
             /** Format: uuid */
             secret_id: string;
             secret_name: string;
@@ -517,6 +518,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             mode: components["schemas"]["GrantMode"];
+            scope?: components["schemas"]["GrantScope"] | null;
             /** Format: uuid */
             secret_id: string;
             secret_name: string;
@@ -660,10 +662,22 @@ export interface components {
             updated_at: string;
         };
         /**
-         * @description How a grant lets the agent use the secret. S4 has relay only.
+         * @description How a grant lets the agent use the secret.
          * @enum {string}
          */
-        GrantMode: "relay";
+        GrantMode: "relay" | "delegate";
+        /** @description The allow-list a `delegate` grant carries: what the vended credentials may do. */
+        GrantScope: {
+            /** @description IAM actions, for example `s3:GetObject`. */
+            actions?: string[];
+            /**
+             * Format: int32
+             * @description Upper bound on a credential's lifetime in seconds.
+             */
+            max_duration_secs?: number | null;
+            /** @description Resource ARNs the actions apply to. */
+            resources?: string[];
+        };
         /** @description One public key in the JWKS (RFC 7517, RFC 8037 `OKP`/`Ed25519`). */
         Jwk: {
             /** @description Always `EdDSA`. */
@@ -695,6 +709,7 @@ export interface components {
             expires_at?: string | null;
             /** @description Defaults to `relay`. */
             mode?: components["schemas"]["GrantMode"];
+            scope?: components["schemas"]["GrantScope"] | null;
             /**
              * Format: uuid
              * @description The secret the agent may relay (same org).
@@ -730,6 +745,11 @@ export interface components {
              */
             attempt_id?: string | null;
             /**
+             * Format: int32
+             * @description Lifetime of the vended credentials (`aws.credentials.*` only; required for `issued`).
+             */
+            duration_secs?: number | null;
+            /**
              * @description Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or
              *     query.
              */
@@ -742,6 +762,8 @@ export interface components {
              * @description Upstream port, when the URL names one explicitly.
              */
             port?: number | null;
+            /** @description AWS region of the binding (`aws.credentials.*` only, required there), e.g. `us-east-1`. */
+            region?: string | null;
             /**
              * Format: uuid
              * @description The secret the call used (the event's target).
@@ -803,6 +825,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 mode: components["schemas"]["GrantMode"];
+                scope?: components["schemas"]["GrantScope"] | null;
                 /** Format: uuid */
                 secret_id: string;
                 secret_name: string;
@@ -889,7 +912,7 @@ export interface components {
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied";
         /**
          * @description The upstream request method.
          * @enum {string}

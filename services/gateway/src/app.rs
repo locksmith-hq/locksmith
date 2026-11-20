@@ -9,6 +9,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use ls_control_plane::readiness::Readiness;
 
+use crate::aws;
 use crate::git;
 use crate::grants;
 use crate::relay::{self, Relay};
@@ -53,6 +54,11 @@ pub fn build(state: AppState) -> Router {
             post(relay::route).layer(DefaultBodyLimit::max(body_limit)),
         )
         .route("/v1/grants", get(grants::route))
+        // AWS credential vending (D2): a small JSON request.
+        .route(
+            "/v1/aws/credentials",
+            post(aws::route).layer(DefaultBodyLimit::max(16 * 1024)),
+        )
         // Smart-HTTP Git (D1): bodies are streamed, so no whole-body limit applies.
         .route(
             "/git/{host}/{*rest}",

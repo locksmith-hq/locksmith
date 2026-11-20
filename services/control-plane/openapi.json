@@ -686,6 +686,16 @@
               "null"
             ]
           },
+          "duration_secs": {
+            "description": "Lifetime of the vended credentials (`aws.credentials.*` only; required for `issued`).",
+            "format": "int32",
+            "maximum": 3600,
+            "minimum": 900,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "host": {
             "description": "Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or\nquery.",
             "type": [
@@ -715,6 +725,13 @@
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "region": {
+            "description": "AWS region of the binding (`aws.credentials.*` only, required there), e.g. `us-east-1`.",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -1183,7 +1200,9 @@
           "relay.denied",
           "git.fetch",
           "git.push",
-          "git.denied"
+          "git.denied",
+          "aws.credentials.issued",
+          "aws.credentials.denied"
         ],
         "type": "string"
       },

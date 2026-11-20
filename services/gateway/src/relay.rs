@@ -131,6 +131,7 @@ pub struct Relay {
     audit: Arc<dyn AuditSink>,
     options: RelayOptions,
     git: crate::git::GitState,
+    aws: crate::aws::AwsOptions,
 }
 
 impl Relay {
@@ -153,7 +154,18 @@ impl Relay {
             audit,
             options,
             git: crate::git::GitState::default(),
+            aws: crate::aws::AwsOptions::default(),
         }
+    }
+
+    /// Replace the AWS route's options (D2): the STS endpoint override for tests and moto.
+    pub fn with_aws(mut self, aws: crate::aws::AwsOptions) -> Self {
+        self.aws = aws;
+        self
+    }
+
+    pub(crate) fn aws(&self) -> &crate::aws::AwsOptions {
+        &self.aws
     }
 
     /// Replace the Git route's timeouts and token cache (D1).
@@ -838,6 +850,7 @@ mod tests {
             secret_id,
             secret_name: name.to_owned(),
             mode: "relay".to_owned(),
+            scope: None,
             expires_at,
         }
     }

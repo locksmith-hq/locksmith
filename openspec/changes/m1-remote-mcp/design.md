@@ -17,9 +17,11 @@
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| rmcp | Apache-2.0 (verify in task 1.2) | 3.11.0 (pin on add) | 2026-11-17 | MCP protocol, Streamable HTTP server | permissive, fine |
+| rmcp | Apache-2.0 (verified on crates.io, task 1.2) | =3.11.0 (pin exact) | 2026-11-17 | MCP protocol, Streamable HTTP server | permissive, fine |
 | existing: axum, jsonwebtoken/JWKS stack from T1 | per repo | repo versions | n/a | transport and token verification | already in use |
 Versions and licences are re-checked and recorded when added (task 1.2).
+
+Spike result (task 1.2, 2026-11-20): `rmcp =3.11.0` with features `server,transport-streamable-http-server` builds against axum 0.8 and mounts with `Router::nest_service("/mcp", StreamableHttpService::new(factory, Arc<LocalSessionManager>, config))`. Notes for tasks 2.1/3.1: the config's `allowed_hosts` defaults to loopback only, so set it to the public hostnames (never `disable_allowed_hosts`); the auth layer can wrap the service as a tower layer and pass the verified principal as a request extension, which handlers read from `RequestContext.extensions` (`http::request::Parts`); `legacy_session_mode` is off by default and protocol versions from 2026-07-28 are stateless, so `mcp_clients` upsert on `initialize` must not rely on a session id alone (key on OAuth client_id / agent as designed).
 
 ## Built in-house
 The tool registry, switch enforcement, audit hook and the no-value test, because they carry Locksmith's rules; the protocol layer is reused (rmcp).

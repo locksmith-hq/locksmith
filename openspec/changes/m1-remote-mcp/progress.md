@@ -26,3 +26,8 @@
 - Task: m1-remote-mcp 1.1 - done. Decision record and design.md (option A, `auth_time`) are on this branch; the research note already states it and its MCP spec citations were re-checked against the live site earlier today.
 - Verified: grep shows design.md, decisions.md M1-1 and the note agree; docs only.
 - Notes for next session: 1.2 (rmcp spike) and 1.4 (migration and OpenAPI) are next.
+
+## 2026-11-20 worker C
+- Task: m1-remote-mcp 1.2 - done (rmcp spike: licence Apache-2.0, pin `=3.11.0`, released 2026-11-17; builds and mounts in axum 0.8 via `nest_service`; findings in design.md "OSS used")
+- Verified: scratch crate `cargo build` -> Finished (not committed); crates.io API for licence and date; no repo code changed
+- Notes for next session: 1.4 (migration and OpenAPI) next. Host allowlist must be set for public hostnames in 2.1/3.1. Spike did not send a live MCP request.

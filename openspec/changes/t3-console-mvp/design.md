@@ -6,7 +6,7 @@
 ## Decisions and evidence
 | Decision | Alternatives rejected | Evidence |
 |---|---|---|
-| Typed `openapi-fetch` client already in the repo, wrapped by `@tanstack/react-query` hooks | Hand-written fetch; Redux | `packages/control-plane-client` already uses the generated schema; TanStack Query is the maintained standard for server state (https://tanstack.com/query) |
+| `openapi-fetch` over the existing generated types (the client package has only `openapi-typescript` types today), wrapped by `@tanstack/react-query` hooks | Hand-written fetch; Redux | `packages/control-plane-client` already uses the generated schema; TanStack Query is the maintained standard for server state (https://tanstack.com/query) |
 | `react-router` v7 data-less routes | Custom hash router; Next.js | Static SPA hosting is the P1 plan (S3 + CloudFront); no SSR needed |
 | Tokens and kit move to `packages/ui`, mockup imports them | Copy the CSS | One source avoids drift; the mockup stays as the design reference |
 | No value routes called from the console | Reveal-on-click | Security rule; T7 owns entry; checked by a test on recorded requests |
@@ -18,6 +18,8 @@
 |---|---|---|---|---|---|
 | @tanstack/react-query | MIT | 5.x (pin on add) | 2026, maintained | Server-state cache, retry, invalidation | permissive, fine |
 | react-router | MIT | 7.x (pin on add) | 2026, maintained | Routing | permissive, fine |
+| openapi-fetch | MIT | 0.x (pin on add) | 2026, maintained | Typed fetch over the generated schema | permissive, fine |
+| msw (if used for fixtures) | MIT | 2.x (pin on add) | 2026, maintained | API mocks in tests | permissive, fine |
 | @playwright/test | Apache-2.0 | match installed Playwright | 2026 | e2e | permissive, fine |
 Versions and dates are re-checked when added (task 1.1) and recorded here.
 

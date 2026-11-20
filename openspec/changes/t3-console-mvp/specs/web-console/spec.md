@@ -35,7 +35,7 @@ The console SHALL list, create, rename and delete projects and their environment
 - **THEN** the page shows the problem title and leaves the list unchanged
 
 ### Requirement: Secret names without values
-The console SHALL show each secret's name, versions, creation times and creators, and MUST NOT display, request or store any secret value.
+The console SHALL show each secret's name, versions, key ids and creation times, and MUST NOT display, request or store any secret value.
 
 #### Scenario: Secret detail
 - **WHEN** the user opens a secret
@@ -47,6 +47,13 @@ The console SHALL list agents, register and revoke them, and create and revoke g
 #### Scenario: Revoke a grant
 - **WHEN** the user confirms revoking a grant
 - **THEN** the grant disappears from the list and the Activity page later shows the revocation event
+
+### Requirement: One-time enrollment secret
+The console SHALL show an agent's enrollment secret only once, in the dialog that received it, and MUST NOT keep it in the query cache, browser storage, logs or error reports.
+
+#### Scenario: Register an agent
+- **WHEN** the API returns an enrollment secret for a new or rotated agent
+- **THEN** it is shown once with a copy action, and closing the dialog clears it from memory, cache and storage
 
 ### Requirement: Activity view
 The console SHALL show audit events newest first with paging and the ledger verification status, without payload values.

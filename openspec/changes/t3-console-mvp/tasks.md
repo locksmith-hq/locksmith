@@ -1,7 +1,7 @@
 # Tasks: T3 web console MVP
 
 ## 1. Contract and foundations [sonnet]
-- [ ] 1.1 Add `@tanstack/react-query` and `react-router`, pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
+- [ ] 1.1 Add `openapi-fetch`, `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
 - [ ] 1.2 `apps/web/src/api/client.ts`: bearer-token client over `@locksmith/control-plane-client`, `401` -> sign-out, problem+json -> typed error; Vitest with a mocked fetch.
 - [ ] 1.3 Fixture data (MSW or in-memory handlers) for every route the console calls, in `apps/web/src/api/fixtures.ts`.
 - [ ] 1.4 Verify: `npm test --workspace apps/web`.
@@ -20,7 +20,7 @@
 
 ## 4. Secrets, agents, grants and activity [sonnet]
 - [ ] 4.1 Secrets list and detail with versions; a test asserts no request to a value or material route.
-- [ ] 4.2 Agents list, register, revoke.
+- [ ] 4.2 Agents list, register, revoke; the enrollment secret is shown once, kept out of the query cache, storage and logs, and cleared on close, with a test for each.
 - [ ] 4.3 Grants list, create, revoke with mode, target, expiry.
 - [ ] 4.4 Activity page with paging and ledger status.
 - [ ] 4.5 Verify: `npm test --workspace apps/web`.

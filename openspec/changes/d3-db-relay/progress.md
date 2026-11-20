@@ -21,3 +21,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: merge origin/main into branch - done (conflicts in `services/gateway/src/config.rs`, `relay.rs`: kept both `pg` and `git_bindings`; fixed `git_fixture_tests.rs` initializer)
 - Verified: `cargo nextest run -p ls-gateway` 89 passed; fmt and clippy clean.
 - Notes for next session: group 2 (pg listener and agent auth, opus-grade) is next and not started.
+
+## 2026-11-20 03:25 worker
+- Task: ci-fix - done (no code change)
+- Verified: just ci -> green locally after merging origin/main; human_auth 16/16 pass locally
+- Notes for next session: CI rust job failed only on ls-control-plane human_auth auth_garbage_kids_cannot_turn_requests_into_a_fetch_storm (fetches 2 vs 1), a timing flake under CI load, not touched by d3. If it recurs, file on harness-backlog / fix the test.

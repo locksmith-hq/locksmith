@@ -286,7 +286,8 @@ async fn clients_list_and_revoke_are_org_scoped() {
     .await;
     assert_eq!(s, StatusCode::NOT_FOUND);
 
-    // Revoke marks revoked_at, keeps the row, and a second revoke keeps the first time.
+    // Revoke marks revoked_at, keeps the row, and a second revoke moves the cut-off to the new time
+    // (a client that signed in again after the first revoke must be cut off too).
     let (s, r1) = call(
         &f.app,
         "POST",
@@ -305,9 +306,10 @@ async fn clients_list_and_revoke_are_org_scoped() {
         None,
     )
     .await;
-    assert_eq!(r2["revoked_at"], at);
+    let at2 = r2["revoked_at"].as_str().unwrap().to_owned();
+    assert!(at2 >= at, "{at} -> {at2}");
     let (_, list) = call(&f.app, "GET", "/v1/mcp/clients", Some(f.a), None).await;
-    assert_eq!(list["items"][0]["revoked_at"], at);
+    assert_eq!(list["items"][0]["revoked_at"], at2);
     assert!(list["items"][1].get("revoked_at").is_none());
     let (_, lb) = call(&f.app, "GET", "/v1/mcp/clients", Some(f.b), None).await;
     assert!(lb["items"][0].get("revoked_at").is_none());

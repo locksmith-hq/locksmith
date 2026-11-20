@@ -5,6 +5,8 @@
 //! and the no-value schema check. Tools return ids, names, metadata and relay results, never a
 //! stored secret value (decision D-2).
 
+pub mod explain;
+
 use serde_json::{Value, json};
 use std::collections::HashMap;
 

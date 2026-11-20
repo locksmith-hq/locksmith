@@ -6,9 +6,8 @@
 //! (the same view as `GET /v1/grants`). `relay_http_request` goes through the very function
 //! `/v1/relay` uses ([`crate::relay::handle_as`]), so the grant check, the origin and address
 //! guards, the audit events and the response redaction are not re-implemented; its result is
-//! the redacted upstream response. `explain_block` has no backing service on the gateway (no
-//! block explanations are recorded anywhere yet), so it answers a typed `not_available`, as the
-//! hub's does.
+//! the redacted upstream response. `explain_block` looks the caller's refusal code up in the
+//! static table shared with the hub (`ls_mcp_server::explain`); it does no I/O.
 //!
 //! `issue_short_lived_credential` returns a credential the gateway mints ([`crate::short_lived`]),
 //! never the stored value: it decrypts nothing and touches no KMS. It needs an unexpired relay
@@ -38,9 +37,6 @@ use crate::grants::{self, GrantView, MODE_RELAY};
 use crate::relay::{self, Relay};
 use crate::short_lived::{self, MAX_TTL_SECS, MIN_TTL_SECS, StoreError};
 
-const NOT_AVAILABLE_EXPLAIN_BLOCK: &str = "No block explanations are recorded by the gateway \
-    yet; the refusal slug in a relay result (for example `no_grant` or `denied`) names the cause.";
-
 /// Default and largest page for `list_my_keys`.
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 100;
@@ -55,7 +51,6 @@ struct ListArgs {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExplainArgs {
-    #[allow(dead_code)]
     reason: String,
 }
 
@@ -274,12 +269,10 @@ pub(crate) async fn call(
     args: Option<JsonObject>,
 ) -> Result<CallToolResult, McpError> {
     if name == "explain_block" {
-        let _a: ExplainArgs = parse(args)?;
-        return Ok(CallToolResult::structured_error(json!({"error": {
-            "code": "not_available",
-            "status": 501,
-            "message": NOT_AVAILABLE_EXPLAIN_BLOCK,
-        }})));
+        let a: ExplainArgs = parse(args)?;
+        return Ok(CallToolResult::structured(ls_mcp_server::explain::to_json(
+            &ls_mcp_server::explain::lookup(&a.reason),
+        )));
     }
     let Some(relay) = relay else {
         return Ok(tool_error("unavailable", 503));

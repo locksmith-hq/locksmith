@@ -713,22 +713,19 @@ async fn mcp_no_tool_result_or_response_contains_a_stored_secret_value() {
 }
 
 #[tokio::test]
-async fn mcp_explain_block_is_a_typed_not_available_error() {
+async fn mcp_explain_block_explains_a_code_and_never_echoes_input() {
     let f = start().await;
     let mut p = Person::connect(&f, "alice").await;
+    let (err, out) = p.call("explain_block", json!({"reason": "no_grant"})).await;
+    assert!(!err, "{out}");
+    assert_eq!(out["rule"], "no_grant");
+    assert!(out["next_step"].as_str().unwrap().contains("human"));
     let (err, out) = p
-        .call("explain_block", json!({"reason": "policy.denied"}))
+        .call("explain_block", json!({"reason": "zz SENTINEL-echo"}))
         .await;
-    assert!(err);
-    assert_eq!(out["error"]["code"], "not_available");
-    assert!(
-        out["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("explain_block")
-    );
-    // The reason is checked against the schema but never echoed.
-    assert!(!out.to_string().contains("policy.denied"));
+    assert!(!err);
+    assert!(out["rule"].is_null());
+    assert!(!out.to_string().contains("SENTINEL-echo"));
 }
 
 #[tokio::test]

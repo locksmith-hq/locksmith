@@ -124,3 +124,8 @@
 - Cause: workers had no lead ruling on `explain_block` (no backing service), the gateway half of 4.2 (assumed to need T8) and 4.3's nonexistent `mcp_e2e` target.
 - Decisions: 2.2 `explain_block` is a static reason-code table in `ls-mcp-server`, used by hub and gateway (precedent: `locksmith-mcp` `explain()`); 4.2 is built in full now: Keycloak admin consent revoke on the hub (best-effort, `auth_time` rule enforces) and a gateway-side revoked-agent check with an agent-layer `mcp_clients` row; 4.3 is `just mcp-e2e`, extended with the revoke flow (task text fixed on `claude/planning-m1-remote-mcp-tasks`).
 - Notes for next session: order 2.2, then 4.2 hub issuer revoke, 4.2 gateway, then 4.3 and 7.x. 4.2 gateway is a good [opus] evaluator task (auth path).
+
+## 2026-11-20 worker C (harriet)
+- Task: m1-remote-mcp 2.2 - done. `ls_mcp_server::explain` is a static reason-code table (20 rows incl. every relay refusal slug) used by hub and gateway `explain_block`; input never echoed, no I/O. G9/G10 adversarial cases updated to expect the rule instead of `not_available` (not re-run live).
+- Verified: ls-mcp-server unit tests, `mcp_tools` explain test (hub) and gateway mcp tests pass; `just ci` exit 0. Sonnet evaluator first FAIL (6 relay codes missing), fixed, rows added and tests extended; final re-check by unit tests.
+- Notes for next session: 4.2 hub issuer revoke (Keycloak admin API), then 4.2 gateway check (use an Opus evaluator), then 4.3 (`just mcp-e2e` + revoke flow) and 7.x. Latent: explain matching is substring (e.g. "blocked" contains `locked`); tighten if it bites.

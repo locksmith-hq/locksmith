@@ -263,14 +263,23 @@ async fn mcp_relay_keeps_every_relay_guard() {
 }
 
 #[tokio::test]
-async fn mcp_explain_block_is_a_typed_not_available() {
+async fn mcp_explain_block_explains_a_refusal_code_and_never_echoes_input() {
     let h = harness(Setup::default()).await;
     let sid = session(&h).await;
     let msg = call_tool(&h, &sid, "explain_block", json!({"reason": "no_grant"})).await;
-    assert_eq!(msg["result"]["isError"], true, "{msg}");
-    let err = &structured(&msg)["error"];
-    assert_eq!(err["code"], "not_available");
-    assert_eq!(err["status"], 501);
+    assert_ne!(msg["result"]["isError"], true, "{msg}");
+    let out = structured(&msg);
+    assert_eq!(out["rule"], "no_grant");
+    assert!(out["next_step"].as_str().unwrap().contains("human"));
+    let unknown = call_tool(
+        &h,
+        &sid,
+        "explain_block",
+        json!({"reason": "zz SENTINEL-echo"}),
+    )
+    .await;
+    assert!(structured(&unknown)["rule"].is_null());
+    assert!(!unknown.to_string().contains("SENTINEL-echo"));
     // Bad arguments are a protocol error.
     let bad = call_tool(&h, &sid, "explain_block", json!({})).await;
     assert!(bad["error"].is_object(), "{bad}");

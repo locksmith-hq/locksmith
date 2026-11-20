@@ -56,7 +56,7 @@ list_req='{"jsonrpc":"2.0","id":"list","method":"tools/list"}'
   echo "$list_req"
   req keys list_my_keys '{}'
   req relay relay_http_request "{\"secret_id\":\"$sid\",\"version\":1,\"method\":\"GET\",\"url\":\"$api/g9/mcp\"}"
-  req explain explain_block '{"reason":"redaction_failed"}'
+  req explain explain_block '{"reason":"no_grant"}'
   req off1 issue_short_lived_credential "{\"secret_id\":\"$sid\",\"job\":\"g9\"}"
   req off2 ISSUE_SHORT_LIVED_CREDENTIAL "{\"secret_id\":\"$sid\",\"job\":\"g9\"}"
   req off3 "issue_short_lived_credential " "{\"secret_id\":\"$sid\",\"job\":\"g9\"}"
@@ -94,9 +94,9 @@ def text(m):
 for i in ("keys", "relay"):
     if failed(replies.get(i)):
         sys.exit("call %s did not succeed" % i)
-# explain_block is deferred: a typed not_available reply, not a JSON-RPC error.
-if "not_available" not in text(replies.get("explain")) or "error" in (replies.get("explain") or {}):
-    sys.exit("explain_block did not answer not_available")
+# explain_block answers from the static table: the rule, no error.
+if failed(replies.get("explain")) or "no_grant" not in text(replies.get("explain")):
+    sys.exit("explain_block did not explain no_grant")
 for i in ("off1", "off2", "off3", "off4", "off5", "off6", "off7"):
     m = replies.get(i)
     if not failed(m):
@@ -177,8 +177,8 @@ if by.get(("unknown", "denied"), 0) < 6:
     sys.exit("fewer than 6 denied mcp.call events for unknown tool names")
 if by.get(("relay_http_request", "denied"), 0) < 1:
     sys.exit("no denied mcp.call for the relay tool after it was turned off")
-if by.get(("explain_block", "error"), 0) < 1:
-    sys.exit("no error mcp.call for the deferred explain_block")
+if by.get(("explain_block", "ok"), 0) < 1:
+    sys.exit("no ok mcp.call for explain_block")
 for t in ("list_my_keys", "relay_http_request"):
     if by.get((t, "ok"), 0) < 1:
         sys.exit("no ok mcp.call for %s" % t)

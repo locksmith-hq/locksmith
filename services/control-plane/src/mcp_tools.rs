@@ -37,10 +37,6 @@ use crate::problem::{ApiError, Kind};
 use crate::users::{self, ResolvedUser};
 use ls_audit::{Actor, Code, outcome};
 
-/// A tool that is in the hub registry but has no service code behind it yet.
-const NOT_AVAILABLE_EXPLAIN_BLOCK: &str = "No block explanations are recorded on the hub yet; \
-    the gateway's explain_block tool will cover blocks of an agent's own requests.";
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PageArgs {
@@ -82,8 +78,7 @@ struct PauseAgentsArgs {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExplainArgs {
-    // Read so the shape is checked, never stored or echoed.
-    #[allow(dead_code)]
+    // Looked up in the static table, never stored or echoed.
     reason: String,
 }
 
@@ -176,12 +171,10 @@ pub async fn call(
             }})))
         }
         "explain_block" => {
-            let _a: ExplainArgs = parse(args)?;
-            Ok(CallToolResult::structured_error(json!({"error": {
-                "code": "not_available",
-                "status": 501,
-                "message": NOT_AVAILABLE_EXPLAIN_BLOCK,
-            }})))
+            let a: ExplainArgs = parse(args)?;
+            Ok(CallToolResult::structured(ls_mcp_server::explain::to_json(
+                &ls_mcp_server::explain::lookup(&a.reason),
+            )))
         }
         _ => Err(McpError::invalid_params("unknown tool", None)),
     }

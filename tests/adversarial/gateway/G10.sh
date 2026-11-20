@@ -61,7 +61,7 @@ print(json.dumps({"jsonrpc": "2.0", "id": sys.argv[1], "method": "tools/call",
   req activity read_activity '{}'
   req agents list_agents '{}'
   req grants list_grants "{\"agent_id\":\"$agent\"}"
-  req explain explain_block '{"reason":"redaction_failed"}'
+  req explain explain_block '{"reason":"no_grant"}'
   req off1 revoke_grant "{\"grant_id\":\"$grant\"}"
   req off2 pause_agents '{}'
   req off3 pause_agents "{\"agent_ids\":[\"$agent\"]}"
@@ -98,9 +98,9 @@ def text(m):
 for i in ("projects", "names", "activity", "agents", "grants"):
     if failed(replies.get(i)):
         sys.exit("call %s did not succeed" % i)
-# explain_block is deferred: a typed not_available reply, not a JSON-RPC error.
-if "not_available" not in text(replies.get("explain")) or "error" in (replies.get("explain") or {}):
-    sys.exit("explain_block did not answer not_available")
+# explain_block answers from the static table: the rule, no error.
+if failed(replies.get("explain")) or "no_grant" not in text(replies.get("explain")):
+    sys.exit("explain_block did not explain no_grant")
 for i in ("off1", "off2", "off3", "off4", "off5", "off6", "off7"):
     m = replies.get(i)
     if not failed(m):
@@ -137,8 +137,8 @@ for e in new:
         sys.exit("mcp.call names %r (a registry name or unknown only)" % tool)
     by[(tool, e["outcome"])] = by.get((tool, e["outcome"]), 0) + 1
 open(out, "w").write("".join("%s %s %d\n" % (t, o, n) for (t, o), n in sorted(by.items())))
-if by.get(("explain_block", "error"), 0) < 1:
-    sys.exit("no error mcp.call for the deferred explain_block")
+if by.get(("explain_block", "ok"), 0) < 1:
+    sys.exit("no ok mcp.call for explain_block")
 for t in ("list_projects", "list_secret_names", "read_activity", "list_agents", "list_grants"):
     if by.get((t, "ok"), 0) < 1:
         sys.exit("no ok mcp.call for %s" % t)

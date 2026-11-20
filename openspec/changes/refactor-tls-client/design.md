@@ -49,7 +49,7 @@ Nothing new enters `Cargo.lock`. The wrapper is about 40 lines of glue. No crate
 ## Risks / Trade-offs
 
 - [The gateway's adversarial tests rely on exact client behaviour (no redirects, pinning)] → The gateway keeps adding pinning itself. G-series cases and `cargo nextest run -p ls-gateway` must pass unchanged.
-- [A forgotten fifth copy] → Task 3.1 greps for `with_platform_verifier` and `builder_with_provider` outside `crates/ls-http`, and the grep must find nothing.
+- [A forgotten fifth copy] → Task 3.1 greps for `with_platform_verifier` outside `crates/ls-http`, and the grep must find nothing. `builder_with_provider` is not a usable marker, because `ls-proxy` builds its own server, MITM and DB TLS configs with it and those stay out of scope.
 
 ## Migration Plan
 

@@ -10,5 +10,5 @@
 - [ ] 2.3 Replace `default_client` in `services/control-plane/src/auth/jwks.rs` with `ls_http::builder()`. Verify: `cargo nextest run -p ls-control-plane -E 'test(jwks) | binary(human_auth)'`.
 
 ## 3. Local verification
-- [ ] 3.1 `rg -n 'with_platform_verifier|builder_with_provider' crates services --glob '!crates/ls-http/**'` prints nothing.
+- [ ] 3.1 `rg -n 'with_platform_verifier' crates services --glob '!crates/ls-http/**'` prints nothing.
 - [ ] 3.2 `just up` and `just api`, then `just adversarial-gate`, `just apps-build` and `just ci`.

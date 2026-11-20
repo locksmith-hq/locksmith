@@ -106,6 +106,10 @@ pub mod kind {
     /// `issue_short_lived_credential`, decision H1-2). Records the credential's id, the secret it
     /// is scoped to and its expiry, never the credential.
     pub const CREDENTIAL_ISSUED: Code = Code::new("credential.issued");
+    /// After a hub MCP client was revoked, the control plane asked the OIDC issuer to revoke the
+    /// person's consent for it (m1-remote-mcp task 4.2). Outcome `ok`, or `error` when the issuer
+    /// call failed (the database revoke still stands). Records the layer and a static reason only.
+    pub const MCP_ISSUER_REVOKE: Code = Code::new("mcp.issuer_revoke");
 }
 
 /// Common outcomes.

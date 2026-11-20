@@ -12,8 +12,8 @@
 //! [`crate::mcp_tools`] (task 3.2). The `Host` allowlist is loopback plus the configured public
 //! hosts and is never disabled. No token text is logged or echoed.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use axum::extract::{Request, State};
@@ -23,8 +23,8 @@ use axum::response::Response;
 use axum::routing::any;
 use ls_mcp_server::{Layer, Registry, ToolDef, agent_tools};
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, JsonObject, ListToolsResult, PaginatedRequestParams,
-    ServerCapabilities, ServerConfig, Tool,
+    CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult, JsonObject,
+    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
 };
 use rmcp::service::RequestContext;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
@@ -35,6 +35,7 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::audit::{McpCallEvent, McpOutcome, McpReason};
 use crate::auth::{AgentAuth, AgentIdentity};
+use crate::mcp_clients::{AgentClients, NoClients};
 use crate::mcp_settings::{StaticSettings, ToolSettingsSource};
 use crate::mcp_tools;
 use crate::relay::{Relay, error};
@@ -62,6 +63,9 @@ pub struct McpEndpoint {
     auth: Arc<AgentAuth>,
     allowed_hosts: Vec<String>,
     settings: Arc<dyn ToolSettingsSource>,
+    clients: Arc<dyn AgentClients>,
+    /// Agents whose short-lived credentials were already dropped for a revoke (task 4.2).
+    swept: Mutex<HashSet<Uuid>>,
 }
 
 impl McpEndpoint {
@@ -76,6 +80,8 @@ impl McpEndpoint {
             auth,
             allowed_hosts,
             settings: Arc::new(StaticSettings::default()),
+            clients: Arc::new(NoClients),
+            swept: Mutex::new(HashSet::new()),
         }
     }
 
@@ -93,6 +99,15 @@ impl McpEndpoint {
         self.settings = source;
         self
     }
+
+    /// The agent-layer client registry (task 4.2): agents are recorded on `initialize` and a
+    /// revoked agent is refused with `401` on every request. In production the control plane's
+    /// `mcp_clients` through a short cache ([`crate::mcp_clients::ClientsCache`]); a registry
+    /// that cannot be read refuses every request (fail closed). Without one, nobody is revoked.
+    pub fn with_clients(mut self, clients: Arc<dyn AgentClients>) -> Self {
+        self.clients = clients;
+        self
+    }
 }
 
 /// The gateway MCP server: the registry's agent tools that are on, run as the agent behind the
@@ -105,10 +120,15 @@ struct GatewayMcp {
     relay: Option<Arc<Relay>>,
     registry: Arc<Registry>,
     settings: Arc<dyn ToolSettingsSource>,
+    clients: Arc<dyn AgentClients>,
 }
 
 impl GatewayMcp {
-    fn new(relay: Option<Arc<Relay>>, settings: Arc<dyn ToolSettingsSource>) -> Self {
+    fn new(
+        relay: Option<Arc<Relay>>,
+        settings: Arc<dyn ToolSettingsSource>,
+        clients: Arc<dyn AgentClients>,
+    ) -> Self {
         // The shipped registry carries no value field (tested in `ls-mcp-server`).
         let registry = Registry::new(Layer::Agent, agent_tools())
             .unwrap_or_else(|e| panic!("agent tool registry invalid: {e}"));
@@ -116,6 +136,7 @@ impl GatewayMcp {
             relay,
             registry: Arc::new(registry),
             settings,
+            clients,
         }
     }
 
@@ -143,6 +164,29 @@ impl ServerHandler for GatewayMcp {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Locksmith gateway. Tools return ids, names and relay results, never secret values.",
         )
+    }
+
+    async fn initialize(
+        &self,
+        request: InitializeRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<InitializeResult, McpError> {
+        let agent = Self::agent(&context)?;
+        // Record the agent as an MCP client so the console can list and revoke it. A revoked
+        // agent never gets here (the middleware refused it with 401); a row that cannot be
+        // recorded would make a later revoke impossible, so the session is not opened.
+        let name: String = request.client_info.name.chars().take(200).collect();
+        match self.clients.record(agent.agent_id, &name).await {
+            Ok(false) => {}
+            Ok(true) | Err(_) => {
+                return Err(McpError::internal_error(
+                    "the client could not be registered",
+                    None,
+                ));
+            }
+        }
+        context.peer.set_peer_info(request.clone());
+        self.negotiate_initialize(&request)
     }
 
     async fn list_tools(
@@ -270,14 +314,52 @@ fn unauthorized(token_presented: bool) -> Response {
     response
 }
 
+/// Whether `agent`'s MCP access is revoked, read on every request (cached for at most the
+/// registry's TTL). A registry that cannot be read counts as revoked: fail closed. The first time
+/// an agent is seen revoked its live short-lived credentials are destroyed, and the caller's
+/// again every time (a credential issued by a call already in flight at the revoke).
+async fn agent_revoked(
+    endpoint: &McpEndpoint,
+    relay: Option<&Arc<Relay>>,
+    agent: &AgentIdentity,
+) -> bool {
+    let Ok(revoked) = endpoint.clients.revoked().await else {
+        tracing::warn!("revoked MCP agents unreadable; request refused");
+        return true;
+    };
+    if let Some(relay) = relay {
+        let first_seen: Vec<Uuid> = {
+            let mut swept = endpoint.swept.lock().unwrap_or_else(|e| e.into_inner());
+            swept.retain(|id| revoked.contains(id));
+            revoked
+                .iter()
+                .filter(|id| swept.insert(**id))
+                .copied()
+                .collect()
+        };
+        for id in first_seen {
+            let dropped = relay.short_lived().drop_agent(id);
+            tracing::info!(agent.id = %id, dropped, "revoked MCP agent: short-lived credentials dropped");
+        }
+        if revoked.contains(&agent.agent_id) {
+            relay.short_lived().drop_agent(agent.agent_id);
+        }
+    }
+    revoked.contains(&agent.agent_id)
+}
+
 async fn require_agent(
-    State(endpoint): State<Arc<McpEndpoint>>,
+    State((endpoint, relay)): State<(Arc<McpEndpoint>, Option<Arc<Relay>>)>,
     mut request: Request,
     next: Next,
 ) -> Response {
     let presented = request.headers().contains_key(header::AUTHORIZATION);
     match endpoint.auth.authenticate(request.headers()).await {
         Ok(identity) => {
+            // A revoked agent is refused like a bad token, on calls and on a fresh initialize.
+            if agent_revoked(&endpoint, relay.as_ref(), &identity).await {
+                return unauthorized(true);
+            }
             request.extensions_mut().insert(identity);
             next.run(request).await
         }
@@ -301,14 +383,22 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .with_legacy_session_mode(true);
     let relay = state.relay();
     let settings = endpoint.settings.clone();
+    let clients = endpoint.clients.clone();
+    let guard = (endpoint.clone(), state.relay());
     let service = StreamableHttpService::new(
-        move || Ok(GatewayMcp::new(relay.clone(), settings.clone())),
+        move || {
+            Ok(GatewayMcp::new(
+                relay.clone(),
+                settings.clone(),
+                clients.clone(),
+            ))
+        },
         Arc::new(LocalSessionManager::default()),
         config,
     );
     Router::new()
         .nest_service(MCP_PATH, service)
-        .layer(middleware::from_fn_with_state(endpoint, require_agent))
+        .layer(middleware::from_fn_with_state(guard, require_agent))
 }
 
 #[cfg(test)]

@@ -679,3 +679,136 @@ pub async fn append_agent_mcp_call(
         }),
     ))
 }
+
+/// Body of `POST /internal/v1/mcp/agent-clients`: the agent that just initialized an MCP session.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NewAgentMcpClient {
+    /// The agent whose verified token opened the session; also the row's `client_id` and
+    /// `principal` (an agent token has no OAuth client id).
+    pub agent_id: Uuid,
+    /// The client's display name from `initialize`; stored capped at 200 characters.
+    #[schema(max_length = 200)]
+    pub client_name: String,
+}
+
+/// The agent-layer `mcp_clients` row after the upsert.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AgentMcpClientState {
+    /// Whether an admin has revoked this agent's MCP access.
+    pub revoked: bool,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/mcp/agent-clients",
+    operation_id = "upsert_agent_mcp_client",
+    tag = "internal",
+    summary = "Record an agent MCP client on initialize (gateway only)",
+    description = "Upserts the agent-layer `mcp_clients` row for the agent (`client_id` and `principal` are the agent id): inserted on first sight, name and last-seen time refreshed afterwards. A revoked row stays revoked. The answer says whether it is revoked. An agent that does not exist in the org is a `404`. Ids and a display name only; never a token.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The agent's org (the token's `org`)"),
+    ),
+    request_body = NewAgentMcpClient,
+    responses(
+        (status = 200, description = "Recorded", body = AgentMcpClientState),
+        (status = 404, description = "The agent does not exist in the org", body = Problem, content_type = "application/problem+json"),
+        InternalWriteErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn upsert_agent_mcp_client(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+    ApiJson(input): ApiJson<NewAgentMcpClient>,
+) -> Result<Json<AgentMcpClientState>, ApiError> {
+    let org_id = org.org_id;
+    let agent_id = input.agent_id;
+    let name: String = input.client_name.chars().take(200).collect();
+    let revoked = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                exists_or_404(
+                    &mut *c,
+                    sql::query_scalar("SELECT 1 FROM agents WHERE id = $1").bind(agent_id),
+                )
+                .await?;
+                let row = sql::query(
+                    "INSERT INTO mcp_clients (org_id, layer, client_id, principal, client_name) \
+                     VALUES ($1, 'agent', $2, $2, $3) \
+                     ON CONFLICT (org_id, layer, client_id, principal) \
+                     DO UPDATE SET client_name = EXCLUDED.client_name, last_seen_at = now() \
+                     RETURNING revoked_at",
+                )
+                .bind(org_id)
+                .bind(agent_id.to_string())
+                .bind(name)
+                .fetch_one(c)
+                .await?;
+                let at: Option<OffsetDateTime> = row.try_get("revoked_at")?;
+                Ok::<_, ApiError>(at.is_some())
+            })
+        })
+        .await?;
+    Ok(Json(AgentMcpClientState { revoked }))
+}
+
+/// One agent whose MCP access was revoked.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RevokedAgentClient {
+    pub agent_id: Uuid,
+}
+
+/// The org's agents with revoked MCP access.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RevokedAgentClientSet {
+    pub items: Vec<RevokedAgentClient>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/internal/v1/mcp/revoked-agent-clients",
+    operation_id = "get_internal_revoked_agent_clients",
+    tag = "internal",
+    summary = "List the agents whose MCP access is revoked (gateway only)",
+    description = "The gateway reads this (cached for seconds, failing closed when unreadable) and refuses `/mcp` to every agent listed, on calls and on a fresh `initialize`. Agent ids only.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the gateway acts for"),
+    ),
+    responses(
+        (status = 200, description = "Agents with a revoked agent-layer client row", body = RevokedAgentClientSet),
+        InternalReadErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn revoked_agent_clients(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+) -> Result<Json<RevokedAgentClientSet>, ApiError> {
+    let org_id = org.org_id;
+    let items = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let rows = sql::query(
+                    "SELECT client_id FROM mcp_clients \
+                     WHERE org_id = $1 AND layer = 'agent' AND revoked_at IS NOT NULL \
+                     ORDER BY id",
+                )
+                .bind(org_id)
+                .fetch_all(c)
+                .await?;
+                // A row whose client id is not an agent id cannot name an agent; it is skipped.
+                Ok::<_, ApiError>(
+                    rows.iter()
+                        .filter_map(|r| r.try_get::<String, _>("client_id").ok())
+                        .filter_map(|id| id.parse::<Uuid>().ok())
+                        .map(|agent_id| RevokedAgentClient { agent_id })
+                        .collect::<Vec<_>>(),
+                )
+            })
+        })
+        .await?;
+    Ok(Json(RevokedAgentClientSet { items }))
+}

@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use secrecy::{ExposeSecret, SecretString};
 
 use crate::auth::human::HumanAuthConfig;
+use crate::issuer_admin::IssuerAdminConfig;
 
 pub const ENV_DATABASE_URL: &str = "DATABASE_URL";
 pub const ENV_DATABASE_OWNER_URL: &str = "DATABASE_OWNER_URL";
@@ -39,6 +40,17 @@ pub const ENV_OIDC_JWKS_URL: &str = "LOCKSMITH_OIDC_JWKS_URL";
 /// M1 2.1: the canonical public URL of the hub `/mcp` route (RFC 8707 resource). MCP tokens must
 /// carry it as `aud`. Needs the `LOCKSMITH_OIDC_*` issuer settings; unset leaves `/mcp` answering `401`.
 pub const ENV_MCP_RESOURCE_URL: &str = "LOCKSMITH_MCP_RESOURCE_URL";
+
+/// M1 4.2: the server base URL of the issuer's admin API, e.g. `http://localhost:8180` for
+/// Keycloak. It is used to revoke a person's consent for an MCP client after the database
+/// revoke. This and the three variables below go together; unset skips the step.
+pub const ENV_ISSUER_ADMIN_URL: &str = "LOCKSMITH_ISSUER_ADMIN_URL";
+/// The realm whose users and clients the admin client manages.
+pub const ENV_ISSUER_ADMIN_REALM: &str = "LOCKSMITH_ISSUER_ADMIN_REALM";
+/// The confidential client the control plane authenticates as (service account).
+pub const ENV_ISSUER_ADMIN_CLIENT_ID: &str = "LOCKSMITH_ISSUER_ADMIN_CLIENT_ID";
+/// That client's secret. Secret value: never logged.
+pub const ENV_ISSUER_ADMIN_CLIENT_SECRET: &str = "LOCKSMITH_ISSUER_ADMIN_CLIENT_SECRET";
 
 /// Shortest accepted gateway service token, in bytes (a 256-bit random token in hex or base64
 /// is longer). Shorter values are rejected rather than accepted as a guessable credential.
@@ -111,6 +123,9 @@ pub struct Config {
     pub human_auth: Option<HumanAuthConfig>,
     /// The canonical hub MCP resource URL (M1 2.1). `None` when unset. Public value only.
     pub mcp_resource_url: Option<String>,
+    /// The issuer admin client for the consent revoke (M1 4.2). `None` when
+    /// `LOCKSMITH_ISSUER_ADMIN_URL` is unset: the issuer step is then skipped.
+    pub issuer_admin: Option<IssuerAdminConfig>,
 }
 
 /// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
@@ -237,6 +252,8 @@ impl Config {
             Some(v) => Some(v),
         };
 
+        let issuer_admin = issuer_admin_from(&get, human_auth.is_some())?;
+
         Ok(Self {
             database_url,
             database_owner_url,
@@ -249,6 +266,7 @@ impl Config {
             agent_signing_key,
             human_auth,
             mcp_resource_url,
+            issuer_admin,
         })
     }
 }
@@ -274,6 +292,38 @@ fn human_auth_from(
         issuer,
         audience,
         jwks_url,
+    }))
+}
+
+/// All four `LOCKSMITH_ISSUER_ADMIN_*` variables or none (an unset or empty URL means none). The
+/// admin client acts on the OIDC issuer, so it needs the `LOCKSMITH_OIDC_*` settings too.
+fn issuer_admin_from(
+    get: &impl Fn(&str) -> Option<String>,
+    has_oidc: bool,
+) -> Result<Option<IssuerAdminConfig>, ConfigError> {
+    let value = |var: &'static str| {
+        get(var)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    let Some(url) = value(ENV_ISSUER_ADMIN_URL) else {
+        return Ok(None);
+    };
+    if !has_oidc {
+        return Err(ConfigError::Missing(ENV_OIDC_ISSUER));
+    }
+    if !is_http_url(&url) {
+        return Err(ConfigError::Invalid(ENV_ISSUER_ADMIN_URL));
+    }
+    Ok(Some(IssuerAdminConfig {
+        url,
+        realm: value(ENV_ISSUER_ADMIN_REALM).ok_or(ConfigError::Missing(ENV_ISSUER_ADMIN_REALM))?,
+        client_id: value(ENV_ISSUER_ADMIN_CLIENT_ID)
+            .ok_or(ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_ID))?,
+        client_secret: SecretString::from(
+            value(ENV_ISSUER_ADMIN_CLIENT_SECRET)
+                .ok_or(ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_SECRET))?,
+        ),
     }))
 }
 
@@ -350,6 +400,48 @@ mod tests {
             c.mcp_resource_url.as_deref(),
             Some("https://hub.example/mcp")
         );
+    }
+
+    #[test]
+    fn issuer_admin_is_all_or_nothing_and_needs_oidc() {
+        // Unset: skipped.
+        assert!(
+            Config::from_lookup(lookup(&DB))
+                .ok()
+                .unwrap()
+                .issuer_admin
+                .is_none()
+        );
+        let oidc = [
+            (ENV_OIDC_ISSUER, "https://idp.example/realms/x"),
+            (ENV_OIDC_AUDIENCE, "api"),
+            (ENV_OIDC_JWKS_URL, "http://localhost:8081/certs"),
+        ];
+        let url = (ENV_ISSUER_ADMIN_URL, "http://localhost:8180");
+        let err = Config::from_lookup(lookup(&with(&[url]))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OIDC_ISSUER));
+        let mut v = oidc.to_vec();
+        v.push(url);
+        let err = Config::from_lookup(lookup(&with(&v))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_ISSUER_ADMIN_REALM));
+        v.push((ENV_ISSUER_ADMIN_REALM, "locksmith"));
+        let err = Config::from_lookup(lookup(&with(&v))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_ID));
+        v.push((ENV_ISSUER_ADMIN_CLIENT_ID, "locksmith-control-plane"));
+        let err = Config::from_lookup(lookup(&with(&v))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_SECRET));
+        // The error names the variable, never a value.
+        assert!(!err.to_string().contains("localhost:8180"));
+        v.push((ENV_ISSUER_ADMIN_CLIENT_SECRET, "s3cret-value"));
+        let c = Config::from_lookup(lookup(&with(&v))).ok().unwrap();
+        let admin = c.issuer_admin.unwrap();
+        assert_eq!(admin.realm, "locksmith");
+        assert_eq!(admin.url, "http://localhost:8180");
+        // A bad URL is refused.
+        let mut bad = oidc.to_vec();
+        bad.push((ENV_ISSUER_ADMIN_URL, "not a url"));
+        let err = Config::from_lookup(lookup(&with(&bad))).err().unwrap();
+        assert_eq!(err, ConfigError::Invalid(ENV_ISSUER_ADMIN_URL));
     }
 
     #[test]

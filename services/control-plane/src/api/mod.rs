@@ -80,6 +80,8 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(internal::agent_grants))
         .routes(routes!(internal::agent_tool_settings))
         .routes(routes!(internal::append_agent_mcp_call))
+        .routes(routes!(internal::upsert_agent_mcp_client))
+        .routes(routes!(internal::revoked_agent_clients))
         .routes(routes!(internal::append_event))
 }
 

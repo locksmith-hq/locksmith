@@ -173,6 +173,24 @@ async fn main() -> ExitCode {
             }
         }
     }
+    match (&config.issuer_admin, &config.human_auth) {
+        (Some(admin), Some(human)) => {
+            match ls_control_plane::issuer_admin::IssuerAdmin::new(admin, &human.issuer) {
+                Ok(client) => {
+                    tracing::info!("issuer consent revoke configured (admin client)");
+                    state = state.with_issuer_admin(client);
+                }
+                Err(e) => {
+                    tracing::error!(reason = e.reason(), "invalid issuer admin configuration");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        _ => tracing::info!(
+            "{} is not set: revoking an MCP client does not revoke consent at the issuer",
+            config::ENV_ISSUER_ADMIN_URL
+        ),
+    }
     let router = app::build(state);
 
     let listener = match tokio::net::TcpListener::bind(config.bind).await {

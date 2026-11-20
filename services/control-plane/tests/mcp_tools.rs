@@ -19,6 +19,7 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header as JwtHeader};
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::auth::human::{HumanAuth, HumanAuthConfig};
 use ls_control_plane::db::PoolSettings;
+use ls_control_plane::issuer_admin::{IssuerAdmin, IssuerAdminConfig};
 use ls_control_plane::mcp_endpoint::McpEndpoint;
 use ls_control_plane::readiness::ReadyFlag;
 use ls_envelope::{
@@ -125,13 +126,23 @@ impl TestKey {
 }
 
 struct Fixture {
-    _issuer: MockServer,
+    issuer: MockServer,
     key: TestKey,
     app: Router,
     pg: common::Pg,
 }
 
 async fn start() -> Fixture {
+    start_with(false).await
+}
+
+/// The admin client's secret in the tests that configure one: it must never be logged, audited
+/// or returned.
+const ADMIN_SECRET: &str = "ADMIN-SECRET-CANARY-3b7d";
+const ADMIN_TOKEN: &str = "ADMIN-TOKEN-CANARY-91ac";
+
+/// As [`start`], with the issuer admin client pointed at the mock issuer when `admin` is set.
+async fn start_with(admin: bool) -> Fixture {
     let server = MockServer::start().await;
     let key = TestKey(p256::ecdsa::SigningKey::from_slice(&[9; 32]).unwrap());
     Mock::given(method("GET"))
@@ -146,7 +157,7 @@ async fn start() -> Fixture {
     };
     let pg = common::Pg::migrated().await;
     // Dev auth is on only so the test can seed data through the REST API; `/mcp` never uses it.
-    let state = AppState::new(
+    let mut state = AppState::new(
         true,
         Arc::new(ReadyFlag::new(true)),
         pg.app_db(PoolSettings::default()),
@@ -154,8 +165,17 @@ async fn start() -> Fixture {
     .with_kms(Arc::new(FakeKms(AtomicU32::new(0))))
     .with_human_auth(HumanAuth::new(&cfg).unwrap())
     .with_mcp(McpEndpoint::new(&cfg, RESOURCE).unwrap());
+    if admin {
+        let admin_cfg = IssuerAdminConfig {
+            url: server.uri(),
+            realm: "locksmith".to_owned(),
+            client_id: "locksmith-control-plane".to_owned(),
+            client_secret: ADMIN_SECRET.to_owned().into(),
+        };
+        state = state.with_issuer_admin(IssuerAdmin::new(&admin_cfg, ISSUER).unwrap());
+    }
     Fixture {
-        _issuer: server,
+        issuer: server,
         key,
         app: app::build(state),
         pg,
@@ -1105,4 +1125,141 @@ async fn mcp_a_revoked_client_is_refused_on_the_next_call_and_on_a_fresh_initial
         .find(|r| r["client_id"] == "client-abc")
         .unwrap();
     assert!(!row["revoked_at"].is_null(), "{rows}");
+}
+
+/// Mount the issuer's token endpoint (answering `token_status`) and the consent delete
+/// (answering `delete_status`).
+async fn mount_issuer_admin(f: &Fixture, token_status: u16, delete_status: u16) {
+    let token = if token_status == 200 {
+        ResponseTemplate::new(200)
+            .set_body_json(json!({"access_token": ADMIN_TOKEN, "token_type": "Bearer"}))
+    } else {
+        ResponseTemplate::new(token_status).set_body_string(ADMIN_TOKEN)
+    };
+    Mock::given(method("POST"))
+        .and(path("/realms/locksmith/protocol/openid-connect/token"))
+        .respond_with(token)
+        .mount(&f.issuer)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path(
+            "/admin/realms/locksmith/users/alice/consents/client-abc",
+        ))
+        .respond_with(ResponseTemplate::new(delete_status).set_body_string(ADMIN_TOKEN))
+        .mount(&f.issuer)
+        .await;
+}
+
+/// Requests the mock issuer received on its admin and token endpoints.
+async fn admin_requests(f: &Fixture) -> Vec<wiremock::Request> {
+    f.issuer
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.url.path().starts_with("/admin/") || r.url.path().starts_with("/realms/"))
+        .collect()
+}
+
+/// Connect `alice` as `client-abc` and revoke that client; returns `(org, revoked_client)`.
+async fn revoke_alices_client(f: &Fixture) -> (Uuid, Value) {
+    let _alice = Person::connect_as(f, "alice", Some("client-abc")).await;
+    let org = personal_org(f, "alice").await;
+    let rows = rest(f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    let row_id = rows["items"][0]["id"].as_str().unwrap().to_owned();
+    let revoked = rest(
+        f,
+        "POST",
+        &format!("/v1/mcp/clients/{row_id}/revoke"),
+        org,
+        json!({}),
+    )
+    .await;
+    (org, revoked)
+}
+
+#[tokio::test]
+async fn mcp_revoke_deletes_the_persons_consent_at_the_issuer_and_audits_it() {
+    let f = start_with(true).await;
+    mount_issuer_admin(&f, 200, 204).await;
+    let (_, revoked) = revoke_alices_client(&f).await;
+    assert!(revoked["revoked_at"].is_string(), "{revoked}");
+    let reqs = admin_requests(&f).await;
+    assert_eq!(reqs.len(), 2, "{reqs:?}");
+    // The admin client signs in with its own credentials, then deletes with the access token.
+    assert_eq!(reqs[0].method.as_str(), "POST");
+    let basic = reqs[0]
+        .headers
+        .get("authorization")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(basic.starts_with("Basic "), "client authentication");
+    assert_eq!(reqs[1].method.as_str(), "DELETE");
+    assert_eq!(
+        reqs[1]
+            .headers
+            .get("authorization")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        format!("Bearer {ADMIN_TOKEN}")
+    );
+    // One event, outcome ok, no reason, nothing from the issuer.
+    let events = ledger(&f, "mcp.issuer_revoke").await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].2, "ok");
+    assert!(!events[0].3.contains(ADMIN_TOKEN) && !events[0].3.contains(ADMIN_SECRET));
+    // The revoke is enforced by the database rule whatever the issuer does.
+    let again = Person::raw(&f, f.key.token_at("alice", true, Some("client-abc"), None));
+    assert_eq!(again.init_status().await, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn mcp_revoke_still_succeeds_and_holds_when_the_issuer_call_fails() {
+    for (token_status, delete_status, reason) in [
+        (200, 500, "issuer_admin_delete"),
+        (200, 403, "issuer_admin_delete"),
+        (401, 204, "issuer_admin_token"),
+    ] {
+        let f = start_with(true).await;
+        mount_issuer_admin(&f, token_status, delete_status).await;
+        let (org, revoked) = revoke_alices_client(&f).await;
+        // The API answered success with the revoked row, and the row is revoked.
+        assert!(revoked["revoked_at"].is_string(), "{revoked}");
+        let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+        assert_eq!(rows["items"][0]["revoked_at"], revoked["revoked_at"]);
+        // The next call and a fresh initialize are refused (the issuer step is not the control).
+        let again = Person::raw(&f, f.key.token_at("alice", true, Some("client-abc"), None));
+        assert_eq!(again.init_status().await, StatusCode::UNAUTHORIZED);
+        // The failure is an audit event with outcome error and a static reason only.
+        let events = ledger(&f, "mcp.issuer_revoke").await;
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0].2, "error");
+        assert!(events[0].3.contains(reason), "{events:?}");
+        for banned in [ADMIN_TOKEN, ADMIN_SECRET, "alice"] {
+            assert!(!events[0].3.contains(banned), "{banned} in {events:?}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn mcp_revoke_of_an_unreachable_issuer_still_succeeds() {
+    let f = start_with(true).await;
+    // Nothing mounted: the mock answers 404 to the token request.
+    let (_, revoked) = revoke_alices_client(&f).await;
+    assert!(revoked["revoked_at"].is_string(), "{revoked}");
+    let events = ledger(&f, "mcp.issuer_revoke").await;
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].2, "error");
+}
+
+#[tokio::test]
+async fn mcp_revoke_skips_the_issuer_when_no_admin_client_is_configured() {
+    let f = start().await;
+    mount_issuer_admin(&f, 200, 204).await;
+    let (_, revoked) = revoke_alices_client(&f).await;
+    assert!(revoked["revoked_at"].is_string(), "{revoked}");
+    assert!(admin_requests(&f).await.is_empty(), "no issuer call");
+    assert!(ledger(&f, "mcp.issuer_revoke").await.is_empty());
 }

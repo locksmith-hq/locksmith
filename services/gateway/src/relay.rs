@@ -919,6 +919,8 @@ mod tests {
     /// Task 3.2 of m1-remote-mcp: the gateway's default-on MCP tools over the same harness.
     mod mcp;
 
+    /// Task 4.2 of m1-remote-mcp: a revoked agent is refused on `/mcp`, calls and initialize.
+    mod mcp_revoke;
     /// Task 3.3 of m1-remote-mcp: `issue_short_lived_credential` and its adversarial cases.
     mod mcp_short_lived;
 
@@ -1039,6 +1041,8 @@ mod tests {
         mcp_tools: Vec<(&'static str, bool)>,
         /// Replaces the fixed switches with a source read on every call (task 3.4).
         settings_source: Option<Arc<dyn crate::mcp_settings::ToolSettingsSource>>,
+        /// The agent-layer client registry (task 4.2); none means nobody is revoked.
+        clients: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
     }
 
     impl Default for Setup {
@@ -1053,6 +1057,7 @@ mod tests {
                 value: VALUE.to_vec(),
                 mcp_tools: Vec::new(),
                 settings_source: None,
+                clients: None,
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
@@ -1185,6 +1190,9 @@ mod tests {
                 );
         if let Some(source) = setup.settings_source {
             mcp = mcp.with_settings_source(source);
+        }
+        if let Some(clients) = setup.clients {
+            mcp = mcp.with_clients(clients);
         }
         let relay = Relay::new(
             auth,

@@ -101,6 +101,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/mcp/agent-clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record an agent MCP client on initialize (gateway only)
+         * @description Upserts the agent-layer `mcp_clients` row for the agent (`client_id` and `principal` are the agent id): inserted on first sight, name and last-seen time refreshed afterwards. A revoked row stays revoked. The answer says whether it is revoked. An agent that does not exist in the org is a `404`. Ids and a display name only; never a token.
+         */
+        post: operations["upsert_agent_mcp_client"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/mcp/agent-tool-settings": {
         parameters: {
             query?: never;
@@ -113,6 +133,26 @@ export interface paths {
          * @description The gateway reads this (cached for seconds) to decide which agent tools it lists and runs. Only overrides are returned; the defaults live in the tool registry. Tool names and booleans only.
          */
         get: operations["get_internal_agent_tool_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/mcp/revoked-agent-clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the agents whose MCP access is revoked (gateway only)
+         * @description The gateway reads this (cached for seconds, failing closed when unreadable) and refuses `/mcp` to every agent listed, on calls and on a fresh `initialize`. Agent ids only.
+         */
+        get: operations["get_internal_revoked_agent_clients"];
         put?: never;
         post?: never;
         delete?: never;
@@ -641,6 +681,11 @@ export interface components {
             agent_id: string;
             items: components["schemas"]["ActiveGrant"][];
         };
+        /** @description The agent-layer `mcp_clients` row after the upsert. */
+        AgentMcpClientState: {
+            /** @description Whether an admin has revoked this agent's MCP access. */
+            revoked: boolean;
+        };
         /**
          * @description A minted agent token (RFC 6749 section 5.1 shape). No `Debug`: the token is a bearer
          *     credential for the gateway only.
@@ -881,6 +926,17 @@ export interface components {
              * @description The secret the agent may relay (same org).
              */
             secret_id: string;
+        };
+        /** @description Body of `POST /internal/v1/mcp/agent-clients`: the agent that just initialized an MCP session. */
+        NewAgentMcpClient: {
+            /**
+             * Format: uuid
+             * @description The agent whose verified token opened the session; also the row's `client_id` and
+             *     `principal` (an agent token has no OAuth client id).
+             */
+            agent_id: string;
+            /** @description The client's display name from `initialize`; stored capped at 200 characters. */
+            client_name: string;
         };
         NewEnvironment: {
             description?: string;
@@ -1133,6 +1189,15 @@ export interface components {
          * @enum {string}
          */
         RelayOutcome: "pending" | "ok" | "no_grant" | "grants_unavailable" | "denied" | "denied_address" | "material_error" | "decrypt_failed" | "inject_failed" | "upstream_unreachable" | "upstream_timeout" | "upstream_error" | "redaction_failed";
+        /** @description One agent whose MCP access was revoked. */
+        RevokedAgentClient: {
+            /** Format: uuid */
+            agent_id: string;
+        };
+        /** @description The org's agents with revoked MCP access. */
+        RevokedAgentClientSet: {
+            items: components["schemas"]["RevokedAgentClient"][];
+        };
         Secret: {
             /** Format: date-time */
             created_at: string;
@@ -1477,6 +1542,96 @@ export interface operations {
             };
         };
     };
+    upsert_agent_mcp_client: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The agent's org (the token's `org`) */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewAgentMcpClient"];
+            };
+        };
+        responses: {
+            /** @description Recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentMcpClientState"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The agent does not exist in the org */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_internal_agent_tool_settings: {
         parameters: {
             query?: never;
@@ -1496,6 +1651,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentToolSettingSet"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found (including another org's secret) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_internal_revoked_agent_clients: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the gateway acts for */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agents with a revoked agent-layer client row */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokedAgentClientSet"];
                 };
             };
             /** @description Missing or invalid service token or org header */

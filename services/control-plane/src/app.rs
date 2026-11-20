@@ -23,6 +23,7 @@ use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
 use crate::auth::human::HumanAuth;
 use crate::db::Database;
+use crate::issuer_admin::IssuerAdmin;
 use crate::kms::DekWrapper;
 use crate::mcp_endpoint::{self, McpEndpoint};
 use crate::problem::ApiError;
@@ -91,6 +92,7 @@ pub struct AppState {
     agent_signer: Option<Arc<AgentTokenSigner>>,
     human_auth: Option<Arc<HumanAuth>>,
     mcp: Option<Arc<McpEndpoint>>,
+    issuer_admin: Option<Arc<IssuerAdmin>>,
 }
 
 impl AppState {
@@ -105,7 +107,20 @@ impl AppState {
             agent_signer: None,
             human_auth: None,
             mcp: None,
+            issuer_admin: None,
         }
+    }
+
+    /// Revoke the person's consent at the issuer after a hub MCP client revoke (M1 task 4.2).
+    /// Without one that step is skipped.
+    pub fn with_issuer_admin(mut self, admin: IssuerAdmin) -> Self {
+        self.issuer_admin = Some(Arc::new(admin));
+        self
+    }
+
+    /// The issuer admin client, if one is configured.
+    pub fn issuer_admin(&self) -> Option<&IssuerAdmin> {
+        self.issuer_admin.as_deref()
     }
 
     /// Mint agent tokens with `signer` and publish its public key in the JWKS (S4). Without

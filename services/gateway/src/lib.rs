@@ -15,6 +15,7 @@ pub mod egress;
 pub mod git;
 pub mod grants;
 pub mod http_client;
+pub mod mcp_clients;
 pub mod mcp_endpoint;
 pub mod mcp_settings;
 mod mcp_tools;

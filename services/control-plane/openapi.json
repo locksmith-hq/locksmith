@@ -148,6 +148,19 @@
         ],
         "type": "object"
       },
+      "AgentMcpClientState": {
+        "description": "The agent-layer `mcp_clients` row after the upsert.",
+        "properties": {
+          "revoked": {
+            "description": "Whether an admin has revoked this agent's MCP access.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "type": "object"
+      },
       "AgentToken": {
         "description": "A minted agent token (RFC 6749 section 5.1 shape). No `Debug`: the token is a bearer\ncredential for the gateway only.",
         "properties": {
@@ -733,6 +746,27 @@
         },
         "required": [
           "secret_id"
+        ],
+        "type": "object"
+      },
+      "NewAgentMcpClient": {
+        "additionalProperties": false,
+        "description": "Body of `POST /internal/v1/mcp/agent-clients`: the agent that just initialized an MCP session.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent whose verified token opened the session; also the row's `client_id` and\n`principal` (an agent token has no OAuth client id).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "client_name": {
+            "description": "The client's display name from `initialize`; stored capped at 200 characters.",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "client_name"
         ],
         "type": "object"
       },
@@ -1438,6 +1472,34 @@
         ],
         "type": "string"
       },
+      "RevokedAgentClient": {
+        "description": "One agent whose MCP access was revoked.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id"
+        ],
+        "type": "object"
+      },
+      "RevokedAgentClientSet": {
+        "description": "The org's agents with revoked MCP access.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RevokedAgentClient"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "Secret": {
         "properties": {
           "created_at": {
@@ -1962,6 +2024,125 @@
         ]
       }
     },
+    "/internal/v1/mcp/agent-clients": {
+      "post": {
+        "description": "Upserts the agent-layer `mcp_clients` row for the agent (`client_id` and `principal` are the agent id): inserted on first sight, name and last-seen time refreshed afterwards. A revoked row stays revoked. The answer says whether it is revoked. An agent that does not exist in the org is a `404`. Ids and a display name only; never a token.",
+        "operationId": "upsert_agent_mcp_client",
+        "parameters": [
+          {
+            "description": "The agent's org (the token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgentMcpClient"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentMcpClientState"
+                }
+              }
+            },
+            "description": "Recorded"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The agent does not exist in the org"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Record an agent MCP client on initialize (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
     "/internal/v1/mcp/agent-tool-settings": {
       "get": {
         "description": "The gateway reads this (cached for seconds) to decide which agent tools it lists and runs. Only overrides are returned; the defaults live in the tool registry. Tool names and booleans only.",
@@ -2036,6 +2217,85 @@
           }
         ],
         "summary": "List the org's agent-layer MCP tool overrides (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/revoked-agent-clients": {
+      "get": {
+        "description": "The gateway reads this (cached for seconds, failing closed when unreadable) and refuses `/mcp` to every agent listed, on calls and on a fresh `initialize`. Agent ids only.",
+        "operationId": "get_internal_revoked_agent_clients",
+        "parameters": [
+          {
+            "description": "The org the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokedAgentClientSet"
+                }
+              }
+            },
+            "description": "Agents with a revoked agent-layer client row"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found (including another org's secret)"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "List the agents whose MCP access is revoked (gateway only)",
         "tags": [
           "internal"
         ]

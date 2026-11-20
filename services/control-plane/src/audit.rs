@@ -189,6 +189,23 @@ pub fn mcp_call(
     }
 }
 
+/// `mcp.issuer_revoke`: the issuer-side consent revoke that follows a hub MCP client revoke
+/// (task 4.2). `outcome` is `ok` or `error`; a failure carries a static `reason` and nothing
+/// the issuer said.
+pub fn mcp_issuer_revoke(actor: Actor, org_id: Uuid, outcome: Code, reason: Option<Code>) -> Event {
+    let mut attrs = Attrs::new().code(attr::LAYER, Code::new("hub"));
+    if let Some(r) = reason {
+        attrs = attrs.code(attr::REASON, r);
+    }
+    Event {
+        kind: kind::MCP_ISSUER_REVOKE,
+        actor,
+        target: Some(Target::Org(org_id)),
+        outcome,
+        attrs,
+    }
+}
+
 /// Host name of an OIDC issuer URL, if it is one the ledger accepts. The issuer is the only
 /// identity attribute recorded besides the user id: no subject, email, token or claim text.
 fn issuer_host(issuer: &str) -> Option<Host> {

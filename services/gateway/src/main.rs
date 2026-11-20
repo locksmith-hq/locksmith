@@ -13,6 +13,7 @@ use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
 use ls_gateway::grants::{GrantCache, GrantCacheSettings};
+use ls_gateway::mcp_clients::{ClientsCache, MAX_REVOKED_TTL};
 use ls_gateway::mcp_endpoint::McpEndpoint;
 use ls_gateway::mcp_settings::{MAX_SETTINGS_TTL, SettingsCache};
 use ls_gateway::relay::{Relay, RelayOptions};
@@ -128,10 +129,14 @@ async fn main() -> ExitCode {
     // internal append endpoint, with the same service token.
     // The org's agent MCP tool switches (m1-remote-mcp task 3.4), cached for at most 10 s.
     let tool_settings = Arc::new(SettingsCache::new(control_plane.clone(), MAX_SETTINGS_TTL));
+    // Agent MCP clients and their revoke (task 4.2): recorded on initialize, the revoked set
+    // read on every `/mcp` request through a cache of at most 10 s, failing closed.
+    let clients = Arc::new(ClientsCache::new(control_plane.clone(), MAX_REVOKED_TTL));
     let audit = Arc::new(HttpAudit::new(control_plane));
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)
-        .with_settings_source(tool_settings);
+        .with_settings_source(tool_settings)
+        .with_clients(clients);
     let binding_count = config.bindings.bindings.len();
     let relay = Relay::new(
         auth,

@@ -22,6 +22,7 @@ use super::extract::{ApiJson, ApiPath, ApiQuery};
 use super::responses::{ListErrors, ReadErrors, WriteErrors};
 use super::{Page, PageParams, Paged, all, one, utc};
 use crate::app::AppState;
+use crate::audit::DEV_AUTH_ACTOR;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
 use crate::problem::ApiError;
@@ -334,5 +335,48 @@ pub async fn revoke_client(
         })
         .await?;
     tracing::info!(mcp.client.row = %row_id, "mcp client revoked");
+    if client.layer == McpLayer::Hub {
+        revoke_consent_at_issuer(&state, org.org_id, &client).await;
+    }
     Ok(Json(client))
+}
+
+/// Best-effort issuer step after the database revoke (task 4.2). The revoke has committed and the
+/// `auth_time` rule enforces it, so nothing here changes the API's answer: a failure is logged
+/// with a static reason and recorded as an `mcp.issuer_revoke` event with outcome `error`.
+/// Skipped when no issuer admin is configured (it was logged once at start).
+async fn revoke_consent_at_issuer(state: &AppState, org_id: Uuid, client: &McpClient) {
+    let Some(admin) = state.issuer_admin() else {
+        return;
+    };
+    let result = admin
+        .revoke_consent(&client.principal, &client.client_id)
+        .await;
+    let (outcome, reason) = match result {
+        Ok(()) => (ls_audit::outcome::OK, None),
+        Err(e) => {
+            tracing::warn!(
+                mcp.client.row = %client.id,
+                reason = e.reason(),
+                "issuer consent revoke failed; the database revoke stands"
+            );
+            (
+                ls_audit::outcome::ERROR,
+                ls_audit::Code::try_new(e.reason()).ok(),
+            )
+        }
+    };
+    let event = crate::audit::mcp_issuer_revoke(DEV_AUTH_ACTOR, org_id, outcome, reason);
+    let appended = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                crate::audit::append(c, org_id, &event).await?;
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await;
+    if appended.is_err() {
+        tracing::warn!(mcp.client.row = %client.id, "mcp.issuer_revoke event not appended");
+    }
 }

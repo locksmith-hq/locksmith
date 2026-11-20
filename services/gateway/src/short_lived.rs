@@ -158,6 +158,15 @@ impl ShortLivedStore {
         }
     }
 
+    /// Destroy every credential issued to `agent_id` (its MCP access was revoked, task 4.2).
+    /// Returns how many were live.
+    pub fn drop_agent(&self, agent_id: Uuid) -> usize {
+        let mut live = self.live.lock().unwrap_or_else(|e| e.into_inner());
+        let before = live.len();
+        live.retain(|_, s| s.agent_id != agent_id);
+        before - live.len()
+    }
+
     /// Live credentials (tests and metrics).
     pub fn live(&self, now: OffsetDateTime) -> usize {
         let mut live = self.live.lock().unwrap_or_else(|e| e.into_inner());
@@ -245,6 +254,25 @@ mod tests {
                 .mint(A, ORG, S, later + Duration::seconds(60), later)
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn drop_agent_destroys_only_that_agents_credentials() {
+        let store = ShortLivedStore::default();
+        let t = now();
+        let mut tokens = Vec::new();
+        for agent in [A, A, B] {
+            let m = store
+                .mint(agent, ORG, S, t + Duration::minutes(5), t)
+                .unwrap();
+            store.insert(&m, t).unwrap();
+            tokens.push((agent, m.token().expose_secret().to_owned()));
+        }
+        assert_eq!(store.drop_agent(A), 2);
+        assert_eq!(store.drop_agent(A), 0);
+        for (agent, token) in &tokens {
+            assert_eq!(store.resolve(token, t).is_some(), *agent == B);
+        }
     }
 
     #[test]

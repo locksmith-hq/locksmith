@@ -951,3 +951,167 @@ async fn audit_read_api_pages_newest_first_and_is_org_scoped() {
     let r = dev(&f.app, "GET", "/v1/audit/status", b, None).await;
     assert_eq!(r.body, json!({"head_seq": 1}));
 }
+
+/// m1-remote-mcp task 4.2 (gateway half): the gateway records an agent as an MCP client on
+/// `initialize`, the console lists and revokes it, and the gateway reads the revoked set. All of
+/// it per org, service token only.
+#[tokio::test]
+async fn gateway_records_agent_mcp_clients_and_reads_the_revoked_ones() {
+    let f = Fixture::start().await;
+    let (a, b) = (f.org("rev-a").await, f.org("rev-b").await);
+    let auth = bearer(TOKEN);
+    let agent_of = |org: Uuid, name: &'static str| {
+        let app = f.app.clone();
+        async move {
+            let r = dev(&app, "POST", "/v1/agents", org, Some(json!({"name": name}))).await;
+            assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+            r.body["agent"]["id"]
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        }
+    };
+    let (one, two, theirs) = (
+        agent_of(a, "one").await,
+        agent_of(a, "two").await,
+        agent_of(b, "theirs").await,
+    );
+    let upsert = |org: Option<Uuid>, auth: Option<&str>, body: Value| {
+        let mut r = Request::builder()
+            .method("POST")
+            .uri("/internal/v1/mcp/agent-clients")
+            .header("content-type", "application/json");
+        if let Some(a) = auth {
+            r = r.header("authorization", a);
+        }
+        if let Some(o) = org {
+            r = r.header("x-locksmith-org", o.to_string());
+        }
+        send(&f.app, r.body(Body::from(body.to_string())).unwrap())
+    };
+    let revoked = |org: Uuid| {
+        send(
+            &f.app,
+            Request::builder()
+                .method("GET")
+                .uri("/internal/v1/mcp/revoked-agent-clients")
+                .header("authorization", auth.clone())
+                .header("x-locksmith-org", org.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+
+    // Initialize records the agent (twice is one row); nothing is revoked yet.
+    for _ in 0..2 {
+        let r = upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": one, "client_name": "claude"}),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+        assert_eq!(r.body, json!({"revoked": false}));
+    }
+    upsert(
+        Some(a),
+        Some(&auth),
+        json!({"agent_id": two, "client_name": "x"}),
+    )
+    .await;
+    let r = dev(&f.app, "GET", "/v1/mcp/clients", a, None).await;
+    let items = r.body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{}", r.raw);
+    let row = items
+        .iter()
+        .find(|i| i["client_id"] == one.to_string())
+        .unwrap();
+    assert_eq!(row["layer"], "agent");
+    assert_eq!(row["principal"], one.to_string());
+    assert_eq!(row["client_name"], "claude");
+    assert_eq!(revoked(a).await.body["items"], json!([]));
+
+    // The console revokes agent one; only that agent is listed, and only in its org.
+    let r = dev(
+        &f.app,
+        "POST",
+        &format!("/v1/mcp/clients/{}/revoke", row["id"].as_str().unwrap()),
+        a,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    assert_eq!(revoked(a).await.body["items"], json!([{"agent_id": one}]));
+    assert_eq!(revoked(b).await.body["items"], json!([]));
+    // A second initialize keeps it revoked and says so; the row is not recreated.
+    let r = upsert(
+        Some(a),
+        Some(&auth),
+        json!({"agent_id": one, "client_name": "again"}),
+    )
+    .await;
+    assert_eq!(r.body, json!({"revoked": true}));
+    let r = dev(&f.app, "GET", "/v1/mcp/clients", a, None).await;
+    assert_eq!(r.body["items"].as_array().unwrap().len(), 2);
+
+    // Another org's agent is a 404 (like one that does not exist); no token, a wrong token and
+    // unknown fields are refused.
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": theirs, "client_name": "x"})
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": Uuid::now_v7(), "client_name": "x"})
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        upsert(Some(a), None, json!({"agent_id": one, "client_name": "x"}))
+            .await
+            .status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&bearer(WRONG)),
+            json!({"agent_id": one, "client_name": "x"})
+        )
+        .await
+        .status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": one, "client_name": "x", "token": "t"})
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    let no_token = send(
+        &f.app,
+        Request::builder()
+            .method("GET")
+            .uri("/internal/v1/mcp/revoked-agent-clients")
+            .header("x-locksmith-org", a.to_string())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(no_token.status, StatusCode::UNAUTHORIZED);
+}

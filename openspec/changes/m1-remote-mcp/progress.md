@@ -67,3 +67,8 @@
 - Task: m1-remote-mcp 3.1 - done (gateway `/mcp` via rmcp Streamable HTTP; reuses `AgentAuth` (aud `gateway`); 401 + `WWW-Authenticate` for missing/expired/wrong-audience/wrong-org tokens; Host allowlist loopback + `LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS`; fails closed if unconfigured)
 - Verified: `cargo nextest run -p ls-gateway mcp` -> 7 passed; `just ci` -> exit 0; Sonnet evaluator PASS
 - Notes for next session: 3.2 (gateway tools; `ls-mcp-server` dep already added, unused until then). Set `LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS` in infra/compose when deploying behind a hostname. 2.2 still unticked (explain_block deferral).
+
+## 2026-11-20 worker (event)
+- Task: m1-remote-mcp 3.2 - done (gateway `/mcp` default-on tools: `list_my_keys`, `relay_http_request` via the existing relay path through `relay::handle_as`, `explain_block` as typed `not_available` 501; `issue_short_lived_credential` stays off and unlisted)
+- Verified: `cargo nextest run -p ls-gateway mcp` -> 16 passed; `just ci` -> exit 0 (before tick/progress edit); independent Sonnet evaluator PASS
+- Notes for next session: 3.3 [opus] short-lived credential; 3.4 per-org switches and per-call audit event (must also cover `list_my_keys` and `explain_block`); relay tool needs secret `version`; tool errors drop the relay request_id.

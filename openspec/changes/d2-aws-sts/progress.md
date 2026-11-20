@@ -26,3 +26,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.1 - blocked
 - Verified: merged origin/main into the branch (conflicts in infra/compose/compose.yaml and docs/dev-harness.md resolved by keeping both moto and keycloak/mailpit); compose YAML parses -> ok
 - Notes for next session: 2.1 needs a `delegate` GrantMode plus a scope column in the control-plane `agent_grants` table, the internal grants API and OpenAPI types. That `delegate` mode belongs to d1-git-delegation and is not on main yet, so building it here would collide with d1's migration. Start 2.1 after d1 lands delegate in control-plane, or agree the shared migration with d1. Group 3 depends on 2.1.
+
+## 2026-11-20 worker
+- Task: ci-fix (PR #480 conflicts with main: aws_bindings + git_bindings) - done
+- Verified: just ci -> exit 0 after merging origin/main (kept both fields in config.rs, relay.rs, git_fixture_tests.rs)
+- Notes for next session: task 2.1 still blocked on d1 `delegate` GrantMode (see earlier entry).

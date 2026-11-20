@@ -13,10 +13,10 @@
 - [x] 2.4 Verify: `cargo nextest run -p ls-gateway pg_auth`: plaintext refused, bad token, unbound database, no grant, private host without permission; each asserts no decrypt and no upstream call.
 
 ## 3. Upstream auth and relay [opus]
-- [ ] 3.1 `pg/upstream.rs`: connect with the binding's TLS mode, send the bound user and database plus the allow-listed client parameters only (decision 6), drive SCRAM-SHA-256 and md5 with the decrypted password in `secrecy` types; refuse cleartext unless TLS or loopback.
-- [ ] 3.2 After upstream `AuthenticationOk`: forward `ParameterStatus` and `ReadyForQuery`, replace `BackendKeyData` with a gateway key, then splice both directions, framing backend messages to redact `E` and `N` text via `ls-redact`.
-- [ ] 3.3 Cancel map: `CancelRequest` on the listener forwarded to the mapped upstream key; entries removed on session close.
-- [ ] 3.4 Verify: `cargo nextest run -p ls-gateway pg_relay` against a testcontainers `postgres:18` with SCRAM and with md5: query works, client `user`/`options` ignored, cancel works, cleartext-over-plain refused.
+- [x] 3.1 `pg/upstream.rs`: connect with the binding's TLS mode, send the bound user and database plus the allow-listed client parameters only (decision 6), drive SCRAM-SHA-256 and md5 with the decrypted password in `secrecy` types; refuse cleartext unless TLS or loopback.
+- [x] 3.2 After upstream `AuthenticationOk`: forward `ParameterStatus` and `ReadyForQuery`, replace `BackendKeyData` with a gateway key, then splice both directions, framing backend messages to redact `E` and `N` text via `ls-redact`.
+- [x] 3.3 Cancel map: `CancelRequest` on the listener forwarded to the mapped upstream key; entries removed on session close.
+- [x] 3.4 Verify: `cargo nextest run -p ls-gateway pg_relay` against a testcontainers `postgres:18` with SCRAM and with md5: query works, client `user`/`options` ignored, cancel works, cleartext-over-plain refused.
 
 ## 4. Redaction, revocation and audit [sonnet]
 - [ ] 4.1 `db.session.opened` and `db.session.closed` (reason, duration, bytes) ledger events; fail closed (no upstream connect) if the opened event cannot be appended.

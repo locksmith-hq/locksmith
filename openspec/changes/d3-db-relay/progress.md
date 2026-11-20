@@ -36,3 +36,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.3/2.4 evaluator FAIL fix - done
 - Verified: `cargo nextest run -p ls-gateway` -> 102 passed (pg_auth 12); fmt, clippy clean; `openspec validate d3-db-relay --strict` valid; `just ci` -> exit 0
 - Notes for next session: unresolvable upstream (`upstream_unreachable`) and material/decrypt failures (`material_error`/`decrypt_failed`) now append `db.session.denied`; the control plane accepts those three outcomes for that kind only. Spec scenario "Invalid agent token" amended: 28P01, slug log only, no ledger event (no agent identity). Added a NegotiateProtocolVersion test.
+
+## 2026-11-20 worker (C)
+- Task: 3.1-3.4 pg upstream relay, redaction, cancel map - done (`services/gateway/src/pg/upstream.rs`, listener cancel map, wired in main.rs; added `rustls` dep that the merge had left missing)
+- Verified: `cargo nextest run -p ls-gateway` 109 passed (pg_relay 7, real testcontainers postgres:18 SCRAM+md5, fake upstream for cleartext-refusal and E/N redaction); `just ci` -> exit 0; independent sonnet evaluator PASS (static)
+- Notes for next session: group 4 next (ledger events db.session.opened/closed, revocation watcher, adversarial cases). Not yet done: bytes in/out counters; ledger event for cleartext-refused/upstream failures is slug-log only until 4.1. Evaluator notes: wrap upstream cancel secret in zeroize; add a per-message timeout to the post-AuthenticationOk S/K/Z read loop; `verify-full` upstream untested.

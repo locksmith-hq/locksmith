@@ -129,3 +129,8 @@
 - Task: m1-remote-mcp 2.2 - done. `ls_mcp_server::explain` is a static reason-code table (20 rows incl. every relay refusal slug) used by hub and gateway `explain_block`; input never echoed, no I/O. G9/G10 adversarial cases updated to expect the rule instead of `not_available` (not re-run live).
 - Verified: ls-mcp-server unit tests, `mcp_tools` explain test (hub) and gateway mcp tests pass; `just ci` exit 0. Sonnet evaluator first FAIL (6 relay codes missing), fixed, rows added and tests extended; final re-check by unit tests.
 - Notes for next session: 4.2 hub issuer revoke (Keycloak admin API), then 4.2 gateway check (use an Opus evaluator), then 4.3 (`just mcp-e2e` + revoke flow) and 7.x. Latent: explain matching is substring (e.g. "blocked" contains `locked`); tighten if it bites.
+
+## 2026-11-20 worker B (josie)
+- Task: m1-remote-mcp - blocked (no code changed; run stopped after queue triage)
+- Verified: `scripts/merge-gate.sh 520` -> GATE FAIL "PR not opened by the owner" (line 22 needs author tomer555; agent PRs are now opened by role Apps)
+- Notes for next session: #520 (4.3 wording) cannot merge until the owner lets the gate accept the App logins (reported on #472). Remaining: 4.2 hub issuer revoke, 4.2 gateway check (Opus evaluator), 4.3, 7.x.

@@ -8,3 +8,8 @@
 - Task: p2-packaging - blocked (PR #534 has groups 2-8 unchecked; merge-ready failed "unchecked tasks"; auto-merge disabled)
 - Verified: gh api statuses on a4c2ba0 -> merge-ready error, review job failed at tasks check
 - Notes for next session: continue groups 2-8 on this branch, then re-enable auto-merge. A stray branch claude/planning-p2-packaging was pushed by mistake (same commit); ignore it.
+
+## 2026-11-20 worker
+- Task: p2-packaging 2.1-2.4 - done
+- Verified: just images, bash scripts/image-check.sh (8 OK), just ci -> green; evaluator PASS
+- Notes for next session: section 3 (compose self-host) next. In this VM docker build needs IMAGE_BUILD_ARGS='--network host --secret id=cabundle,src=/root/.ccr/ca-bundle.crt --build-arg HTTPS_PROXY=$HTTPS_PROXY'. Re-enable auto-merge (gh pr merge 534 --auto --merge) only when all tasks ticked.

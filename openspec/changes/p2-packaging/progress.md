@@ -29,3 +29,8 @@
 - Task: p2-packaging 3.1-3.7 - done (ticked after evaluator PASS and green just ci)
 - Verified: just ci -> exit 0; selfhost-bootstrap.test.sh and selfhost-smoke.sh pass
 - Notes for next session: section 4 (Helm) next; helm is unavailable here (get.helm.sh 403), so helm-test must skip with a message. Keep auto-merge off until all tasks are ticked.
+
+## 2026-11-20 20:08 worker
+- Task: merge-conflict fix on PR #534 - done
+- Verified: just quick -> ok
+- Notes for next session: 22 tasks still unticked; docs/testing.md conflict resolved keeping both selfhost and ci lines.

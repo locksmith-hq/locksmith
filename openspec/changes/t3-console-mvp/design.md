@@ -33,4 +33,5 @@ Page components and the shared kit, because the mockup defines the look; searche
 
 ## Open questions
 - Does the owner want the mockup's sidebar layout unchanged for the live console? Assumed yes (mockup is the approved direction under T1-1); a `Gate:` task near the end (6.4) confirms before the e2e snapshot baseline is locked.
+- Resolved 2026-11-20 ([#510](https://github.com/locksmith-hq/locksmith/issues/510), decision T3-1): owner chose option B, the mockup frame on the live pages (grouped sidebar, org switcher, user card, `packages/ui` kit). Tasks 6.4.1–6.4.3 add it before the baselines are locked in 6.5.
 - API gaps (for example org-wide activity filters) are logged, not patched here.

@@ -35,6 +35,9 @@
 - [ ] 6.2 Add a leak check: the e2e records all requests and fails on any value or material route.
 - [ ] 6.3 Verify: `just up && just web-e2e`.
 - [ ] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
+- [ ] 6.4.1 Group the sidebar as the mockup does (decision T3-1): Home; Secret Management (Projects, Environments, Secrets); Agent Gateway (Agents, Grants); Activity. Org switcher top right, user card at the bottom. Update `Shell.test.tsx`.
+- [ ] 6.4.2 Style the live pages with the `packages/ui` kit and tokens (tables, empty, loading and error states) to match `apps/web/src/mockup`; no new colours or fonts outside `tokens.css`.
+- [ ] 6.4.3 Verify: `npm test -w apps/web`, `just web-e2e` (leak check still green), and a side-by-side screenshot of Overview, Projects and Activity against the mockup in progress.md.
 - [ ] 6.5 Lock the Playwright screenshot baselines for Overview, Projects and Activity.
 - [ ] 6.6 Verify: `just web-e2e` passes against the locked baselines.
 

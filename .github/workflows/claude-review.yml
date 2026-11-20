@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # Verdict labels only wake the event worker routine; gate 6 still reads the verdict comment.
+      # Verdict labels are informational (the PR's own worker is woken by wake-agents.yml when this run ends); gate 6 still reads the verdict comment.
       # Removed first so the next verdict is a fresh "labeled" event.
       - env:
           GH_TOKEN: ${{ github.token }}

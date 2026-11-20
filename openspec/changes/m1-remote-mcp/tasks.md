@@ -13,7 +13,7 @@
 - [x] 2.3 Switch enforcement on list and call, and `mcp_clients` upsert on initialize; tests for off-tool hidden and refused.
 - [x] 2.4 Off-by-default mutating tools: revoke a grant and pause agents (calls the T8 endpoint if present, otherwise returns a typed not-available error).
 - [x] 2.5 Audit event per call (layer, tool, principal, outcome; no arguments with values); test a denied call is recorded.
-- [ ] 2.6 Verify: `cargo nextest run -p ls-control-plane mcp`.
+- [x] 2.6 Verify: `cargo nextest run -p ls-control-plane mcp`.
 
 ## 3. Agent MCP [sonnet]
 - [ ] 3.1 `/mcp` route on the gateway with agent-token auth (audience `gateway`); tests for expired and wrong-audience tokens.

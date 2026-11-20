@@ -3,7 +3,8 @@
 Locksmith is an open-source secrets platform and credential gateway for AI coding agents. Agents perform authenticated operations without ever holding the credential.
 
 ## Build and test
-- `just ci` runs fmt, lint, test-rust, test-web, tree-check and task-guard. Run it before every push.
+- `just ci` runs fmt, lint, test-rust, test-web, tree-check and task-guard. Never run it locally: the PR's required checks run it.
+- Before every push run `just quick` (fmt and lint of your branch's committed changes) plus the tests you touched (`cargo test -p <crate>`).
 - Other recipes: `just up` / `just down` (local stack), `just dev <app>`, and `cargo test -p <crate>` for a single crate.
 - npm workspaces only. Never use pnpm or yarn. After changing a `package.json`, run `npm i` in that package's directory.
 
@@ -27,7 +28,7 @@ The repo is public, so Actions minutes are free. Every PR runs:
 - `ci-platforms`: macOS tests and a Windows check;
 - `adversarial`: the scripted adversarial cases (live cases run nightly and on main).
 
-CI jobs call the same `just` recipes as `just ci`. Still run `just ci` before every push.
+CI jobs call the same `just` recipes as `just ci`, so run `just quick` locally and let CI run the full suite.
 
 ## Security rules
 - Never print, log or serialize a plaintext secret.

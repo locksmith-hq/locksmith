@@ -2572,6 +2572,7 @@ dependencies = [
  "ls-pg-test",
  "ls-proxy",
  "ls-redact",
+ "proptest",
  "reqwest",
  "rustls",
  "rustls-platform-verifier",

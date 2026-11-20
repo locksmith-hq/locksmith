@@ -107,6 +107,9 @@ pub struct Bindings {
     pub org_id: Uuid,
     #[serde(default, rename = "binding")]
     pub bindings: Vec<Binding>,
+    /// AWS credential-vending bindings (D2); none by default.
+    #[serde(default, rename = "aws_binding")]
+    pub aws_bindings: Vec<crate::aws_policy::AwsBinding>,
 }
 
 impl Bindings {

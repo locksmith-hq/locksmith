@@ -1003,6 +1003,7 @@ mod tests {
                 binding(INTERNAL, format!("http://internal.test:{port}"), false),
                 binding(DEAD, format!("http://dead.test:{dead_port}"), true),
             ],
+            aws_bindings: Vec::new(),
         };
         let control_plane =
             ControlPlane::new(cp.uri().parse().unwrap(), ORG, "s".repeat(32).into()).unwrap();
@@ -1738,6 +1739,7 @@ mod tests {
             Bindings {
                 org_id: ORG,
                 bindings: Vec::new(),
+                aws_bindings: Vec::new(),
             },
             Decryptor::new(
                 ORG,

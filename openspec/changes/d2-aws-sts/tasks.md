@@ -7,8 +7,8 @@
 
 ## 2. Session policy and binding model [sonnet]
 - [ ] 2.1 Define the AWS binding shape (role ARN, region, external id, `vend`, `unrestricted`, max duration) and the grant allow-list in the gateway config and control-plane types with fixture data; document in design.md.
-- [ ] 2.2 `render_session_policy(grant)`: actions and resources only, empty grant refused, size limit checked (STS 2048 packed characters); proptest that output never widens the grant.
-- [ ] 2.3 Verify: `cargo nextest run -p ls-gateway aws_policy`.
+- [x] 2.2 `render_session_policy(grant)`: actions and resources only, empty grant refused, size limit checked (STS 2048 packed characters); proptest that output never widens the grant.
+- [x] 2.3 Verify: `cargo nextest run -p ls-gateway aws_policy`.
 
 ## 3. Gateway route [opus]
 - [ ] 3.1 `services/gateway/src/aws.rs`: `POST /v1/aws/credentials`: agent token, `delegate` grant and `vend` checks, duration clamp, all before decrypt; fail closed when the ledger append fails.

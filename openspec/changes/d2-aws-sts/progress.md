@@ -16,3 +16,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.2, 1.3 - done (moto spike in tests/e2e/tests/aws_sts_moto.rs; findings and decision 6 in design.md)
 - Verified: `E2E_REQUIRE_MOTO=1 cargo nextest run -p ls-e2e --test aws_sts_moto` -> 2 passed; `just ci` -> green; Opus evaluator PASS
 - Notes for next session: moto ignores session policies and does not validate their shape or 2048 limit, so task 2.2's renderer must check both itself and tests assert the policy moto recorded (data.json) not moto enforcement. Emit compact JSON (moto IAM mode fails signature on spaces). New moto test binaries must join the nextest `moto` group in .config/nextest.toml. Next: group 2 (binding shape, renderer, sonnet), then 3 (gateway route, opus).
+
+## 2026-11-20 worker
+- Task: 2.2, 2.3 - done (2.1 partial: gateway `[[aws_binding]]` shape and fixture done; control-plane grant types do not carry the allow-list yet, so 2.1 stays unticked)
+- Verified: `cargo nextest run -p ls-gateway aws_policy` -> 8 passed (incl. proptest never-widens); `just ci` -> exit 0. No independent evaluator run (self-checked).
+- Notes for next session: `services/gateway/src/aws_policy.rs` has `AwsBinding`, `AwsGrantScope`, `render_session_policy`, `clamp_duration`; finish 2.1 by adding the scope to control-plane grant types and the internal grants API, then group 3 (opus). Other changes p1 (7.1 left, 1.2/4.3 gated), d1 (4.2 onward) and d3 (no branch yet) were not touched this run.

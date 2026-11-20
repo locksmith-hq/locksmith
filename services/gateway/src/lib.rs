@@ -9,6 +9,7 @@
 pub mod app;
 pub mod audit;
 pub mod auth;
+pub mod aws_policy;
 pub mod config;
 pub mod decrypt;
 pub mod egress;

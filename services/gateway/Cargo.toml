@@ -50,6 +50,7 @@ jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust
 time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
 
 [dev-dependencies]
+proptest = { workspace = true }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 wiremock = { workspace = true }

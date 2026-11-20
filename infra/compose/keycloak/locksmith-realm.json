@@ -214,6 +214,16 @@
       "consentRequired": true
     }
   ],
+  "clientScopeMappings": {
+    "realm-management": [
+      {
+        "client": "locksmith-control-plane",
+        "roles": [
+          "manage-users"
+        ]
+      }
+    ]
+  },
   "users": [
     {
       "username": "service-account-locksmith-control-plane",

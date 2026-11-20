@@ -33,7 +33,7 @@ use crate::users;
 
 /// A tool that is in the hub registry but has no service code behind it yet.
 const NOT_AVAILABLE_EXPLAIN_BLOCK: &str = "No block explanations are recorded on the hub yet; \
-    the gateway's explain_block tool covers blocks of an agent's own requests.";
+    the gateway's explain_block tool will cover blocks of an agent's own requests.";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

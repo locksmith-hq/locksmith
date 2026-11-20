@@ -42,3 +42,8 @@
 - Task: m1-remote-mcp 2.1 - done (hub `/mcp` via rmcp =3.11.0 behind OIDC middleware; audience = MCP resource URL, 401 + `WWW-Authenticate` resource_metadata, protected-resource metadata, fail-closed when `LOCKSMITH_MCP_RESOURCE_URL` unset)
 - Verified: `just ci` -> exit 0; `cargo nextest run -p ls-control-plane mcp` -> 11 passed; Sonnet evaluator PASS
 - Notes for next session: 2.2 (read tools) next; `McpPrincipal` carries identity only, no client_id yet (4.x extends it); user/org resolution belongs to 2.2.
+
+## 2026-11-20 worker B
+- Task: m1-remote-mcp 2.2 - code done, NOT ticked: five hub read tools (list_projects, list_secret_names, list_agents, list_grants, read_activity) call the existing REST handlers as the person; `explain_block` returns a typed `not_available` (501) because the hub has no block-explanation service code. Sonnet evaluator PASS with that caveat.
+- Verified: `just ci` -> exit 0; `cargo nextest run -p ls-control-plane mcp` -> 19 passed; `cargo nextest run -p ls-mcp-server` -> 13 passed
+- Notes for next session: tick 2.2 once `explain_block` has a real hub handler (or the lead accepts the deferral). Then 2.3 (switch enforcement, mcp_clients upsert), 2.4, 2.5.

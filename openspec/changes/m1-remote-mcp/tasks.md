@@ -3,7 +3,7 @@
 ## 1. Contract and foundations [sonnet]
 - [ ] 1.1 [haiku] Write `docs/research/remote-mcp-auth.md`: the MCP authorization spec, client registration, token audience, and how Claude, Cursor and Codex store a remote-MCP token, each point with a source URL; also how a call is tied to an `mcp_clients` row (the OAuth `client_id` in the token, since a session id alone can be re-created); end with a recommendation for the Hub sign-in.
 - [ ] 1.2 Spike `rmcp` Streamable HTTP inside an axum route; record the licence, pinned version and release date in design.md "OSS used".
-- [ ] 1.3 Add `crates/ls-mcp-server` with the tool registry type, the default on/off table for both layers, and the no-value schema test (fails if any input or output schema has a value-like field).
+- [x] 1.3 Add `crates/ls-mcp-server` with the tool registry type, the default on/off table for both layers, and the no-value schema test (fails if any input or output schema has a value-like field).
 - [ ] 1.4 Add migration for `mcp_tool_settings` and `mcp_clients` (org-scoped, covered by the tenant lint) and the OpenAPI for list and update of tool settings and list and revoke of clients; regenerate `packages/control-plane-client` types and add fixture data.
 - [ ] 1.5 Verify: `cargo nextest run -p ls-mcp-server && npm test --workspace packages/control-plane-client`.
 

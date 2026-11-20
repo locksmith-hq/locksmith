@@ -8,3 +8,8 @@
 - 2026-11-20 · lead (owner reply, #493): owner allowlisted `modelcontextprotocol.io` (verified HTTP 200 from the VM); `datatracker.ietf.org` is still blocked. The revoke rule (A: `auth_time` plus issuer revoke, B: strict) is still waiting on the owner; #493 body and Action are updated. Next worker: re-check the research note's MCP spec citations against the live site. Verified: curl modelcontextprotocol.io -> 200.
 
 - 2026-11-20 · worker (event wake: #493 closed): owner chose option A. Re-checked the research note against the live MCP spec (all cited claims present) and recorded the decision; 1.1 NOT ticked yet: evaluator FAIL because the decision record (#503) and design.md update (#502) are not on this branch until they merge; tick 1.1 after merging main. Verified: curl + grep of the spec page; docs-only. Next: 1.2 (rmcp spike), 1.3 (ls-mcp-server crate).
+
+## 2026-11-20 worker
+- Task: m1-remote-mcp 1.3 - blocked (WIP crate `crates/ls-mcp-server` committed, task NOT ticked; two evaluator FAILs, see needs-rescue issue)
+- Verified: `cargo nextest run -p ls-mcp-server` -> 8 passed; clippy clean; evaluator FAIL x2 (sonnet, opus)
+- Notes for next session: the evaluators disagree on the Agent default table. Design section 6 "Agent MCP" column (list keys, start session, relay, request access, explain block on; issue_short_lived_credential off) vs the seven tools in `locksmith-mcp` vs task 3.2's smaller default-on set. Lead to decide. Also open: normalize field names (camelCase, separators, substrings) in `find_value_like_field`; real hub tool input schemas and output schemas so the output half of the no-value test runs on shipped tools.

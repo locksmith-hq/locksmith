@@ -2881,6 +2881,13 @@ name = "ls-license"
 version = "0.0.1-alpha.4"
 
 [[package]]
+name = "ls-mcp-server"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "ls-pg-test"
 version = "0.0.1-alpha.4"
 dependencies = [

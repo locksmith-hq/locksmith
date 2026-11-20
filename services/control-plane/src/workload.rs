@@ -436,6 +436,237 @@ mod tests {
         ));
     }
 
+    /// A GitHub Actions ID token claim set (shape from GitHub's OIDC documentation).
+    fn github_claims(repository: &str, git_ref: &str, environment: Option<&str>) -> Value {
+        let mut c = json!({
+            "jti": "example-id",
+            "sub": format!("repo:{repository}:ref:{git_ref}"),
+            "aud": "https://locksmith.example",
+            "ref": git_ref,
+            "sha": "example-sha",
+            "repository": repository,
+            "repository_owner": repository.split('/').next().unwrap(),
+            "repository_owner_id": "65",
+            "repository_id": "35",
+            "repository_visibility": "private",
+            "actor": "octocat",
+            "actor_id": "12",
+            "run_id": "example-run-id",
+            "run_number": "10",
+            "run_attempt": "2",
+            "workflow": "example-workflow",
+            "event_name": "workflow_dispatch",
+            "ref_type": "branch",
+            "job_workflow_ref": format!("{repository}/.github/workflows/deploy.yml@{git_ref}"),
+            "runner_environment": "github-hosted",
+            "iss": GITHUB_ISSUER,
+            "nbf": 1632492967,
+            "exp": 1632493867,
+            "iat": 1632493567
+        });
+        if let Some(env) = environment {
+            c["environment"] = json!(env);
+            c["sub"] = json!(format!("repo:{repository}:environment:{env}"));
+        }
+        c
+    }
+
+    /// A projected Kubernetes service account token claim set.
+    fn k8s_claims(namespace: &str, sa: &str) -> Value {
+        json!({
+            "aud": ["https://locksmith.example"],
+            "exp": 1731613413,
+            "iat": 1700077413,
+            "iss": "https://kubernetes.default.svc.cluster.local",
+            "jti": "ea28ed49-2e11-4280-9ec5-bc3d1d84661a",
+            "kubernetes.io": {
+                "namespace": namespace,
+                "pod": {"name": "deployer-5d8f", "uid": "7c4e0d6c-2b7c-4c2f-9f3b-0c4f1c6a9c1e"},
+                "serviceaccount": {"name": sa, "uid": "a087d5a0-e1dd-43ec-93ac-f13d89cd13af"}
+            },
+            "nbf": 1700077413,
+            "sub": format!("system:serviceaccount:{namespace}:{sa}")
+        })
+    }
+
+    #[test]
+    fn matcher_table_github_claim_sets() {
+        let main = github_claims("acme/api", "refs/heads/main", None);
+        let feature = github_claims("acme/api", "refs/heads/feature", None);
+        let other_repo = github_claims("acme/web", "refs/heads/main", None);
+        let lookalike = github_claims("acme/api-evil", "refs/heads/main", None);
+        let prod = github_claims("acme/api", "refs/heads/main", Some("production"));
+        let tag = github_claims("acme/api", "refs/tags/v1.2.0", None);
+
+        type Case<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a Value, bool);
+        let cases: &[Case] = &[
+            (
+                "repo pin matches",
+                &[("repository", "acme/api")],
+                &main,
+                true,
+            ),
+            (
+                "repo and ref",
+                &[("repository", "acme/api"), ("ref", "refs/heads/main")],
+                &main,
+                true,
+            ),
+            (
+                "ref mismatch",
+                &[("repository", "acme/api"), ("ref", "refs/heads/main")],
+                &feature,
+                false,
+            ),
+            (
+                "other repo",
+                &[("repository", "acme/api")],
+                &other_repo,
+                false,
+            ),
+            (
+                "exact is not prefix",
+                &[("repository", "acme/api")],
+                &lookalike,
+                false,
+            ),
+            ("org prefix", &[("repository", "acme/*")], &lookalike, true),
+            (
+                "environment pin",
+                &[("repository", "acme/api"), ("environment", "production")],
+                &prod,
+                true,
+            ),
+            (
+                "environment missing fails",
+                &[("repository", "acme/api"), ("environment", "production")],
+                &main,
+                false,
+            ),
+            (
+                "tag prefix",
+                &[("repository", "acme/api"), ("ref", "refs/tags/v*")],
+                &tag,
+                true,
+            ),
+            (
+                "tag prefix refuses branch",
+                &[("repository", "acme/api"), ("ref", "refs/tags/v*")],
+                &main,
+                false,
+            ),
+            (
+                "job workflow ref",
+                &[
+                    ("repository", "acme/api"),
+                    (
+                        "job_workflow_ref",
+                        "acme/api/.github/workflows/deploy.yml@refs/heads/main",
+                    ),
+                ],
+                &main,
+                true,
+            ),
+            (
+                "owner id is a string claim",
+                &[("repository", "acme/api"), ("repository_owner_id", "65")],
+                &main,
+                true,
+            ),
+            (
+                "sub form",
+                &[("sub", "repo:acme/api:ref:refs/heads/main")],
+                &main,
+                true,
+            ),
+            (
+                "sub environment form",
+                &[("sub", "repo:acme/api:environment:production")],
+                &prod,
+                true,
+            ),
+            ("case matters", &[("repository", "ACME/api")], &main, false),
+            (
+                "unknown claim fails",
+                &[("repository", "acme/api"), ("nonexistent", "x")],
+                &main,
+                false,
+            ),
+            (
+                "non-string claim fails",
+                &[("repository", "acme/api"), ("nbf", "1632492967")],
+                &main,
+                false,
+            ),
+        ];
+        for (name, conds, claims, want) in cases {
+            let inputs: Vec<_> = conds.iter().map(|(c, v)| ci(c, v)).collect();
+            let p = gh(&inputs).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            assert_eq!(matches(&p.conditions, claims), *want, "{name}");
+        }
+    }
+
+    #[test]
+    fn matcher_table_kubernetes_sub_form() {
+        let deployer = k8s_claims("prod", "deployer");
+        let cases: &[(&str, &str, &Value, bool)] = &[
+            (
+                "exact sa",
+                "system:serviceaccount:prod:deployer",
+                &deployer,
+                true,
+            ),
+            (
+                "other sa",
+                "system:serviceaccount:prod:deployer",
+                &k8s_claims("prod", "builder"),
+                false,
+            ),
+            (
+                "other namespace",
+                "system:serviceaccount:prod:deployer",
+                &k8s_claims("staging", "deployer"),
+                false,
+            ),
+            (
+                "namespace prefix",
+                "system:serviceaccount:prod:*",
+                &k8s_claims("prod", "builder"),
+                true,
+            ),
+            (
+                "namespace prefix is not a namespace prefix match",
+                "system:serviceaccount:prod:*",
+                &k8s_claims("production", "deployer"),
+                false,
+            ),
+            (
+                "namespace name prefix",
+                "system:serviceaccount:prod*",
+                &k8s_claims("production", "deployer"),
+                true,
+            ),
+        ];
+        for (name, sub, claims, want) in cases {
+            let p = validate(
+                "k",
+                IssuerKind::Oidc,
+                Some("https://kubernetes.default.svc.cluster.local"),
+                "https://locksmith.example",
+                &[ci("sub", sub)],
+            )
+            .unwrap();
+            assert_eq!(matches(&p.conditions, claims), *want, "{name}");
+        }
+        // Nested claims are not addressable by name: only top-level string claims match.
+        let nested = [Condition {
+            claim: "kubernetes.io".into(),
+            op: Op::Eq,
+            value: "prod".into(),
+        }];
+        assert!(!matches(&nested, &deployer));
+    }
+
     #[test]
     fn handle_round_trips_and_rejects_junk() {
         let (o, p) = (Uuid::now_v7(), Uuid::now_v7());

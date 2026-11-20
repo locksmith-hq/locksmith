@@ -1,7 +1,7 @@
 # Tasks: M1 remote MCP
 
 ## 1. Contract and foundations [sonnet]
-- [ ] 1.1 [haiku] Write `docs/research/remote-mcp-auth.md`: the MCP authorization spec, client registration, token audience, and how Claude, Cursor and Codex store a remote-MCP token, each point with a source URL; also how a call is tied to an `mcp_clients` row (session id vs a client id in the token); end with a recommendation for the Hub sign-in.
+- [ ] 1.1 [haiku] Write `docs/research/remote-mcp-auth.md`: the MCP authorization spec, client registration, token audience, and how Claude, Cursor and Codex store a remote-MCP token, each point with a source URL; also how a call is tied to an `mcp_clients` row (the OAuth `client_id` in the token, since a session id alone can be re-created); end with a recommendation for the Hub sign-in.
 - [ ] 1.2 Spike `rmcp` Streamable HTTP inside an axum route; record the licence, pinned version and release date in design.md "OSS used".
 - [ ] 1.3 Add `crates/ls-mcp-server` with the tool registry type, the default on/off table for both layers, and the no-value schema test (fails if any input or output schema has a value-like field).
 - [ ] 1.4 Add migration for `mcp_tool_settings` and `mcp_clients` (org-scoped, covered by the tenant lint) and the OpenAPI for list and update of tool settings and list and revoke of clients; regenerate `packages/control-plane-client` types and add fixture data.
@@ -24,7 +24,7 @@
 
 ## 4. Sign-in and clients [sonnet]
 - [ ] 4.1 Hub OAuth flow per the research note (protected-resource metadata, issuer config for Keycloak locally); an end-to-end test with a scripted MCP client that signs in and lists tools.
-- [ ] 4.2 Client revoke: a revoked client's next call is refused with `401`; test.
+- [ ] 4.2 Client revoke bound to the OAuth `client_id` (hub) or the agent (gateway): a revoked client's next call is refused with `401`, and so is a fresh `initialize` after revoke; test both.
 - [ ] 4.3 Verify: `just up && cargo nextest run -p ls-control-plane --test mcp_e2e`.
 
 ## 5. Console and desktop surface [sonnet]

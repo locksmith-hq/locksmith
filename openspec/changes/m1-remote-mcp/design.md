@@ -31,7 +31,11 @@ Request -> axum `/mcp` -> auth layer (person JWT on the hub, agent token on the 
 `just up` (with the auth profile); `curl` or the MCP Inspector against `http://localhost:<port>/mcp`; logs via the Grafana/Loki MCP and `docker compose logs control-plane gateway`; traces in Tempo per tool call; DB tables `mcp_tool_settings`, `mcp_clients`, `audit_events` via the postgres MCP (read-only); `cargo nextest run -p ls-mcp-server`.
 
 ## Client binding for revoke
-Hub calls carry the person's OIDC token and Agent calls the per-agent token; neither names an MCP client. Revoke therefore needs a binding: on `initialize` the server issues an `mcp-session` identifier (a random id stored in `mcp_clients`, sent back as the `Mcp-Session-Id` header) tied to the authenticated principal, and every later call must present it. Revoking a client marks the row `revoked_at`, so its next call is refused with `401`. Revoking the person's or agent's own token is a separate, wider action. The research note (task 1.1) confirms how real clients keep the session id and token before task 4.2.
+A session id is not enough: a revoked client could send a fresh `initialize` and keep working on a still-valid token. Revoke binds to something the client cannot mint again:
+- **Hub:** the OAuth `client_id` (from dynamic registration or pre-registration) is carried in the access token and checked on every call, including `initialize`. `mcp_clients` is keyed by `(org, layer, client_id, principal)`. Revoking marks `revoked_at`; every token for that `client_id` is refused and re-registration needs the person to sign in and approve again.
+- **Agent:** the agent token has no client id, so revoke is per agent: the revoked agent's tokens are refused by the existing agent revocation (T8 makes it take effect in seconds); `mcp_clients` rows for it are marked revoked.
+- The `Mcp-Session-Id` is only a transport convenience and is never trusted for authorization.
+Task 4.2's test revokes a client, then re-initializes and calls a tool, and asserts `401` each time. The research note (task 1.1) confirms how `client_id` reaches the token for real clients.
 
 ## Open questions
 - Remote MCP authorization: client registration (dynamic vs pre-registered), token audience, and how each agent tool stores a token. Unverified; resolved by the research note in task 1.1. If it needs an owner decision, the lead raises it before group 4.

@@ -2730,11 +2730,10 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "base64 0.22.1",
  "ls-core",
+ "ls-http",
  "ls-platform",
  "ls-redact",
  "reqwest",
- "rustls",
- "rustls-platform-verifier",
  "secrecy",
  "serde",
  "serde_json",
@@ -2756,6 +2755,7 @@ dependencies = [
  "ls-audit",
  "ls-crypto",
  "ls-envelope",
+ "ls-http",
  "ls-pg-test",
  "ls-tenant-lint",
  "opentelemetry",
@@ -2765,7 +2765,6 @@ dependencies = [
  "p256",
  "reqwest",
  "rustls",
- "rustls-platform-verifier",
  "secrecy",
  "serde",
  "serde_json",
@@ -2841,10 +2840,9 @@ dependencies = [
  "getrandom 0.2.17",
  "hex",
  "ls-crypto",
+ "ls-http",
  "proptest",
  "reqwest",
- "rustls",
- "rustls-platform-verifier",
  "serde",
  "serde_json",
  "tokio",
@@ -2865,14 +2863,13 @@ dependencies = [
  "ls-audit",
  "ls-control-plane",
  "ls-envelope",
+ "ls-http",
  "ls-pg-test",
  "ls-proxy",
  "ls-redact",
  "pgwire",
  "rcgen",
  "reqwest",
- "rustls",
- "rustls-platform-verifier",
  "secrecy",
  "serde",
  "serde_json",
@@ -2897,6 +2894,17 @@ dependencies = [
  "serde_json",
  "tree-sitter",
  "tree-sitter-bash",
+]
+
+[[package]]
+name = "ls-http"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "reqwest",
+ "rustls",
+ "rustls-platform-verifier",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]

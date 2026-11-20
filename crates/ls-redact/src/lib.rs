@@ -502,6 +502,13 @@ mod tests {
     }
 
     #[test]
+    fn idle_flush_interval_stays_interactive() {
+        // smith-cli's PTY test only bounds prompt latency at 1 s (shared runners flake, #500),
+        // so the interval that releases a held-back prompt is pinned here instead.
+        assert!(IDLE <= Duration::from_millis(50), "{IDLE:?}");
+    }
+
+    #[test]
     fn idle_flush_holds_only_a_possible_secret_prefix() {
         let red = r();
         let mut s = red.stream();

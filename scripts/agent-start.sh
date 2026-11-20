@@ -30,7 +30,7 @@ echo "== identity"
 if [ -n "$persona" ] && [ -n "${!var:-}" ]; then
   # A key is set, so a run must never fall back to the owner: setup undoes itself and prints FAIL on any error.
   bash scripts/agent-identity.sh setup "$persona" || pf=1
-elif compgen -v | grep -q '^AGENT_APP_KEY_'; then
+elif compgen -v AGENT_APP_KEY_ >/dev/null; then
   # Keys here but none for this persona (often a routine that forgot to pass it): never fall back to the owner.
   echo "FAIL identity: this environment holds App keys but $([ -n "$persona" ] && echo "no $var" || echo "no persona was passed"); run agent-start.sh $kind <persona>"; pf=1
 elif [ "$kind" = research ] || [ "$persona" = research ]; then

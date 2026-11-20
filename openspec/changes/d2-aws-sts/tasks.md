@@ -26,8 +26,8 @@
 - [ ] 5.2 Verify: `npm test --workspace apps/web` and `just apps-build`.
 
 ## 6. Adversarial and audit [sonnet]
-- [ ] 6.1 Add AWS cases to `tests/adversarial/cases`: agent-supplied policy ignored, over-duration, STS error echo, base credential absent from every output.
-- [ ] 6.2 Verify: `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
+- [x] 6.1 Add AWS cases to `tests/adversarial/cases`: agent-supplied policy ignored, over-duration, STS error echo, base credential absent from every output.
+- [x] 6.2 Verify: `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
 
 ## 7. Local verification [sonnet]
 - [ ] 7.1 `just aws-smoke` recipe: start moto, gateway and API, register an agent, grant, run the real `aws` CLI through `credential_process`, assert identity, expiry and that the agent home holds no key.

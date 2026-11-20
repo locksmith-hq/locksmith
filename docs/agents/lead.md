@@ -38,4 +38,4 @@ Close each `for-lead` issue with what you did.
 Quality work never adds `needs-rescue` or `needs-owner`.
 
 ## Ship
-Run `just ci` (docs-only diff: `just tree-check task-guard`). Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); finish it (`finish-pr`; also stuck worker PRs). Then, every run (idle too), run `bash scripts/issues-sync.sh` (issues and board follow main); log a failure. Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.
+Run `just quick` (docs-only diff: `just tree-check task-guard`). Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); finish it (`finish-pr`; also stuck worker PRs). Then, every run (idle too), run `bash scripts/issues-sync.sh` (issues and board follow main); log a failure. Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.

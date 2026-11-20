@@ -17,4 +17,6 @@ fresh; out=$(run) && echo "ok: clean copy passes" || { echo "FAIL: clean copy: $
 fresh; mkdir -p "$tmp/r/crates/ls-planted"; expect "missing row" "no row in docs/testing.md for crates/ls-planted"
 fresh; rmdir "$tmp/r/crates/ls-core" 2>/dev/null || rm -rf "$tmp/r/crates/ls-core"; expect "stale row" "stale row.*crates/ls-core"
 fresh; echo 'Run `just no-such-recipe` too.' >> "$tmp/r/docs/testing.md"; expect "unknown just recipe" "no-such-recipe"
+fresh; printf 'planted-default base="x":\n    true\n' >> "$tmp/r/justfile"; echo 'Run `just planted-default` too.' >> "$tmp/r/docs/testing.md"
+out=$(run) && echo "ok: recipe with a defaulted parameter counts" || { echo "FAIL: defaulted parameter: $out"; fail=1; }
 exit $fail

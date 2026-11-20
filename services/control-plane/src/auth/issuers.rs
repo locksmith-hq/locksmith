@@ -307,6 +307,11 @@ fn guarded_client(access: IssuerAccess) -> Result<reqwest::Client, IssuerError> 
         .map_err(|_| IssuerError::Client)
 }
 
+/// Every resolved answer must pass: a name that also points inside is refused outright.
+fn answers_allowed(addrs: &[SocketAddr], allow_private: bool) -> bool {
+    !addrs.is_empty() && addrs.iter().all(|a| address_allowed(a.ip(), allow_private))
+}
+
 struct GuardedResolver {
     allow_private: bool,
 }
@@ -319,7 +324,7 @@ impl reqwest::dns::Resolve for GuardedResolver {
             let addrs: Vec<SocketAddr> =
                 tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
             // Every answer must pass: a name that also points inside is refused outright.
-            if addrs.is_empty() || !addrs.iter().all(|a| address_allowed(a.ip(), allow_private)) {
+            if !answers_allowed(&addrs, allow_private) {
                 return Err(Box::new(io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     "address not allowed",
@@ -341,6 +346,37 @@ mod tests {
     const DEV: IssuerAccess = IssuerAccess {
         allow_private_hosts: true,
     };
+
+    #[test]
+    fn workload_resolver_refuses_any_private_answer_rebinding_guard() {
+        let public: SocketAddr = "93.184.216.34:0".parse().unwrap();
+        let private: SocketAddr = "10.0.0.5:0".parse().unwrap();
+        let metadata: SocketAddr = "169.254.169.254:0".parse().unwrap();
+        assert!(answers_allowed(&[public], false));
+        // A rebinding answer set that mixes a public and an internal address is refused whole.
+        assert!(!answers_allowed(&[public, private], false));
+        assert!(!answers_allowed(&[private, public], false));
+        assert!(!answers_allowed(&[public, metadata], true));
+        assert!(!answers_allowed(&[], false));
+        assert!(answers_allowed(&[private], true));
+    }
+
+    #[tokio::test]
+    async fn workload_resolver_refuses_localhost_itself() {
+        use reqwest::dns::Resolve;
+        let refused = GuardedResolver {
+            allow_private: false,
+        }
+        .resolve("localhost".parse().unwrap())
+        .await;
+        assert!(refused.is_err());
+        let allowed = GuardedResolver {
+            allow_private: true,
+        }
+        .resolve("localhost".parse().unwrap())
+        .await;
+        assert!(allowed.is_ok());
+    }
 
     #[test]
     fn workload_issuer_urls_must_be_https_with_an_allowed_host() {

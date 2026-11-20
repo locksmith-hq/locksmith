@@ -8,7 +8,7 @@ See proposal.md, "Why". All four copies use `reqwest` 0.13.5 with `rustls-no-pro
 
 **Goals:**
 - One function owns the TLS policy (provider, protocol versions, verifier) and the no-redirect and no-proxy defaults.
-- The callers' observable behaviour stays the same, except that JWKS fetches gain TLS 1.2.
+- The callers' observable behaviour stays the same.
 
 **Non-Goals:**
 - A general HTTP abstraction. Callers still use `reqwest` types directly.
@@ -26,7 +26,7 @@ The callers differ in timeouts, pinning (`resolve_to_addrs`), read timeout and p
 `ls-http` returns a single opaque `BuildError`. Each caller maps it to the variant it already has (`JwksError::Client`, `WrapError::Client`, `ClientBuildError`, connector `fail`). Error messages and HTTP problem types do not change.
 
 ### 4. Enable `tls12` in one place
-`ls-http` enables `rustls/tls12`. Cargo feature unification already turns it on for the control-plane binary when the gateway or envelope crates are in the same build, but not when the binary is built alone. Owning the feature in `ls-http` makes it explicit.
+`ls-http` enables `rustls/tls12`. Today the control plane gets it only through feature unification via `ls-envelope`, with no declaration of its own. Owning the feature in `ls-http` makes it explicit and independent of the dependency graph.
 
 ### Decisions and evidence
 

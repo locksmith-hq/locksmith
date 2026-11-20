@@ -11,10 +11,7 @@ Four places build the same locked-down outbound HTTPS client by hand. Each one u
 | `smith` connector (blocking) | `crates/ls-connector/src/lib.rs` `client` |
 | gateway | `services/gateway/src/http_client.rs` `tls` and `build_with_idle` |
 
-The copies have already drifted:
-
-- The control plane's `rustls` dependency lacks the `tls12` feature that the other three enable, so JWKS fetches cannot use TLS 1.2 while every other client can.
-- Comments in the copies point at each other ("same setup as ls-envelope") instead of at one place.
+They already declare their `rustls` features differently. The control plane lists no `tls12` and gets it only through feature unification from `ls-envelope`. Comments in the copies point at each other ("same setup as ls-envelope") instead of at one place.
 
 The TLS policy is a security default, so it should change in exactly one place. Found by the lead review of the d1 and t1 merges on 2026-11-20.
 
@@ -26,7 +23,7 @@ The TLS policy is a security default, so it should change in exactly one place. 
   - `blocking_builder()`, behind a `blocking` feature: the same for `reqwest::blocking`.
   - Callers keep setting their own timeouts, pinning and pool options.
 - Replace the four copies with calls into `ls-http`. Each caller keeps its own error type.
-- JWKS fetches gain TLS 1.2. This is the only behaviour change.
+- There is no behaviour change.
 
 Out of scope:
 - Changing timeouts, pinning (gateway `resolve_to_addrs`) or any other per-caller option.

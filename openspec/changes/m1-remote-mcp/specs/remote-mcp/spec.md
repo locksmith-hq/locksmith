@@ -69,3 +69,11 @@ The console SHALL list connected MCP clients and let an admin revoke one. Revoke
 #### Scenario: Revoked client re-initializes
 - **WHEN** a revoked client sends a fresh `initialize` with the same token
 - **THEN** it is refused with `401` and no new session or `mcp_clients` row is created
+
+#### Scenario: Refreshed token after revoke
+- **WHEN** a revoked Hub client refreshes its token after the revoke and calls a tool
+- **THEN** the refresh is refused at the issuer, or the new token's `auth_time` is before `revoked_at` and the call is refused with `401`
+
+#### Scenario: Person signs in again after revoke
+- **WHEN** the person signs in again and grants consent to the client after the revoke
+- **THEN** the new token's `auth_time` is after `revoked_at` and calls are accepted

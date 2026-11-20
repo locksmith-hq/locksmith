@@ -32,5 +32,5 @@ Page components and the shared kit, because the mockup defines the look; searche
 `just up` starts the stack with the Keycloak profile; `just dev web` runs vite; control-plane logs via the Grafana/Loki MCP and `docker compose logs control-plane`; traces for each API call in Tempo; DB tables `projects`, `environments`, `secrets`, `agent_grants`, `audit_events` through the postgres MCP (read-only); Playwright traces with `--trace on` on failure.
 
 ## Open questions
-- Does the owner want the mockup's sidebar layout unchanged for the live console? Assumed yes (mockup is the approved direction under T1-1); a `Gate:` task near the end confirms before the e2e snapshot baseline is locked.
+- Does the owner want the mockup's sidebar layout unchanged for the live console? Assumed yes (mockup is the approved direction under T1-1); a `Gate:` task near the end (6.4) confirms before the e2e snapshot baseline is locked.
 - API gaps (for example org-wide activity filters) are logged, not patched here.

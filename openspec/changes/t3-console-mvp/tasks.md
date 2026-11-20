@@ -25,13 +25,18 @@
 - [ ] 4.4 Move the existing Audit section to the Activity page (keep paging, outcome filter and ledger status tests).
 - [ ] 4.5 Verify: `npm test --workspace apps/web`.
 
-## 5. End-to-end [sonnet]
-- [ ] 5.1 Playwright setup, `just web-e2e` recipe (starts `just up` with the auth profile): sign in as a test user, create a project and environment, register an agent, create and revoke a grant, see activity.
-- [ ] 5.2 Add a leak check: the e2e records all requests and fails on any value or material route.
-- [ ] 5.3 Verify: `just up && just web-e2e`.
-- [ ] 5.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
-- [ ] 5.5 Lock the Playwright screenshot baselines for Overview, Projects and Activity.
+## 5. Desktop surface [sonnet]
+- [ ] 5.1 Desktop Projects and Environments views in `apps/desktop/src` using the shared client methods from 1.2; Vitest tests including `403`, `409` and empty states.
+- [ ] 5.2 Desktop Overview counts and Secrets metadata view (no value routes); Vitest test that no value or material request is made.
+- [ ] 5.3 Verify: `npm test --workspace apps/desktop && just apps-build`.
 
-## 6. Local verification [sonnet]
-- [ ] 6.1 `just up`, `just web-e2e`, `just apps-build`, then `just ci`.
-- [ ] 6.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.
+## 6. End-to-end [sonnet]
+- [ ] 6.1 Playwright setup, `just web-e2e` recipe (starts `just up` with the auth profile): sign in as a test user, create a project and environment, register an agent, create and revoke a grant, see activity.
+- [ ] 6.2 Add a leak check: the e2e records all requests and fails on any value or material route.
+- [ ] 6.3 Verify: `just up && just web-e2e`.
+- [ ] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
+- [ ] 6.5 Lock the Playwright screenshot baselines for Overview, Projects and Activity.
+
+## 7. Local verification [sonnet]
+- [ ] 7.1 `just up`, `just web-e2e`, `just apps-build`, then `just ci`.
+- [ ] 7.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.

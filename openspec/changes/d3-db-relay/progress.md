@@ -31,3 +31,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.1-2.4 - done
 - Verified: `cargo nextest run -p ls-gateway pg_auth` -> 9 passed (plus pg_config 3 passed, full ls-gateway 99 passed); fmt and clippy -D warnings clean; `just ci` -> exit 0
 - Notes for next session: listener is `services/gateway/src/pg/listener.rs`; group 3 plugs in through the `PgUpstream` trait (`pg/mod.rs`), which gets a `PgSession` (binding, guard-checked pinned addrs, allow-listed client params, decrypted password in `SecretBytes`) and the TLS client stream. `main.rs` wires `UpstreamUnavailable` (answers 0A000) until then. New: `LOCKSMITH_GATEWAY_PG_TLS_CERT`/`_KEY` (required with `_PG_LISTEN`), `[[pg]] version` (default 1, needed for decrypt), `egress::check_host`, ledger kind `db.session.denied` (control plane, ls-audit, openapi.json, TS schema). Bad token and unbound database are not in the ledger (no agent / no secret to name); logged as slugs. CancelRequest is closed unanswered until 3.3. An independent evaluator pass (evaluate-escalate step 3) was not run in this session.
+
+## 2026-11-20 05:35 worker
+- Task: 2.3/2.4 evaluator FAIL fix - done
+- Verified: `cargo nextest run -p ls-gateway` -> 102 passed (pg_auth 12); fmt, clippy clean; `openspec validate d3-db-relay --strict` valid; `just ci` -> exit 0
+- Notes for next session: unresolvable upstream (`upstream_unreachable`) and material/decrypt failures (`material_error`/`decrypt_failed`) now append `db.session.denied`; the control plane accepts those three outcomes for that kind only. Spec scenario "Invalid agent token" amended: 28P01, slug log only, no ledger event (no agent identity). Added a NegotiateProtocolVersion test.

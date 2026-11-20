@@ -218,8 +218,9 @@ pub enum RelayEventKind {
     /// A refused Git call; outcome `denied`, `grants_unavailable`, `no_grant` or `denied_address`.
     #[serde(rename = "git.denied")]
     GitDenied,
-    /// A refused Postgres session on the gateway's pg listener (D3); outcome `denied`,
-    /// `grants_unavailable`, `no_grant` or `denied_address`.
+    /// A refused Postgres session on the gateway's pg listener (D3); a denial outcome, or
+    /// `upstream_unreachable`, `material_error` or `decrypt_failed` (refused before any upstream
+    /// connect).
     #[serde(rename = "db.session.denied")]
     DbSessionDenied,
 }
@@ -348,9 +349,16 @@ impl NewRelayEvent {
             RelayEventKind::GitFetch | RelayEventKind::GitPush => {
                 self.outcome != RelayOutcome::Pending && !self.outcome.is_denial()
             }
-            RelayEventKind::Denied
-            | RelayEventKind::GitDenied
-            | RelayEventKind::DbSessionDenied => self.outcome.is_denial(),
+            RelayEventKind::Denied | RelayEventKind::GitDenied => self.outcome.is_denial(),
+            RelayEventKind::DbSessionDenied => {
+                self.outcome.is_denial()
+                    || matches!(
+                        self.outcome,
+                        RelayOutcome::UpstreamUnreachable
+                            | RelayOutcome::MaterialError
+                            | RelayOutcome::DecryptFailed
+                    )
+            }
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));

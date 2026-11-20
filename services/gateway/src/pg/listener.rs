@@ -14,8 +14,9 @@
 //!    (`28000`) → decrypt → [`PgUpstream::serve`]. Nothing before the decrypt fetches material or
 //!    calls the KMS, and nothing connects upstream before every check passed.
 //!
-//! Every refusal after the token verified appends one `db.session.denied` event when it names a
-//! binding (the ledger event names a secret, so an unbound database is logged only). Errors sent
+//! Every refusal after the binding is known appends one `db.session.denied` event (policy
+//! denials, an unresolvable upstream, a material or decrypt failure). A bad token or an unbound
+//! database has no agent or no secret for the ledger to name, so it is logged by slug only. Errors sent
 //! to the client are fixed texts: they never echo the token, the database name or a parameter.
 //! Logs carry slugs and ids only.
 
@@ -44,6 +45,7 @@ use super::{FORWARDED_PARAMETERS, PgSession, PgUpstream};
 use crate::audit::{EventKind, Outcome, RelayEvent};
 use crate::auth::AgentIdentity;
 use crate::config::PgBinding;
+use crate::decrypt::DecryptError;
 use crate::egress::{self, EgressError};
 use crate::grants::allows_relay;
 use crate::relay::Relay;
@@ -365,11 +367,8 @@ impl PgListener {
                 return Err(NOT_PERMITTED);
             }
             Err(EgressError::Unresolvable) => {
-                tracing::info!(
-                    agent.id = %agent.agent_id,
-                    reason = "upstream_unreachable",
-                    "pg: session refused"
-                );
+                self.deny(agent, binding, Outcome::UpstreamUnreachable)
+                    .await;
                 return Err(UNREACHABLE);
             }
         };
@@ -379,13 +378,12 @@ impl PgListener {
             .await
         {
             Ok(v) => v,
-            Err(_) => {
-                tracing::warn!(
-                    agent.id = %agent.agent_id,
-                    secret.id = %binding.secret_id,
-                    reason = "decrypt_failed",
-                    "pg: session refused"
-                );
+            Err(e) => {
+                let why = match e {
+                    DecryptError::Material(_) => Outcome::MaterialError,
+                    DecryptError::Unwrap(_) | DecryptError::Open => Outcome::DecryptFailed,
+                };
+                self.deny(agent, binding, why).await;
                 return Err(UNREACHABLE);
             }
         };

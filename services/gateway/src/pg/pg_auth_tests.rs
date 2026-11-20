@@ -38,6 +38,10 @@ const APP: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000d3);
 const INTERNAL: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000d4);
 /// Bound as `nogrant`; the agent holds no grant for it.
 const NOGRANT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000d5);
+/// Bound as `nowhere` to a host that does not resolve; granted.
+const NOWHERE: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000d6);
+/// Bound as `nomaterial`; granted, but the control plane has no material for it.
+const NOMATERIAL: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000d7);
 /// A canary database password.
 const PASSWORD: &[u8] = b"canary-pg-Zq7/x+K2=";
 
@@ -134,7 +138,15 @@ impl Harness {
         let mut stub = StubGrants::default();
         tweak(&mut stub);
         let grants = Arc::new(stub);
-        grants.set(AGENT, vec![grant(APP), grant(INTERNAL)]);
+        grants.set(
+            AGENT,
+            vec![
+                grant(APP),
+                grant(INTERNAL),
+                grant(NOWHERE),
+                grant(NOMATERIAL),
+            ],
+        );
         let resolver = Arc::new(StubResolver::with(&[
             ("db.test", "127.0.0.1".parse().unwrap()),
             ("internal.test", "127.0.0.1".parse().unwrap()),
@@ -146,6 +158,8 @@ impl Harness {
                 pg("app", APP, "db.test", true),
                 pg("internal", INTERNAL, "internal.test", false),
                 pg("nogrant", NOGRANT, "db.test", true),
+                pg("nowhere", NOWHERE, "nowhere.test", true),
+                pg("nomaterial", NOMATERIAL, "db.test", true),
             ],
             git_bindings: Vec::new(),
         };
@@ -537,4 +551,54 @@ async fn pg_auth_protocol_errors_are_refused_without_upstream() {
     tcp.write_all(&cancel).await.unwrap();
     assert!(read_all(&mut tcp).await.is_empty());
     h.assert_untouched();
+}
+
+#[tokio::test]
+async fn pg_auth_unresolvable_upstream_is_refused_and_recorded() {
+    let h = Harness::start().await;
+    let msgs = h.login("nowhere", &h.valid_token()).await;
+    assert_eq!(sqlstate_of(&msgs), "08001");
+    h.assert_untouched();
+    assert_eq!(h.denied(), vec![(Outcome::UpstreamUnreachable, NOWHERE)]);
+}
+
+#[tokio::test]
+async fn pg_auth_decrypt_failure_is_refused_and_recorded() {
+    let h = Harness::start().await;
+    let msgs = h.login("nomaterial", &h.valid_token()).await;
+    assert_eq!(sqlstate_of(&msgs), "08001");
+    // The decrypt was tried (the last check) and failed: nothing unwrapped, nothing upstream.
+    assert_eq!(h.material.fetches.load(Ordering::SeqCst), 1);
+    assert_eq!(h.kms.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        h.upstream.calls.load(Ordering::SeqCst),
+        0,
+        "upstream reached"
+    );
+    assert_eq!(h.denied(), vec![(Outcome::MaterialError, NOMATERIAL)]);
+}
+
+#[tokio::test]
+async fn pg_auth_newer_protocol_is_negotiated_down_to_3_0() {
+    let h = Harness::start().await;
+    let mut s = h.tls().await;
+    let mut st = startup("app", &[("_pq_.future_option", "on")]);
+    st.protocol_number_minor = 2;
+    send(&mut s, &st).await;
+    let (tag, mut body) = read_message(&mut s).await.unwrap();
+    assert_eq!(tag, b'v', "NegotiateProtocolVersion first");
+    assert_eq!(body.get_i32(), 0, "newest minor version served");
+    assert_eq!(body.get_i32(), 1);
+    assert_eq!(&body[..], b"_pq_.future_option\0");
+    let (tag, body) = read_message(&mut s).await.unwrap();
+    assert_eq!((tag, &body[..]), (b'R', &3i32.to_be_bytes()[..]));
+    send(&mut s, &Password::new(h.valid_token())).await;
+    let msgs = read_all(&mut s).await;
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(
+        msgs[0].0, b'R',
+        "the session still reaches the upstream leg"
+    );
+    let params = h.upstream.params.lock().unwrap().clone().unwrap();
+    assert!(params.is_empty(), "`_pq_.` options are not forwarded");
 }

@@ -11,10 +11,10 @@
 - [x] 2.3 Verify: `cargo nextest run -p ls-gateway aws_policy`.
 
 ## 3. Gateway route [opus]
-- [ ] 3.1 `services/gateway/src/aws.rs`: `POST /v1/aws/credentials`: agent token, `delegate` grant and `vend` checks, duration clamp, all before decrypt; fail closed when the ledger append fails.
-- [ ] 3.2 Call STS through `ls-proxy::aws::sts::assume_role` (via `spawn_blocking`) with the rendered policy and configurable endpoint (tests only); base credential held in secrecy types and dropped after the call.
-- [ ] 3.3 Fixed error slugs, redaction check of the response for the base credential, ledger events `aws.credentials.issued` and `.denied` with role, region, duration and outcome only.
-- [ ] 3.4 Verify: `cargo nextest run -p ls-gateway aws` against moto: success, unbound 403, no-vend 403, relay-only 403, empty grant 403, STS error slug.
+- [x] 3.1 `services/gateway/src/aws.rs`: `POST /v1/aws/credentials`: agent token, `delegate` grant and `vend` checks, duration clamp, all before decrypt; fail closed when the ledger append fails.
+- [x] 3.2 Call STS through `ls-proxy::aws::sts::assume_role` (via `spawn_blocking`) with the rendered policy and configurable endpoint (tests only); base credential held in secrecy types and dropped after the call.
+- [x] 3.3 Fixed error slugs, redaction check of the response for the base credential, ledger events `aws.credentials.issued` and `.denied` with role, region, duration and outcome only.
+- [x] 3.4 Verify: `cargo nextest run -p ls-gateway aws` against moto: success, unbound 403, no-vend 403, relay-only 403, empty grant 403, STS error slug.
 
 ## 4. Client [sonnet]
 - [ ] 4.1 `smith aws credential-process` (prints the documented JSON, caches nothing on disk, exits non-zero with a fixed message on denial) and `smith aws setup|teardown` writing and removing a keyless profile.

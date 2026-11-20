@@ -41,3 +41,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix - done. Only failure was `ls-control-plane::human_auth auth_garbage_kids_cannot_turn_requests_into_a_fetch_storm` (1 of 779); passes locally in isolation and in full `just ci` after merging origin/main, so treated as a flake (not caused by 2.1).
 - Verified: `just ci` -> exit 0 on the merged branch.
 - Notes for next session: group 3 (opus) is next; if the fetch-storm test flakes again, log it on the harness-backlog issue.
+
+## 2026-11-20 worker
+- Task: 3.1-3.4 gateway `POST /v1/aws/credentials` - done (commit 4fa7337)
+- Verified: `cargo nextest run -p ls-gateway aws` 19/19 incl. real moto success test; `just ci` green; independent Opus evaluator PASS.
+- Notes for next session: ledger has no free-form attr, so events target the binding's secret id (role ARN not stored; see design.md). Minor: aws.rs:182 classifies sts_unreachable by error text; a typed error from `assume_role` would be sturdier. Next: tasks 4 (smith aws credential-process), 5, 6, 7.

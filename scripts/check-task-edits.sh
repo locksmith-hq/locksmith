@@ -18,7 +18,7 @@ trust=(.github/workflows .github/CODEOWNERS 'scripts/check-task-edits*' scripts/
        AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents)
 harness=("${trust[@]}" docs/agents .claude/skills scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh
          scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh
-         scripts/dates-sync.sh scripts/issues-sync.sh scripts/run-meta.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
+         scripts/dates-sync.sh scripts/issues-sync.sh scripts/run-meta.sh scripts/request-work.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
 protected_fail=0
 if git rev-parse -q --verify origin/main >/dev/null; then
   ob=$(git merge-base HEAD origin/main)

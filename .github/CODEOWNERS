@@ -25,6 +25,7 @@
 /scripts/agent-start.sh @tomer555
 /scripts/agent-preflight.sh @tomer555
 /scripts/bg.sh @tomer555
+/scripts/request-work.sh @tomer555
 
 # Crates that hold or move secrets.
 /crates/ls-crypto/ @tomer555

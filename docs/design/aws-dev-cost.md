@@ -2,7 +2,7 @@
 
 **Status: draft for owner approval. Nothing is applied until `openspec/decisions.md` records P1-1.**
 
-**Price caveat.** The agent VM cannot reach `aws.amazon.com` (blocked by the network policy), so the unit prices below are us-east-1 list prices from the worker's knowledge, not fetched today. Each row cites its pricing page. Before approval, a person or an online session must check every row against its page. The totals are recomputed from `aws-dev-cost.csv` by `bash scripts/aws-cost-check.sh`.
+**Prices verified 2026-11-20 (lead, rescue #486).** Every unit price in `aws-dev-cost.csv` matches the AWS Price List bulk API for us-east-1 (`pricing.us-east-1.amazonaws.com/offers/v1.0/aws/<service>/current/us-east-1/index.json`; usage types `us-east-1-KMS-Keys`, `Aurora:StorageUsage`, `Aurora:ServerlessV2Usage`, `TimedStorage-ByteHrs` (S3, ECR), `Global-CognitoFreeTierMAU`, `USE1-Fargate-ARM-vCPU-Hours:perCPU`, `USE1-Fargate-ARM-GB-Hours` ($0.00356, rounded), `USE1-PublicIPv4:InUseAddress`, `USE1-DataProcessing-Bytes`). Not in the table: Aurora Standard I/O at $0.20 per million requests, cents a month at dev load. Scale to 0 ACU is documented (Aurora PostgreSQL 16.3 or later); Aurora PostgreSQL 18 exists (18.6.1, 2026-10-15), but Serverless v2 support for 18 is not stated explicitly, so the PG18 option below is still checked at apply. The totals are recomputed from `aws-dev-cost.csv` by `bash scripts/aws-cost-check.sh`.
 
 ## Assumptions
 - Region us-east-1 (A0-9); one `dev` account; 5 GB in S3, 2 GB in ECR, 1 GB of Aurora storage, 0.2 GB of logs a month.

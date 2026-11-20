@@ -43,3 +43,10 @@
 - Task: 7.1 - done
 - Verified: `just apps-build` exit 0 (desktop debug build ok); `just ci` exit 0 (aws-validate included earlier); no online aws-up/aws-smoke (gate 1.2 open).
 - Notes for next session: remaining 1.2 (owner gate) and 4.3/4.4 (lead PR, protected workflow).
+
+## 2026-11-20 lead
+- Task: rescue #486 (Decision: 1.2 owner gate, 4.3/4.4 protected workflow) - handed to owner as #487
+- Verified: all 10 unit prices in `docs/design/aws-dev-cost.csv` match the AWS Price List bulk API (us-east-1, fetched today; usage types listed in the brief); `bash scripts/aws-cost-check.sh` -> OK ($1.52 idle, $3.12/month). Workflow YAML parses; `actionlint` not run (no sanctioned install in the VM).
+- Cause: approving spend and writing `.github/workflows/*` are owner-only (owner.md 2026-11-18, common.md trust root); neither a worker nor the lead can finish 1.2/4.3.
+- Fix: brief's price caveat replaced with the verification evidence; owner issue #487 carries the cost decision, an Artifact brief and the full `aws-base-apply.yml` for the owner to commit.
+- Notes for next session: on `approved` in #487 the lead records P1-1 in decisions.md and ticks 1.2. Once the workflow is on main, run `actionlint` on it and tick 4.3/4.4. Serverless v2 support for PG18 is not stated in AWS docs; the recorded fallback stays.

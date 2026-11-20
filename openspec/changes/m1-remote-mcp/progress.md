@@ -31,3 +31,4 @@
 - Task: m1-remote-mcp 1.2 - done (rmcp spike: licence Apache-2.0, pin `=3.11.0`, released 2026-11-17; builds and mounts in axum 0.8 via `nest_service`; findings in design.md "OSS used")
 - Verified: scratch crate `cargo build` -> Finished (not committed); crates.io API for licence and date; no repo code changed
 - Notes for next session: 1.4 (migration and OpenAPI) next. Host allowlist must be set for public hostnames in 2.1/3.1. Spike did not send a live MCP request.
+- 2026-11-20 · worker A: tasks 1.4 (migration 0012, /v1/mcp tools+clients API, OpenAPI, client types, fixtures) and 1.5 done; just ci green, independent evaluator PASS. Next: group 2 (/mcp route on control plane). Not built: audit events for switch/revoke changes (task 2.5), mcp_clients initialize upsert (2.3).

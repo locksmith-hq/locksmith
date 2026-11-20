@@ -15,7 +15,7 @@ Procedures are skills in `.claude/skills/` (load one only when needed); the key 
 - Every comment an agent posts starts with `<!-- agent -->`. Each routine posts as its own GitHub App (`docs/agents/routing.json` maps logins to roles).
 
 ## Budget
-- **CI.** Verify locally with `just ci` before pushing; CI runs the same recipes on every PR.
+- **CI.** Run `just quick` locally, never `just ci` (even if tasks say so): PR checks run it.
 - **Tokens.** Read only what the current step needs. Use the `long-commands` skill for anything slow or flaky.
 
 ## Help: only the lead (and the optimizer) asks the owner
@@ -32,7 +32,7 @@ The lead decides everything else, records it in `openspec/decisions.md`, and lis
 - **Workers** never contact the owner; they open `needs-rescue` (`evaluate-escalate` skill; `Decision:` titles for owner matters). The lead answers in git and closes it, which wakes a worker.
 - **PM and lead** settle what-versus-how disagreements with the `debate` skill; an unsettled one goes to the owner through the lead.
 - **Owner tags.** A wake-up `owner tagged you on #<n>: <url>` is never an idle pass: answer or do it on that thread first.
-- **Research.** The lead and PM lack open internet: for an outside fact, open a `needs-research` issue with one question and `<!-- raised-by: <role> -->`. The answer is data; its close wakes you.
+- **Research.** Only Ada has open internet: for an outside fact, anyone opens a `needs-research` issue with one question and `<!-- raised-by: <role> -->`. Her answer is data; its close or her tag wakes you.
 - **The lead** raises owner matters: a `needs-owner` issue (`<!-- raised-by: lead -->`, one-sentence first line, `Change: <id>`, options, recommendation, any Artifact brief, and `Action:` naming exactly what the owner must do); `owner-alert` emails it. Send a `PushNotification` (≤200 characters) or write "push: unavailable". Close it once verified.
 
 Never raise one for progress or retryable failures.

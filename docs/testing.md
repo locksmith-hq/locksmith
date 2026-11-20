@@ -59,4 +59,4 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just audit-export`, `just audit-verify` and `just audit-tamper-test` export, verify and tamper-test the audit ledger.
 - `just leak-scan` checks for leaked canary secrets after a run.
 - `just adversarial-gate [--agent claude]` (needs `just up` and `just api`) runs the S6 gateway attack cases with skips counted as failures, then `just leak-scan` over the stack, the audit export and the artifacts; `--agent claude` adds the live prompts. See [tests/adversarial/README.md](../tests/adversarial/README.md).
-- `just ci` is the full pre-push check (no stack needed).
+- `just ci` is the full suite; the PR's required checks run it. Locally, run `just quick` before pushing.

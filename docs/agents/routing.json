@@ -16,5 +16,5 @@
     "needs-research": { "from": ["lead", "pm"], "to": "research", "on_close": "raiser" }
   },
   "default_worker": "worker-a",
-  "mentions": { "@locksmith-lead": "lead", "@locksmith-pm": "pm", "@locksmith-worker": "worker-a", "@locksmith-alfie": "worker-a", "@locksmith-josie": "worker-b", "@locksmith-harriet": "worker-c", "@locksmith-research": "research", "@locksmith-hq/lead": "lead", "@locksmith-hq/pm": "pm", "@locksmith-hq/worker": "worker-a", "@locksmith-hq/alfie": "worker-a", "@locksmith-hq/josie": "worker-b", "@locksmith-hq/harriet": "worker-c", "@locksmith-hq/research": "research" }
+  "mentions": { "@locksmith-lead": "lead", "@locksmith-pm": "pm", "@locksmith-worker": "worker-a", "@locksmith-alfie": "worker-a", "@locksmith-josie": "worker-b", "@locksmith-harriet": "worker-c", "@locksmith-research": "research", "@locksmith-hq/lead": "lead", "@locksmith-hq/pm": "pm", "@locksmith-hq/alfie": "worker-a", "@locksmith-hq/josie": "worker-b", "@locksmith-hq/harriet": "worker-c" }
 }

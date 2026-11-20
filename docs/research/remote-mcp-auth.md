@@ -39,3 +39,9 @@ Consequence: a token deleted on the client without logout is still valid until i
 5. Short access-token lifetime (minutes) with refresh tokens, plus the server-side `mcp_clients` revoke check and issuer-side refresh revoke of section 3.
 
 **Open items for task 4.1 to verify against the pinned Keycloak (`keycloak/keycloak:26.0.8`, `infra/compose/compose.yaml`):** whether it honours the RFC 8707 `resource` parameter, whether anonymous DCR is allowed by the realm's client-registration policy (the discovery document does advertise a `registration_endpoint`: `OIDCWellKnownProvider.java` in the same source tree), and whether it accepts CIMD. Those were not checked here; the recommendation works with the fallbacks in points 3 and 4 either way.
+
+## 5. Verified against Keycloak 26.0.8 (task 4.1, 2026-11-20, `just mcp-e2e`)
+- `auth_time` is present on the access token and **a refresh keeps it unchanged**, so the #493 option A revoke rule (refuse tokens whose `auth_time` is before `revoked_at`) works; the strict fallback is not needed.
+- The RFC 8707 `resource` parameter is accepted on the authorization and token requests; the token's audience comes from the fixed audience mapper on the `locksmith-mcp` client (`http://127.0.0.1:8080/mcp` locally), and the token has no `locksmith-api` audience, so it is refused by the console API and a console token is refused on `/mcp`.
+- Anonymous Dynamic Client Registration is refused (403); the discovery document advertises the `registration_endpoint` anyway. CIMD is not advertised (`client_id_metadata_document_supported` absent). The pre-registered public client `locksmith-mcp` (PKCE S256, loopback redirect, consent required) is therefore the working path locally.
+- Keycloak advertises a revocation endpoint; the exact issuer-side consent/refresh revoke call is still task 4.2.

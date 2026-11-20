@@ -198,12 +198,16 @@ api:
     set -euo pipefail
     root={{quote(justfile_directory())}}
     set -a; . "$root/infra/compose/.env.example"; set +a
-    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 LOCKSMITH_MCP_RESOURCE_URL=http://127.0.0.1:8080/mcp OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
 
 # T1 sign-up, verify, sign-in (auth code + PKCE), reset and API calls against Keycloak (needs `just up` and `just api`).
 auth-e2e:
     python3 -I scripts/auth-e2e.py
+
+# M1 hub MCP sign-in: a scripted MCP client signs in on Keycloak (consent, PKCE, resource) and lists tools (needs `just up` and `just api`).
+mcp-e2e:
+    python3 -I scripts/mcp-e2e.py
 
 # Run locksmith-gateway against `just up` and `just api`. Needs LOCKSMITH_GATEWAY_BINDINGS (a TOML
 # file naming the org and bindings; see tests/e2e/tests/relay.rs for the shape). The gateway connects

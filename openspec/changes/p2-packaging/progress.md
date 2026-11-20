@@ -13,3 +13,8 @@
 - Task: p2-packaging 2.1-2.4 - done
 - Verified: just images, bash scripts/image-check.sh (8 OK), just ci -> green; evaluator PASS
 - Notes for next session: section 3 (compose self-host) next. In this VM docker build needs IMAGE_BUILD_ARGS='--network host --secret id=cabundle,src=/root/.ccr/ca-bundle.crt --build-arg HTTPS_PROXY=$HTTPS_PROXY'. Re-enable auto-merge (gh pr merge 534 --auto --merge) only when all tasks ticked.
+
+## 2026-11-20 worker (wake-up: merge review finished on #534)
+- Task: none started. The review ran on 0d3e6b7 and failed at the completeness check (unchecked tasks in tasks.md, groups 3-8), so there is no verdict. Auto-merge is off again (a disable/enable retry fails the same way).
+- Note: the PR comment calling #534 "planning-only" is stale; it carries groups 1-2 code. Only claude/planning-* branches are exempt from the check.
+- Next session: section 3 (compose self-host), and re-enable auto-merge only when every task is ticked.

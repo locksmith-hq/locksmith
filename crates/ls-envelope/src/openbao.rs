@@ -28,7 +28,6 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use ls_crypto::{SecretBytes, SecretKey32};
 use reqwest::header::{CONTENT_TYPE, HeaderValue};
-use std::sync::Arc;
 use std::time::Duration;
 use zeroize::Zeroizing;
 
@@ -407,18 +406,8 @@ fn validate_addr(addr: &str) -> Result<String, WrapError> {
 }
 
 fn default_client() -> Result<reqwest::Client, WrapError> {
-    use rustls_platform_verifier::BuilderVerifierExt as _;
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
+    ls_http::builder()
         .map_err(|_| WrapError::Client)?
-        .with_platform_verifier()
-        .map_err(|_| WrapError::Client)?
-        .with_no_client_auth();
-    reqwest::Client::builder()
-        .tls_backend_preconfigured(tls)
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
         .build()

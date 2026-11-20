@@ -14,7 +14,6 @@
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
@@ -240,19 +239,9 @@ pub fn parse_endpoint(raw: &str) -> Result<String> {
 }
 
 fn client() -> Result<reqwest::blocking::Client> {
-    use rustls_platform_verifier::BuilderVerifierExt as _;
     let err = || fail("cannot build the HTTP client");
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
+    ls_http::blocking_builder()
         .map_err(|_| err())?
-        .with_platform_verifier()
-        .map_err(|_| err())?
-        .with_no_client_auth();
-    reqwest::blocking::Client::builder()
-        .tls_backend_preconfigured(tls)
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(45))
         .build()

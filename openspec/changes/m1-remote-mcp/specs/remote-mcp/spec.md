@@ -60,8 +60,12 @@ Every tool call SHALL append one event to the audit ledger with the layer, tool 
 - **THEN** the ledger has an event with outcome `denied` for that call
 
 ### Requirement: Clients can be listed and revoked
-The console SHALL list connected MCP clients and let an admin revoke one; a revoked client's token SHALL be refused on its next call.
+The console SHALL list connected MCP clients and let an admin revoke one. Revoke SHALL bind to the OAuth `client_id` (Hub) or the agent (Agent MCP), not to a transport session, so that a revoked client cannot return by starting a new session.
 
 #### Scenario: Revoke a client
 - **WHEN** an admin revokes a client and that client calls a tool
 - **THEN** the call is refused with `401`
+
+#### Scenario: Revoked client re-initializes
+- **WHEN** a revoked client sends a fresh `initialize` with the same token
+- **THEN** it is refused with `401` and no new session or `mcp_clients` row is created

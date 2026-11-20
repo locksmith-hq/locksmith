@@ -7,9 +7,9 @@
 
 # Locksmith
 
-**Secrets that never sit on the agent's machine.**
+**The open-source secrets platform built by an AI team, for AI agents.**
 
-An open-source secrets platform and credential gateway for AI coding agents.<br>
+A secrets vault and credential gateway for AI coding agents, written and shipped by a team of AI agents.<br>
 Agents run authenticated Git, HTTP, database and AWS operations without ever holding the real credential.
 
 [![ci](https://github.com/locksmith-hq/locksmith/actions/workflows/ci.yml/badge.svg)](https://github.com/locksmith-hq/locksmith/actions/workflows/ci.yml)
@@ -18,7 +18,7 @@ Agents run authenticated Git, HTTP, database and AWS operations without ever hol
 [![Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust)](rust-toolchain.toml)
 ![Status: pre-release](https://img.shields.io/badge/status-pre--release-yellow)
 
-[Why](#why-locksmith) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Agents](#works-with-your-agent) · [Security](#security-promise) · [Contributing](#contributing)
+[Why](#why-locksmith) · [How it works](#how-it-works) · [Built by AI](#built-by-ai-used-by-ai) · [Quick start](#quick-start) · [Agents](#works-with-your-agent) · [Security](#security-promise) · [Contributing](#contributing)
 
 </div>
 
@@ -54,6 +54,20 @@ flowchart LR
 - **`smith`** is the CLI: `smith init`, `smith run`, `smith session`, `smith status`, `smith revoke`, `smith audit`.
 - **Desktop app** (Tauri) is another client of the same daemon: see what agents did, revoke sessions, manage keys. It never sees a secret value.
 - **Relays**: a Git forwarder, an HTTP relay, an AWS SigV4 relay and a DB relay act for the agent, so the key never enters its process.
+
+## Built by AI, used by AI
+
+Locksmith is developed by a team of AI agents, each with its own GitHub App identity, working through issues and pull requests in this repository. A human owner sets direction and makes the calls the agents escalate.
+
+| | Role | What it does |
+|---|---|---|
+| <img src="docs/agents/avatars/walt.png" width="40" alt=""> | **Walt**, PM (Opus) | Owns the end goal, roadmap order, priorities and the board |
+| <img src="docs/agents/avatars/linus.png" width="40" alt=""> | **Linus**, Lead (Opus) | Owns code quality and architecture, reviews merged work, rescues stuck tasks |
+| <img src="docs/agents/avatars/alfie.png" width="40" alt=""> <img src="docs/agents/avatars/josie.png" width="40" alt=""> <img src="docs/agents/avatars/harriet.png" width="40" alt=""> | **Alfie, Josie, Harriet**, Workers (Sonnet) | Implement [OpenSpec](openspec/) tasks, each on its own change and PR, with an independent evaluator |
+
+Every PR passes CI, adversarial tests and an independent Claude merge review before it merges itself. How the team runs: [docs/agents/](docs/agents/) and [docs/cloud-dev.md](docs/cloud-dev.md).
+
+The product is built for the same kind of agents that build it: they need credentials to do real work, and Locksmith lets them use those credentials without ever holding them.
 
 ## Security promise
 

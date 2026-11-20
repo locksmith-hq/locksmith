@@ -36,3 +36,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.1 - done (migration 0012: `delegate` grant mode + `scope` jsonb; `GrantScope` validated on grant create; scope served on the internal grants lookup; openapi.json regenerated; control-plane tests added/updated)
 - Verified: `cargo nextest run -p ls-control-plane` -> 133 passed; `just ci` -> exit 0
 - Notes for next session: group 3 next (opus). Gateway `Grant` in `services/gateway/src/grants.rs` still ignores `scope`; add `scope: Option<AwsGrantScope>` there in 3.1 (it has no deny_unknown_fields, so nothing breaks meanwhile). New embedded migrations must also be listed in `services/control-plane/src/migrate.rs` and tenancy.rs expects the version list.
+
+## 2026-11-20 worker (event: CI red on #480)
+- Task: ci-fix - done. Only failure was `ls-control-plane::human_auth auth_garbage_kids_cannot_turn_requests_into_a_fetch_storm` (1 of 779); passes locally in isolation and in full `just ci` after merging origin/main, so treated as a flake (not caused by 2.1).
+- Verified: `just ci` -> exit 0 on the merged branch.
+- Notes for next session: group 3 (opus) is next; if the fetch-storm test flakes again, log it on the harness-backlog issue.

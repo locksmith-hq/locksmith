@@ -39,3 +39,8 @@
 - Task: p2-packaging CI fix - done (flake)
 - Verified: cargo test -p locksmith-audit --test export -> 3 passed locally; CI failure was only locksmith-audit::export incremental_export_writes_each_event_once_and_verifies_offline (1 of 773), branch does not touch audit; main merged in (already up to date)
 - Notes for next session: flaky audit export test (docker-backed); the App token cannot re-run jobs (403), so this log push re-triggers CI. If it fails again on the same test, open a needs-rescue.
+
+## 2026-11-20 worker (wake-up: merge review finished on #534)
+- Task: p2-packaging - blocked (no task started)
+- Verified: merge-ready status error "no review verdict": review run failed at the completeness check (unchecked tasks 4.1-8.3); auto-merge had been re-enabled, disabled again with --disable-auto
+- Notes for next session: sections 4-8 remain; helm is unavailable in the VM (get.helm.sh 403) so 4.5 must skip with a message; re-enable auto-merge only when every task is ticked.

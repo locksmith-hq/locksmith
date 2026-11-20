@@ -1108,7 +1108,8 @@
           "relay.denied",
           "git.fetch",
           "git.push",
-          "git.denied"
+          "git.denied",
+          "db.session.denied"
         ],
         "type": "string"
       },

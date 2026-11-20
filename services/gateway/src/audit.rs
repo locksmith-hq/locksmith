@@ -106,6 +106,9 @@ pub enum EventKind {
     GitPush(Outcome),
     /// A refused Git call (`Outcome::is_denial`).
     GitDenied(Outcome),
+    /// A refused session on the Postgres listener (D3), after the agent token verified
+    /// (`Outcome::is_denial`).
+    DbDenied(Outcome),
 }
 
 impl EventKind {
@@ -117,6 +120,7 @@ impl EventKind {
             Self::GitFetch(o) => ("git.fetch", o.as_str()),
             Self::GitPush(o) => ("git.push", o.as_str()),
             Self::GitDenied(o) => ("git.denied", o.as_str()),
+            Self::DbDenied(o) => ("db.session.denied", o.as_str()),
         }
     }
 }
@@ -249,7 +253,8 @@ impl HttpAudit {
         | EventKind::Denied(Outcome::AuditUnavailable)
         | EventKind::GitFetch(Outcome::AuditUnavailable)
         | EventKind::GitPush(Outcome::AuditUnavailable)
-        | EventKind::GitDenied(Outcome::AuditUnavailable) = ev.kind
+        | EventKind::GitDenied(Outcome::AuditUnavailable)
+        | EventKind::DbDenied(Outcome::AuditUnavailable) = ev.kind
         {
             return Err(AuditError::Rejected);
         }

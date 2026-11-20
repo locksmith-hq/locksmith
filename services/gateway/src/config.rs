@@ -21,6 +21,12 @@ pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_GATEWAY_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
 pub const ENV_BINDINGS: &str = "LOCKSMITH_GATEWAY_BINDINGS";
+/// Postgres listener address (D3). Unset: no listener.
+pub const ENV_PG_LISTEN: &str = "LOCKSMITH_GATEWAY_PG_LISTEN";
+/// PEM certificate chain the Postgres listener presents (required with [`ENV_PG_LISTEN`]).
+pub const ENV_PG_TLS_CERT: &str = "LOCKSMITH_GATEWAY_PG_TLS_CERT";
+/// PEM private key for [`ENV_PG_TLS_CERT`] (required with [`ENV_PG_LISTEN`]).
+pub const ENV_PG_TLS_KEY: &str = "LOCKSMITH_GATEWAY_PG_TLS_KEY";
 
 /// Shortest accepted bearer token, in bytes. Shorter values are rejected, not accepted as a
 /// guessable credential.
@@ -83,6 +89,16 @@ pub struct Config {
     pub service_token: SecretString,
     pub openbao: OpenBaoConfig,
     pub bindings: Bindings,
+    /// The Postgres listener (D3), when [`ENV_PG_LISTEN`] is set.
+    pub pg_listen: Option<PgListenConfig>,
+}
+
+/// Where the Postgres listener binds and the TLS files it serves (paths only; the key is read
+/// at startup).
+pub struct PgListenConfig {
+    pub addr: SocketAddr,
+    pub cert_path: String,
+    pub key_path: String,
 }
 
 /// OpenBao transit settings for unwrapping DEKs: the gateway's decrypt-capable token.
@@ -125,6 +141,10 @@ fn default_pg_tls() -> PgTls {
     PgTls::Require
 }
 
+fn default_pg_version() -> u32 {
+    1
+}
+
 /// One Postgres database an agent may reach through the relay (D3). There is deliberately no
 /// password field: the password is the secret `secret_id`, decrypted per session.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -133,6 +153,9 @@ pub struct PgBinding {
     /// The client's `database` startup parameter.
     pub name: String,
     pub secret_id: Uuid,
+    /// Secret version decrypted for the session (as `[[git_binding]]`). Default 1.
+    #[serde(default = "default_pg_version")]
+    pub version: u32,
     pub host: String,
     #[serde(default = "default_pg_port")]
     pub port: u16,
@@ -213,6 +236,9 @@ impl Bindings {
             }
             if !pg_secrets.insert(b.secret_id) {
                 return Err(bad("secret_id"));
+            }
+            if b.version == 0 {
+                return Err(bad("version"));
             }
             if b.host.is_empty()
                 || b.host
@@ -310,6 +336,15 @@ impl Config {
         let text = read_file(&path).ok_or(ConfigError::BindingsUnreadable)?;
         let bindings = Bindings::parse(&text)?;
 
+        let pg_listen = match get(ENV_PG_LISTEN).filter(|v| !v.trim().is_empty()) {
+            None => None,
+            Some(v) => Some(PgListenConfig {
+                addr: v.parse().map_err(|_| ConfigError::Invalid(ENV_PG_LISTEN))?,
+                cert_path: required(ENV_PG_TLS_CERT)?,
+                key_path: required(ENV_PG_TLS_KEY)?,
+            }),
+        };
+
         Ok(Self {
             bind,
             database_url,
@@ -318,6 +353,7 @@ impl Config {
             service_token,
             openbao,
             bindings,
+            pg_listen,
         })
     }
 }
@@ -409,8 +445,33 @@ mod tests {
         let c = load(&env(), &bindings_toml(PG)).expect("valid");
         let b = c.bindings.pg_by_name("app").expect("binding");
         assert_eq!(
-            (b.port, b.tls, b.allow_private_hosts),
-            (5432, PgTls::Require, false)
+            (b.port, b.tls, b.allow_private_hosts, b.version),
+            (5432, PgTls::Require, false, 1)
+        );
+        assert!(c.pg_listen.is_none(), "the pg listener is off by default");
+    }
+
+    #[test]
+    fn pg_config_listener_needs_an_address_and_tls_files() {
+        let mut e = env();
+        e.insert(ENV_PG_LISTEN, "127.0.0.1:6432".to_owned());
+        assert_eq!(
+            load(&e, &bindings_toml("")).err(),
+            Some(ConfigError::Missing(ENV_PG_TLS_CERT))
+        );
+        e.insert(ENV_PG_TLS_CERT, "/etc/pg.crt".to_owned());
+        assert_eq!(
+            load(&e, &bindings_toml("")).err(),
+            Some(ConfigError::Missing(ENV_PG_TLS_KEY))
+        );
+        e.insert(ENV_PG_TLS_KEY, "/etc/pg.key".to_owned());
+        let c = load(&e, &bindings_toml("")).expect("valid");
+        let l = c.pg_listen.expect("listener configured");
+        assert_eq!(l.addr, "127.0.0.1:6432".parse().unwrap());
+        e.insert(ENV_PG_LISTEN, "not an address".to_owned());
+        assert_eq!(
+            load(&e, &bindings_toml("")).err(),
+            Some(ConfigError::Invalid(ENV_PG_LISTEN))
         );
     }
 

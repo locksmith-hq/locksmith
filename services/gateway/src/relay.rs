@@ -354,7 +354,10 @@ impl CallAudit {
         let host_ok = match kind {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
-            EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => true,
+            EventKind::GitFetch(_)
+            | EventKind::GitPush(_)
+            | EventKind::GitDenied(_)
+            | EventKind::DbDenied(_) => true,
         };
         RelayEvent {
             kind,
@@ -1167,9 +1170,10 @@ mod tests {
                 .filter_map(|e| match e.kind {
                     EventKind::Attempt => None,
                     EventKind::Outcome(o) | EventKind::Denied(o) => Some((o, e)),
-                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {
-                        None
-                    }
+                    EventKind::GitFetch(_)
+                    | EventKind::GitPush(_)
+                    | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_) => None,
                 })
                 .collect()
         }
@@ -1190,7 +1194,10 @@ mod tests {
                         assert!(o.is_denial());
                         assert!(e.attempt_id.is_none());
                     }
-                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {}
+                    EventKind::GitFetch(_)
+                    | EventKind::GitPush(_)
+                    | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_) => {}
                 }
             }
             assert!(open.is_none(), "attempt left open");

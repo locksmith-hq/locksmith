@@ -26,3 +26,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix - done (no code change)
 - Verified: just ci -> green locally after merging origin/main; human_auth 16/16 pass locally
 - Notes for next session: CI rust job failed only on ls-control-plane human_auth auth_garbage_kids_cannot_turn_requests_into_a_fetch_storm (fetches 2 vs 1), a timing flake under CI load, not touched by d3. If it recurs, file on harness-backlog / fix the test.
+
+## 2026-11-20 05:28 worker
+- Task: 2.1-2.4 - done
+- Verified: `cargo nextest run -p ls-gateway pg_auth` -> 9 passed (plus pg_config 3 passed, full ls-gateway 99 passed); fmt and clippy -D warnings clean; `just ci` -> exit 0
+- Notes for next session: listener is `services/gateway/src/pg/listener.rs`; group 3 plugs in through the `PgUpstream` trait (`pg/mod.rs`), which gets a `PgSession` (binding, guard-checked pinned addrs, allow-listed client params, decrypted password in `SecretBytes`) and the TLS client stream. `main.rs` wires `UpstreamUnavailable` (answers 0A000) until then. New: `LOCKSMITH_GATEWAY_PG_TLS_CERT`/`_KEY` (required with `_PG_LISTEN`), `[[pg]] version` (default 1, needed for decrypt), `egress::check_host`, ledger kind `db.session.denied` (control plane, ls-audit, openapi.json, TS schema). Bad token and unbound database are not in the ledger (no agent / no secret to name); logged as slugs. CancelRequest is closed unanswered until 3.3. An independent evaluator pass (evaluate-escalate step 3) was not run in this session.

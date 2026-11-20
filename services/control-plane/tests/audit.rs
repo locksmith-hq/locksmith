@@ -190,6 +190,9 @@ async fn non_allow_listed_bodies_are_400() {
         json!({"kind": "git.fetch", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "git.push", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "git.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        // Postgres refusals (D3): only denial outcomes.
+        json!({"kind": "db.session.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.denied", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         // An outcome must name its attempt (the idempotency key).
         json!({"kind": "relay.outcome", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
     ] {
@@ -216,6 +219,7 @@ async fn git_events_append_to_the_chain() {
         ("git.fetch", "ok"),
         ("git.push", "upstream_timeout"),
         ("git.denied", "denied"),
+        ("db.session.denied", "no_grant"),
     ]
     .into_iter()
     .enumerate()
@@ -237,7 +241,8 @@ async fn git_events_append_to_the_chain() {
         [
             ("git.fetch", "ok"),
             ("git.push", "upstream_timeout"),
-            ("git.denied", "denied")
+            ("git.denied", "denied"),
+            ("db.session.denied", "no_grant")
         ]
     );
 }

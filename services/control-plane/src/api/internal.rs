@@ -218,6 +218,10 @@ pub enum RelayEventKind {
     /// A refused Git call; outcome `denied`, `grants_unavailable`, `no_grant` or `denied_address`.
     #[serde(rename = "git.denied")]
     GitDenied,
+    /// A refused Postgres session on the gateway's pg listener (D3); outcome `denied`,
+    /// `grants_unavailable`, `no_grant` or `denied_address`.
+    #[serde(rename = "db.session.denied")]
+    DbSessionDenied,
 }
 
 impl RelayEventKind {
@@ -229,6 +233,7 @@ impl RelayEventKind {
             Self::GitFetch => kind::GIT_FETCH,
             Self::GitPush => kind::GIT_PUSH,
             Self::GitDenied => kind::GIT_DENIED,
+            Self::DbSessionDenied => kind::DB_SESSION_DENIED,
         }
     }
 }
@@ -343,7 +348,9 @@ impl NewRelayEvent {
             RelayEventKind::GitFetch | RelayEventKind::GitPush => {
                 self.outcome != RelayOutcome::Pending && !self.outcome.is_denial()
             }
-            RelayEventKind::Denied | RelayEventKind::GitDenied => self.outcome.is_denial(),
+            RelayEventKind::Denied
+            | RelayEventKind::GitDenied
+            | RelayEventKind::DbSessionDenied => self.outcome.is_denial(),
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));

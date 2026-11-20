@@ -7,10 +7,10 @@
 - [x] 1.4 Verify: `cargo nextest run -p ls-gateway pg_config` and `cargo nextest run -p ls-proxy db`.
 
 ## 2. Listener and agent auth [opus]
-- [ ] 2.1 `services/gateway/src/pg/listener.rs`: optional TCP listener (`LOCKSMITH_GATEWAY_PG_LISTEN`), tokio-rustls TLS required before startup, GSSENC answered `N`, plaintext startup refused, handshake timeout.
-- [ ] 2.2 Cleartext password message carries the agent token, verified with `AgentAuth`; fixed SQLSTATE errors (`28P01`, `28000`, `3D000`) built with pgwire; nothing logged but slugs.
-- [ ] 2.3 Check order binding → relay grant → address guard → decrypt (decision 4); `db.session.denied` ledger event for every refusal after token parse.
-- [ ] 2.4 Verify: `cargo nextest run -p ls-gateway pg_auth`: plaintext refused, bad token, unbound database, no grant, private host without permission; each asserts no decrypt and no upstream call.
+- [x] 2.1 `services/gateway/src/pg/listener.rs`: optional TCP listener (`LOCKSMITH_GATEWAY_PG_LISTEN`), tokio-rustls TLS required before startup, GSSENC answered `N`, plaintext startup refused, handshake timeout.
+- [x] 2.2 Cleartext password message carries the agent token, verified with `AgentAuth`; fixed SQLSTATE errors (`28P01`, `28000`, `3D000`) built with pgwire; nothing logged but slugs.
+- [x] 2.3 Check order binding → relay grant → address guard → decrypt (decision 4); `db.session.denied` ledger event for every refusal after token parse.
+- [x] 2.4 Verify: `cargo nextest run -p ls-gateway pg_auth`: plaintext refused, bad token, unbound database, no grant, private host without permission; each asserts no decrypt and no upstream call.
 
 ## 3. Upstream auth and relay [opus]
 - [ ] 3.1 `pg/upstream.rs`: connect with the binding's TLS mode, send the bound user and database plus the allow-listed client parameters only (decision 6), drive SCRAM-SHA-256 and md5 with the decrypted password in `secrecy` types; refuse cleartext unless TLS or loopback.

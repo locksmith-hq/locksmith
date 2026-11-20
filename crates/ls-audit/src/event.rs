@@ -87,6 +87,8 @@ pub mod kind {
     pub const GIT_FETCH: Code = Code::new("git.fetch");
     pub const GIT_PUSH: Code = Code::new("git.push");
     pub const GIT_DENIED: Code = Code::new("git.denied");
+    /// A refused session on the gateway's Postgres listener (D3).
+    pub const DB_SESSION_DENIED: Code = Code::new("db.session.denied");
     pub const AGENT_CREATED: Code = Code::new("agent.created");
     pub const AGENT_ROTATED: Code = Code::new("agent.rotated");
     pub const AGENT_DELETED: Code = Code::new("agent.deleted");

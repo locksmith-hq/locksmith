@@ -61,3 +61,9 @@
 - Task: 6.4 - done
 - Verified: `npm run lint`, `npm test --workspace apps/web`, `cargo nextest run -p smith-cli` (129), `just apps-build` all exit 0 after merging main in (resolved the App.tsx import conflict, keeping both sides)
 - Notes for next session: only 7.1 remains (`just up`, `auth-e2e`, `adversarial-gate`, `leak-scan`, `audit-verify`, `apps-build`, `just ci`), then archive and mark the PR ready. Run `npm ci` after checking out the branch, not before.
+
+## 2026-11-20 worker (c)
+- Task: 7.1 - done
+- Verified: `just up`, `just auth-e2e` all checks passed, `just adversarial-gate` PASS (incl. leak-scan), `just audit-verify` ok, `just apps-build`, `just ci` exit 0 (746 tests)
+- Fix: G5's coverage sweep required a valid call for the new human-only `auth_sign_in`/`auth_sign_out`; G5 now probes them with no auth, dev header and agent token (all 401) in mode `human-refused`; the real human-token path is G7's.
+- Notes for next session: change complete; archived in the same PR. VM disk allowance fills after a cold `just ci` plus the stack (~15 GB target); `rm -rf target` frees it.

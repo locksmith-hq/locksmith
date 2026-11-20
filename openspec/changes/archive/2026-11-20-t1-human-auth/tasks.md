@@ -34,4 +34,4 @@
 - [x] 6.4 Verify: `npm run lint`, `npm test --workspace apps/web`, `cargo nextest run -p smith-cli`, `just apps-build`.
 
 ## 7. Local verification
-- [ ] 7.1 `just up`, `just auth-e2e`, `just adversarial-gate`, `just leak-scan`, `just audit-verify`, `just apps-build`, then `just ci`.
+- [x] 7.1 `just up`, `just auth-e2e`, `just adversarial-gate`, `just leak-scan`, `just audit-verify`, `just apps-build`, then `just ci`.

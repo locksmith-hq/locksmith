@@ -221,6 +221,9 @@ for tmpl, item in spec["paths"].items():
 by_key = {(m, t): o for m, t, o in ops}
 
 
+HUMAN_ONLY = {"auth_sign_in", "auth_sign_out"}
+
+
 def is_internal(o):
     return "internal" in (o.get("tags") or [])
 
@@ -458,12 +461,20 @@ call(gw, "gateway", "gateway_grants", "garbage-token", "GET", "/v1/grants",
 call(gw, "gateway", "gateway_grants", "service-token", "GET", "/v1/grants",
      headers={"Authorization": "Bearer " + svc_auth}, expect="401")
 
+# --- human-only routes (T1): G5 runs on dev auth, so the dev header and the agent token must be 401 ---
+for tmpl in ("/v1/auth/sign-in", "/v1/auth/sign-out"):
+    for label, h in [("no-auth", {}), ("dev-org", dev(A["org"])),
+                     ("agent-token", {"Authorization": "Bearer " + agent_auth})]:
+        call(api, "human-refused", opid("POST", tmpl), label, "POST", tmpl, headers=h, expect="401")
+
 # --- coverage: every operation called in each mode that applies to it ---
 for method, tmpl, o in ops:
     oid = o["operationId"]
     modes = done.get(oid, set())
     if is_internal(o):
         need = {"internal"}
+    elif oid in HUMAN_ONLY:
+        need = {"human-refused"}  # a real human token is G7's; here the dev header must be refused
     else:
         need = {"valid"}
         if params_of(o, "path") or params_of(o, "query") or o.get("requestBody") or method == "GET":

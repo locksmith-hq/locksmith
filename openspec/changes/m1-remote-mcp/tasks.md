@@ -29,8 +29,8 @@
 
 ## 5. Console and desktop surface [sonnet]
 - [x] 5.1 `apps/web` Tools page (one switch per tool, per layer) and Clients page (list, revoke), with Vitest tests including `403` and empty states.
-- [ ] 5.2 `apps/desktop` Tools and Clients views on the same client methods, with Vitest tests.
-- [ ] 5.3 Verify: `npm test --workspace apps/web --workspace apps/desktop && just apps-build`.
+- [x] 5.2 `apps/desktop` Tools and Clients views on the same client methods, with Vitest tests.
+- [x] 5.3 Verify: `npm test --workspace apps/web --workspace apps/desktop && just apps-build`.
 
 ## 6. Adversarial [sonnet]
 - [ ] 6.1 Add adversarial cases to `tests/`: a tool-list scan for value-like fields on both servers, a sentinel secret that must not appear in any MCP result, log or audit row, and an off-tool call by name.

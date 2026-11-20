@@ -98,3 +98,8 @@
 - Task: m1-remote-mcp 5.1 - done (`apps/web` Tools page: one switch per tool grouped by layer, saved through `setMcpTool`; Clients page: list with revoke; loading, error/403 and empty states; new `mcp.test.tsx`, 7 tests)
 - Verified: `npx tsc --noEmit` and `npx vitest run` in apps/web -> 26 passed; `just ci` -> exit 0 (started before the page code landed, web part re-run by hand after)
 - Notes for next session: 5.2 desktop views on the same client methods; 4.2 gateway half and 4.3 still open; 2.2 still unticked.
+
+## 2026-11-20 worker A (alfie)
+- Task: m1-remote-mcp 5.2, 5.3 - done (desktop "MCP tools" and "MCP clients" screens on the same client methods as the web: one switch per tool by layer, client list with revoke, 403/empty/not-connected states; 3 new Vitest tests)
+- Verified: `npx vitest run` in apps/desktop -> 28 passed; `just apps-build` -> exit 0; `just ci` -> exit 0
+- Notes for next session: remaining: 2.2 (explain_block deferral), 4.2 gateway half + issuer-side revoke, 4.3, groups 6 and 7.

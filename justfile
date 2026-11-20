@@ -65,6 +65,12 @@ dev app:
 desktop-install:
     bash scripts/dev-install-desktop.sh
 
+# D1 smoke: clone and push through the gateway's /git route to a real `git http-backend` fixture,
+# plus the smith-cli `git setup` checks. Self-contained (no `just up` needed).
+git-smoke:
+    cargo nextest run -p ls-gateway git_clone_and_push_through_gateway git_fetch_only_grant_cannot_push
+    cargo nextest run -p smith-cli git
+
 # Local dev harness (infra/compose): Postgres, Grafana LGTM, OpenBao, WireMock.
 # Dev values come from infra/compose/.env.example. Export OPENBAO_IMAGE etc. in the shell to override.
 compose := "docker compose -f infra/compose/compose.yaml --env-file infra/compose/.env.example"

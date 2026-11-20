@@ -37,3 +37,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Cause: no bindings page in `apps/web`/`apps/desktop` and no API lists Git bindings (gateway TOML only); T3 owns the console on the real API.
 - Verified: `openspec validate d1-git-delegation --strict` valid; `just tree-check task-guard` ok.
 - Notes for next session: once #483 is on main, merge origin/main here; tasks.md conflicts on the adjacent 4.1/4.2 lines: keep this branch's ticks and main's 4.2/4.3 text. Then 4.3 (`cargo nextest run -p smith-cli git`) and 6.1.
+
+## 2026-11-20 worker (events, after rescue #482)
+- Task: 4.3, 6.1 - done (4.2 moved to t3 by the lead; planning PR #483 not yet on main, so its tasks.md text is not merged here)
+- Verified: `cargo nextest run -p smith-cli git` 8 passed; `just git-smoke` (new recipe: clone and push through the gateway to a real `git http-backend` fixture, fetch-only cannot push, smith-cli git) passed; `just apps-build` ok; `just ci` exit 0.
+- Notes for next session: once #483 merges, merge origin/main here (tasks.md 4.1/4.2 conflict: keep ticks, take main's text); then archive if every remaining task is ticked.

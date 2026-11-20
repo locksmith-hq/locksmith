@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ls_control_plane::agent_token::AgentTokenSigner;
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::auth::ServiceToken;
+use ls_control_plane::auth::human::HumanAuth;
 use ls_control_plane::checkpoint::{self, CheckpointJob, Schedule};
 use ls_control_plane::config::{self, Config};
 use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
@@ -144,6 +145,20 @@ async fn main() -> ExitCode {
         None => tracing::warn!(
             "{} is not set: agent token requests are refused (503) and the JWKS is empty",
             config::ENV_AGENT_SIGNING_KEY
+        ),
+    }
+    match config.human_auth.as_ref().map(HumanAuth::new) {
+        Some(Ok(auth)) => {
+            tracing::info!("human token verification configured (OIDC issuer JWKS)");
+            state = state.with_human_auth(auth);
+        }
+        Some(Err(e)) => {
+            tracing::error!(error = %e, "invalid human token verification configuration");
+            return ExitCode::FAILURE;
+        }
+        None => tracing::warn!(
+            "{} is not set: bearer tokens are refused on the control-plane API",
+            config::ENV_OIDC_ISSUER
         ),
     }
     let router = app::build(state);

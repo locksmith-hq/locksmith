@@ -132,18 +132,68 @@ impl Database {
         self.transaction(None, f).instrument(span).await
     }
 
+    /// Run `f` in one transaction for a sign-in (T1 design decision 6): no org is bound yet, but
+    /// the verified identity is, so the `users` policy shows the rows for exactly that
+    /// `(issuer, subject)` and, when `verified_email` is given, rows with that same verified
+    /// email (identity linking). `f` binds an org itself with [`bind_org`] once it knows which.
+    /// Everything is transaction-local, like [`Self::with_org`].
+    pub async fn with_login<T, E, F>(
+        &self,
+        issuer: &str,
+        subject: &str,
+        verified_email: Option<&str>,
+        f: F,
+    ) -> Result<T, E>
+    where
+        T: Send,
+        E: From<sql::Error> + Send,
+        F: for<'c> FnOnce(&'c mut PgConnection) -> TxFuture<'c, T, E> + Send,
+    {
+        let span = tracing::info_span!(
+            "db.transaction",
+            otel.kind = "client",
+            db.system.name = "postgresql",
+            error = tracing::field::Empty,
+        );
+        let login = Login {
+            issuer: issuer.to_owned(),
+            subject: subject.to_owned(),
+            email: verified_email.map(str::to_lowercase),
+        };
+        self.run(None, Some(login), f).instrument(span).await
+    }
+
     async fn transaction<T, E, F>(&self, org_id: Option<Uuid>, f: F) -> Result<T, E>
+    where
+        E: From<sql::Error>,
+        F: for<'c> FnOnce(&'c mut PgConnection) -> TxFuture<'c, T, E>,
+    {
+        self.run(org_id, None, f).await
+    }
+
+    async fn run<T, E, F>(&self, org_id: Option<Uuid>, login: Option<Login>, f: F) -> Result<T, E>
     where
         E: From<sql::Error>,
         F: for<'c> FnOnce(&'c mut PgConnection) -> TxFuture<'c, T, E>,
     {
         let mut tx = self.pool.begin().await.inspect_err(|_| mark_error())?;
         if let Some(org_id) = org_id {
-            sql::query("SELECT set_config('app.org_id', $1, true)")
-                .bind(org_id.to_string())
-                .execute(&mut *tx)
+            bind_org(&mut tx, org_id)
                 .await
                 .inspect_err(|_| mark_error())?;
+        }
+        if let Some(login) = login {
+            sql::query(
+                "SELECT set_config('app.login_issuer', $1, true), \
+                        set_config('app.login_subject', $2, true), \
+                        set_config('app.login_email', $3, true)",
+            )
+            .bind(login.issuer)
+            .bind(login.subject)
+            .bind(login.email.unwrap_or_default())
+            .execute(&mut *tx)
+            .await
+            .inspect_err(|_| mark_error())?;
         }
         match f(&mut tx).await {
             Ok(value) => {
@@ -182,6 +232,24 @@ impl Database {
     pub async fn close(&self) {
         self.pool.close().await;
     }
+}
+
+/// The identity a sign-in transaction acts for; see [`Database::with_login`].
+struct Login {
+    issuer: String,
+    subject: String,
+    email: Option<String>,
+}
+
+/// Bind `org_id` as the tenant for the rest of the current transaction (transaction-local, so it
+/// resets at commit or rollback). [`Database::with_org`] does this first; a sign-in transaction
+/// calls it once the personal org is known.
+pub async fn bind_org(conn: &mut PgConnection, org_id: Uuid) -> sql::Result<()> {
+    sql::query("SELECT set_config('app.org_id', $1, true)")
+        .bind(org_id.to_string())
+        .execute(conn)
+        .await
+        .map(|_| ())
 }
 
 fn mark_error() {

@@ -92,6 +92,13 @@ pub mod kind {
     pub const AGENT_DELETED: Code = Code::new("agent.deleted");
     pub const GRANT_CREATED: Code = Code::new("grant.created");
     pub const GRANT_REVOKED: Code = Code::new("grant.revoked");
+    /// A human signed in (T1 task 5.1). Actor `user:<id>`, target the personal org.
+    pub const AUTH_SIGN_IN: Code = Code::new("auth.sign_in");
+    pub const AUTH_SIGN_OUT: Code = Code::new("auth.sign_out");
+    /// A verified identity was refused (e.g. unverified email); `reason` says why.
+    pub const AUTH_VERIFY_FAILED: Code = Code::new("auth.verify_failed");
+    /// A first sign-in created the user's personal org.
+    pub const ORG_PERSONAL_CREATED: Code = Code::new("org.personal_created");
 }
 
 /// Common outcomes.
@@ -119,6 +126,10 @@ pub mod attr {
     pub const STATUS: Code = Code::new("status");
     /// Links a relay `outcome` event to its `attempt` event.
     pub const ATTEMPT_ID: Code = Code::new("attempt_id");
+    /// Host name of the OIDC issuer that vouched for a human identity (never a token).
+    pub const ISSUER: Code = Code::new("issuer");
+    /// Static reason code for a refusal.
+    pub const REASON: Code = Code::new("reason");
 }
 
 /// Who acted.

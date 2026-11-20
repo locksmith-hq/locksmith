@@ -33,14 +33,24 @@ const GATEWAY_ENV: &str = ls_connector::GATEWAY_ENV;
 pub struct LoginArgs {
     /// Log in as an agent: exchange an enrollment secret for a short-lived token. The secret is
     /// read from $LOCKSMITH_ENROLLMENT_SECRET, else from stdin (a no-echo prompt on a terminal).
-    #[arg(long, required = true)]
+    #[arg(long, required_unless_present = "user", conflicts_with = "user")]
     pub agent: bool,
-    /// Control plane base URL (`https`, or `http` on loopback only).
-    #[arg(long, env = CONTROL_PLANE_ENV)]
-    pub control_plane_url: String,
-    /// Gateway base URL (`https`, or `http` on loopback only).
-    #[arg(long, env = GATEWAY_ENV)]
-    pub gateway_url: String,
+    /// Log in as a human with the OAuth device grant (RFC 8628): approve in any browser; the
+    /// token is kept in the OS keystore.
+    #[arg(long)]
+    pub user: bool,
+    /// Control plane base URL (`https`, or `http` on loopback only). Agent login only.
+    #[arg(long, env = CONTROL_PLANE_ENV, required_if_eq("agent", "true"))]
+    pub control_plane_url: Option<String>,
+    /// Gateway base URL (`https`, or `http` on loopback only). Agent login only.
+    #[arg(long, env = GATEWAY_ENV, required_if_eq("agent", "true"))]
+    pub gateway_url: Option<String>,
+    /// OIDC issuer URL for `--user` (Keycloak realm layout; `https`, or `http` on loopback).
+    #[arg(long, env = "LOCKSMITH_OIDC_ISSUER", requires = "user")]
+    pub issuer: Option<String>,
+    /// OAuth client id for `--user` (the issuer client must allow the device grant).
+    #[arg(long, env = "LOCKSMITH_OIDC_CLIENT_ID", requires = "user")]
+    pub client_id: Option<String>,
 }
 
 #[derive(Args)]
@@ -113,11 +123,18 @@ fn enrollment_secret() -> Result<SecretString, Fail> {
 }
 
 pub fn login(json: bool, a: LoginArgs) -> Result<ExitCode, Fail> {
+    if a.user {
+        return crate::user_login::run(json, a.issuer, a.client_id);
+    }
+    let (Some(control_plane_url), Some(gateway_url)) = (&a.control_plane_url, &a.gateway_url)
+    else {
+        return Err(fail("--control-plane-url and --gateway-url are required"));
+    };
     // Validate both endpoints before asking for the secret.
-    ls_connector::parse_endpoint(&a.control_plane_url)?;
-    ls_connector::parse_endpoint(&a.gateway_url)?;
+    ls_connector::parse_endpoint(control_plane_url)?;
+    ls_connector::parse_endpoint(gateway_url)?;
     let secret = enrollment_secret()?;
-    let (state, expires_in) = ls_connector::login(&a.control_plane_url, &a.gateway_url, &secret)?;
+    let (state, expires_in) = ls_connector::login(control_plane_url, gateway_url, &secret)?;
     if json {
         println!(
             "{}",

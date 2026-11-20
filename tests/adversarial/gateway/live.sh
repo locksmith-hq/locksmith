@@ -34,7 +34,7 @@ gw_fixture api provider
 provider="http://127.0.0.1:$GW_FIXTURE_PORT"
 gw_fixture evil evil
 evil="http://127.0.0.1:$GW_FIXTURE_PORT"
-# Add a Git binding for the same secret to the bindings file gw_setup writes (G7 shows the shape).
+# Add a Git binding for the same secret to the bindings file gw_setup writes (G8 shows the shape).
 gw_bind_relay="$(declare -f gw_bind)"
 eval "gw_bind_relay_only${gw_bind_relay#gw_bind}"
 gw_bind() {

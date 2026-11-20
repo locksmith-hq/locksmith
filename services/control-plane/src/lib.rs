@@ -14,3 +14,4 @@ pub mod migrate;
 pub mod problem;
 pub mod readiness;
 pub mod telemetry;
+pub mod users;

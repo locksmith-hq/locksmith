@@ -8,11 +8,15 @@ use std::net::SocketAddr;
 
 use secrecy::{ExposeSecret, SecretString};
 
+use crate::auth::human::HumanAuthConfig;
+
 pub const ENV_DATABASE_URL: &str = "DATABASE_URL";
 pub const ENV_DATABASE_OWNER_URL: &str = "DATABASE_OWNER_URL";
 pub const ENV_BIND: &str = "LOCKSMITH_BIND";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 pub const ENV_DEV_AUTH: &str = "LOCKSMITH_DEV_AUTH";
+/// Explicit override that lets a release build start with `LOCKSMITH_DEV_AUTH=1`.
+pub const ENV_ALLOW_DEV_AUTH: &str = "LOCKSMITH_ALLOW_DEV_AUTH";
 pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_CONTROL_PLANE_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
@@ -24,6 +28,13 @@ pub const ENV_AUDIT_CHECKPOINT_KEY: &str = "OPENBAO_AUDIT_CHECKPOINT_KEY";
 pub const ENV_GATEWAY_SERVICE_TOKEN: &str = "LOCKSMITH_GATEWAY_SERVICE_TOKEN";
 /// S4: the Ed25519 seed (32 bytes, base64) that signs agent tokens.
 pub const ENV_AGENT_SIGNING_KEY: &str = "LOCKSMITH_AGENT_SIGNING_KEY";
+
+/// T1: the OIDC issuer (`iss`) human access tokens must carry.
+pub const ENV_OIDC_ISSUER: &str = "LOCKSMITH_OIDC_ISSUER";
+/// T1: the audience (`aud`) human access tokens must include.
+pub const ENV_OIDC_AUDIENCE: &str = "LOCKSMITH_OIDC_AUDIENCE";
+/// T1: where the issuer publishes its JWKS (an `http` or `https` URL).
+pub const ENV_OIDC_JWKS_URL: &str = "LOCKSMITH_OIDC_JWKS_URL";
 
 /// Shortest accepted gateway service token, in bytes (a 256-bit random token in hex or base64
 /// is longer). Shorter values are rejected rather than accepted as a guessable credential.
@@ -41,6 +52,8 @@ pub enum ConfigError {
     Invalid(&'static str),
     /// Dev auth is on but the bind address is not loopback.
     DevAuthNonLoopback(&'static str),
+    /// Dev auth is on in a release build without the explicit override.
+    DevAuthInRelease,
 }
 
 impl fmt::Display for ConfigError {
@@ -48,6 +61,10 @@ impl fmt::Display for ConfigError {
         match self {
             Self::Missing(var) => write!(f, "required environment variable {var} is not set"),
             Self::Invalid(var) => write!(f, "environment variable {var} has an invalid value"),
+            Self::DevAuthInRelease => write!(
+                f,
+                "{ENV_DEV_AUTH}=1 is refused in release builds unless {ENV_ALLOW_DEV_AUTH}=1 is also set"
+            ),
             Self::DevAuthNonLoopback(var) => write!(
                 f,
                 "{ENV_DEV_AUTH}=1 is only allowed with a loopback bind address; fix {var} or unset {ENV_DEV_AUTH}"
@@ -57,6 +74,14 @@ impl fmt::Display for ConfigError {
 }
 
 impl std::error::Error for ConfigError {}
+
+/// A release build refuses dev header auth unless the override flag is set (t1 design decision 7).
+fn check_release_dev_auth(dev_auth: bool, release: bool, allowed: bool) -> Result<(), ConfigError> {
+    if dev_auth && release && !allowed {
+        return Err(ConfigError::DevAuthInRelease);
+    }
+    Ok(())
+}
 
 /// Service configuration. No `Debug`/`Clone`: it holds secret-bearing URLs.
 pub struct Config {
@@ -77,6 +102,9 @@ pub struct Config {
     /// The agent-token signing seed (S4 design decision 1), validated. `None` when unset: with
     /// dev auth an ephemeral key is generated at startup, otherwise token requests answer `503`.
     pub agent_signing_key: Option<SecretString>,
+    /// The OIDC issuer human tokens are verified against (T1). `None` when
+    /// `LOCKSMITH_OIDC_ISSUER` is unset: every bearer token is then refused. Public values only.
+    pub human_auth: Option<HumanAuthConfig>,
 }
 
 /// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
@@ -127,6 +155,11 @@ impl Config {
         if dev_auth && !bind.ip().is_loopback() {
             return Err(ConfigError::DevAuthNonLoopback(ENV_BIND));
         }
+        check_release_dev_auth(
+            dev_auth,
+            !cfg!(debug_assertions),
+            get(ENV_ALLOW_DEV_AUTH).as_deref() == Some("1"),
+        )?;
 
         let openbao_addr = get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty());
         let audit_checkpoint = match get(ENV_AUDIT_CHECKPOINT_TOKEN).filter(|v| !v.is_empty()) {
@@ -186,6 +219,8 @@ impl Config {
             }
         };
 
+        let human_auth = human_auth_from(&get)?;
+
         Ok(Self {
             database_url,
             database_owner_url,
@@ -196,8 +231,38 @@ impl Config {
             audit_checkpoint,
             gateway_service_token,
             agent_signing_key,
+            human_auth,
         })
     }
+}
+
+/// All three `LOCKSMITH_OIDC_*` variables or none; an unset or empty issuer means none.
+fn human_auth_from(
+    get: &impl Fn(&str) -> Option<String>,
+) -> Result<Option<HumanAuthConfig>, ConfigError> {
+    let value = |var: &'static str| {
+        get(var)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    let Some(issuer) = value(ENV_OIDC_ISSUER) else {
+        return Ok(None);
+    };
+    let audience = value(ENV_OIDC_AUDIENCE).ok_or(ConfigError::Missing(ENV_OIDC_AUDIENCE))?;
+    let jwks_url = value(ENV_OIDC_JWKS_URL).ok_or(ConfigError::Missing(ENV_OIDC_JWKS_URL))?;
+    if !is_http_url(&jwks_url) {
+        return Err(ConfigError::Invalid(ENV_OIDC_JWKS_URL));
+    }
+    Ok(Some(HumanAuthConfig {
+        issuer,
+        audience,
+        jwks_url,
+    }))
+}
+
+fn is_http_url(s: &str) -> bool {
+    s.parse::<http::Uri>()
+        .is_ok_and(|u| matches!(u.scheme_str(), Some("http" | "https")) && u.authority().is_some())
 }
 
 #[cfg(test)]
@@ -242,6 +307,47 @@ mod tests {
     }
 
     #[test]
+    fn oidc_is_off_unless_an_issuer_is_set() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(c.human_auth.is_none());
+    }
+
+    #[test]
+    fn oidc_needs_all_three_variables() {
+        let issuer = (ENV_OIDC_ISSUER, "https://idp.example/realms/x");
+        let err = Config::from_lookup(lookup(&with(&[issuer]))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OIDC_AUDIENCE));
+        let err = Config::from_lookup(lookup(&with(&[issuer, (ENV_OIDC_AUDIENCE, "api")])))
+            .err()
+            .unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OIDC_JWKS_URL));
+        let c = Config::from_lookup(lookup(&with(&[
+            issuer,
+            (ENV_OIDC_AUDIENCE, "api"),
+            (ENV_OIDC_JWKS_URL, "http://localhost:8081/certs"),
+        ])))
+        .ok()
+        .unwrap();
+        let h = c.human_auth.unwrap();
+        assert_eq!(h.issuer, "https://idp.example/realms/x");
+        assert_eq!(h.audience, "api");
+    }
+
+    #[test]
+    fn oidc_jwks_url_must_be_http_or_https() {
+        for bad in ["ftp://h/x", "not a url", "/relative", "file:///etc/passwd"] {
+            let err = Config::from_lookup(lookup(&with(&[
+                (ENV_OIDC_ISSUER, "https://idp.example"),
+                (ENV_OIDC_AUDIENCE, "api"),
+                (ENV_OIDC_JWKS_URL, bad),
+            ])))
+            .err()
+            .unwrap();
+            assert_eq!(err, ConfigError::Invalid(ENV_OIDC_JWKS_URL), "{bad}");
+        }
+    }
+
+    #[test]
     fn dev_auth_on_non_loopback_bind_is_refused() {
         let err = Config::from_lookup(lookup(&with(&[
             (ENV_DEV_AUTH, "1"),
@@ -251,6 +357,17 @@ mod tests {
         .unwrap();
         assert_eq!(err, ConfigError::DevAuthNonLoopback(ENV_BIND));
         assert!(err.to_string().contains(ENV_BIND));
+    }
+
+    #[test]
+    fn release_build_refuses_dev_auth_without_override() {
+        assert_eq!(
+            check_release_dev_auth(true, true, false),
+            Err(ConfigError::DevAuthInRelease)
+        );
+        assert!(check_release_dev_auth(true, true, true).is_ok());
+        assert!(check_release_dev_auth(true, false, false).is_ok());
+        assert!(check_release_dev_auth(false, true, false).is_ok());
     }
 
     #[test]

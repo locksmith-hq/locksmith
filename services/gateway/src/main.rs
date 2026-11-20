@@ -24,7 +24,11 @@ const SERVICE_NAME: &str = "locksmith-gateway";
 const CACHE_SWEEP: Duration = Duration::from_secs(10);
 
 fn env_filter() -> EnvFilter {
-    EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())
+    // rmcp logs whole tool results at debug; capped so a short-lived credential never reaches a
+    // log line whatever `RUST_LOG` says (m1-remote-mcp task 3.3).
+    ls_gateway::mcp_endpoint::cap_rmcp_logs(
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+    )
 }
 
 #[tokio::main]

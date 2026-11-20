@@ -50,6 +50,10 @@ time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
 # M1 task 3.1: the agent MCP server (`/mcp`), same rmcp pin and features as the hub.
 ls-mcp-server = { path = "../../crates/ls-mcp-server" }
 rmcp = { version = "=3.11.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
+# M1 task 3.3: short-lived credentials are random tokens (OS RNG) kept only as SHA-256 hashes.
+# Same versions the workspace already uses (ls-crypto, ls-envelope, ls-audit).
+getrandom = "0.2"
+sha2 = "0.10"
 
 [dev-dependencies]
 http-body-util = "0.1"

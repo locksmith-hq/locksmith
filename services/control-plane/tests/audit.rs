@@ -192,6 +192,15 @@ async fn non_allow_listed_bodies_are_400() {
         json!({"kind": "git.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         // An outcome must name its attempt (the idempotency key).
         json!({"kind": "relay.outcome", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        // A short-lived credential issue: outcome `ok`, its id and expiry, no upstream fields,
+        // and no field for the credential itself.
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "expires_at": 1}),
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7()}),
+        json!({"kind": "credential.issued", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7(), "expires_at": 1}),
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7(), "expires_at": 1, "host": "api.example.com"}),
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7(), "expires_at": 1, "credential": CANARY}),
+        with("credential_id", json!(Uuid::now_v7())),
+        with("expires_at", json!(1)),
     ] {
         let r = post_event(&app, Some(&auth), org, &bad).await;
         assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
@@ -240,6 +249,32 @@ async fn git_events_append_to_the_chain() {
             ("git.denied", "denied")
         ]
     );
+}
+
+/// m1-remote-mcp task 3.3: `credential.issued` appends with the credential's id and expiry as
+/// attributes, actor the agent and target the secret.
+#[tokio::test]
+async fn credential_issued_appends_to_the_chain() {
+    let f = Fixture::start().await;
+    let org = f.org("short-lived").await;
+    let auth = bearer(TOKEN);
+    let (agent, secret, credential) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    let body = json!({
+        "kind": "credential.issued", "outcome": "ok", "agent_id": agent, "secret_id": secret,
+        "version": 1, "credential_id": credential, "expires_at": 1_900_000_000_i64,
+    });
+    let r = post_event(&f.app, Some(&auth), Some(org), &body).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+    let rows = f.records(org).await;
+    assert_intact(&rows);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        (rows[0].kind.as_str(), rows[0].outcome.as_str()),
+        ("credential.issued", "ok")
+    );
+    let text = f.ledger_text().await;
+    assert!(text.contains(&credential.to_string()), "{text}");
+    assert!(text.contains("1900000000"), "{text}");
 }
 
 /// A migrated database and the app as `locksmith_app`.

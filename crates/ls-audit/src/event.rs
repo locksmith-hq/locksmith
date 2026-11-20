@@ -102,6 +102,10 @@ pub mod kind {
     /// A remote MCP tool call (allowed, refused or failed). Records the layer, the tool name and
     /// the outcome only, never the call's arguments or result.
     pub const MCP_CALL: Code = Code::new("mcp.call");
+    /// The gateway issued a short-lived credential to an agent (MCP
+    /// `issue_short_lived_credential`, decision H1-2). Records the credential's id, the secret it
+    /// is scoped to and its expiry, never the credential.
+    pub const CREDENTIAL_ISSUED: Code = Code::new("credential.issued");
 }
 
 /// Common outcomes.
@@ -137,6 +141,8 @@ pub mod attr {
     pub const LAYER: Code = Code::new("layer");
     /// The MCP tool name, from the registry (`unknown` for a name the registry does not have).
     pub const TOOL: Code = Code::new("tool");
+    /// The id of a short-lived credential (never the credential itself).
+    pub const CREDENTIAL_ID: Code = Code::new("credential_id");
 }
 
 /// Who acted.

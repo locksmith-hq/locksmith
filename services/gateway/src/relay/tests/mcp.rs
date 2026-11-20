@@ -6,10 +6,10 @@ use super::*;
 use serde_json::{Value, json};
 
 const HOST: &str = "gateway.test";
-const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
+pub(super) const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
 
 /// One MCP exchange: the HTTP status and the JSON-RPC message of the answer (JSON or SSE).
-async fn rpc(
+pub(super) async fn rpc(
     h: &Harness,
     token: &str,
     session: Option<&str>,
@@ -49,7 +49,7 @@ async fn rpc(
 }
 
 /// A session opened as the harness agent.
-async fn session(h: &Harness) -> String {
+pub(super) async fn session(h: &Harness) -> String {
     let (status, _, sid) = rpc(h, &h.token, None, INITIALIZE).await;
     assert_eq!(status, StatusCode::OK);
     let sid = sid.expect("session id");
@@ -64,7 +64,7 @@ async fn session(h: &Harness) -> String {
     sid
 }
 
-async fn call_tool(h: &Harness, sid: &str, name: &str, args: Value) -> Value {
+pub(super) async fn call_tool(h: &Harness, sid: &str, name: &str, args: Value) -> Value {
     let body = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
                       "params": {"name": name, "arguments": args}});
     let (status, msg, _) = rpc(h, &h.token, Some(sid), &body.to_string()).await;
@@ -72,7 +72,7 @@ async fn call_tool(h: &Harness, sid: &str, name: &str, args: Value) -> Value {
     msg
 }
 
-fn structured(msg: &Value) -> &Value {
+pub(super) fn structured(msg: &Value) -> &Value {
     &msg["result"]["structuredContent"]
 }
 

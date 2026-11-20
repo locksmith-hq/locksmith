@@ -744,6 +744,22 @@
               "null"
             ]
           },
+          "credential_id": {
+            "description": "The id of the short-lived credential (`credential.issued` only; never the credential).",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "description": "When the short-lived credential expires, Unix seconds (`credential.issued` only).",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "host": {
             "description": "Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or\nquery.",
             "type": [
@@ -1298,7 +1314,8 @@
           "relay.denied",
           "git.fetch",
           "git.push",
-          "git.denied"
+          "git.denied",
+          "credential.issued"
         ],
         "type": "string"
       },
@@ -1622,7 +1639,7 @@
     },
     "/internal/v1/audit/events": {
       "post": {
-        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
+        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
         "operationId": "append_audit_event",
         "parameters": [
           {

@@ -37,6 +37,21 @@ use crate::auth::{AgentAuth, AgentIdentity};
 use crate::mcp_tools;
 use crate::relay::{Relay, error};
 
+/// rmcp targets that log whole JSON-RPC messages (tool results included) at `debug`/`trace`.
+const RMCP_MESSAGE_TARGETS: &[&str] = &["rmcp", "rmcp::service", "rmcp::transport"];
+
+/// Cap rmcp's logging at `info`, whatever else `filter` allows. rmcp logs every response message
+/// at `debug`, which would put an `issue_short_lived_credential` result (the credential) in the
+/// logs; the more specific directives also override a `RUST_LOG=rmcp::service=trace`.
+pub fn cap_rmcp_logs(mut filter: tracing_subscriber::EnvFilter) -> tracing_subscriber::EnvFilter {
+    for target in RMCP_MESSAGE_TARGETS {
+        if let Ok(d) = format!("{target}=info").parse() {
+            filter = filter.add_directive(d);
+        }
+    }
+    filter
+}
+
 /// The path the MCP service is mounted at.
 pub const MCP_PATH: &str = "/mcp";
 
@@ -44,6 +59,7 @@ pub const MCP_PATH: &str = "/mcp";
 pub struct McpEndpoint {
     auth: Arc<AgentAuth>,
     allowed_hosts: Vec<String>,
+    tool_settings: Arc<HashMap<String, bool>>,
 }
 
 impl McpEndpoint {
@@ -57,28 +73,40 @@ impl McpEndpoint {
         Self {
             auth,
             allowed_hosts,
+            tool_settings: Arc::new(HashMap::new()),
         }
+    }
+
+    /// Tool switches over the registry defaults (tool name to on/off). Until task 3.4 reads the
+    /// org's `mcp_tool_settings` on every call, this is the gateway's one source of switches;
+    /// without it every tool is at its default, so `issue_short_lived_credential` is off.
+    pub fn with_tool_settings(mut self, settings: HashMap<String, bool>) -> Self {
+        self.tool_settings = Arc::new(settings);
+        self
     }
 }
 
-/// The gateway MCP server: the registry's default-on agent tools, run as the agent behind the
-/// verified token ([`crate::mcp_tools`]). Per-org switches and the per-call audit event are
-/// task 3.4; until then every tool is at its default, so `issue_short_lived_credential` (off by
-/// default, task 3.3) is neither listed nor callable.
+/// The gateway MCP server: the registry's agent tools that are on, run as the agent behind the
+/// verified token ([`crate::mcp_tools`]). The switches are the endpoint's
+/// ([`McpEndpoint::with_tool_settings`]); per-org switches and the per-call audit event are
+/// task 3.4. A tool that is off (by default `issue_short_lived_credential`, task 3.3) is neither
+/// listed nor callable.
 #[derive(Clone)]
 struct GatewayMcp {
     relay: Option<Arc<Relay>>,
     registry: Arc<Registry>,
+    settings: Arc<HashMap<String, bool>>,
 }
 
 impl GatewayMcp {
-    fn new(relay: Option<Arc<Relay>>) -> Self {
+    fn new(relay: Option<Arc<Relay>>, settings: Arc<HashMap<String, bool>>) -> Self {
         // The shipped registry carries no value field (tested in `ls-mcp-server`).
         let registry = Registry::new(Layer::Agent, agent_tools())
             .unwrap_or_else(|e| panic!("agent tool registry invalid: {e}"));
         Self {
             relay,
             registry: Arc::new(registry),
+            settings,
         }
     }
 
@@ -116,7 +144,7 @@ impl ServerHandler for GatewayMcp {
         Self::agent(&context)?;
         let tools = self
             .registry
-            .list(&HashMap::new())
+            .list(&self.settings)
             .into_iter()
             .map(to_tool)
             .collect();
@@ -135,7 +163,7 @@ impl ServerHandler for GatewayMcp {
         // An off or unknown tool is refused the same way: not callable.
         let def = self
             .registry
-            .authorize(&request.name, &HashMap::new())
+            .authorize(&request.name, &self.settings)
             .map_err(|_| McpError::invalid_params("unknown tool", None))?;
         let result =
             mcp_tools::call(self.relay.as_ref(), &agent, def.name, request.arguments).await?;
@@ -190,8 +218,9 @@ pub fn router(state: &AppState) -> Router<AppState> {
         .with_allowed_hosts(endpoint.allowed_hosts.clone())
         .with_legacy_session_mode(true);
     let relay = state.relay();
+    let settings = endpoint.tool_settings.clone();
     let service = StreamableHttpService::new(
-        move || Ok(GatewayMcp::new(relay.clone())),
+        move || Ok(GatewayMcp::new(relay.clone(), settings.clone())),
         Arc::new(LocalSessionManager::default()),
         config,
     );

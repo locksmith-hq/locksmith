@@ -511,18 +511,28 @@ pub fn agent_tools() -> Vec<ToolDef> {
         schemas(
             tool(
                 SHORT_LIVED_TOOL,
-                "A credential valid for minutes, scoped to one job, destroyed after. Off by \
-                 default; every issue is audited.",
+                "A credential valid for minutes, scoped to one job, destroyed after. It is \
+                 not the stored secret: present it as `Authorization: Bearer` to the \
+                 gateway's `POST /v1/relay` for the one secret it was issued for (never past \
+                 the grant). Off by default; every issue is audited.",
                 false,
             ),
             obj(
                 &["secret_id", "job", "ttl_secs"],
-                json!({"secret_id": id(), "job": {"type": "string", "maxLength": 128},
+                json!({"secret_id": id(),
+                       "job": {"type": "string", "minLength": 1, "maxLength": 128,
+                               "pattern": "^[A-Za-z0-9._:/-]+$"},
                        "ttl_secs": {"type": "integer", "minimum": 60, "maximum": 900}}),
             ),
             obj(
-                &[SHORT_LIVED_OUTPUT_FIELD, "expires_at", "scope"],
+                &[
+                    SHORT_LIVED_OUTPUT_FIELD,
+                    "credential_id",
+                    "expires_at",
+                    "scope",
+                ],
                 json!({SHORT_LIVED_OUTPUT_FIELD: {"type": "string"},
+                       "credential_id": id(),
                        "expires_at": time(), "scope": {"type": "string"}}),
             ),
         ),

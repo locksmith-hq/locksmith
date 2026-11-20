@@ -12,7 +12,8 @@
 //! same service token and org scoping apply.
 //!
 //! `POST /internal/v1/audit/events` appends a relay event (`relay.attempt`, `relay.outcome`,
-//! `relay.denied`, and for Git `git.fetch`, `git.push`, `git.denied`) to the org's audit ledger (S5 design decision 5). The body is typed end to
+//! `relay.denied`, for Git `git.fetch`, `git.push`, `git.denied`, and `credential.issued` for a
+//! short-lived credential the agent MCP issued) to the org's audit ledger (S5 design decision 5). The body is typed end to
 //! end: kinds, outcomes and methods are closed enums mapped to static codes, ids are UUIDs, the
 //! host is validated as a bare host name or IP, and unknown fields are refused. There is no field
 //! for a URL, path, query, header or body, so none of them can reach the ledger.
@@ -218,6 +219,11 @@ pub enum RelayEventKind {
     /// A refused Git call; outcome `denied`, `grants_unavailable`, `no_grant` or `denied_address`.
     #[serde(rename = "git.denied")]
     GitDenied,
+    /// The gateway issued a short-lived credential scoped to the secret (m1-remote-mcp task 3.3,
+    /// decision H1-2); outcome `ok`, with `credential_id` and `expires_at`. Written before the
+    /// credential is usable, so a failed append means nothing was issued.
+    #[serde(rename = "credential.issued")]
+    CredentialIssued,
 }
 
 impl RelayEventKind {
@@ -229,6 +235,7 @@ impl RelayEventKind {
             Self::GitFetch => kind::GIT_FETCH,
             Self::GitPush => kind::GIT_PUSH,
             Self::GitDenied => kind::GIT_DENIED,
+            Self::CredentialIssued => kind::CREDENTIAL_ISSUED,
         }
     }
 }
@@ -332,6 +339,10 @@ pub struct NewRelayEvent {
     /// append returned). Required for `relay.outcome`, and its idempotency key: an outcome
     /// resent for the same attempt returns the stored event instead of appending another.
     pub attempt_id: Option<Uuid>,
+    /// The id of the short-lived credential (`credential.issued` only; never the credential).
+    pub credential_id: Option<Uuid>,
+    /// When the short-lived credential expires, Unix seconds (`credential.issued` only).
+    pub expires_at: Option<i64>,
 }
 
 impl NewRelayEvent {
@@ -344,9 +355,33 @@ impl NewRelayEvent {
                 self.outcome != RelayOutcome::Pending && !self.outcome.is_denial()
             }
             RelayEventKind::Denied | RelayEventKind::GitDenied => self.outcome.is_denial(),
+            RelayEventKind::CredentialIssued => self.outcome == RelayOutcome::Ok,
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        // An issue names the credential and its expiry and nothing about an upstream call; no
+        // other kind carries either field.
+        if self.kind == RelayEventKind::CredentialIssued {
+            if self.credential_id.is_none() || self.expires_at.is_none() {
+                return Err(ApiError::validation(
+                    "`credential.issued` needs `credential_id` and `expires_at`",
+                ));
+            }
+            if self.method.is_some()
+                || self.host.is_some()
+                || self.port.is_some()
+                || self.status.is_some()
+                || self.attempt_id.is_some()
+            {
+                return Err(ApiError::validation(
+                    "`credential.issued` takes no upstream fields",
+                ));
+            }
+        } else if self.credential_id.is_some() || self.expires_at.is_some() {
+            return Err(ApiError::validation(
+                "`credential_id` and `expires_at` are for `credential.issued` only",
+            ));
         }
         // The outcome is idempotent on its attempt (design decision 5), so it must name one.
         if self.kind == RelayEventKind::Outcome && self.attempt_id.is_none() {
@@ -380,6 +415,12 @@ impl NewRelayEvent {
         if let Some(a) = self.attempt_id {
             attrs = attrs.id(attr::ATTEMPT_ID, a);
         }
+        if let Some(c) = self.credential_id {
+            attrs = attrs.id(attr::CREDENTIAL_ID, c);
+        }
+        if let Some(t) = self.expires_at {
+            attrs = attrs.int(attr::EXPIRES_AT, t);
+        }
         Ok(Event {
             kind: self.kind.code(),
             actor: Actor::Agent(self.agent_id),
@@ -404,7 +445,7 @@ pub struct AppendedEvent {
     operation_id = "append_audit_event",
     tag = "internal",
     summary = "Append a relay event to the org's audit ledger (gateway only)",
-    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
+    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
     params(
         ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to (the agent token's `org`)"),
     ),

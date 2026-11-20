@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Append a relay event to the org's audit ledger (gateway only)
-         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
+         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
          */
         post: operations["append_audit_event"];
         delete?: never;
@@ -851,6 +851,16 @@ export interface components {
              */
             attempt_id?: string | null;
             /**
+             * Format: uuid
+             * @description The id of the short-lived credential (`credential.issued` only; never the credential).
+             */
+            credential_id?: string | null;
+            /**
+             * Format: int64
+             * @description When the short-lived credential expires, Unix seconds (`credential.issued` only).
+             */
+            expires_at?: number | null;
+            /**
              * @description Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or
              *     query.
              */
@@ -1034,7 +1044,7 @@ export interface components {
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "credential.issued";
         /**
          * @description The upstream request method.
          * @enum {string}

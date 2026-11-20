@@ -11,7 +11,11 @@
 //!
 //! An event holds ids, closed codes, numbers and the upstream host only. The host is sent only
 //! once the URL's origin has matched the secret's binding (configuration, not caller input), so
-//! a refused caller's host never reaches the ledger. Nothing here holds the value, a header, a
+//! a refused caller's host never reaches the ledger.
+//!
+//! An agent MCP `issue_short_lived_credential` call (m1-remote-mcp task 3.3) appends one
+//! `credential.issued` event before the credential becomes usable: the agent, the secret, the
+//! credential's id and its expiry. Never the credential. Nothing here holds the value, a header, a
 //! body, a path or the query string. `gateway_audit` is read-only legacy (migration 0009).
 
 use std::sync::{Arc, Mutex};
@@ -106,6 +110,8 @@ pub enum EventKind {
     GitPush(Outcome),
     /// A refused Git call (`Outcome::is_denial`).
     GitDenied(Outcome),
+    /// A short-lived credential was issued (outcome `ok`); the event carries [`Issued`].
+    CredentialIssued,
 }
 
 impl EventKind {
@@ -117,6 +123,7 @@ impl EventKind {
             Self::GitFetch(o) => ("git.fetch", o.as_str()),
             Self::GitPush(o) => ("git.push", o.as_str()),
             Self::GitDenied(o) => ("git.denied", o.as_str()),
+            Self::CredentialIssued => ("credential.issued", "ok"),
         }
     }
 }
@@ -168,6 +175,8 @@ pub struct RelayEvent {
     /// The agent whose verified token made the call.
     pub agent_id: Uuid,
     pub secret_id: Uuid,
+    /// The secret version (`0` and not sent for `credential.issued`, which is not
+    /// version-bound).
     pub version: u32,
     pub method: Option<Method>,
     /// The upstream host (no port), set only when the origin matched the binding.
@@ -178,6 +187,17 @@ pub struct RelayEvent {
     pub status: Option<u16>,
     /// The attempt this outcome closes (the attempt event's id).
     pub attempt_id: Option<Uuid>,
+    /// For [`EventKind::CredentialIssued`] only: which credential, and until when.
+    pub issued: Option<Issued>,
+}
+
+/// What a `credential.issued` event records about the credential: its id and expiry, never the
+/// credential.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Issued {
+    pub credential_id: Uuid,
+    /// Unix seconds.
+    pub expires_at: i64,
 }
 
 /// Why an append failed. Carries no response body.
@@ -214,7 +234,8 @@ struct WireEvent {
     outcome: &'static str,
     agent_id: Uuid,
     secret_id: Uuid,
-    version: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     method: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -225,6 +246,10 @@ struct WireEvent {
     status: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     attempt_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expires_at: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -259,12 +284,15 @@ impl HttpAudit {
             outcome,
             agent_id: ev.agent_id,
             secret_id: ev.secret_id,
-            version: ev.version,
+            // A short-lived credential is scoped to the secret, not to one version.
+            version: (ev.kind != EventKind::CredentialIssued).then_some(ev.version),
             method: ev.method.map(Method::as_str),
             host: ev.host,
             port: ev.port,
             status: ev.status,
             attempt_id: ev.attempt_id,
+            credential_id: ev.issued.map(|i| i.credential_id),
+            expires_at: ev.issued.map(|i| i.expires_at),
         })
         .map_err(|_| AuditError::Rejected)?;
         let (status, resp) = self

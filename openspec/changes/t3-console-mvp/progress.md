@@ -38,3 +38,8 @@
 - Task: 6.2 - done; 6.1 partial (not ticked)
 - Verified: `just up`, `just api`, `just web-e2e` -> 1 passed (one earlier run failed while `just ci` compiled in parallel; rerun green); just ci -> exit 0
 - Notes for next session: Playwright e2e in apps/web/e2e (sign in as seeded alice, project, environment, agent, leak check on all /v1 and /internal requests). 6.1 still needs grant create/revoke on a real secret: the control plane has no secret-create route, so the spec only asserts the error alert for an unknown secret id; seed a secret (DB or new route) then extend. 6.3 waits on 6.1. 6.4 is an owner gate. Run with `PW_CHROMIUM=/opt/pw-browsers/chromium just web-e2e` on the cloud VM. vitest now excludes e2e/.
+
+## 2026-11-20 worker
+- Task: 6.1 - blocked (no code change this run)
+- Verified: none; branch merged with main (already current); main CI green
+- Notes for next session: 6.1 grant create/revoke on a real secret still needs a seeded secret. Control plane has no secret-create route; seed via SQL (secrets row + secret_versions, see services/control-plane/tests/internal.rs ~l.178) from e2e global setup, or add the route. Needs `just up` (auth profile) + `just api` (cold build is long). 6.4 is an owner gate after 6.3.

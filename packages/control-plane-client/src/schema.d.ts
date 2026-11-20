@@ -300,6 +300,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/mcp/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List MCP clients that signed in, including revoked ones */
+        get: operations["list_mcp_clients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp/clients/{client_row_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an MCP client
+         * @description Marks the client revoked. Its next call, and a fresh initialize, are refused. Revoking again keeps the first revoke time.
+         */
+        post: operations["revoke_mcp_client"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List MCP tools with their default and current switch */
+        get: operations["list_mcp_tool_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mcp/tools/{layer}/{tool}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Turn one MCP tool on or off for the org
+         * @description Enforced by the server: a client cannot list or call a tool that is off.
+         */
+        put: operations["update_mcp_tool_setting"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -683,6 +757,53 @@ export interface components {
         JwkSet: {
             keys: components["schemas"]["Jwk"][];
         };
+        /** @description A client that signed in to an MCP server. Never carries a token. */
+        McpClient: {
+            /** @description The OAuth client id (hub) or the agent id (agent layer). */
+            client_id: string;
+            /** @description Display name from registration; may be empty. */
+            client_name: string;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            layer: components["schemas"]["McpLayer"];
+            /** @description The signed-in person (hub) or the agent id (agent layer). */
+            principal: string;
+            /**
+             * Format: date-time
+             * @description Set when the client was revoked; absent while active.
+             */
+            revoked_at?: string | null;
+        };
+        /**
+         * @description Which MCP server a tool or client belongs to.
+         * @enum {string}
+         */
+        McpLayer: "hub" | "agent";
+        /** @description One tool and whether it is on for this org. */
+        McpToolSetting: {
+            /** @description What the tool does when the org has not changed it. */
+            default_enabled: boolean;
+            description: string;
+            /** @description The effective switch: the org's override, else the default. */
+            enabled: boolean;
+            layer: components["schemas"]["McpLayer"];
+            /** @description Whether the org has changed the switch from the default. */
+            overridden: boolean;
+            /** @description The tool's name. */
+            tool: string;
+        };
+        /** @description Every tool of both layers. */
+        McpToolSettingList: {
+            items: components["schemas"]["McpToolSetting"][];
+        };
+        /** @description Body of `PUT /v1/mcp/tools/{layer}/{tool}`. */
+        McpToolSettingUpdate: {
+            enabled: boolean;
+        };
         NewAgent: {
             description?: string;
             name: string;
@@ -822,6 +943,30 @@ export interface components {
                 project_id: string;
                 /** Format: date-time */
                 updated_at: string;
+            }[];
+            next?: string | null;
+        };
+        /** @description One page of a list. `next` is absent on the last page. */
+        Paged_McpClient: {
+            items: {
+                /** @description The OAuth client id (hub) or the agent id (agent layer). */
+                client_id: string;
+                /** @description Display name from registration; may be empty. */
+                client_name: string;
+                /** Format: date-time */
+                first_seen_at: string;
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                last_seen_at: string;
+                layer: components["schemas"]["McpLayer"];
+                /** @description The signed-in person (hub) or the agent id (agent layer). */
+                principal: string;
+                /**
+                 * Format: date-time
+                 * @description Set when the client was revoked; absent while active.
+                 */
+                revoked_at?: string | null;
             }[];
             next?: string | null;
         };
@@ -2101,6 +2246,283 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_mcp_clients: {
+        parameters: {
+            query?: {
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: number;
+                /** @description Opaque cursor: the `next` value of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of clients */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Paged_McpClient"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_mcp_client: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Client row id from the list */
+                client_row_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The revoked client */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpClient"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_mcp_tool_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every tool of the hub and agent servers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpToolSettingList"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_mcp_tool_setting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `hub` or `agent` */
+                layer: components["schemas"]["McpLayer"];
+                /** @description Tool name */
+                tool: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpToolSettingUpdate"];
+            };
+        };
+        responses: {
+            /** @description The tool with its new switch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpToolSetting"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

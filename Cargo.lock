@@ -2722,6 +2722,7 @@ dependencies = [
  "ls-crypto",
  "ls-envelope",
  "ls-http",
+ "ls-mcp-server",
  "ls-pg-test",
  "ls-tenant-lint",
  "opentelemetry",

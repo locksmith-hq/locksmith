@@ -522,6 +522,128 @@
         ],
         "type": "object"
       },
+      "McpClient": {
+        "description": "A client that signed in to an MCP server. Never carries a token.",
+        "properties": {
+          "client_id": {
+            "description": "The OAuth client id (hub) or the agent id (agent layer).",
+            "type": "string"
+          },
+          "client_name": {
+            "description": "Display name from registration; may be empty.",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/McpLayer"
+          },
+          "principal": {
+            "description": "The signed-in person (hub) or the agent id (agent layer).",
+            "type": "string"
+          },
+          "revoked_at": {
+            "description": "Set when the client was revoked; absent while active.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "layer",
+          "client_id",
+          "principal",
+          "client_name",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "type": "object"
+      },
+      "McpLayer": {
+        "description": "Which MCP server a tool or client belongs to.",
+        "enum": [
+          "hub",
+          "agent"
+        ],
+        "type": "string"
+      },
+      "McpToolSetting": {
+        "description": "One tool and whether it is on for this org.",
+        "properties": {
+          "default_enabled": {
+            "description": "What the tool does when the org has not changed it.",
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "description": "The effective switch: the org's override, else the default.",
+            "type": "boolean"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/McpLayer"
+          },
+          "overridden": {
+            "description": "Whether the org has changed the switch from the default.",
+            "type": "boolean"
+          },
+          "tool": {
+            "description": "The tool's name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "tool",
+          "description",
+          "default_enabled",
+          "enabled",
+          "overridden"
+        ],
+        "type": "object"
+      },
+      "McpToolSettingList": {
+        "description": "Every tool of both layers.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolSetting"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "McpToolSettingUpdate": {
+        "additionalProperties": false,
+        "description": "Body of `PUT /v1/mcp/tools/{layer}/{tool}`.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
       "NewAgent": {
         "additionalProperties": false,
         "properties": {
@@ -893,6 +1015,74 @@
                 "description",
                 "created_at",
                 "updated_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "Paged_McpClient": {
+        "description": "One page of a list. `next` is absent on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "description": "A client that signed in to an MCP server. Never carries a token.",
+              "properties": {
+                "client_id": {
+                  "description": "The OAuth client id (hub) or the agent id (agent layer).",
+                  "type": "string"
+                },
+                "client_name": {
+                  "description": "Display name from registration; may be empty.",
+                  "type": "string"
+                },
+                "first_seen_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "last_seen_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "layer": {
+                  "$ref": "#/components/schemas/McpLayer"
+                },
+                "principal": {
+                  "description": "The signed-in person (hub) or the agent id (agent layer).",
+                  "type": "string"
+                },
+                "revoked_at": {
+                  "description": "Set when the client was revoked; absent while active.",
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "layer",
+                "client_id",
+                "principal",
+                "client_name",
+                "first_seen_at",
+                "last_seen_at"
               ],
               "type": "object"
             },
@@ -2799,6 +2989,376 @@
         "summary": "Record a sign-out in the audit ledger",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/v1/mcp/clients": {
+      "get": {
+        "operationId": "list_mcp_clients",
+        "parameters": [
+          {
+            "description": "Page size, 1 to 100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: the `next` value of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paged_McpClient"
+                }
+              }
+            },
+            "description": "A page of clients"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List MCP clients that signed in, including revoked ones",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/clients/{client_row_id}/revoke": {
+      "post": {
+        "description": "Marks the client revoked. Its next call, and a fresh initialize, are refused. Revoking again keeps the first revoke time.",
+        "operationId": "revoke_mcp_client",
+        "parameters": [
+          {
+            "description": "Client row id from the list",
+            "in": "path",
+            "name": "client_row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpClient"
+                }
+              }
+            },
+            "description": "The revoked client"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Revoke an MCP client",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/tools": {
+      "get": {
+        "operationId": "list_mcp_tool_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpToolSettingList"
+                }
+              }
+            },
+            "description": "Every tool of the hub and agent servers"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List MCP tools with their default and current switch",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/tools/{layer}/{tool}": {
+      "put": {
+        "description": "Enforced by the server: a client cannot list or call a tool that is off.",
+        "operationId": "update_mcp_tool_setting",
+        "parameters": [
+          {
+            "description": "`hub` or `agent`",
+            "in": "path",
+            "name": "layer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/McpLayer"
+            }
+          },
+          {
+            "description": "Tool name",
+            "in": "path",
+            "name": "tool",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolSettingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpToolSetting"
+                }
+              }
+            },
+            "description": "The tool with its new switch"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Turn one MCP tool on or off for the org",
+        "tags": [
+          "mcp"
         ]
       }
     },

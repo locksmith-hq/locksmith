@@ -13,6 +13,7 @@ mod audit;
 mod environments;
 mod extract;
 mod internal;
+mod mcp;
 mod orgs;
 mod projects;
 mod responses;
@@ -71,6 +72,10 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(session::sign_out))
         .routes(routes!(audit::list_events))
         .routes(routes!(audit::status))
+        .routes(routes!(mcp::list_tools))
+        .routes(routes!(mcp::update_tool))
+        .routes(routes!(mcp::list_clients))
+        .routes(routes!(mcp::revoke_client))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
         .routes(routes!(internal::append_event))

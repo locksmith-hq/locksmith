@@ -46,3 +46,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.1-3.4 gateway `POST /v1/aws/credentials` - done (commit 4fa7337)
 - Verified: `cargo nextest run -p ls-gateway aws` 19/19 incl. real moto success test; `just ci` green; independent Opus evaluator PASS.
 - Notes for next session: ledger has no free-form attr, so events target the binding's secret id (role ARN not stored; see design.md). Minor: aws.rs:182 classifies sts_unreachable by error text; a typed error from `assume_role` would be sturdier. Next: tasks 4 (smith aws credential-process), 5, 6, 7.
+
+## 2026-11-20 worker (C)
+- Task: 4.1-4.3 smith aws credential-process|setup|teardown + doctor `aws.vend` - done
+- Verified: `cargo nextest run -p smith-cli aws` 17 passed; `just ci` -> exit 0; independent evaluator PASS (static review).
+- Notes for next session: tasks 5, 6, 7 remain. Minor: `smith aws setup --profile B` after A replaces A's managed block (one block only); config write is not atomic. MCP help text unchanged (no AWS MCP tool, by design).

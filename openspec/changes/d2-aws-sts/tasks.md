@@ -17,9 +17,9 @@
 - [x] 3.4 Verify: `cargo nextest run -p ls-gateway aws` against moto: success, unbound 403, no-vend 403, relay-only 403, empty grant 403, STS error slug.
 
 ## 4. Client [sonnet]
-- [ ] 4.1 `smith aws credential-process` (prints the documented JSON, caches nothing on disk, exits non-zero with a fixed message on denial) and `smith aws setup|teardown` writing and removing a keyless profile.
-- [ ] 4.2 `smith doctor` check `aws.vend` (profile present, no long-lived keys in `~/.aws`, off-by-default warning); MCP and CLI help text.
-- [ ] 4.3 Verify: `cargo nextest run -p smith-cli aws`.
+- [x] 4.1 `smith aws credential-process` (prints the documented JSON, caches nothing on disk, exits non-zero with a fixed message on denial) and `smith aws setup|teardown` writing and removing a keyless profile.
+- [x] 4.2 `smith doctor` check `aws.vend` (profile present, no long-lived keys in `~/.aws`, off-by-default warning); MCP and CLI help text.
+- [x] 4.3 Verify: `cargo nextest run -p smith-cli aws`.
 
 ## 5. Console and desktop [sonnet]
 - [ ] 5.1 Show AWS bindings (role, region, allowed actions, `vend`, max duration) on the bindings page in `apps/web` and `apps/desktop` with Vitest tests; no credentials displayed.

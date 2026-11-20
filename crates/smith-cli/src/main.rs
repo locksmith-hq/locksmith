@@ -12,6 +12,7 @@ mod binding;
 mod connector;
 mod daemon_vault;
 mod db_cmd;
+mod doctor_d2;
 mod doctor_m4;
 mod doctor_m5;
 mod doctor_m6;
@@ -110,7 +111,9 @@ enum Cmd {
         #[command(subcommand)]
         cmd: http_cmd::HttpCmd,
     },
-    /// AWS helpers: `smith aws creds --contained -- <cmd>` (short-lived STS credentials).
+    /// AWS helpers: short-lived STS credentials. `creds --contained -- <cmd>` runs a command with them;
+    /// `setup`, `credential-process` and `teardown` give the AWS CLI keyless gateway-issued credentials
+    /// (off unless the gateway binding allows it; the credentials are visible to the agent).
     Aws {
         #[command(subcommand)]
         cmd: aws_cmd::AwsCmd,

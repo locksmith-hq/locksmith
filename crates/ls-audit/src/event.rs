@@ -92,6 +92,9 @@ pub mod kind {
     pub const AGENT_DELETED: Code = Code::new("agent.deleted");
     pub const GRANT_CREATED: Code = Code::new("grant.created");
     pub const GRANT_REVOKED: Code = Code::new("grant.revoked");
+    /// A workload identity trust policy was created or deleted (D4 task 1.3).
+    pub const WORKLOAD_IDENTITY_CREATED: Code = Code::new("workload_identity.created");
+    pub const WORKLOAD_IDENTITY_DELETED: Code = Code::new("workload_identity.deleted");
     /// A human signed in (T1 task 5.1). Actor `user:<id>`, target the personal org.
     pub const AUTH_SIGN_IN: Code = Code::new("auth.sign_in");
     pub const AUTH_SIGN_OUT: Code = Code::new("auth.sign_out");
@@ -159,6 +162,7 @@ pub enum Target {
     Secret(Uuid),
     Agent(Uuid),
     Grant(Uuid),
+    WorkloadIdentity(Uuid),
 }
 
 impl Target {
@@ -169,6 +173,7 @@ impl Target {
             Self::Secret(id) => ("secret", id),
             Self::Agent(id) => ("agent", id),
             Self::Grant(id) => ("grant", id),
+            Self::WorkloadIdentity(id) => ("workload", id),
         };
         format!("{t}:{}", id.hyphenated())
     }

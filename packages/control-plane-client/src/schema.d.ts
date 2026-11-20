@@ -463,6 +463,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workload-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List workload identity trust policies */
+        get: operations["list_workload_identities"];
+        put?: never;
+        /**
+         * Create a workload identity trust policy
+         * @description Maps an issuer and claim conditions to an existing agent. A policy with no subject pin, or a bare `*`, is refused.
+         */
+        post: operations["create_workload_identity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workload-identities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a workload identity trust policy */
+        get: operations["get_workload_identity"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a workload identity trust policy
+         * @description Exchanges for this policy fail from now on. Agent tokens already minted stay valid until they expire (at most 15 minutes).
+         */
+        delete: operations["delete_workload_identity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -647,6 +689,12 @@ export interface components {
              */
             truncated_at?: number | null;
         };
+        /** @description One claim test as shown to callers: `pattern` ends in `*` for a prefix match. */
+        ConditionView: {
+            claim: string;
+            /** @description Exact value, or a prefix ending in one `*`. */
+            pattern: string;
+        };
         Environment: {
             /** Format: date-time */
             created_at: string;
@@ -767,6 +815,28 @@ export interface components {
              */
             value: string;
         };
+        NewWorkloadIdentity: {
+            /**
+             * Format: uuid
+             * @description The existing agent whose token the workload receives (same org).
+             */
+            agent_id: string;
+            /** @description The `aud` the external token must carry. */
+            audience: string;
+            /**
+             * @description ANDed. A value is exact, or ends in one `*` for a prefix. At least one condition must
+             *     pin the subject: `repository` or `sub` for `github`, `sub` for `oidc`.
+             */
+            conditions: components["schemas"]["ConditionView"][];
+            /** @description Required for `oidc`; for `github` omit it or give the GitHub Actions issuer. */
+            issuer?: string | null;
+            /**
+             * @description `github` (the GitHub Actions issuer) or `oidc` (an explicit https issuer, e.g. a
+             *     Kubernetes cluster).
+             */
+            issuer_kind: string;
+            name: string;
+        };
         Org: {
             /** Format: date-time */
             created_at: string;
@@ -862,6 +932,28 @@ export interface components {
             }[];
             next?: string | null;
         };
+        /** @description One page of a list. `next` is absent on the last page. */
+        Paged_WorkloadIdentity: {
+            items: {
+                /** Format: uuid */
+                agent_id: string;
+                audience: string;
+                conditions: components["schemas"]["ConditionView"][];
+                /** Format: date-time */
+                created_at: string;
+                /** @description `lsw_...`: names the org and this policy. Not a secret. */
+                handle: string;
+                /** Format: uuid */
+                id: string;
+                issuer: string;
+                /** @description `github` or `oidc`. */
+                issuer_kind: string;
+                /** Format: date-time */
+                last_used_at?: string | null;
+                name: string;
+            }[];
+            next?: string | null;
+        };
         /** @description `PATCH` body for projects, environments and secrets: name and description only. */
         Patch: {
             description?: string | null;
@@ -952,6 +1044,28 @@ export interface components {
             version: number;
             /** @description A0-7 `dek-wrap` blob (the KMS-wrapped data key), standard base64 with padding. */
             wrapped_dek: string;
+        };
+        /**
+         * @description A trust policy. The `handle` is the non-secret routing value a workload sends to the
+         *     exchange route.
+         */
+        WorkloadIdentity: {
+            /** Format: uuid */
+            agent_id: string;
+            audience: string;
+            conditions: components["schemas"]["ConditionView"][];
+            /** Format: date-time */
+            created_at: string;
+            /** @description `lsw_...`: names the org and this policy. Not a secret. */
+            handle: string;
+            /** Format: uuid */
+            id: string;
+            issuer: string;
+            /** @description `github` or `oidc`. */
+            issuer_kind: string;
+            /** Format: date-time */
+            last_used_at?: string | null;
+            name: string;
         };
     };
     responses: never;
@@ -3482,6 +3596,272 @@ export interface operations {
                 };
             };
             /** @description Service or key service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_workload_identities: {
+        parameters: {
+            query?: {
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: number;
+                /** @description Opaque cursor: the `next` value of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of policies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Paged_WorkloadIdentity"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_workload_identity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewWorkloadIdentity"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description URL of the new policy */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadIdentity"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_workload_identity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Policy id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadIdentity"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_workload_identity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Policy id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -136,6 +136,35 @@ pub fn agent_deleted(actor: Actor, agent_id: Uuid, grants_revoked: i64) -> Event
     )
 }
 
+/// `workload_identity.created`: the policy, the agent it maps to and the issuer host.
+pub fn workload_identity_created(
+    actor: Actor,
+    policy_id: Uuid,
+    agent_id: Uuid,
+    issuer: &str,
+) -> Event {
+    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    admin(
+        kind::WORKLOAD_IDENTITY_CREATED,
+        actor,
+        Target::WorkloadIdentity(policy_id),
+        attrs,
+    )
+}
+
+/// `workload_identity.deleted`.
+pub fn workload_identity_deleted(actor: Actor, policy_id: Uuid, agent_id: Uuid) -> Event {
+    admin(
+        kind::WORKLOAD_IDENTITY_DELETED,
+        actor,
+        Target::WorkloadIdentity(policy_id),
+        Attrs::new().id(attr::AGENT_ID, agent_id),
+    )
+}
+
 /// `grant.created`: the agent, the secret, the mode and the expiry (Unix seconds), if any.
 pub fn grant_created(
     actor: Actor,

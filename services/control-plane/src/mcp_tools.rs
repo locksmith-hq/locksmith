@@ -499,8 +499,12 @@ pub async fn client_revoked(state: &AppState, principal: &McpPrincipal) -> Resul
     let Some(client_id) = principal.0.client_id.clone() else {
         return Ok(false);
     };
-    let Ok(user) = caller(state, principal).await else {
-        return Ok(false);
+    // An unverified email has no org and no client row: the handlers refuse it as the console
+    // does. Any other failure fails closed (the middleware answers 401).
+    let user = match caller(state, principal).await {
+        Ok(user) => user,
+        Err(e) if e.kind == Kind::EmailVerificationRequired => return Ok(false),
+        Err(e) => return Err(e),
     };
     let who = format!("{}|{}", principal.0.issuer, principal.0.subject);
     let revoked_at: Option<OffsetDateTime> = state
@@ -525,8 +529,16 @@ pub async fn client_revoked(state: &AppState, principal: &McpPrincipal) -> Resul
     let Some(revoked_at) = revoked_at else {
         return Ok(false);
     };
-    Ok(match principal.0.auth_time {
-        Some(t) => t < revoked_at.unix_timestamp(),
-        None => true,
-    })
+    // Compared at full precision: a sign-in is only newer if it is at or after the revoke. An
+    // `auth_time` out of range counts as old.
+    Ok(
+        match principal
+            .0
+            .auth_time
+            .map(OffsetDateTime::from_unix_timestamp)
+        {
+            Some(Ok(signed_in)) => signed_in < revoked_at,
+            _ => true,
+        },
+    )
 }

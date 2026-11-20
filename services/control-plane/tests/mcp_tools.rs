@@ -1065,8 +1065,7 @@ async fn mcp_a_revoked_client_is_refused_on_the_next_call_and_on_a_fresh_initial
     let row_id = rows["items"][0]["id"].as_str().unwrap().to_owned();
     // Another client of the same person, to prove the revoke is per client.
     let other = Person::connect_as(&f, "alice", Some("client-other")).await;
-    // The row stamps `revoked_at` with whole seconds of "now"; make sure it is after sign-in.
-    rest(
+    let revoked = rest(
         &f,
         "POST",
         &format!("/v1/mcp/clients/{row_id}/revoke"),
@@ -1074,6 +1073,12 @@ async fn mcp_a_revoked_client_is_refused_on_the_next_call_and_on_a_fresh_initial
         json!({}),
     )
     .await;
+    let revoked_secs = time::OffsetDateTime::parse(
+        revoked["revoked_at"].as_str().unwrap(),
+        &time::format_description::well_known::Rfc3339,
+    )
+    .unwrap()
+    .unix_timestamp() as u64;
     // The next call on the live session is refused with 401 and a challenge.
     let (s, _, _) = client
         .send(json!({"jsonrpc": "2.0", "id": 6, "method": "tools/list", "params": {}}))
@@ -1089,7 +1094,10 @@ async fn mcp_a_revoked_client_is_refused_on_the_next_call_and_on_a_fresh_initial
     assert!(!other.list_tools().await.is_empty());
     let bob = Person::raw(&f, f.key.token_at("bob", true, Some("client-abc"), None));
     assert_eq!(bob.init_status().await, StatusCode::OK);
-    // A fresh sign-in after the revoke (newer auth_time) is let through; the row stays revoked.
+    // A sign-in in the same second as the revoke but before it (revoked_at has microseconds) is
+    // still old; only a sign-in after the revoke is let through. The row stays revoked.
+    let same_second = Person::raw(&f, token("client-abc", Some(revoked_secs)));
+    assert_eq!(same_second.init_status().await, StatusCode::UNAUTHORIZED);
     let fresh = Person::raw(&f, token("client-abc", Some(now_secs() + 5)));
     assert_eq!(fresh.init_status().await, StatusCode::OK);
     let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;

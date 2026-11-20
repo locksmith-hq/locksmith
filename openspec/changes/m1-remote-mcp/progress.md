@@ -72,3 +72,8 @@
 - Task: m1-remote-mcp 3.2 - done (gateway `/mcp` default-on tools: `list_my_keys`, `relay_http_request` via the existing relay path through `relay::handle_as`, `explain_block` as typed `not_available` 501; `issue_short_lived_credential` stays off and unlisted)
 - Verified: `cargo nextest run -p ls-gateway mcp` -> 16 passed; `just ci` -> exit 0 (before tick/progress edit); independent Sonnet evaluator PASS
 - Notes for next session: 3.3 [opus] short-lived credential; 3.4 per-org switches and per-call audit event (must also cover `list_my_keys` and `explain_block`); relay tool needs secret `version`; tool errors drop the relay request_id.
+
+## 2026-11-20 worker B
+- Task: m1-remote-mcp 3.3 - done (gateway `issue_short_lived_credential`: random `lsst_` token, 60-900 s, one secret, relay-only, hash held in memory, `credential.issued` audit before use, off by default; rmcp debug log cap added after the adversarial log test found a leak)
+- Verified: `cargo nextest run -p ls-gateway mcp` 25 passed; full ls-gateway 116 passed; `just ci` exit 0; Opus evaluator PASS
+- Notes for next session: 3.4 replaces `with_tool_settings` with per-org `mcp_tool_settings` and adds the per-call audit event (also refused issues); agent revoke (4.2/T8) should also invalidate that agent's live short-lived credentials (a credential can outlive the agent token by up to 15 min); "one job" is a label, not single-use; credentials are per replica. 2.2 still unticked (explain_block deferral).

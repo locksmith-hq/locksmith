@@ -48,6 +48,7 @@ zeroize = "1.9.1"
 # ls_control_plane::agent_token.
 jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
 time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
+pgwire = { version = "=0.42.3", default-features = false }
 
 [dev-dependencies]
 http-body-util = "0.1"

@@ -41,6 +41,11 @@ pub enum ConfigError {
         index: usize,
         field: &'static str,
     },
+    /// A `[[pg]]` binding is invalid; names the binding's index and the field.
+    PgBinding {
+        index: usize,
+        field: &'static str,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -56,6 +61,9 @@ impl fmt::Display for ConfigError {
             }
             Self::Binding { index, field } => {
                 write!(f, "binding #{index} has an invalid `{field}`")
+            }
+            Self::PgBinding { index, field } => {
+                write!(f, "pg binding #{index} has an invalid `{field}`")
             }
         }
     }
@@ -100,6 +108,42 @@ pub struct Binding {
     pub allow_private_hosts: bool,
 }
 
+/// TLS mode for the upstream Postgres leg of a `[[pg]]` binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PgTls {
+    Require,
+    VerifyFull,
+    Disable,
+}
+
+fn default_pg_port() -> u16 {
+    5432
+}
+
+fn default_pg_tls() -> PgTls {
+    PgTls::Require
+}
+
+/// One Postgres database an agent may reach through the relay (D3). There is deliberately no
+/// password field: the password is the secret `secret_id`, decrypted per session.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PgBinding {
+    /// The client's `database` startup parameter.
+    pub name: String,
+    pub secret_id: Uuid,
+    pub host: String,
+    #[serde(default = "default_pg_port")]
+    pub port: u16,
+    pub user: String,
+    pub database: String,
+    #[serde(default = "default_pg_tls")]
+    pub tls: PgTls,
+    #[serde(default)]
+    pub allow_private_hosts: bool,
+}
+
 /// The bindings file: the org the gateway acts for, and its bindings.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -107,6 +151,8 @@ pub struct Bindings {
     pub org_id: Uuid,
     #[serde(default, rename = "binding")]
     pub bindings: Vec<Binding>,
+    #[serde(default, rename = "pg")]
+    pub pg: Vec<PgBinding>,
 }
 
 impl Bindings {
@@ -144,7 +190,36 @@ impl Bindings {
                 return Err(bad("template"));
             }
         }
+        let mut names = HashSet::new();
+        let mut pg_secrets = HashSet::new();
+        for (index, b) in self.pg.iter().enumerate() {
+            let bad = |field| ConfigError::PgBinding { index, field };
+            if b.name.is_empty() || !names.insert(b.name.as_str()) {
+                return Err(bad("name"));
+            }
+            if !pg_secrets.insert(b.secret_id) {
+                return Err(bad("secret_id"));
+            }
+            if b.host.is_empty()
+                || b.host
+                    .chars()
+                    .any(|c| c.is_whitespace() || c.is_control() || c == '/')
+            {
+                return Err(bad("host"));
+            }
+            if b.user.is_empty() || b.database.is_empty() {
+                return Err(bad("user"));
+            }
+            if b.tls == PgTls::Disable && !b.allow_private_hosts {
+                return Err(bad("tls"));
+            }
+        }
         Ok(())
+    }
+
+    /// The Postgres binding named `name`, if any.
+    pub fn pg_by_name(&self, name: &str) -> Option<&PgBinding> {
+        self.pg.iter().find(|b| b.name == name)
     }
 
     /// The binding for `secret_id`, if any.
@@ -306,6 +381,42 @@ mod tests {
         e.insert(ENV_SERVICE_TOKEN, "hunter2".to_owned());
         let msg = load(&e, &bindings_toml("")).err().unwrap().to_string();
         assert!(!msg.contains("hunter2"), "{msg}");
+    }
+
+    const PG: &str = "\n[[pg]]\nname = \"app\"\nsecret_id = \"0197c1f0-0000-7000-8000-000000000003\"\nhost = \"postgres\"\nuser = \"app_rw\"\ndatabase = \"app\"\n";
+
+    #[test]
+    fn pg_config_accepts_fixture_and_defaults() {
+        let c = load(&env(), &bindings_toml(PG)).expect("valid");
+        let b = c.bindings.pg_by_name("app").expect("binding");
+        assert_eq!(
+            (b.port, b.tls, b.allow_private_hosts),
+            (5432, PgTls::Require, false)
+        );
+    }
+
+    #[test]
+    fn pg_config_rejects_bad_bindings() {
+        let err = |extra: &str| load(&env(), &bindings_toml(extra)).err();
+        let field = |f| Some(ConfigError::PgBinding { index: 1, field: f });
+        // Password fields do not exist.
+        assert!(err(&format!("{PG}password = \"x\"\n")).is_some());
+        // Duplicate name.
+        let dup_name = PG.replace("000000000003", "000000000004");
+        assert_eq!(err(&format!("{PG}{dup_name}")), field("name"));
+        // Duplicate secret.
+        let dup_secret = PG.replace("\"app\"\nsecret", "\"app2\"\nsecret");
+        assert_eq!(err(&format!("{PG}{dup_secret}")), field("secret_id"));
+        // tls disable only with allow_private_hosts.
+        let off = format!("{PG}tls = \"disable\"\n");
+        assert_eq!(
+            err(&off),
+            Some(ConfigError::PgBinding {
+                index: 0,
+                field: "tls"
+            })
+        );
+        assert!(err(&format!("{off}allow_private_hosts = true\n")).is_none());
     }
 
     #[test]

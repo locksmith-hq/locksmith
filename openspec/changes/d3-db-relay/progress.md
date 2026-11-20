@@ -11,3 +11,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: planning review fix - done
 - Verified: openspec validate d3-db-relay --strict -> valid
 - Notes for next session: merge-review FAIL on spec.md:74 fixed (agent.json excepted, before/after home snapshot); gate 4 CI was still running; re-add ready-to-merge label if gate passes.
+
+## 2026-11-20 worker
+- Task: 1.1-1.4 - done
+- Verified: `cargo nextest run -p ls-gateway pg_config` 2 passed; `cargo nextest run -p ls-proxy db` 18 passed (M6 behaviour unchanged); `just ci` exit 0.
+- Notes for next session: `PgBinding`/`PgTls` in `services/gateway/src/config.rs` (`Bindings::pg_by_name`); `ls_proxy::db::scram::Client` and `ls_proxy::db::postgres::md5_password` are public. pgwire is pinned but unused until group 2 (no code imports it yet). Next: group 2 (listener, opus-grade auth path).

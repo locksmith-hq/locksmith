@@ -1,10 +1,10 @@
 # Tasks: D3 Postgres relay
 
 ## 1. Bindings and reusable auth [sonnet]
-- [ ] 1.1 [haiku] Verify pgwire's current version, release date and codec-only use (decision 1); add it pinned to `services/gateway/Cargo.toml` and record the result in design.md "OSS used".
-- [ ] 1.2 `[[pg]]` binding table in `services/gateway/src/config.rs` (shape in design.md) with validation: unique name and secret, no password field, `tls = "disable"` only with `allow_private_hosts`; fixture TOML in tests.
-- [ ] 1.3 Make `ls-proxy::db::scram` and `md5_password` public sans-IO helpers without changing M6 behaviour.
-- [ ] 1.4 Verify: `cargo nextest run -p ls-gateway pg_config` and `cargo nextest run -p ls-proxy db`.
+- [x] 1.1 [haiku] Verify pgwire's current version, release date and codec-only use (decision 1); add it pinned to `services/gateway/Cargo.toml` and record the result in design.md "OSS used".
+- [x] 1.2 `[[pg]]` binding table in `services/gateway/src/config.rs` (shape in design.md) with validation: unique name and secret, no password field, `tls = "disable"` only with `allow_private_hosts`; fixture TOML in tests.
+- [x] 1.3 Make `ls-proxy::db::scram` and `md5_password` public sans-IO helpers without changing M6 behaviour.
+- [x] 1.4 Verify: `cargo nextest run -p ls-gateway pg_config` and `cargo nextest run -p ls-proxy db`.
 
 ## 2. Listener and agent auth [opus]
 - [ ] 2.1 `services/gateway/src/pg/listener.rs`: optional TCP listener (`LOCKSMITH_GATEWAY_PG_LISTEN`), tokio-rustls TLS required before startup, GSSENC answered `N`, plaintext startup refused, handshake timeout.

@@ -135,3 +135,8 @@
 - Verified: `scripts/merge-gate.sh 520` -> GATE FAIL "PR not opened by the owner" (line 22 needs author tomer555; agent PRs are now opened by role Apps)
 - Notes for next session: #520 (4.3 wording) cannot merge until the owner lets the gate accept the App logins (reported on #472). Remaining: 4.2 hub issuer revoke, 4.2 gateway check (Opus evaluator), 4.3, 7.x.
 - 2026-11-20 · worker (josie): tasks 4.2, 4.3 and 7.1 done. Hub issuer revoke (Keycloak consent delete, best effort), gateway agent-layer revoke with a <=10 s fail-closed cache, short-lived credentials dropped, `just mcp-e2e` extended with the revoke flow (live, passes). Opus evaluator FAILed the first cut: the Keycloak service-account client lacked a clientScopeMappings entry for manage-users (fixed, live-verified); a Sonnet evaluator then passed the delta. Also fixed: re-revoking now moves `revoked_at` forward (a client that signed in again after a revoke could not be revoked again). `just ci` green. Left: 7.2 (manual ci-platforms run if this is the phase's last change).
+
+## 2026-11-20 lead (for-lead #538)
+- Task: m1-remote-mcp 7.2 - done (not applicable): M1 is not the last change of Phase 2 (T5 and others follow in `docs/roadmap.md`), so no manual `ci-platforms` run is due. Merged origin/main (tasks.md conflict: kept main's 4.3 wording, ticked as verified by the 4.3 entry above).
+- Verified: every task ticked; `just ci` on the merged branch (see the PR); change archived in this PR.
+- Notes for next session: none; p4-sdks can now build on the archived M1 contract.

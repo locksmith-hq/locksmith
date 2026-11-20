@@ -30,5 +30,5 @@
 - [x] 6.2 Verify: `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
 
 ## 7. Local verification [sonnet]
-- [ ] 7.1 `just aws-smoke` recipe: start moto, gateway and API, register an agent, grant, run the real `aws` CLI through `credential_process`, assert identity, expiry and that the agent home holds no key.
+- [x] 7.1 `just aws-smoke` recipe: start moto, gateway and API, register an agent, grant, run the real `aws` CLI through `credential_process`, assert identity, expiry and that the agent home holds no key.
 - [ ] 7.2 `just up`, `just aws-smoke`, `just apps-build`, then `just ci`. Record the P1 named check for session-policy enforcement on real AWS in progress.md.

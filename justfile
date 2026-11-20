@@ -232,6 +232,15 @@ connector-smoke:
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
 
+# D2 AWS smoke (needs `just up` for moto and `just api`; `pip install awscli`): the real `aws` CLI
+# gets scoped, short-lived STS credentials from the gateway through `smith aws setup` and
+# `credential_process`; asserts the assumed-role identity, expiry and that the agent HOME holds no
+# key. Skips with a note without `aws` or moto unless E2E_REQUIRE_AWS is set. Run `just leak-scan` after.
+aws-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test aws_smoke --no-capture
+
 # S6 stack adversarial gate (needs `just up` and `just api`; fails fast without them): every
 # gateway case with skips as failures, then `leak-scan` over the stack, the audit export and the
 # kept artifacts. `--agent claude` adds the live prompts (no claude CLI or key: `skip live`, fails).

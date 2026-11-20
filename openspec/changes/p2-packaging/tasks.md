@@ -1,10 +1,10 @@
 # Tasks: P2 packaging
 
 ## 1. Research and layout [sonnet]
-- [ ] 1.1 [haiku] Research spike: write `docs/research/packaging.md` with source URLs and dates for cosign keyless (identity and verify flags), `actions/attest-build-provenance`, SBOM tool choice (syft or cargo-cyclonedx), Helm, kind, kubeconform, Caddy and the production OpenBao image; for each record the pinned version and last release date; record whether cargo-dist can emit our `manifest.json` layout (decision 2) and whether the gateway supports a key provider other than OpenBao transit.
-- [ ] 1.2 [haiku] Read `services/control-plane/src/config.rs` and the gateway config; list in the research note every environment variable each service needs, its default, which are secrets (names only), and how the web console bundle is served. Update `design.md` Context only through the next task if an assumption was wrong, never by rewriting decisions.
-- [ ] 1.3 Teach `scripts/tree-check.sh` the new paths (`infra/docker`, `infra/compose/selfhost`, `infra/helm/locksmith`) and add pinned versions of the new CI tools to `scripts/ci-tools.sh`.
-- [ ] 1.4 Verify: `bash scripts/tree-check.sh` and `bash scripts/ci-tools.sh --check` (or the script's documented dry mode).
+- [x] 1.1 [haiku] Research spike: write `docs/research/packaging.md` with source URLs and dates for cosign keyless (identity and verify flags), `actions/attest-build-provenance`, SBOM tool choice (syft or cargo-cyclonedx), Helm, kind, kubeconform, Caddy and the production OpenBao image; for each record the pinned version and last release date; record whether cargo-dist can emit our `manifest.json` layout (decision 2) and whether the gateway supports a key provider other than OpenBao transit.
+- [x] 1.2 [haiku] Read `services/control-plane/src/config.rs` and the gateway config; list in the research note every environment variable each service needs, its default, which are secrets (names only), and how the web console bundle is served. Update `design.md` Context only through the next task if an assumption was wrong, never by rewriting decisions.
+- [x] 1.3 Teach `scripts/tree-check.sh` the new paths (`infra/docker`, `infra/compose/selfhost`, `infra/helm/locksmith`) and add pinned versions of the new CI tools to `scripts/ci-tools.sh`.
+- [x] 1.4 Verify: `bash scripts/tree-check.sh` and `bash scripts/ci-tools.sh --check` (or the script's documented dry mode).
 
 ## 2. Container images [sonnet]
 - [ ] 2.1 `infra/docker/control-plane.Dockerfile`: multi-stage `cargo build --release --locked -p <control-plane package>`, minimal runtime base, non-root user, health check, AGPL licence text and source link in the image, no shell secrets.

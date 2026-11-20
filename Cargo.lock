@@ -2723,6 +2723,7 @@ dependencies = [
  "ls-envelope",
  "ls-http",
  "ls-pg-test",
+ "ls-proxy",
  "ls-tenant-lint",
  "opentelemetry",
  "opentelemetry-appender-tracing",

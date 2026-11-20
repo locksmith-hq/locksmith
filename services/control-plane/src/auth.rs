@@ -8,6 +8,7 @@
 //! decision 2), which names the org it acts for in [`SERVICE_ORG_HEADER`].
 
 pub mod human;
+pub mod issuers;
 pub mod jwks;
 
 use axum::extract::FromRequestParts;

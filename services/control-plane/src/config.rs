@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use secrecy::{ExposeSecret, SecretString};
 
 use crate::auth::human::HumanAuthConfig;
+use crate::auth::issuers::IssuerAccess;
 
 pub const ENV_DATABASE_URL: &str = "DATABASE_URL";
 pub const ENV_DATABASE_OWNER_URL: &str = "DATABASE_OWNER_URL";
@@ -35,6 +36,9 @@ pub const ENV_OIDC_ISSUER: &str = "LOCKSMITH_OIDC_ISSUER";
 pub const ENV_OIDC_AUDIENCE: &str = "LOCKSMITH_OIDC_AUDIENCE";
 /// T1: where the issuer publishes its JWKS (an `http` or `https` URL).
 pub const ENV_OIDC_JWKS_URL: &str = "LOCKSMITH_OIDC_JWKS_URL";
+/// D4, local development only: `1` lets workload issuers live on loopback or private addresses
+/// (and plain http), for a stub issuer. Cloud metadata addresses stay refused.
+pub const ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS: &str = "LOCKSMITH_WORKLOAD_ALLOW_PRIVATE_ISSUERS";
 
 /// Shortest accepted gateway service token, in bytes (a 256-bit random token in hex or base64
 /// is longer). Shorter values are rejected rather than accepted as a guessable credential.
@@ -105,6 +109,8 @@ pub struct Config {
     /// The OIDC issuer human tokens are verified against (T1). `None` when
     /// `LOCKSMITH_OIDC_ISSUER` is unset: every bearer token is then refused. Public values only.
     pub human_auth: Option<HumanAuthConfig>,
+    /// How far workload issuer discovery may reach (D4 decision 3). Default: public https only.
+    pub workload_issuers: IssuerAccess,
 }
 
 /// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
@@ -221,6 +227,14 @@ impl Config {
 
         let human_auth = human_auth_from(&get)?;
 
+        let workload_issuers = IssuerAccess {
+            allow_private_hosts: match get(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS).as_deref() {
+                None | Some("") | Some("0") => false,
+                Some("1") => true,
+                Some(_) => return Err(ConfigError::Invalid(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS)),
+            },
+        };
+
         Ok(Self {
             database_url,
             database_owner_url,
@@ -232,6 +246,7 @@ impl Config {
             gateway_service_token,
             agent_signing_key,
             human_auth,
+            workload_issuers,
         })
     }
 }
@@ -287,6 +302,26 @@ mod tests {
         let mut v = DB.to_vec();
         v.extend_from_slice(extra);
         v
+    }
+
+    #[test]
+    fn workload_private_issuers_are_off_unless_set_to_1() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(!c.workload_issuers.allow_private_hosts);
+        let c = Config::from_lookup(lookup(&with(&[(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS, "1")])))
+            .ok()
+            .unwrap();
+        assert!(c.workload_issuers.allow_private_hosts);
+        let err = Config::from_lookup(lookup(&with(&[(
+            ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS,
+            "yes",
+        )])))
+        .err()
+        .unwrap();
+        assert_eq!(
+            err,
+            ConfigError::Invalid(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS)
+        );
     }
 
     #[test]

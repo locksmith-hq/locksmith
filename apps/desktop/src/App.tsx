@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { StatusView } from "@locksmith/api-types";
 import * as api from "./api";
-import { Icon, Logo, Wordmark, type IconName } from "./brand";
+import { Icon, Logo, Wordmark, type IconName } from "@locksmith/ui";
 import { Agents, Audit, Keys, OrgAudit, Overview, Relays, Sessions, Tokens, clock, errCode, msg, plural, type ScreenProps } from "./screens";
 
 const TABS = { Overview, Sessions, Keys, Tokens, Agents, Relays, Audit, "Org audit": OrgAudit } as const;

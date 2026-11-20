@@ -4,7 +4,7 @@ import type {
 } from "@locksmith/api-types";
 import * as api from "./api";
 import { auditOutcomeMatches, type AuditOutcomeFilter } from "@locksmith/control-plane-client";
-import { Icon, type IconName } from "./brand";
+import { Icon, type IconName } from "@locksmith/ui";
 
 export interface ScreenProps {
   st: StatusView | null;

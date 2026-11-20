@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@locksmith/control-plane-client": "*",
+    "@locksmith/ui": "*",
     "@tanstack/react-query": "5.108.1",
     "oidc-client-ts": "3.5.0",
     "react": "^19.0.0",

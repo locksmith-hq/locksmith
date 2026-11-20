@@ -84,10 +84,10 @@ resolve() { # <role or "raiser"> <event.json>
   printf '%s' "${r:-lead}"
 }
 
-# Each worker owns its PRs: the worker whose App opened PR <n>, else default_worker (owner or unknown author).
+# Each PR belongs to its author: the worker or lead whose App opened PR <n>, else default_worker (owner or unknown author).
 pr_worker() { # <pr number>; the author from GitHub (or $PR_AUTHOR in the selftest)
   local who r; who=${PR_AUTHOR:-$( [ -n "$1" ] && gh api "repos/$repo/pulls/$1" -q .user.login 2>/dev/null)}
-  r=$(role_of "$who"); case "$r" in worker-*) printf '%s' "$r" ;; *) cfgq .default_worker ;; esac
+  r=$(role_of "$who"); case "$r" in worker-*|lead) printf '%s' "$r" ;; *) cfgq .default_worker ;; esac
 }
 
 event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
@@ -215,7 +215,7 @@ no role marker"
   PR_AUTHOR='locksmith-josie[bot]' ev 'worker-b\tCI failed on PR #12 (claude/change-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
   PR_AUTHOR='locksmith-harriet[bot]' ev 'worker-c\tmerge review finished on PR #12' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
   PR_AUTHOR=tomer555 ev 'worker-a\tmerge review finished on PR #13' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"owner/x","event":"pull_request","pull_requests":[{"number":13}]}}'
-  PR_AUTHOR='locksmith-linus[bot]' ev 'worker-a\tmerge review finished on PR #14' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
+  PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tmerge review finished on PR #14' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"skipped","head_branch":"x","event":"pull_request","pull_requests":[{"number":12}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"

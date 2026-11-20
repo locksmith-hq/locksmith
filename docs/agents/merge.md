@@ -1,16 +1,15 @@
 # Merge policy (owner-only file)
 
-The owner asked on 2026-11-16 for PRs to merge autonomously, with no waiting window.
+PRs merge themselves through GitHub auto-merge (owner 2026-11-20; the repo is public, so CI minutes are free). There is no merge workflow, gate script or label.
 
-- Only the `merge-on-green` workflow merges, the moment gates pass: agent (`claude/*`) PRs through the full gate below (`ready-to-merge` plus review PASS), owner PRs on green CI with no label or review. Label a PR `hold` to stop it. Agents never merge: the worker (`merge-queue` skill) marks PRs ready and fixes what the gate rejects. Every PR that ticks a change's last task carries its archive.
-- A PR merges only if `scripts/merge-gate.sh <pr>` prints `GATE PASS <sha>`. The script checks that:
-  - the work is complete;
-  - the guard passes;
-  - GitHub reports the PR as mergeable, with no conflicts;
-  - CI is green;
-  - no protected files changed;
-  - the independent review passed. That review is the `claude-review` workflow: Claude Opus running in GitHub Actions as the Claude GitHub App, posting `merge-review <sha>: PASS`. The verdict holds while the PR's own diff (by patch-id) is unchanged, so merging main in or pushes that add up to no net change do not need a new review.
-- Merges are pinned to the reviewed SHA and always use a merge commit, so `git revert -m 1` undoes any of them.
-- An agent PR that touches agent-system files (the weekly harness release or a hotfix) never auto-merges; the owner merges it.
+- **Who enables it.** A PR belongs to the App that opened it. When it is finished, its author runs `gh pr merge <n> --auto --merge`. The lead may also do this, or fix, on a worker's PR. A worker never pushes to, labels or enables auto-merge on a PR it did not open, and never touches a PR the lead opened. Agents never call the merge API, approve, or use `--admin`.
+- **What must pass** (ruleset `main-threads` on main; GitHub merges the moment all pass):
+  - required checks: `hygiene` (layout, task-edit guard, public-check, gitleaks), `rust`, `web`, `desktop`, `macos`, `windows-check`, `adversarial`;
+  - `merge-ready`, a commit status set only by `claude-review.yml` once auto-merge is on: the change is complete (planning-only PRs exempt) and the independent Claude (Opus) review posted `merge-review <sha>: PASS`. A PASS still holds while the PR's own diff (patch-id) is unchanged, e.g. after merging main in. Owner PRs pass it without review;
+  - every review thread resolved, no conflicts;
+  - a code-owner approval for paths in `.github/CODEOWNERS`: the agent system and trust root (so the weekly harness release and hotfixes wait for the owner) and the secret-handling crates.
+- **Stop a merge:** `gh pr merge <n> --disable-auto`.
+- Merges always use a merge commit, so `git revert -m 1 <sha>` undoes any of them.
 - If main CI goes red after a merge, fixing it comes before any other work.
-- This file, `scripts/merge-gate.sh`, `.claude/skills/merge-queue`, `.claude/skills/merge-review` and the workflows change only in owner sessions, or through a lead PR that the owner merges (`lead.md`).
+- Admins bypass the ruleset; only the owner is an admin.
+- This file, `.github/CODEOWNERS`, `.claude/skills/merge-review` and the workflows change only in owner sessions, or through a lead PR that the owner approves.

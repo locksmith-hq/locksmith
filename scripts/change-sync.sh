@@ -58,8 +58,8 @@ parked_block() { # <owner|rescue> <blocker-issue> <id>
 render() { # <id> <state> <detail>
   local id=$1 state=$2 detail=$3 src pr owner rescue
   src=$(git show "origin/claude/change-$id:openspec/changes/$id/tasks.md" >/dev/null 2>&1 && echo "origin/claude/change-$id" || echo HEAD)
-  pr=$(gh pr list -R "$repo" --head "claude/change-$id" --state open --json number,isDraft,labels \
-    -q '.[0]|select(.!=null)|"#\(.number)\(if any(.labels[]; .name=="ready-to-merge") then " (ready to merge)" else "" end)"' 2>/dev/null)
+  pr=$(gh pr list -R "$repo" --head "claude/change-$id" --state open --json number,isDraft,autoMergeRequest \
+    -q '.[0]|select(.!=null)|"#\(.number)\(if .autoMergeRequest then " (auto-merge on)" else "" end)"' 2>/dev/null)
   owner=$(gh api "repos/$repo/issues?labels=needs-owner&state=open&per_page=100" \
     -q ".[]|select((.title+\" \"+(.body // \"\"))|contains(\"$id\"))|\"- ⚠ **Needs owner:** #\(.number) \(.title)\"" 2>/dev/null)
   rescue=$(gh api "repos/$repo/issues?labels=needs-rescue&state=open&per_page=100" \

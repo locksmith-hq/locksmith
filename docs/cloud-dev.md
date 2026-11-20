@@ -105,14 +105,13 @@ The design follows Anthropic's long-running agent harness (https://www.anthropic
 
 ## Schedules (cloud routines, Israel time)
 
-Except the workers (events, plus every 2 hours, 24/7), routines avoid peak hours (weekdays about 15:00–21:00).
+Except the workers (their own PR events, plus about every 90 minutes, 24/7), routines avoid peak hours (weekdays about 15:00–21:00).
 
 | Routine | Model | Environment | When | Job |
 |---|---|---|---|---|
 | [Worker A](https://claude.ai/code/routines/trig_01GtbNHhQ34w5h6Z6nj3xD4G) | Sonnet 5.5 (subagents on Haiku, Sonnet or Opus by task tier) | `locksmith-dev` | about every 90 min: :05 UTC at hours 0,1,3,4,… (2 of every 3 hours; gaps alternate 1h/2h; owner 2026-11-19) | claims one ready change at a time (per-change lock on its tracking issue), parks blocked ones and takes the next; non-draft PR per change. Several workers may run at once |
-| [Worker B](https://claude.ai/code/routines/trig_0157sQMWva4JP97dc6DqkPEM) | Sonnet 5.5 (same prompt as Worker A) | `locksmith-dev` | about every 90 min: :35 UTC at hours 1,2,4,5,… (owner 2026-11-19) | same as Worker A; with C, six worker starts every 3 hours |
-| [Worker C](https://claude.ai/code/routines/trig_013QMkh2C8t7h3z2AL3YvAXH) | Sonnet 5.5 (same prompt as Worker A) | `locksmith-dev` | about every 90 min: :50 UTC at hours 0,2,3,5,… (owner 2026-11-19) | same as Worker A; a third worker between A and B |
-| [Worker (events)](https://claude.ai/code/routines/trig_01JUGABHdyZuNMJSYdEKSfJx) | Sonnet 5.5 (worker prompt, checks out `origin/main` first) | `locksmith-dev` | GitHub: PR labeled, labels `review-passed`/`review-failed` (set by `claude-review.yml` from the verdict), author `tomer555`, base `main`, not draft. API: `wake-agents.yml` fires it when a `needs-owner` issue is closed or main CI fails (secret `ROUTINE_FIRE_TOKEN`) | merges or fixes a PR the moment its review verdict lands, applies owner replies and fixes red main within minutes. Events only wake it: `worker-has-work.sh` decides, so dropped or duplicate events are harmless |
+| [Worker B](https://claude.ai/code/routines/trig_0157sQMWva4JP97dc6DqkPEM) | Sonnet 5.5 (same prompt as Worker A) | `locksmith-dev` | about every 90 min: :35 UTC at hours 1,2,4,5,… (owner 2026-11-19) | same as Worker A, as `locksmith-josie`; with C, six worker starts every 3 hours |
+| [Worker C](https://claude.ai/code/routines/trig_013QMkh2C8t7h3z2AL3YvAXH) | Sonnet 5.5 (same prompt as Worker A) | `locksmith-dev` | about every 90 min: :50 UTC at hours 0,2,3,5,… (owner 2026-11-19) | same as Worker A, as `locksmith-harriet`; a third worker between A and B |
 | [Daily summary](https://claude.ai/code/routines/trig_01E29QPqddtqyaTR1FUjLKxT) | Haiku 5.5 | Default | daily 08:00 and 18:00 | updates the one daily-summary Artifact and sends a push; read-only, REST API only (GraphQL is blocked in cloud sessions) |
 | [PM (Walt)](https://claude.ai/code/routines/trig_01Dja9jHSJRqbcepRAGz9GUQ) | Opus 5.5 | its own environment | daily 08:00, plus API: `wake-agents.yml` fires it for a debate turn (secret `PM_FIRE_TOKEN`) | product: end goal, roadmap order, priorities and the board; hands technical findings to the lead as `for-lead` issues |
 | [Lead (Opus)](https://claude.ai/code/routines/trig_01QEJR9b7UBh6XeiCeAa7cv1) | Opus 5.5 | `locksmith-research` | daily 09:35, 23:35 (passes with nothing to do are skipped), plus API: `wake-agents.yml` fires it per `docs/agents/routing.json`: a new `needs-rescue` issue, an owner reply on `needs-owner`, a debate turn (secret `LEAD_FIRE_TOKEN`) | tech lead (`docs/agents/lead.md`, replaced Rescue and the Learning loop 2026-11-17): rescues the oldest `needs-rescue` issue; reviews code merged since its last run for duplication, reinvented wheels, readability drift and over-specific solutions, and turns findings into fixes, unticked tasks or a `refactor-*` change |
@@ -123,7 +122,9 @@ GitHub triggers (web UI only; one per routine): the API stores filters as `filte
 Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.
 
 ## Agent identities (GitHub Apps)
-Agents are named by role (Worker A, B, C, Worker (events), PM, Lead). Each role has a private GitHub App owned by `locksmith-hq`, installed only on this repo, with webhooks off. Avatars are in `docs/agents/avatars/`.
+Agents are named by role (Worker A, B, C, PM, Lead).
+
+**Each worker owns its PRs (owner 2026-11-20).** There is no separate event worker. `wake-agents.yml` fires the worker whose App opened a PR when that PR's merge review (`claude-review`) finishes or its CI fails, and the worker that opened a `needs-rescue` issue when it closes. Red main, a closed `needs-owner` issue and PRs opened by the owner go to Worker A. An owner tag `@locksmith-alfie`, `-josie` or `-harriet` wakes that worker (`@locksmith-worker`: Worker A). Each worker's API trigger token is a repo secret (`WORKER_A_FIRE_TOKEN`, `_B_`, `_C_`). Each role has a private GitHub App owned by `locksmith-hq`, installed only on this repo, with webhooks off. Avatars are in `docs/agents/avatars/`.
 
 | Routine | App (old slug, until renamed) | Access |
 |---|---|---|
@@ -131,17 +132,16 @@ Agents are named by role (Worker A, B, C, Worker (events), PM, Lead). Each role 
 | Worker A | `locksmith-alfie` | code, PRs, issues (write) |
 | Worker B | `locksmith-josie` | code, PRs, issues (write) |
 | Worker C | `locksmith-harriet` | code, PRs, issues (write) |
-| Worker (events) | `locksmith-alfie` | code, PRs, issues (write) |
 | PM | `locksmith-walt` | PRs, issues (write); code (read) |
 
 **Key per environment (owner, 2026-11-20).** The 2026-11-18 pause had one cause: a network secret is a fixed header, but the token request needs a JWT signed with the App's private key, and GitHub caps that JWT at 10 minutes. Like Renovate's self-hosted setup, each run now signs a fresh JWT from the App key and swaps it for a one-hour installation token. An environment without the key still runs as the owner (`agent-start.sh` warns) until every key is set.
 
-How a run takes its app identity: one cloud environment per role, each holding only that role's App key (owner 2026-11-20): `locksmith-dev` for Workers A, B, C and Worker (events) (keys `AGENT_APP_KEY_ALFIE`, `_JOSIE`, `_HARRIET`; no `AGENT_PERSONA`: each worker prompt passes its persona to `agent-start.sh`, owner 2026-11-20), `locksmith-lead` for the lead (`linus`), `locksmith-walt` for the PM (`walt`), and a dedicated open-internet environment for Research. A run can read every key in its environment, so different roles never share one (the workers are one role): otherwise a worker could post as the lead and the login-based routing in `route.sh` would mean nothing. The lead and PM environments set `AGENT_PERSONA=<persona>` and `AGENT_APP_KEY_<PERSONA>`. A run in an environment with App keys but none for its persona fails (`FAIL identity`) instead of acting as the owner. `scripts/agent-start.sh` calls `scripts/agent-identity.sh setup` at the start of every run. That script mints a one-hour installation token (signed with `AGENT_APP_KEY_<PERSONA>`, or locally the Keychain key), sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If no token comes back or it is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
+How a run takes its app identity: one cloud environment per role, each holding only that role's App key (owner 2026-11-20): `locksmith-dev` for Workers A, B and C (keys `AGENT_APP_KEY_ALFIE`, `_JOSIE`, `_HARRIET`; no `AGENT_PERSONA`: each worker prompt passes its persona to `agent-start.sh`, owner 2026-11-20), `locksmith-lead` for the lead (`linus`), `locksmith-walt` for the PM (`walt`), and a dedicated open-internet environment for Research. A run can read every key in its environment, so different roles never share one (the workers are one role): otherwise a worker could post as the lead and the login-based routing in `route.sh` would mean nothing. The lead and PM environments set `AGENT_PERSONA=<persona>` and `AGENT_APP_KEY_<PERSONA>`. A run in an environment with App keys but none for its persona fails (`FAIL identity`) instead of acting as the owner. `scripts/agent-start.sh` calls `scripts/agent-identity.sh setup` at the start of every run. That script mints a one-hour installation token (signed with `AGENT_APP_KEY_<PERSONA>`, or locally the Keychain key), sets the git author, points pushes at github.com with that token, and puts a `gh` shim on PATH. If no token comes back or it is not accepted, it prints `FAIL identity` and exits 1, and the run stops without doing work: it never falls back to the owner account.
 
 Owner setup:
 1. In each routine's environment, set `AGENT_APP_KEY_<PERSONA>` to the base64 of that App's private key (`base64 -i key.pem`), only that routine's key, and delete the old network secret on `api.github.com/app/installations/`. A new App without a row in `agent-identity.sh` also sets `AGENT_APP_IDS="<app_id> <installation_id> <bot_user_id>"`.
 2. Run each routine in its own environment.
-3. Add the `locksmith-*[bot]` logins to the author filter of the GitHub triggers (`Worker (events)` and `Lead`), next to `tomer555`.
+3. Add the `locksmith-*[bot]` logins to the author filter of the lead's GitHub trigger, next to `tomer555`.
 
 **Identity test (before any real routine switches).** A test App and environment prove the identity without touching the schedules:
 1. Create the App `locksmith-test` (Contents, Issues, Pull requests: write; Metadata: read; webhooks off) and install it on this repo only.

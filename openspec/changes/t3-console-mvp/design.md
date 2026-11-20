@@ -16,9 +16,9 @@
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| @tanstack/react-query | MIT | 5.108.1 (pinned) | 2026-11-19, maintained | Server-state cache, retry, invalidation | permissive, fine |
-| react-router | MIT | 8.5.2 (pinned) | 2026-11-18, maintained | Routing | permissive, fine |
-| msw (if used for fixtures) | MIT | not added: fixtures are an in-memory fetch stub (`apps/web/src/api/fixtures.ts`) | n/a | API mocks in tests | permissive, fine |
+| @tanstack/react-query | MIT | 5.x (pin on add) | 2026, maintained | Server-state cache, retry, invalidation | permissive, fine |
+| react-router | MIT | 7.x (pin on add) | 2026, maintained | Routing | permissive, fine |
+| msw (if used for fixtures) | MIT | 2.x (pin on add) | 2026, maintained | API mocks in tests | permissive, fine |
 | @playwright/test | Apache-2.0 | match installed Playwright | 2026 | e2e | permissive, fine |
 Versions and dates are re-checked when added (task 1.1) and recorded here.
 
@@ -33,5 +33,4 @@ Page components and the shared kit, because the mockup defines the look; searche
 
 ## Open questions
 - Does the owner want the mockup's sidebar layout unchanged for the live console? Assumed yes (mockup is the approved direction under T1-1); a `Gate:` task near the end (6.4) confirms before the e2e snapshot baseline is locked.
-- Resolved 2026-11-20 ([#510](https://github.com/locksmith-hq/locksmith/issues/510), decision T3-1): owner chose option B, the mockup frame on the live pages (grouped sidebar, org switcher, user card, `packages/ui` kit). Tasks 6.4.1–6.4.3 add it before the baselines are locked in 6.5.
 - API gaps (for example org-wide activity filters) are logged, not patched here.

@@ -54,3 +54,8 @@
 - Task: 6.4 - blocked (owner gate raised)
 - Verified: `just up`, `just api`, `just web-e2e` -> 1 passed; live screenshots taken for the owner brief
 - Notes for next session: rescue #509 closed in favour of needs-owner #510 (layout options A/B/C; lead recommends B: the mockup frame on the live pages, which needs a styling task group before 6.5). On approval the lead records it in decisions.md and adjusts tasks on claude/planning-t3-console-mvp-tasks. Until then 6.5+ stay parked.
+
+## 2026-11-20 worker
+- Task: 6.4 gate ticked (owner approved option B on #510); 6.4.1 code done but NOT ticked
+- Verified: `npm test` in apps/web -> 38 passed, tsc clean; guard OK; evaluator PASS (sonnet)
+- Notes for next session: sidebar grouped (Home; Secret Management: Projects/Environments/Secrets; Agent Gateway: Agents/Grants; Activity) with user card at the bottom; Environments is a placeholder route pointing to Projects; org switcher is a static label in the sidebar (no workspace API yet). Task lines 6.4.1-6.4.3 exist only on planning PR #524 (not merged: merge-gate rejects agent-app-authored PRs "not opened by the owner"), so tasks.md here is main's version and the task-guard fails if they are merged in. Once #524 is on main, merge main, tick 6.4.1, then do 6.4.2 (style pages with packages/ui kit) and 6.4.3 (e2e + screenshots). Also note: `just ci` was not run to green here because of that guard; the other recipes passed before task-guard.

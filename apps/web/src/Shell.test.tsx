@@ -43,6 +43,7 @@ test("signed in: opens on Overview, sidebar links route to each page", async () 
   render(<App auth={fakeAuth(signedIn)} />);
   expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
   expect(screen.getByTestId("signed-in-as")).toHaveTextContent("ada@example.com");
+  for (const h of ["Secret Management", "Agent Gateway"]) expect(screen.getByText(h)).toBeInTheDocument();
   for (const name of ["Projects", "Secrets", "Grants"]) {
     await userEvent.click(screen.getByRole("link", { name }));
     expect(await screen.findByRole("heading", { name })).toBeInTheDocument();

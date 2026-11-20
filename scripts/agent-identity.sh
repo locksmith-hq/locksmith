@@ -50,7 +50,8 @@ token() {
   grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
   auth=(-H "Authorization: Bearer $(jwt "$app" "$pem")")
   rm -f "$pem"
-  resp=$(curl -sS -w '\n%{http_code}' -X POST ${auth[@]+"${auth[@]}"} -H "Accept: application/vnd.github+json" \
+  # --noproxy: the cloud session proxy (HTTPS_PROXY) refuses App API paths with 403; GitHub itself is reachable directly.
+  resp=$(curl -sS --noproxy '*' -w '\n%{http_code}' -X POST ${auth[@]+"${auth[@]}"} -H "Accept: application/vnd.github+json" \
     "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null) || { why "cannot reach api.github.com (curl exit $?)"; return 1; }
   code=${resp##*$'\n'}
   t=$(jq -r '.token // empty' <<<"${resp%$'\n'*}" 2>/dev/null)
@@ -63,6 +64,7 @@ fail() { # <reason>: undo everything and fail: a run must never act as the owner
   if [ -f "$state/git" ]; then # only undo git settings this script made
     git config --local --unset-all credential.https://github.com.helper 2>/dev/null
     git config --local --unset remote.origin.pushurl 2>/dev/null
+    git config --local --unset http.https://github.com/.proxy 2>/dev/null
     git config --local --unset user.name 2>/dev/null; git config --local --unset user.email 2>/dev/null
   fi
   [ -f "$state/shim" ] && rm -f "$(cat "$state/shim")"
@@ -98,13 +100,14 @@ setup() {
   git config --local credential.https://github.com.helper ""
   git config --local --add credential.https://github.com.helper "!bash $self credential"
   git config --local remote.origin.pushurl "https://github.com/$repo.git"
+  git config --local http.https://github.com/.proxy ""  # straight to GitHub with the app token, not the session proxy
   GIT_TERMINAL_PROMPT=0 git ls-remote --heads "https://github.com/$repo.git" main >/dev/null 2>&1 ||
     fail "git cannot reach github.com with the app token"
   echo "OK identity: locksmith-${persona}[bot]"
 }
 shim_text() { # <real gh> <checkout root>
   # shellcheck disable=SC2016  # the shim expands these at run time
-  printf '#!/usr/bin/env bash\ncase "$(pwd -P)/" in %q/*) t=$(AGENT_ID_DIR=%q bash %q token 2>/dev/null) && export GH_TOKEN="$t" ;; esac\nexec %q "$@"\n' \
+  printf '#!/usr/bin/env bash\ncase "$(pwd -P)/" in %q/*) t=$(AGENT_ID_DIR=%q bash %q token 2>/dev/null) && export GH_TOKEN="$t" NO_PROXY="${NO_PROXY:+$NO_PROXY,}api.github.com,github.com" no_proxy="${no_proxy:+$no_proxy,}api.github.com,github.com" ;; esac\nexec %q "$@"\n' \
     "$2" "$state" "$self" "$1"
 }
 selftest() {

@@ -27,7 +27,7 @@
 - Verified: grep shows design.md, decisions.md M1-1 and the note agree; docs only.
 - Notes for next session: 1.2 (rmcp spike) and 1.4 (migration and OpenAPI) are next.
 
-## 2026-11-20 worker C
+## 2026-11-20 worker
 - Task: m1-remote-mcp 1.2 - done (rmcp spike: licence Apache-2.0, pin `=3.11.0`, released 2026-11-17; builds and mounts in axum 0.8 via `nest_service`; findings in design.md "OSS used")
 - Verified: scratch crate `cargo build` -> Finished (not committed); crates.io API for licence and date; no repo code changed
 - Notes for next session: 1.4 (migration and OpenAPI) next. Host allowlist must be set for public hostnames in 2.1/3.1. Spike did not send a live MCP request.
@@ -53,7 +53,7 @@
 - Verified: `cargo nextest run -p ls-control-plane mcp` -> 21 passed; `just ci` -> exit 0; Sonnet evaluator PASS
 - Notes for next session: 2.2 is still unticked (explain_block is a typed not-available; lead to accept the deferral or add a handler). Next 2.4 (mutating tools) and 2.5 (audit). Revoked-client refusal is 4.2; `HumanIdentity` now carries `client_id`.
 
-## 2026-11-20 worker C
+## 2026-11-20 worker
 - Task: m1-remote-mcp 2.4 - done (hub `revoke_grant` calls the console's delete-grant handler as the person, org-scoped, audited by that handler; `pause_agents` returns a typed `not_available` error until T8 lands; both stay off by default)
 - Verified: `cargo nextest run -p ls-control-plane mcp` -> 22 passed; `just ci` -> exit 0; Sonnet evaluator PASS
 - Notes for next session: 2.2 still unticked (explain_block deferral); next 2.5 (audit event per call, which should also replace the DEV_AUTH_ACTOR attribution on MCP revoke), then 2.6.

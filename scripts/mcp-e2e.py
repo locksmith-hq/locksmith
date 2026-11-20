@@ -11,7 +11,9 @@ describes and lists the tools. Needs `just up` and the control plane started wit
   4. the access token carries the MCP audience (not the console audience) and `auth_time`;
   5. a refresh keeps `auth_time` (the revoke rule of design.md "Client binding for revoke" needs it);
   6. `initialize` + `tools/list` over Streamable HTTP with the token succeed and the list is not empty;
-  7. a token minted for the console client is refused on `/mcp` (no passthrough).
+  7. a token minted for the console client is refused on `/mcp` (no passthrough);
+  8. (task 4.2) the person revokes the client in the console: the old token and a fresh `initialize`
+     are refused with 401, and a new sign-in is accepted again.
 
 No token or password is printed. Env overrides: KEYCLOAK_URL, API_URL.
 """
@@ -24,6 +26,7 @@ import os
 import re
 import secrets
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -134,6 +137,18 @@ def refresh(rt):
         return None
 
 
+def console(token, method, path):
+    """Console API call as the person; returns (status, parsed body or {})."""
+    req = urllib.request.Request(API + path, method=method, data=b"" if method == "POST" else None,
+                                 headers={"Authorization": f"Bearer {token}"})
+    try:
+        r = urllib.request.urlopen(req, timeout=30)
+        raw = r.read()
+        return r.status, (json.loads(raw) if raw else {})
+    except urllib.error.HTTPError as e:
+        return e.code, {}
+
+
 def main():
     if not base.wait_ready():
         sys.exit("mcp-e2e: Keycloak not reachable; run `just up`")
@@ -196,6 +211,26 @@ def main():
         check("a token minted for the console client is refused on /mcp", st == 401, str(st))
     else:
         check("could not get a console token for the passthrough check", False)
+
+    # 8. revoke the client from the console (hub layer), then the next call and a fresh initialize are 401.
+    if web:
+        rows = console(web, "GET", "/v1/mcp/clients")[1].get("items", [])
+        mine = [r for r in rows if r.get("layer") == "hub" and r.get("client_id") == CLIENT]
+        check("the console lists the signed-in MCP client", bool(mine), str(len(rows)))
+        if mine:
+            st, _ = console(web, "POST", f"/v1/mcp/clients/{mine[0]['id']}/revoke")
+            check("revoking the client answers 200", st == 200, str(st))
+            st, _, _ = mcp(tok, {"jsonrpc": "2.0", "id": 3, "method": "tools/list"}, sid)
+            check("the revoked client's next call is 401", st == 401, str(st))
+            st, _, _ = mcp(tok, init)
+            check("a fresh initialize after revoke is 401", st == 401, str(st))
+            time.sleep(2)  # auth_time has 1 s resolution; a sign-in in the revoke's own second counts as older
+            tok3, _, shown = sign_in()
+            st3 = mcp(tok3, init)[0] if tok3 else None
+            check("a new sign-in after revoke is accepted again", bool(tok3) and st3 == 200,
+                  f"token={bool(tok3)} consent_shown={shown} initialize={st3}")
+            # Leave the realm clean (consent deleted at the issuer) so the next run shows consent again.
+            console(web, "POST", f"/v1/mcp/clients/{mine[0]['id']}/revoke")
 
     if base.failures:
         print(f"mcp-e2e: {len(base.failures)} check(s) failed", file=sys.stderr)

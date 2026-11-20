@@ -1066,6 +1066,29 @@ fn now_secs() -> u64 {
 }
 
 #[tokio::test]
+async fn mcp_revoking_again_after_a_new_sign_in_cuts_that_sign_in_off() {
+    let f = start().await;
+    let token = |at: u64| f.key.token_at("alice", true, Some("client-again"), Some(at));
+    let mut first = Person::raw(&f, token(now_secs() - 60));
+    assert_eq!(first.init_status_keep().await, StatusCode::OK);
+    let org = personal_org(&f, "alice").await;
+    let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    let row_id = rows["items"][0]["id"].as_str().unwrap().to_owned();
+    let path = format!("/v1/mcp/clients/{row_id}/revoke");
+    rest(&f, "POST", &path, org, json!({})).await;
+    // A sign-in after the first revoke is let through.
+    let signed_in_again = now_secs() + 1;
+    tokio::time::sleep(std::time::Duration::from_millis(2200)).await;
+    assert_eq!(Person::raw(&f, token(signed_in_again)).init_status().await, StatusCode::OK);
+    // Revoking again moves the cut-off forward: that sign-in is now refused too.
+    rest(&f, "POST", &path, org, json!({})).await;
+    assert_eq!(
+        Person::raw(&f, token(signed_in_again)).init_status().await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
 async fn mcp_a_revoked_client_is_refused_on_the_next_call_and_on_a_fresh_initialize() {
     let f = start().await;
     let signed_in = now_secs() - 60;

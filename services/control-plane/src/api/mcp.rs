@@ -324,7 +324,7 @@ pub async fn revoke_client(
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
                 let row = sql::query(sqlx_core::sql_str::AssertSqlSafe(format!(
-                    "UPDATE mcp_clients SET revoked_at = COALESCE(revoked_at, now()) \
+                    "UPDATE mcp_clients SET revoked_at = now() \
                      WHERE id = $1 RETURNING {CLIENT_COLS}"
                 )))
                 .bind(row_id)

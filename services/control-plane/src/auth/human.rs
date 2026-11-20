@@ -42,6 +42,9 @@ pub struct HumanIdentity {
     pub subject: String,
     pub email: Option<String>,
     pub email_verified: bool,
+    /// The OAuth client the token was issued to (`client_id`, else `azp`), when the issuer sets
+    /// one. Used by the MCP route to bind a call to an `mcp_clients` row.
+    pub client_id: Option<String>,
 }
 
 /// A refused token. Deliberately opaque: the only content is a static label for traces.
@@ -54,6 +57,8 @@ struct Claims {
     sub: String,
     email: Option<String>,
     email_verified: Option<bool>,
+    client_id: Option<String>,
+    azp: Option<String>,
 }
 
 /// Verifier for one issuer.
@@ -132,6 +137,11 @@ impl HumanAuth {
             subject: c.sub,
             email: c.email,
             email_verified: c.email_verified.unwrap_or(false),
+            client_id: c
+                .client_id
+                .or(c.azp)
+                .map(|id| id.trim().to_owned())
+                .filter(|id| !id.is_empty()),
         })
     }
 }

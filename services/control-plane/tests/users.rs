@@ -19,6 +19,7 @@ fn identity(subject: &str, email: Option<&str>, verified: bool) -> HumanIdentity
         subject: subject.to_owned(),
         email: email.map(str::to_owned),
         email_verified: verified,
+        client_id: None,
     }
 }
 

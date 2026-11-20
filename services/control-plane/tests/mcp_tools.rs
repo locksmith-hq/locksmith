@@ -86,15 +86,23 @@ impl TestKey {
 
     /// A token for the person `sub` (verified email unless `verified` is false).
     fn token(&self, sub: &str, verified: bool) -> String {
+        self.token_for(sub, verified, None)
+    }
+
+    /// As [`Self::token`], issued to the OAuth client `client` (the `azp` claim).
+    fn token_for(&self, sub: &str, verified: bool, client: Option<&str>) -> String {
         let exp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
             + 600;
-        let claims = json!({
+        let mut claims = json!({
             "iss": ISSUER, "aud": RESOURCE, "sub": sub, "exp": exp,
             "email": format!("{sub}@example.com"), "email_verified": verified,
         });
+        if let Some(c) = client {
+            claims["azp"] = json!(c);
+        }
         let mut header = JwtHeader::new(Algorithm::ES256);
         header.kid = Some("k1".to_owned());
         let der = self.0.to_pkcs8_der().unwrap();
@@ -166,9 +174,14 @@ struct Person {
 
 impl Person {
     async fn connect(f: &Fixture, sub: &str) -> Self {
+        Self::connect_as(f, sub, None).await
+    }
+
+    /// Initialize as the OAuth client `client` (token `azp`), when given.
+    async fn connect_as(f: &Fixture, sub: &str, client: Option<&str>) -> Self {
         let mut p = Self {
             app: f.app.clone(),
-            token: f.key.token(sub, true),
+            token: f.key.token_for(sub, true, client),
             session: None,
             next_id: 1,
             transcript: Vec::new(),
@@ -710,4 +723,97 @@ async fn mcp_unverified_email_is_refused_like_the_console() {
         .unwrap();
     c.close().await.unwrap();
     assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn mcp_an_off_tool_is_hidden_and_refused_and_switches_are_per_org() {
+    let (f, mut alice, mut bob, _a, _b) = two_people().await;
+    let org_a = personal_org(&f, "alice").await;
+    let put = |org, tool: &'static str, enabled: bool| {
+        let f = &f;
+        async move {
+            rest(
+                f,
+                "PUT",
+                &format!("/v1/mcp/tools/hub/{tool}"),
+                org,
+                json!({ "enabled": enabled }),
+            )
+            .await
+        }
+    };
+    put(org_a, "list_projects", false).await;
+    let names: Vec<String> = alice
+        .list_tools()
+        .await
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(!names.iter().any(|n| n == "list_projects"), "{names:?}");
+    let r = alice
+        .rpc(
+            "tools/call",
+            json!({"name": "list_projects", "arguments": {}}),
+        )
+        .await;
+    assert!(r["error"].is_object(), "off tool must be refused: {r}");
+    // Another org keeps the default.
+    let (err, _) = bob.call("list_projects", json!({})).await;
+    assert!(!err);
+    assert!(
+        bob.list_tools()
+            .await
+            .iter()
+            .any(|t| t["name"] == "list_projects")
+    );
+    // Turning it back on lists and runs it again.
+    put(org_a, "list_projects", true).await;
+    let (err, _) = alice.call("list_projects", json!({})).await;
+    assert!(!err);
+    // An off-by-default tool the org turns on is listed.
+    put(org_a, "revoke_grant", true).await;
+    assert!(
+        alice
+            .list_tools()
+            .await
+            .iter()
+            .any(|t| t["name"] == "revoke_grant")
+    );
+}
+
+#[tokio::test]
+async fn mcp_initialize_records_the_client_and_never_unrevokes_it() {
+    let f = start().await;
+    let _first = Person::connect_as(&f, "alice", Some("client-abc")).await;
+    let org = personal_org(&f, "alice").await;
+    let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    let items = rows["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{rows}");
+    assert_eq!(items[0]["client_id"], "client-abc");
+    assert_eq!(items[0]["client_name"], "test");
+    assert_eq!(items[0]["layer"], "hub");
+    assert!(items[0]["revoked_at"].is_null());
+    // A second initialize (a new session) is the same row.
+    let _second = Person::connect_as(&f, "alice", Some("client-abc")).await;
+    let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    assert_eq!(rows["items"].as_array().unwrap().len(), 1, "{rows}");
+    // After a revoke, initializing again keeps the first revoke time.
+    let row_id = rows["items"][0]["id"].as_str().unwrap().to_owned();
+    let revoked = rest(
+        &f,
+        "POST",
+        &format!("/v1/mcp/clients/{row_id}/revoke"),
+        org,
+        json!({}),
+    )
+    .await;
+    let _third = Person::connect_as(&f, "alice", Some("client-abc")).await;
+    let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    assert_eq!(rows["items"].as_array().unwrap().len(), 1, "{rows}");
+    assert_eq!(rows["items"][0]["revoked_at"], revoked["revoked_at"]);
+    // A different client is a different row; a token without a client id records none.
+    let _other = Person::connect_as(&f, "alice", Some("client-xyz")).await;
+    let _none = Person::connect(&f, "alice").await;
+    let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    assert_eq!(rows["items"].as_array().unwrap().len(), 2, "{rows}");
 }

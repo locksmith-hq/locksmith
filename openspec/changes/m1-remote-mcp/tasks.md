@@ -10,7 +10,7 @@
 ## 2. Hub MCP [sonnet]
 - [x] 2.1 `/mcp` route on the control plane with OIDC token auth, `401` with `WWW-Authenticate` and protected-resource metadata; tests for missing, expired and wrong-audience tokens.
 - [ ] 2.2 Read tools: list projects, list secret names and versions, read activity, list agents and grants, explain a block; each calls the existing service code as the person.
-- [ ] 2.3 Switch enforcement on list and call, and `mcp_clients` upsert on initialize; tests for off-tool hidden and refused.
+- [x] 2.3 Switch enforcement on list and call, and `mcp_clients` upsert on initialize; tests for off-tool hidden and refused.
 - [ ] 2.4 Off-by-default mutating tools: revoke a grant and pause agents (calls the T8 endpoint if present, otherwise returns a typed not-available error).
 - [ ] 2.5 Audit event per call (layer, tool, principal, outcome; no arguments with values); test a denied call is recorded.
 - [ ] 2.6 Verify: `cargo nextest run -p ls-control-plane mcp`.

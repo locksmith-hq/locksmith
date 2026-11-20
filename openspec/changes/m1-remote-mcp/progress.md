@@ -47,3 +47,8 @@
 - Task: m1-remote-mcp 2.2 - code done, NOT ticked: five hub read tools (list_projects, list_secret_names, list_agents, list_grants, read_activity) call the existing REST handlers as the person; `explain_block` returns a typed `not_available` (501) because the hub has no block-explanation service code. Sonnet evaluator PASS with that caveat.
 - Verified: `just ci` -> exit 0; `cargo nextest run -p ls-control-plane mcp` -> 19 passed; `cargo nextest run -p ls-mcp-server` -> 13 passed
 - Notes for next session: tick 2.2 once `explain_block` has a real hub handler (or the lead accepts the deferral). Then 2.3 (switch enforcement, mcp_clients upsert), 2.4, 2.5.
+
+## 2026-11-20 worker A
+- Task: m1-remote-mcp 2.3 - done (hub `/mcp` reads the org's `mcp_tool_settings` on every list and call; an off tool is hidden and refused like an unknown one; `initialize` upserts `mcp_clients` keyed by token `client_id`/`azp` and person, never clearing `revoked_at`; tokens with no client id record no row)
+- Verified: `cargo nextest run -p ls-control-plane mcp` -> 21 passed; `just ci` -> exit 0; Sonnet evaluator PASS
+- Notes for next session: 2.2 is still unticked (explain_block is a typed not-available; lead to accept the deferral or add a handler). Next 2.4 (mutating tools) and 2.5 (audit). Revoked-client refusal is 4.2; `HumanIdentity` now carries `client_id`.

@@ -15,9 +15,8 @@
 //!
 //! The verified person is passed to handlers as an [`McpPrincipal`] request extension (read from
 //! `RequestContext.extensions` as `http::request::Parts`). Tools live in `mcp_tools` (task 2.2);
-//! switches (2.3) and audit (2.5) are later tasks. No token text is logged or echoed.
+//! the per-org switches and the client upsert on `initialize` are task 2.3; audit (2.5) is later. No token text is logged or echoed.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Json;
@@ -30,8 +29,9 @@ use axum::routing::{any, get};
 use ls_mcp_server::{Layer, Registry, ToolDef, hub_tools};
 use rmcp::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, JsonObject, ListToolsResult, PaginatedRequestParams,
-    ServerCapabilities, ServerConfig, Tool, ToolAnnotations,
+    CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult, JsonObject,
+    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
+    ToolAnnotations,
 };
 use rmcp::service::RequestContext;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
@@ -163,8 +163,7 @@ impl McpEndpoint {
     }
 }
 
-/// The hub MCP server: the registry's hub tools (defaults only until the per-org switch of task
-/// 2.3), each run as the person behind the request token ([`crate::mcp_tools`]).
+/// The hub MCP server: the registry's hub tools (with the org's switches), each run as the person behind the request token ([`crate::mcp_tools`]).
 #[derive(Clone)]
 struct HubMcp {
     state: AppState,
@@ -193,6 +192,11 @@ impl HubMcp {
     }
 }
 
+/// A failed lookup before a tool runs, without detail.
+fn internal(_: ApiError) -> McpError {
+    McpError::internal_error("the request could not be completed", None)
+}
+
 fn to_tool(def: &ToolDef) -> Tool {
     let object = |v: &serde_json::Value| -> Arc<JsonObject> {
         Arc::new(v.as_object().cloned().unwrap_or_default())
@@ -211,15 +215,31 @@ impl ServerHandler for HubMcp {
         )
     }
 
+    async fn initialize(
+        &self,
+        request: InitializeRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<InitializeResult, McpError> {
+        let principal = Self::principal(&context)?;
+        mcp_tools::record_client(&self.state, &principal, &request.client_info.name)
+            .await
+            .map_err(internal)?;
+        context.peer.set_peer_info(request.clone());
+        self.negotiate_initialize(&request)
+    }
+
     async fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        Self::principal(&context)?;
+        let principal = Self::principal(&context)?;
+        let overrides = mcp_tools::tool_overrides(&self.state, &principal)
+            .await
+            .map_err(internal)?;
         let tools = self
             .registry
-            .list(&HashMap::new())
+            .list(&overrides)
             .into_iter()
             .map(to_tool)
             .collect();
@@ -235,9 +255,15 @@ impl ServerHandler for HubMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let principal = Self::principal(&context)?;
+        let overrides = match mcp_tools::tool_overrides(&self.state, &principal).await {
+            Ok(o) => o,
+            // The same typed refusal the REST API gives (an unverified email, say).
+            Err(e) => return Ok(mcp_tools::result(Err(e)).into()),
+        };
+        // An off tool is refused exactly like an unknown one.
         let def = self
             .registry
-            .authorize(&request.name, &HashMap::new())
+            .authorize(&request.name, &overrides)
             .map_err(|_| McpError::invalid_params("unknown tool", None))?;
         // Tools that change state are built by task 2.4; until then they have no handler.
         let result = mcp_tools::call(&self.state, &principal, def.name, request.arguments).await?;

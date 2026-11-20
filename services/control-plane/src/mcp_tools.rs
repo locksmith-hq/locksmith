@@ -7,8 +7,10 @@
 //! console. The tools only reshape the handlers' metadata responses; none of them touches a
 //! secret value, and no tool argument is echoed back.
 //!
-//! Out of scope here: the per-org tool switch (task 2.3, so only the registry's defaults apply)
-//! and the audit event per call (task 2.5).
+//! The per-org tool switch (task 2.3) is read by [`tool_overrides`] and the signed-in client is
+//! recorded by [`record_client`]. Out of scope here: the audit event per call (task 2.5).
+
+use std::collections::HashMap;
 
 use axum::Json;
 use axum::extract::State;
@@ -27,6 +29,7 @@ use crate::api::extract::{ApiPath, ApiQuery};
 use crate::api::{PageParams, environments, projects, secrets, versions};
 use crate::app::AppState;
 use crate::auth::OrgBinding;
+use crate::db::sql::{self, Row};
 use crate::mcp_endpoint::McpPrincipal;
 use crate::problem::{ApiError, Kind};
 use crate::users;
@@ -291,4 +294,69 @@ async fn list_grants(
         })
         .collect();
     Ok(page(items, p.next))
+}
+
+/// The org's hub tool switches (`mcp_tool_settings`): only the overrides of a tool's default.
+pub async fn tool_overrides(
+    state: &AppState,
+    principal: &McpPrincipal,
+) -> Result<HashMap<String, bool>, ApiError> {
+    let org = org_of(state, principal).await?;
+    let rows = state
+        .db()
+        .with_org(org.org_id, move |c| {
+            Box::pin(async move {
+                let rows =
+                    sql::query("SELECT tool, enabled FROM mcp_tool_settings WHERE layer = 'hub'")
+                        .fetch_all(c)
+                        .await?;
+                rows.iter()
+                    .map(|r| {
+                        Ok((
+                            r.try_get::<String, _>("tool")?,
+                            r.try_get::<bool, _>("enabled")?,
+                        ))
+                    })
+                    .collect::<sql::Result<HashMap<_, _>>>()
+            })
+        })
+        .await?;
+    Ok(rows)
+}
+
+/// Record the client on `initialize`: insert on first sight, refresh the name and last-seen time
+/// afterwards. A revoked row stays revoked (`revoked_at` is never touched here). Keyed by the
+/// token's OAuth client id and the person, never by a session id; a token with no client id
+/// records nothing. The name is informational and length-capped; no token text is stored.
+pub async fn record_client(
+    state: &AppState,
+    principal: &McpPrincipal,
+    client_name: &str,
+) -> Result<(), ApiError> {
+    let Some(client_id) = principal.0.client_id.clone() else {
+        return Ok(());
+    };
+    let org = org_of(state, principal).await?;
+    let who = format!("{}|{}", principal.0.issuer, principal.0.subject);
+    let name: String = client_name.chars().take(200).collect();
+    state
+        .db()
+        .with_org(org.org_id, move |c| {
+            Box::pin(async move {
+                sql::query(
+                    "INSERT INTO mcp_clients (org_id, layer, client_id, principal, client_name) \
+                     VALUES ($1, 'hub', $2, $3, $4) \
+                     ON CONFLICT (org_id, layer, client_id, principal) \
+                     DO UPDATE SET client_name = EXCLUDED.client_name, last_seen_at = now()",
+                )
+                .bind(org.org_id)
+                .bind(client_id)
+                .bind(who)
+                .bind(name)
+                .execute(c)
+                .await?;
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await
 }

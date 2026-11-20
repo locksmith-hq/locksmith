@@ -160,6 +160,11 @@ fn build(root: &Path) -> Result<Plan, Fail> {
 
     // 5. agent hooks and the MCP server. Codex keeps both in one file, so its text is chained.
     for a in agents::detect(root) {
+        // Task 2.2 (hook handling) has not landed for the newer agents: wiring their hooks now
+        // would install a hook that exits 2 on every call. Skip until `smith hook` knows them.
+        if !agents::hook_handler_ready(a) {
+            continue;
+        }
         let f = agents::config_path(a, root);
         let before = read(&f);
         let mut after = agents::merge_hooks(a, before.as_deref())

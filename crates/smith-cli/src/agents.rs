@@ -137,6 +137,11 @@ pub fn binary_on_path(a: Agent) -> bool {
 }
 
 /// Agents the repo shows signs of using.
+/// True once `smith hook <agent>` can parse the agent's payload (p3 task 2.2). Remove with 2.2.
+pub fn hook_handler_ready(a: Agent) -> bool {
+    matches!(a, Agent::ClaudeCode | Agent::Cursor | Agent::Codex)
+}
+
 pub fn detect(repo: &Path) -> Vec<Agent> {
     ALL.into_iter()
         .filter(|a| match a {

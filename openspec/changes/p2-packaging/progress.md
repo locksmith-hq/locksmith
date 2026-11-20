@@ -18,3 +18,9 @@
 - Task: none started. The review ran on 0d3e6b7 and failed at the completeness check (unchecked tasks in tasks.md, groups 3-8), so there is no verdict. Auto-merge is off again (a disable/enable retry fails the same way).
 - Note: the PR comment calling #534 "planning-only" is stale; it carries groups 1-2 code. Only claude/planning-* branches are exempt from the check.
 - Next session: section 3 (compose self-host), and re-enable auto-merge only when every task is ticked.
+
+## 2026-11-20 worker (section 3)
+- Task: p2-packaging 3.1-3.7 - implemented (compose self-host, bootstrap.sh, selfhost-smoke, bootstrap test); evaluator PASS
+- Deviation: task 3.1 and design decision 6 say OpenBao "file storage", but OpenBao 2.7.2 has no `file` backend ("unknown storage type file"). The bundle uses single-node integrated raft storage on the `openbao-data` volume (mounted at /openbao/file). tasks.md and design.md text left as written; lead or owner can reconcile the wording, and the task 1.1 research note should list the finding.
+- Verified: selfhost-bootstrap.test.sh, selfhost-smoke.sh (passed 4 times in the sandbox), shellcheck clean. Not verified: --external-keys against a real OpenBao, the tls (Caddy) and demo-oidc profiles beyond `docker compose config`, offline start.
+- Notes for next session: section 4 (Helm chart; helm binary is unavailable here, get.helm.sh is 403). PR #534 still has unticked tasks, keep auto-merge off until all are ticked.

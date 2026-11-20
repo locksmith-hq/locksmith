@@ -1,6 +1,6 @@
 #!/bin/sh
 # OpenBao production-mode entrypoint for the self-host bundle. Idempotent on every start:
-#   1. start the server (file storage) as the openbao user;
+#   1. start the server (integrated raft storage) as the openbao user;
 #   2. initialise once (1 key share), writing the unseal key and root token to the openbao-keys
 #      volume, mode 0600 in a 0700 directory (this volume is mounted by this service only);
 #   3. unseal from that file;

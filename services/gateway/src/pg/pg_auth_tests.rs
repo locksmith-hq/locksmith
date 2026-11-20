@@ -18,7 +18,7 @@ use tokio_rustls::TlsConnector;
 use uuid::Uuid;
 
 use super::*;
-use crate::audit::MemoryAudit;
+use crate::audit::{MemoryAudit, RelayEvent};
 use crate::auth::testkit::StubJwks;
 use crate::auth::{AgentAuth, JwksSettings};
 use crate::config::{Bindings, PgTls};
@@ -77,6 +77,8 @@ struct RecordingUpstream {
     password_matched: Mutex<Option<bool>>,
     params: Mutex<Option<BTreeMap<String, String>>>,
     addrs: Mutex<Vec<std::net::SocketAddr>>,
+    /// Keep the session open (counting bytes) until the client leaves or the listener drops it.
+    hold: bool,
 }
 
 impl PgUpstream for RecordingUpstream {
@@ -88,6 +90,13 @@ impl PgUpstream for RecordingUpstream {
             *self.addrs.lock().unwrap() = session.addrs.clone();
             let _ = write_message(&mut client, &Authentication::Ok).await;
             let _ = client.flush().await;
+            if self.hold {
+                session.stats.add_in(7);
+                session.stats.add_out(11);
+                let mut buf = [0u8; 64];
+                while matches!(client.read(&mut buf).await, Ok(n) if n > 0) {}
+                session.stats.ended_by_client();
+            }
             let _ = client.shutdown().await;
         })
     }
@@ -111,6 +120,23 @@ impl Harness {
     }
 
     async fn start_with(tweak: impl FnOnce(&mut StubGrants), handshake: Duration) -> Self {
+        Self::start_full(
+            tweak,
+            handshake,
+            Duration::from_secs(10),
+            MemoryAudit::default(),
+            false,
+        )
+        .await
+    }
+
+    async fn start_full(
+        tweak: impl FnOnce(&mut StubGrants),
+        handshake: Duration,
+        watch_interval: Duration,
+        audit: MemoryAudit,
+        hold: bool,
+    ) -> Self {
         let sealed = seal(ORG, APP, 1, PASSWORD);
         let dek = sealed.dek;
         let material = Arc::new(FakeMaterial {
@@ -163,7 +189,7 @@ impl Harness {
             ],
             git_bindings: Vec::new(),
         };
-        let audit = Arc::new(MemoryAudit::default());
+        let audit = Arc::new(audit);
         let relay = Arc::new(Relay::new(
             auth,
             grants.clone(),
@@ -193,13 +219,17 @@ impl Harness {
         .with_no_client_auth();
         client.alpn_protocols = vec![b"postgresql".to_vec()];
 
-        let upstream = Arc::new(RecordingUpstream::default());
+        let upstream = Arc::new(RecordingUpstream {
+            hold,
+            ..RecordingUpstream::default()
+        });
         let listener = Arc::new(PgListener::new(
             relay,
             tls,
             upstream.clone(),
             PgListenerOptions {
                 handshake_timeout: handshake,
+                watch_interval,
             },
         ));
         let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -269,6 +299,18 @@ impl Harness {
             0,
             "upstream reached"
         );
+    }
+
+    /// The ledger events once at least `n` are stored (the closing event is appended after the
+    /// session ends).
+    async fn wait_events(&self, n: usize) -> Vec<RelayEvent> {
+        for _ in 0..200 {
+            if self.audit.events().len() >= n {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        self.audit.events()
     }
 
     fn denied(&self) -> Vec<(Outcome, Uuid)> {
@@ -395,7 +437,12 @@ async fn pg_auth_valid_session_is_decrypted_and_handed_upstream() {
         vec!["127.0.0.1:5432".parse().unwrap()]
     );
     assert_eq!(h.material.fetches.load(Ordering::SeqCst), 1);
-    assert!(h.audit.events().is_empty(), "no refusal recorded");
+    let kinds = h.wait_events(2).await;
+    assert!(
+        matches!(kinds[0].kind, EventKind::DbOpened)
+            && matches!(kinds[1].kind, EventKind::DbClosed(_)),
+        "an opened and a closed event, no refusal"
+    );
 }
 
 #[tokio::test]
@@ -601,4 +648,141 @@ async fn pg_auth_newer_protocol_is_negotiated_down_to_3_0() {
     );
     let params = h.upstream.params.lock().unwrap().clone().unwrap();
     assert!(params.is_empty(), "`_pq_.` options are not forwarded");
+}
+
+/// TLS, startup and a valid token; returns the open stream after the upstream's `AuthenticationOk`.
+async fn open_session(h: &Harness, token: &str) -> tokio_rustls::client::TlsStream<TcpStream> {
+    let mut s = h.tls().await;
+    send(&mut s, &startup("app", &[])).await;
+    let (tag, _) = read_message(&mut s).await.expect("auth request");
+    assert_eq!(tag, b'R');
+    send(&mut s, &Password::new(token.to_owned())).await;
+    let (tag, body) = read_message(&mut s).await.expect("auth ok");
+    assert_eq!((tag, &body[..]), (b'R', &0i32.to_be_bytes()[..]));
+    s
+}
+
+fn closed(ev: &RelayEvent) -> crate::audit::SessionClose {
+    match ev.kind {
+        EventKind::DbClosed(c) => c,
+        other => panic!("not a closing event: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn pg_audit_opened_then_closed_with_reason_duration_and_bytes() {
+    let h = Harness::start_full(
+        |_| {},
+        Duration::from_secs(5),
+        Duration::from_secs(10),
+        MemoryAudit::default(),
+        true,
+    )
+    .await;
+    let mut s = open_session(&h, &h.valid_token()).await;
+    let opened = h.wait_events(1).await;
+    assert_eq!(
+        opened.len(),
+        1,
+        "opened is recorded while the session is open"
+    );
+    assert!(matches!(opened[0].kind, EventKind::DbOpened));
+    assert_eq!(opened[0].secret_id, APP);
+    assert_eq!(opened[0].agent_id, AGENT);
+    assert_eq!(opened[0].host.as_deref(), Some("db.test"));
+    s.shutdown().await.unwrap();
+    drop(s);
+    let stored = {
+        for _ in 0..200 {
+            if h.audit.stored().len() >= 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        h.audit.stored()
+    };
+    assert_eq!(stored.len(), 2);
+    let c = closed(&stored[1].1);
+    assert_eq!(c.reason, crate::audit::CloseReason::ClientClosed);
+    assert_eq!((c.bytes_in, c.bytes_out), (7, 11));
+    assert_eq!(
+        stored[1].1.attempt_id,
+        Some(stored[0].0),
+        "the closing event names the opening one"
+    );
+}
+
+#[tokio::test]
+async fn pg_audit_ledger_down_refuses_the_session_before_any_upstream_leg_work() {
+    let h = Harness::start_full(
+        |_| {},
+        Duration::from_secs(5),
+        Duration::from_secs(10),
+        MemoryAudit {
+            fail: true,
+            ..MemoryAudit::default()
+        },
+        true,
+    )
+    .await;
+    let msgs = h.login("app", &h.valid_token()).await;
+    assert_eq!(sqlstate_of(&msgs), "08001");
+    assert_eq!(
+        h.upstream.calls.load(Ordering::SeqCst),
+        0,
+        "no upstream connect without the opened event"
+    );
+    assert!(h.audit.events().is_empty());
+}
+
+#[tokio::test]
+async fn pg_revoke_grant_revoked_mid_session_closes_it_within_the_interval() {
+    let h = Harness::start_full(
+        |_| {},
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        MemoryAudit::default(),
+        true,
+    )
+    .await;
+    let mut s = open_session(&h, &h.valid_token()).await;
+    h.wait_events(1).await;
+    h.grants.set(AGENT, vec![grant(NOGRANT)]);
+    let started = std::time::Instant::now();
+    let mut buf = [0u8; 8];
+    let n = tokio::time::timeout(Duration::from_secs(5), s.read(&mut buf))
+        .await
+        .expect("the gateway closed the connection")
+        .unwrap_or(0);
+    assert_eq!(n, 0, "closed");
+    assert!(started.elapsed() < Duration::from_secs(2));
+    let events = h.wait_events(2).await;
+    assert_eq!(
+        closed(&events[1]).reason,
+        crate::audit::CloseReason::Revoked
+    );
+}
+
+#[tokio::test]
+async fn pg_revoke_expired_agent_token_closes_the_session() {
+    let h = Harness::start_full(
+        |_| {},
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        MemoryAudit::default(),
+        true,
+    )
+    .await;
+    let mut s = open_session(&h, &h.token(AUDIENCE, 1)).await;
+    let mut buf = [0u8; 8];
+    let n = tokio::time::timeout(Duration::from_secs(8), s.read(&mut buf))
+        .await
+        .expect("the gateway closed the connection")
+        .unwrap_or(0);
+    assert_eq!(n, 0, "closed");
+    let events = h.wait_events(2).await;
+    assert_eq!(
+        closed(&events[1]).reason,
+        crate::audit::CloseReason::Expired
+    );
 }

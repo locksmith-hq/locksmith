@@ -357,7 +357,9 @@ impl CallAudit {
             EventKind::GitFetch(_)
             | EventKind::GitPush(_)
             | EventKind::GitDenied(_)
-            | EventKind::DbDenied(_) => true,
+            | EventKind::DbDenied(_)
+            | EventKind::DbOpened
+            | EventKind::DbClosed(_) => true,
         };
         RelayEvent {
             kind,
@@ -1173,7 +1175,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
-                    | EventKind::DbDenied(_) => None,
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_) => None,
                 })
                 .collect()
         }
@@ -1197,7 +1201,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
-                    | EventKind::DbDenied(_) => {}
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_) => {}
                 }
             }
             assert!(open.is_none(), "attempt left open");

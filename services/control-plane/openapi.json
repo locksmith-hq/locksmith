@@ -622,6 +622,33 @@
               "null"
             ]
           },
+          "bytes_in": {
+            "description": "Bytes relayed client to upstream (`db.session.closed` only).",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bytes_out": {
+            "description": "Bytes relayed upstream to client (`db.session.closed` only).",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "description": "Session length in milliseconds (`db.session.closed` only).",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "host": {
             "description": "Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or\nquery.",
             "type": [
@@ -652,6 +679,17 @@
             "type": [
               "integer",
               "null"
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SessionCloseReason",
+                "description": "Why the session ended; required for `db.session.closed`, refused elsewhere."
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "secret_id": {
@@ -1109,7 +1147,9 @@
           "git.fetch",
           "git.push",
           "git.denied",
-          "db.session.denied"
+          "db.session.denied",
+          "db.session.opened",
+          "db.session.closed"
         ],
         "type": "string"
       },
@@ -1272,6 +1312,17 @@
           "wrapped_dek"
         ],
         "type": "object"
+      },
+      "SessionCloseReason": {
+        "description": "Why a relayed Postgres session ended (`db.session.closed`).",
+        "enum": [
+          "client_closed",
+          "upstream_closed",
+          "revoked",
+          "expired",
+          "error"
+        ],
+        "type": "string"
       }
     },
     "securitySchemes": {

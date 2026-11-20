@@ -23,6 +23,7 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use bytes::{Buf, BufMut, BytesMut};
@@ -39,16 +40,17 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsAcceptor;
+use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
 use super::upstream::CancelMap;
 use super::{FORWARDED_PARAMETERS, PgSession, PgUpstream};
-use crate::audit::{EventKind, Outcome, RelayEvent};
+use crate::audit::{AuditError, CloseReason, EventKind, Outcome, RelayEvent, SessionClose};
 use crate::auth::AgentIdentity;
 use crate::config::PgBinding;
 use crate::decrypt::DecryptError;
 use crate::egress::{self, EgressError};
-use crate::grants::allows_relay;
+use crate::grants::{MAX_GRANT_TTL, allows_relay};
 use crate::relay::Relay;
 
 /// Largest pre-authentication packet (startup, password), as Postgres's own limit.
@@ -79,12 +81,16 @@ pub mod sqlstate {
 pub struct PgListenerOptions {
     /// From accept until the session is handed upstream (TLS, startup, token, checks, decrypt).
     pub handshake_timeout: Duration,
+    /// How often an open session re-checks its grant and token expiry (at most the grant cache
+    /// TTL, so a revocation closes the session within it).
+    pub watch_interval: Duration,
 }
 
 impl Default for PgListenerOptions {
     fn default() -> Self {
         Self {
             handshake_timeout: Duration::from_secs(10),
+            watch_interval: MAX_GRANT_TTL,
         }
     }
 }
@@ -255,9 +261,113 @@ impl PgListener {
         let _ = stream.set_nodelay(true);
         let deadline = self.options.handshake_timeout;
         match tokio::time::timeout(deadline, self.handshake(stream)).await {
-            Ok(Some((session, client))) => self.upstream.serve(session, client).await,
+            Ok(Some((session, client))) => self.run_session(session, client).await,
             Ok(None) => {}
             Err(_) => tracing::info!(reason = "handshake_timeout", "pg: connection refused"),
+        }
+    }
+
+    /// One authorized session: `db.session.opened` before any upstream connect (no event, no
+    /// session), the relay raced against the revocation watcher, then `db.session.closed`.
+    async fn run_session(&self, session: PgSession, mut client: Box<dyn super::ClientIo>) {
+        let (agent_id, secret_id, version) = (
+            session.agent.agent_id,
+            session.binding.secret_id,
+            session.binding.version,
+        );
+        let (host, port) = (session.binding.host.clone(), session.binding.port);
+        let (expires_at, stats) = (session.token_expires_at, session.stats.clone());
+        let event = |kind, attempt_id| RelayEvent {
+            kind,
+            agent_id,
+            secret_id,
+            version,
+            method: None,
+            host: Some(host.clone()),
+            port: Some(port),
+            status: None,
+            attempt_id,
+        };
+        let opened_id = match self
+            .relay
+            .audit()
+            .append(event(EventKind::DbOpened, None))
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                // Fail closed: the ledger could not record the session, so it does not start.
+                tracing::warn!(
+                    agent.id = %agent_id,
+                    secret.id = %secret_id,
+                    error = %e,
+                    "pg: db.session.opened not recorded, session refused"
+                );
+                refuse(&mut client, UNREACHABLE).await;
+                return;
+            }
+        };
+        let started = tokio::time::Instant::now();
+        let reason = tokio::select! {
+            () = self.upstream.serve(session, client) => stats.own_reason(),
+            r = self.watch(agent_id, secret_id, expires_at) => r,
+        };
+        let closed = SessionClose {
+            reason,
+            duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            bytes_in: stats.bytes_in.load(Ordering::Relaxed),
+            bytes_out: stats.bytes_out.load(Ordering::Relaxed),
+        };
+        tracing::info!(
+            agent.id = %agent_id,
+            secret.id = %secret_id,
+            reason = reason.as_str(),
+            duration_ms = closed.duration_ms,
+            "pg: session closed"
+        );
+        for _ in 0..3 {
+            match self
+                .relay
+                .audit()
+                .append(event(EventKind::DbClosed(closed), Some(opened_id)))
+                .await
+            {
+                Ok(_) | Err(AuditError::Rejected) => return,
+                Err(AuditError::Unavailable) => {}
+            }
+        }
+        tracing::warn!(agent.id = %agent_id, "pg: db.session.closed event not recorded");
+    }
+
+    /// Returns when the session must end: the token expired, or the grant is gone (or could not
+    /// be read for three checks in a row). Dropping the relay future closes both legs.
+    async fn watch(&self, agent_id: Uuid, secret_id: Uuid, expires_at: i64) -> CloseReason {
+        let mut failures = 0u8;
+        loop {
+            tokio::time::sleep(self.options.watch_interval).await;
+            let now = time::OffsetDateTime::now_utc();
+            if now.unix_timestamp() >= expires_at {
+                return CloseReason::Expired;
+            }
+            match self.relay.grants().grants(agent_id).await {
+                Ok(g) => {
+                    failures = 0;
+                    if !allows_relay(&g, secret_id, now) {
+                        return CloseReason::Revoked;
+                    }
+                }
+                Err(e) => {
+                    failures += 1;
+                    tracing::warn!(
+                        reason = e.as_str(),
+                        failures,
+                        "pg: session grant re-check failed"
+                    );
+                    if failures >= 3 {
+                        return CloseReason::Error;
+                    }
+                }
+            }
         }
     }
 
@@ -337,7 +447,7 @@ impl PgListener {
         write_message(s, &Authentication::CleartextPassword).await?;
         s.flush().await?;
         let token = read_password(s).await?;
-        let agent = match self.relay.auth().verify(token.as_str()).await {
+        let (agent, token_exp) = match self.relay.auth().verify_expiring(token.as_str()).await {
             Ok(a) => a,
             Err(e) => {
                 tracing::info!(reason = e.as_str(), "pg: agent token refused");
@@ -345,13 +455,15 @@ impl PgListener {
             }
         };
         drop(token);
-        self.check(agent, &database, client_parameters).await
+        self.check(agent, token_exp, &database, client_parameters)
+            .await
     }
 
     /// Binding → relay grant → address guard → decrypt (design decision 4).
     async fn check(
         &self,
         agent: AgentIdentity,
+        token_exp: i64,
         database: &str,
         client_parameters: BTreeMap<String, String>,
     ) -> Result<PgSession, Refusal> {
@@ -415,6 +527,8 @@ impl PgListener {
             addrs,
             client_parameters,
             password,
+            token_expires_at: token_exp,
+            stats: Arc::default(),
         })
     }
 

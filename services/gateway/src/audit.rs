@@ -109,6 +109,44 @@ pub enum EventKind {
     /// A refused session on the Postgres listener (D3), after the agent token verified
     /// (`Outcome::is_denial`).
     DbDenied(Outcome),
+    /// A relayed Postgres session was established (D3); written before the upstream connect, and
+    /// the session is refused if the append fails.
+    DbOpened,
+    /// A relayed Postgres session ended (D3), with why and how much.
+    DbClosed(SessionClose),
+}
+
+/// Why a relayed Postgres session ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloseReason {
+    ClientClosed,
+    UpstreamClosed,
+    /// The grant behind the session was revoked or expired.
+    Revoked,
+    /// The agent token expired.
+    Expired,
+    Error,
+}
+
+impl CloseReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ClientClosed => "client_closed",
+            Self::UpstreamClosed => "upstream_closed",
+            Self::Revoked => "revoked",
+            Self::Expired => "expired",
+            Self::Error => "error",
+        }
+    }
+}
+
+/// The `db.session.closed` payload: a reason and numbers, never query text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionClose {
+    pub reason: CloseReason,
+    pub duration_ms: u64,
+    pub bytes_in: u64,
+    pub bytes_out: u64,
 }
 
 impl EventKind {
@@ -121,6 +159,8 @@ impl EventKind {
             Self::GitPush(o) => ("git.push", o.as_str()),
             Self::GitDenied(o) => ("git.denied", o.as_str()),
             Self::DbDenied(o) => ("db.session.denied", o.as_str()),
+            Self::DbOpened => ("db.session.opened", "ok"),
+            Self::DbClosed(_) => ("db.session.closed", "ok"),
         }
     }
 }
@@ -229,6 +269,14 @@ struct WireEvent {
     status: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     attempt_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bytes_in: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bytes_out: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -259,6 +307,10 @@ impl HttpAudit {
             return Err(AuditError::Rejected);
         }
         let (kind, outcome) = ev.kind.wire();
+        let closed = match ev.kind {
+            EventKind::DbClosed(c) => Some(c),
+            _ => None,
+        };
         let body = serde_json::to_vec(&WireEvent {
             kind,
             outcome,
@@ -270,6 +322,10 @@ impl HttpAudit {
             port: ev.port,
             status: ev.status,
             attempt_id: ev.attempt_id,
+            reason: closed.map(|c| c.reason.as_str()),
+            duration_ms: closed.map(|c| c.duration_ms),
+            bytes_in: closed.map(|c| c.bytes_in),
+            bytes_out: closed.map(|c| c.bytes_out),
         })
         .map_err(|_| AuditError::Rejected)?;
         let (status, resp) = self

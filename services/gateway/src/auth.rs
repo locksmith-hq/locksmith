@@ -282,6 +282,12 @@ impl AgentAuth {
     /// Verify one token: header (`EdDSA`, a `kid`), key by `kid`, signature, audience, expiry,
     /// org.
     pub async fn verify(&self, token: &str) -> Result<AgentIdentity, AuthError> {
+        self.verify_expiring(token).await.map(|(id, _)| id)
+    }
+
+    /// [`Self::verify`], also returning the token's `exp` (Unix seconds) for callers that hold a
+    /// session open for longer than one request.
+    pub async fn verify_expiring(&self, token: &str) -> Result<(AgentIdentity, i64), AuthError> {
         if token.len() > MAX_TOKEN_BYTES {
             return Err(AuthError::Malformed);
         }
@@ -303,10 +309,13 @@ impl AgentAuth {
         if claims.org != self.org_id {
             return Err(AuthError::WrongOrg);
         }
-        Ok(AgentIdentity {
-            agent_id: claims.sub,
-            org_id: claims.org,
-        })
+        Ok((
+            AgentIdentity {
+                agent_id: claims.sub,
+                org_id: claims.org,
+            },
+            claims.exp,
+        ))
     }
 
     async fn key_for(&self, kid: &str) -> Result<Arc<DecodingKey>, AuthError> {

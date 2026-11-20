@@ -48,7 +48,7 @@ use tokio_rustls::TlsConnector;
 use zeroize::Zeroizing;
 
 use super::listener::{TlsSetupError, sqlstate};
-use super::{ClientIo, PgSession, PgUpstream};
+use super::{ClientIo, PgSession, PgUpstream, SessionStats};
 use crate::config::PgTls;
 use crate::decrypt::BoxFuture;
 
@@ -484,15 +484,17 @@ impl PgRelayUpstream {
         let (mut client_read, client_write) = split(&mut *client);
         let (up_read, mut up_write) = split(up.io);
         let mut client_write = BufWriter::new(client_write);
+        let stats = &session.stats;
         let to_upstream = async {
-            let r = copy(&mut client_read, &mut up_write).await;
+            let r = copy_counted(&mut client_read, &mut up_write, stats).await;
             let _ = up_write.shutdown().await;
             r
         };
-        let to_client = backend_to_client(BufReader::new(up_read), &mut client_write, &redactor);
+        let to_client =
+            backend_to_client(BufReader::new(up_read), &mut client_write, &redactor, stats);
         tokio::select! {
-            _ = to_upstream => {}
-            _ = to_client => {}
+            _ = to_upstream => stats.ended_by_client(),
+            _ = to_client => stats.ended_by_upstream(),
         }
         let _ = client_write.flush().await;
         let _ = client_write.shutdown().await;
@@ -588,11 +590,30 @@ async fn authenticate(up: &mut Upstream, session: &PgSession) -> Result<(), Fail
     }
 }
 
+/// Client to upstream, counting the bytes into `stats`.
+async fn copy_counted<R, W>(r: &mut R, w: &mut W, stats: &SessionStats) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let mut buf = vec![0u8; 16 * 1024];
+    loop {
+        let n = r.read(&mut buf).await?;
+        if n == 0 {
+            return Ok(());
+        }
+        w.write_all(&buf[..n]).await?;
+        w.flush().await?;
+        stats.add_in(n);
+    }
+}
+
 /// Backend to client: `E` and `N` are buffered and redacted, every other message is streamed.
 async fn backend_to_client<R, W>(
     mut reader: BufReader<R>,
     writer: &mut W,
     redactor: &Redactor,
+    stats: &SessionStats,
 ) -> io::Result<()>
 where
     R: AsyncRead + Unpin,
@@ -605,6 +626,7 @@ where
         let Some(body_len) = len.checked_sub(4) else {
             return Err(other("bad backend message length"));
         };
+        stats.add_out(head.len() + body_len);
         if matches!(head[0], b'E' | b'N') {
             if body_len > MAX_NOTICE {
                 return Err(other("oversized backend notice"));

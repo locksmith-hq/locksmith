@@ -239,6 +239,7 @@ impl Harness {
                 up,
                 PgListenerOptions {
                     handshake_timeout: Duration::from_secs(20),
+                    ..PgListenerOptions::default()
                 },
             )
             .with_cancel_map(cancels.clone()),
@@ -447,7 +448,10 @@ async fn current_user_through_gateway(user: &str, password: &str) {
     // Errors pass through with their SQLSTATE.
     assert_eq!(c.query("SELECT 1/0").await, Err("22012".to_owned()));
     assert_eq!(c.query("SELECT 2").await.unwrap(), vec!["2".to_owned()]);
-    assert!(h.audit.events().is_empty());
+    // The session is recorded as opened (no denial), once.
+    let events = h.audit.events();
+    assert_eq!(events.len(), 1);
+    assert!(matches!(events[0].kind, crate::audit::EventKind::DbOpened));
 }
 
 #[tokio::test]

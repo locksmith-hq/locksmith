@@ -7,7 +7,7 @@
     "worker-b": { "logins": ["locksmith-josie[bot]"], "trigger": "trig_0157sQMWva4JP97dc6DqkPEM", "secret": "WORKER_B_FIRE_TOKEN" },
     "worker-c": { "logins": ["locksmith-harriet[bot]"], "trigger": "trig_013QMkh2C8t7h3z2AL3YvAXH", "secret": "WORKER_C_FIRE_TOKEN" },
     "pm":       { "logins": ["locksmith-walt[bot]"], "trigger": "trig_01Dja9jHSJRqbcepRAGz9GUQ", "secret": "PM_FIRE_TOKEN" },
-    "research": { "logins": ["locksmith-ada[bot]"], "trigger": "", "secret": "RESEARCH_FIRE_TOKEN" }
+    "research": { "logins": ["locksmith-ada[bot]"], "trigger": "trig_018kWxT3hop7LXdXkBN4HwNB", "secret": "RESEARCH_FIRE_TOKEN" }
   },
   "channels": {
     "needs-rescue":   { "from": ["worker-a", "worker-b", "worker-c"], "to": "lead", "on_close": "raiser" },

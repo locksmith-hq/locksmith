@@ -13,13 +13,13 @@
 - [x] 2.4 Verify: `just images && bash scripts/image-check.sh`.
 
 ## 3. Compose self-host [sonnet]
-- [ ] 3.1 `infra/compose/selfhost/compose.yaml`: Postgres 18, OpenBao production mode with file storage, control plane, gateway; healthchecks, `depends_on` conditions, localhost-only published ports, no fixed tokens, restart policy, named volumes.
-- [ ] 3.2 `infra/compose/selfhost/bootstrap.sh`: generate secrets with a secure generator into `.env` (mode 0600, kept if present), initialize OpenBao once and store its unseal material in a separate root-only volume, refuse known dev-only values, print no secret value. Shellcheck clean.
-- [ ] 3.3 `just selfhost-up` (bootstrap then `docker compose up --wait`) and `just selfhost-down`; a `--external-keys` option that skips the bundled OpenBao and reads the address and credential reference from `.env`.
-- [ ] 3.4 Optional profiles: `tls` (Caddy) and `demo-oidc` (the existing Keycloak realm, labelled not for production); accept any OIDC issuer URL by variable.
-- [ ] 3.5 `scripts/selfhost-smoke.sh` (`just selfhost-smoke`): fresh up, API health, one request through the gateway to a throwaway upstream container, restart and check data and keys persist, then check secrets-file mode, difference between two fresh runs and absence of secrets in `docker compose logs`.
-- [ ] 3.6 Tests for the refusal path and idempotence of `bootstrap.sh` (`scripts/selfhost-bootstrap.test.sh`, no Docker needed for the secret and refusal checks).
-- [ ] 3.7 Verify: `bash scripts/selfhost-bootstrap.test.sh` then `just selfhost-smoke`.
+- [x] 3.1 `infra/compose/selfhost/compose.yaml`: Postgres 18, OpenBao production mode with file storage, control plane, gateway; healthchecks, `depends_on` conditions, localhost-only published ports, no fixed tokens, restart policy, named volumes.
+- [x] 3.2 `infra/compose/selfhost/bootstrap.sh`: generate secrets with a secure generator into `.env` (mode 0600, kept if present), initialize OpenBao once and store its unseal material in a separate root-only volume, refuse known dev-only values, print no secret value. Shellcheck clean.
+- [x] 3.3 `just selfhost-up` (bootstrap then `docker compose up --wait`) and `just selfhost-down`; a `--external-keys` option that skips the bundled OpenBao and reads the address and credential reference from `.env`.
+- [x] 3.4 Optional profiles: `tls` (Caddy) and `demo-oidc` (the existing Keycloak realm, labelled not for production); accept any OIDC issuer URL by variable.
+- [x] 3.5 `scripts/selfhost-smoke.sh` (`just selfhost-smoke`): fresh up, API health, one request through the gateway to a throwaway upstream container, restart and check data and keys persist, then check secrets-file mode, difference between two fresh runs and absence of secrets in `docker compose logs`.
+- [x] 3.6 Tests for the refusal path and idempotence of `bootstrap.sh` (`scripts/selfhost-bootstrap.test.sh`, no Docker needed for the secret and refusal checks).
+- [x] 3.7 Verify: `bash scripts/selfhost-bootstrap.test.sh` then `just selfhost-smoke`.
 
 ## 4. Helm chart [sonnet]
 - [ ] 4.1 `infra/helm/locksmith` scaffold: `Chart.yaml`, `values.yaml` (image digests, replicas, resources, `existingSecret` names for Postgres DSN, OIDC and key provider), Deployments, Services, optional Ingress.

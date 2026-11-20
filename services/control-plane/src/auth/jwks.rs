@@ -236,18 +236,8 @@ fn verification_key(jwk: &Jwk) -> Option<VerificationKey> {
 /// same setup as the OpenBao client in `ls-envelope`), no redirects, no proxy environment,
 /// short timeouts.
 fn default_client() -> Result<reqwest::Client, JwksError> {
-    use rustls_platform_verifier::BuilderVerifierExt as _;
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
+    ls_http::builder()
         .map_err(|_| JwksError::Client)?
-        .with_platform_verifier()
-        .map_err(|_| JwksError::Client)?
-        .with_no_client_auth();
-    reqwest::Client::builder()
-        .tls_backend_preconfigured(tls)
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
         .build()

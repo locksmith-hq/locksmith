@@ -2,7 +2,6 @@
 //! store (same stack as `ls-envelope`), no redirects, no proxy from the environment.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
 /// The client could not be built (TLS setup). Carries nothing else.
@@ -16,17 +15,6 @@ impl std::fmt::Display for ClientBuildError {
 }
 
 impl std::error::Error for ClientBuildError {}
-
-fn tls() -> Result<rustls::ClientConfig, ClientBuildError> {
-    use rustls_platform_verifier::BuilderVerifierExt as _;
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    Ok(rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|_| ClientBuildError)?
-        .with_platform_verifier()
-        .map_err(|_| ClientBuildError)?
-        .with_no_client_auth())
-}
 
 /// A client that never follows redirects and ignores `HTTP(S)_PROXY`.
 ///
@@ -48,10 +36,8 @@ pub fn build_with_idle(
     idle: Option<Duration>,
     pin: Option<(&str, &[SocketAddr])>,
 ) -> Result<reqwest::Client, ClientBuildError> {
-    let mut b = reqwest::Client::builder()
-        .tls_backend_preconfigured(tls()?)
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
+    let mut b = ls_http::builder()
+        .map_err(|_| ClientBuildError)?
         .connect_timeout(connect_timeout)
         .timeout(timeout)
         .pool_max_idle_per_host(0);

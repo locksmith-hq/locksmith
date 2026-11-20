@@ -58,9 +58,9 @@ ls-crypto = { path = "../../crates/ls-crypto" }
 # S5: the audit ledger (hash chain) and its Postgres store, appended inside tenant transactions.
 ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
 # T1: human JWT verification. `jsonwebtoken` (above) verifies; this fetches the issuer's JWKS.
-# Same TLS setup as ls-envelope's OpenBao client: rustls with ring, OS trust store.
+# TLS policy lives in ls-http.
+ls-http = { path = "../../crates/ls-http" }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
-rustls-platform-verifier = "0.7.1"
 # Hashes in the audit API are shown as lowercase hex.
 hex = "0.4"
 

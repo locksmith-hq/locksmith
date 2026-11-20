@@ -8,10 +8,10 @@
 - [x] 1.5 Verify: `cargo nextest run -p ls-control-plane workload` and `cargo nextest run -p ls-control-plane tenant_lint` (cross-org agent id is `404`, unpinned policy is `422`).
 
 ## 2. Issuer verification and claim matching [opus]
-- [ ] 2.1 Per-issuer `JwksCache` registry in `services/control-plane/src/auth/` keyed by stored issuer URL: OpenID discovery, https-only, address-guarded client, size and time caps, local-dev private-host flag; reuses the `jwks.rs` cache unchanged.
-- [ ] 2.2 `verify_external(token, policy)`: header and algorithm allow-list (no `none`, no HS*), `kid` lookup with one rate-limited refresh, `iss` equals the stored issuer, `aud` equals the policy audience, `exp`/`nbf` with leeway, `exp - iat` cap; token never in errors.
-- [ ] 2.3 Condition matcher (exact and trailing `*`, AND semantics, missing claim fails) with table-driven tests including GitHub sample claim sets and the Kubernetes `sub` form.
-- [ ] 2.4 Verify: `cargo nextest run -p ls-control-plane workload_verify` against a wiremock stub issuer: valid, expired, wrong aud, wrong iss, alg none, HS256 confusion, unknown kid, rotated key, issuer down, issuer at a private address.
+- [x] 2.1 Per-issuer `JwksCache` registry in `services/control-plane/src/auth/` keyed by stored issuer URL: OpenID discovery, https-only, address-guarded client, size and time caps, local-dev private-host flag; reuses the `jwks.rs` cache unchanged.
+- [x] 2.2 `verify_external(token, policy)`: header and algorithm allow-list (no `none`, no HS*), `kid` lookup with one rate-limited refresh, `iss` equals the stored issuer, `aud` equals the policy audience, `exp`/`nbf` with leeway, `exp - iat` cap; token never in errors.
+- [x] 2.3 Condition matcher (exact and trailing `*`, AND semantics, missing claim fails) with table-driven tests including GitHub sample claim sets and the Kubernetes `sub` form.
+- [x] 2.4 Verify: `cargo nextest run -p ls-control-plane workload_verify` against a wiremock stub issuer: valid, expired, wrong aud, wrong iss, alg none, HS256 confusion, unknown kid, rotated key, issuer down, issuer at a private address.
 
 ## 3. Token exchange endpoint [sonnet]
 - [ ] 3.1 `POST /v1/workload-tokens`: parse `{policy, token}` with the token read into a `SecretString` newtype (no Debug, Display, Clone, Serialize), load the policy under RLS, verify, match, then mint via the existing `AgentTokenSigner::mint`; `Cache-Control: no-store`; a single `401` for every failure with the reason only on the span.

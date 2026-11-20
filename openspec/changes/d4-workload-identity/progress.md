@@ -21,3 +21,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (macos check red on PR #530) - done
 - Verified: just quick -> ok; nextest list --profile portable excludes workload_identities
 - Notes for next session: new Postgres-backed test binaries must be added to .config/nextest.toml portable filter. Tasks 2.x onward still open.
+
+## 2026-11-20 worker (C), third run
+- Task: 2.1, 2.2, 2.3, 2.4 - done (`auth/issuers.rs` per-issuer registry with address-guarded resolver; `auth/external.rs` `verify_external`; matcher tests; `tests/workload_verify.rs` 20 wiremock cases; `JwksCache::with_client` added so the guarded client is injected)
+- Verified: `cargo nextest run -p ls-control-plane workload` 41 passed; `just quick` ok; Opus evaluator PASS (after adding resolver rebinding tests)
+- Notes for next session: registry/verifier/config not yet in `AppState` - wire in 3.1; create-time private-issuer 422 should call `IssuerRegistry::check_issuer_host`. Dev flag `LOCKSMITH_WORKLOAD_ALLOW_PRIVATE_ISSUERS` also allows http. Nits: `address_allowed` duplicates gateway egress.rs; `ls-proxy` dep is heavy. Tasks 3.x onward open.

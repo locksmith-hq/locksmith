@@ -21,3 +21,8 @@
 - Task: m1-remote-mcp 1.3 - done (rescue #508)
 - Verified: `cargo nextest run -p ls-mcp-server` -> 13 passed; `just ci` -> exit 0; Opus evaluator PASS
 - Notes for next session: next are 1.2 (rmcp spike) and 1.4 (migration and OpenAPI). Tools named in design section 6 but not built here (start_session, request_access, list_findings, list_waiting_requests, approve_or_deny_request, rotate_secret) join the registry with their own changes. Task 6.1 should also widen the name check (see the rescue entry above).
+
+## 2026-11-20 worker (event wake: #508 closed)
+- Task: m1-remote-mcp 1.1 - done. Decision record and design.md (option A, `auth_time`) are on this branch; the research note already states it and its MCP spec citations were re-checked against the live site earlier today.
+- Verified: grep shows design.md, decisions.md M1-1 and the note agree; docs only.
+- Notes for next session: 1.2 (rmcp spike) and 1.4 (migration and OpenAPI) are next.

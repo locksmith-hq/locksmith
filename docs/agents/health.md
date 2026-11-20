@@ -7,9 +7,9 @@ Use the `run-start` skill with `health`, then check the following against the cu
 1. **Worker heartbeat.** The newest `worker` comment on the `agent-log` issue is less than 24h old. If the issue doesn't exist and it is after 2026-11-17T06:00Z, that is a failure.
 2. **Main CI.** The latest `ci` run on main has not failed (`gh api 'repos/locksmith-hq/locksmith/actions/runs?branch=main&per_page=5'`).
 3. **Owner queue.** No open `needs-owner` issue is older than 3 days.
-4. **Merge queue.** No PR labelled `ready-to-merge` has been open for more than 1 day. No PR has had failing CI for more than 24h. An auto-merged PR must not have turned main's `ci` red.
+4. **Merge queue.** No PR with auto-merge on has been open for more than 1 day. No PR has had failing CI for more than 24h. An auto-merged PR must not have turned main's `ci` red.
 5. **Rescue health.** No open `needs-rescue` issue is older than 2h without a rescue comment, and none is older than 72h.
-6. **Merge backlog.** No PR labelled `ready-to-merge` is older than 1 day: the worker should have merged it.
+6. **Merge backlog.** No finished change's PR is older than 1 day without auto-merge on: its author should have enabled it.
 7. **Run cost drift.** If the last 3 worker metadata blocks all show `duration_s` above 3600, report it as a warning.
 
 If every check passes, end with "healthy" and post nothing.

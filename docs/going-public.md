@@ -44,7 +44,7 @@ Only the owner does these, in this order. Agents never change repository, Action
    gh workflow enable ci -R OWNER/REPO
    gh workflow enable claude-review -R OWNER/REPO
    ```
-   `change-sync` stays off until you decide otherwise; `merge-on-green`, `owner-alert` and `wake-agents` stay on. `merge-gate.sh` stops skipping gates 4 and 6 once the workflows are enabled again.
+   `change-sync` stays off until you decide otherwise; `owner-alert` and `wake-agents` stay on.
 5. **Turn on secret scanning and push protection:**
    ```sh
    gh api -X PATCH repos/OWNER/REPO -f 'security_and_analysis[secret_scanning][status]=enabled' -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
@@ -53,7 +53,7 @@ Only the owner does these, in this order. Agents never change repository, Action
    ```sh
    gh api -X PUT repos/OWNER/REPO/private-vulnerability-reporting
    ```
-7. **Branch rules.** Applied 2026-11-19 (steps 4 `ci`, 5 and 6 too): `main` needs a code-owner review, dismisses stale approvals and needs last-push approval; ruleset `main-threads` requires resolved review threads and blocks force pushes and deletion; ruleset `release-tags` lets only admins create, move or delete `v*` tags. Admins bypass all of them, so owner and agent PRs still merge on green. Fork PR workflows need approval for every outside contributor, and Dependabot alerts are on. `merge-gate.sh` refuses fork PRs and PRs not opened by the owner; those merge by hand after review.
+7. **Branch rules.** Applied 2026-11-19 (steps 4 `ci`, 5 and 6 too): `main` needs a code-owner review, dismisses stale approvals and needs last-push approval; ruleset `main-threads` requires resolved review threads and blocks force pushes and deletion; ruleset `release-tags` lets only admins create, move or delete `v*` tags. Since 2026-11-20 `main-threads` also requires the CI checks, the `merge-ready` status and code-owner review for `.github/CODEOWNERS` paths, and agent PRs merge through GitHub auto-merge (`docs/agents/merge.md`). Admins bypass all of them. Fork PR workflows need approval for every outside contributor, and Dependabot alerts are on. Fork PRs never get the `merge-ready` status; those merge by hand after review.
 
 ### Coverage of owner decision #307
 | #307 item | Step |
@@ -61,5 +61,4 @@ Only the owner does these, in this order. Agents never change repository, Action
 | `ci` re-enabled once the repo is public | 4 |
 | `claude-review` re-enabled with it | 4 |
 | `change-sync` stays off, cheap workflows stay on | 4 |
-| `merge-gate.sh` skips gates 4/6 only while workflows are disabled | 4 |
 | agents run `just ci` locally before pushing | unchanged; `just ci` now includes `public-check` |

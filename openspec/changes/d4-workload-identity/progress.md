@@ -16,3 +16,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.3, 1.4, 1.5 - done (`api/workload_identities.rs`: POST/GET list/GET/DELETE under human auth and `with_org`; `workload_identity.created`/`.deleted` audit events; OpenAPI and `control-plane-client` types regenerated; `tests/workload_identities.rs`)
 - Verified: `cargo nextest run -p ls-control-plane -p ls-audit workload tenant_lint openapi audit` 19 passed; `just ci` exit 0
 - Notes for next session: validation errors are `400` (the repo's `Kind::Validation`), not `422` as task 1.5 text says; unpinned and bare-`*` policies are refused. Audit target type is `workload` (the ledger CHECK allows `[a-z]+` only, no underscore). Response field is `pattern`, not `value` (the OpenAPI guard bans response fields named `value`). Next: 2.1 per-issuer JwksCache registry.
+
+## 2026-11-20 20:55 worker
+- Task: ci-fix (macos check red on PR #530) - done
+- Verified: just quick -> ok; nextest list --profile portable excludes workload_identities
+- Notes for next session: new Postgres-backed test binaries must be added to .config/nextest.toml portable filter. Tasks 2.x onward still open.

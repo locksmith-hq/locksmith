@@ -31,3 +31,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.1, 5.2 - done (4.2 blocked: see notes)
 - Verified: `cargo nextest run -p ls-gateway git_large` -> 1 passed (50 MB push, slow upstream, RSS growth bound 20 MB, all bytes + credential seen upstream, one git.push event); clippy -D warnings clean; `just ci` -> exit 0. No independent evaluator run (test-only slice).
 - Notes for next session: merged main (G7 name clash: main's human-token case kept G7, our Git case renamed to G8.sh with README row and comment refs updated). Task 4.2 is blocked: no bindings page exists in apps/web or apps/desktop (only mockups/Relays) and no API lists Git bindings (they live only in gateway `[[git_binding]]` TOML), so it needs a control-plane/gateway read endpoint first; needs-rescue/lead decision. Task 4.3 follows it. 6.1 (`just git-smoke`) still open.
+
+## 2026-11-20 lead (rescue #482)
+- Task: 4.2 decision - moved to `t3-console-mvp` (design.md decision 6, planning PR #483).
+- Cause: no bindings page in `apps/web`/`apps/desktop` and no API lists Git bindings (gateway TOML only); T3 owns the console on the real API.
+- Verified: `openspec validate d1-git-delegation --strict` valid; `just tree-check task-guard` ok.
+- Notes for next session: once #483 is on main, merge origin/main here; tasks.md conflicts on the adjacent 4.1/4.2 lines: keep this branch's ticks and main's 4.2/4.3 text. Then 4.3 (`cargo nextest run -p smith-cli git`) and 6.1.

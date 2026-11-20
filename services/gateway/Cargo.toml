@@ -49,6 +49,7 @@ jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust
 time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
 pgwire = { version = "=0.42.3", default-features = false }
 # D3 task 2.1: TLS on the Postgres listener, with the gateway's rustls `ring` provider.
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 
 [dev-dependencies]
@@ -59,4 +60,5 @@ ls-pg-test = { path = "../../crates/ls-pg-test" }
 # S5 task 3.2: read the ledger back and walk the chain in the relay's ledger tests.
 ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
 # D3 task 2.4: self-signed certificates for the Postgres listener tests (same build as ls-proxy).
+testcontainers = { workspace = true }
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }

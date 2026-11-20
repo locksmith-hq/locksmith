@@ -4,10 +4,11 @@
 //! - [`listener`]: the TCP listener, TLS before startup, agent-token auth and the check order
 //!   (design decision 4) up to the decrypt; it hands an authorized session to a [`PgUpstream`].
 //!
-//! The upstream leg (SCRAM/md5 with the decrypted password, splice and redaction, cancel map) is
-//! group 3 of the change and plugs in through [`PgUpstream`].
+//! - [`upstream`]: the upstream leg (SCRAM/md5 with the decrypted password, splice and redaction,
+//!   cancel map); it plugs in through [`PgUpstream`].
 
 pub mod listener;
+pub mod upstream;
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -20,6 +21,7 @@ use crate::config::PgBinding;
 use crate::decrypt::BoxFuture;
 
 pub use listener::{PgListener, PgListenerOptions, TlsSetupError, tls_acceptor};
+pub use upstream::{CancelMap, Connector, PgRelayUpstream};
 
 /// The client side of a session after TLS and authentication.
 pub trait ClientIo: AsyncRead + AsyncWrite + Unpin + Send {}

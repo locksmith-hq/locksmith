@@ -13,8 +13,7 @@ use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
 use ls_gateway::grants::{GrantCache, GrantCacheSettings};
-use ls_gateway::pg::listener::UpstreamUnavailable;
-use ls_gateway::pg::{PgListener, PgListenerOptions, tls_acceptor};
+use ls_gateway::pg::{Connector, PgListener, PgListenerOptions, PgRelayUpstream, tls_acceptor};
 use ls_gateway::relay::{Relay, RelayOptions};
 use secrecy::ExposeSecret;
 use tracing_subscriber::EnvFilter;
@@ -168,14 +167,26 @@ async fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            // The upstream leg (group 3 of d3-db-relay) is not wired yet: authorized sessions
-            // are answered `0A000`.
-            let pg_listener = Arc::new(PgListener::new(
-                relay.clone(),
-                tls,
-                Arc::new(UpstreamUnavailable),
-                PgListenerOptions::default(),
-            ));
+            let connector = match ls_http::tls_config()
+                .ok()
+                .and_then(|c| Connector::new(c).ok())
+            {
+                Some(c) => c,
+                None => {
+                    tracing::error!("pg upstream TLS client setup failed");
+                    return ExitCode::FAILURE;
+                }
+            };
+            let upstream = Arc::new(PgRelayUpstream::new(connector));
+            let pg_listener = Arc::new(
+                PgListener::new(
+                    relay.clone(),
+                    tls,
+                    upstream.clone(),
+                    PgListenerOptions::default(),
+                )
+                .with_cancel_map(upstream.cancel_map()),
+            );
             tracing::info!(addr = %pg.addr, bindings = relay.bindings().pg.len(), "pg listener started");
             Some(tokio::spawn(async move {
                 if let Err(e) = pg_listener.serve(listener).await {

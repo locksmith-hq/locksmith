@@ -3,8 +3,8 @@
 //! Per connection, under one handshake deadline:
 //! 1. Before TLS: `GSSENCRequest` is answered `N`, `SSLRequest` is answered `S` and TLS is
 //!    accepted (tokio-rustls, `ring`). A `StartupMessage` without TLS is refused with SQLSTATE
-//!    `28000` and the connection closed; a `CancelRequest` is closed without an answer until the
-//!    cancel map exists (task 3.3).
+//!    `28000` and the connection closed. A `CancelRequest` (before or inside TLS, as libpq sends
+//!    it) is forwarded through the cancel map (task 3.3) and closed without an answer.
 //! 2. Over TLS: the `StartupMessage` (pgwire codec). The `database` parameter names the binding;
 //!    `user` is required by the protocol but never routes. Only [`super::FORWARDED_PARAMETERS`]
 //!    are kept for the upstream.
@@ -41,6 +41,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::TlsAcceptor;
 use zeroize::{Zeroize, Zeroizing};
 
+use super::upstream::CancelMap;
 use super::{FORWARDED_PARAMETERS, PgSession, PgUpstream};
 use crate::audit::{EventKind, Outcome, RelayEvent};
 use crate::auth::AgentIdentity;
@@ -206,6 +207,7 @@ pub struct PgListener {
     tls: TlsAcceptor,
     upstream: Arc<dyn PgUpstream>,
     options: PgListenerOptions,
+    cancels: Option<Arc<CancelMap>>,
 }
 
 impl PgListener {
@@ -220,6 +222,22 @@ impl PgListener {
             tls,
             upstream,
             options,
+            cancels: None,
+        }
+    }
+
+    /// Forward `CancelRequest`s through `cancels` (without one they are closed unanswered).
+    #[must_use]
+    pub fn with_cancel_map(mut self, cancels: Arc<CancelMap>) -> Self {
+        self.cancels = Some(cancels);
+        self
+    }
+
+    /// A `CancelRequest` packet: forward it if the key is known. Never answered.
+    async fn cancel(&self, mut packet: BytesMut) {
+        let Some(cancels) = &self.cancels else { return };
+        if let Ok(Some(c)) = CancelRequest::decode(&mut packet, &DecodeContext::default()) {
+            cancels.cancel(c.pid, &c.secret_key).await;
         }
     }
 
@@ -247,7 +265,11 @@ impl PgListener {
     async fn handshake(&self, mut tcp: TcpStream) -> Option<(PgSession, Box<dyn super::ClientIo>)> {
         // Before TLS: negotiate, never read a startup message in the clear.
         match negotiate(&mut tcp).await {
-            Ok(()) => {}
+            Ok(Negotiated::Tls) => {}
+            Ok(Negotiated::Cancel(packet)) => {
+                self.cancel(packet).await;
+                return None;
+            }
             Err(r) => {
                 refuse(&mut tcp, r).await;
                 return None;
@@ -276,7 +298,7 @@ impl PgListener {
     ) -> Result<PgSession, Refusal> {
         let mut packet = read_untyped(s).await?;
         if CancelRequest::is_cancel_request_packet(&packet) {
-            // Task 3.3 maps gateway keys to upstream keys; until then nothing is cancelled.
+            self.cancel(packet).await;
             return Err(Refusal::Io);
         }
         if request_code(&packet).is_some() {
@@ -435,22 +457,32 @@ fn request_code(packet: &[u8]) -> Option<i32> {
     .then_some(code)
 }
 
-/// Before TLS: answer `GSSENCRequest` with `N`, accept `SSLRequest` with `S`. Anything else
-/// (a startup message, a cancel request) is refused.
-async fn negotiate(tcp: &mut TcpStream) -> Result<(), Refusal> {
+/// What the pre-TLS negotiation ended with.
+enum Negotiated {
+    /// `SSLRequest` answered `S`: accept TLS now.
+    Tls,
+    /// A `CancelRequest` packet sent in the clear.
+    Cancel(BytesMut),
+}
+
+/// Before TLS: answer `GSSENCRequest` with `N`, accept `SSLRequest` with `S`, hand a cancel
+/// request on. A startup message is refused.
+async fn negotiate(tcp: &mut TcpStream) -> Result<Negotiated, Refusal> {
     for _ in 0..MAX_NEGOTIATIONS {
         let packet = read_untyped(tcp).await?;
         match request_code(&packet) {
             Some(SslRequest::BODY_MAGIC_NUMBER) => {
                 tcp.write_all(b"S").await?;
                 tcp.flush().await?;
-                return Ok(());
+                return Ok(Negotiated::Tls);
             }
             Some(_) => {
                 tcp.write_all(b"N").await?;
                 tcp.flush().await?;
             }
-            None if CancelRequest::is_cancel_request_packet(&packet) => return Err(Refusal::Io),
+            None if CancelRequest::is_cancel_request_packet(&packet) => {
+                return Ok(Negotiated::Cancel(packet));
+            }
             None => return Err(PLAINTEXT),
         }
     }

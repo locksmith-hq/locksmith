@@ -36,6 +36,7 @@
 - [ ] 6.3 Verify: `just up && just web-e2e`.
 - [ ] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
 - [ ] 6.5 Lock the Playwright screenshot baselines for Overview, Projects and Activity.
+- [ ] 6.6 Verify: `just web-e2e` passes against the locked baselines.
 
 ## 7. Local verification [sonnet]
 - [ ] 7.1 `just up`, `just web-e2e`, `just apps-build`, then `just ci`.

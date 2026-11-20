@@ -55,6 +55,17 @@ The console SHALL show an agent's enrollment secret only once, in the dialog tha
 - **WHEN** the API returns an enrollment secret for a new or rotated agent
 - **THEN** it is shown once with a copy action, and closing the dialog clears it from memory, cache and storage
 
+### Requirement: Desktop parity
+The desktop app SHALL offer Overview, Projects, Environments and Secrets views with the same data, error states and no-value rule as the web console.
+
+#### Scenario: Desktop secret metadata
+- **WHEN** the user opens a secret in the desktop app
+- **THEN** only metadata is shown and no request targets a value or material route
+
+#### Scenario: Desktop API refusal
+- **WHEN** the API answers `403` or `409` to a change made in the desktop app
+- **THEN** the view shows the problem title and leaves the list unchanged
+
 ### Requirement: Activity view
 The console SHALL show audit events newest first with paging and the ledger verification status, without payload values.
 

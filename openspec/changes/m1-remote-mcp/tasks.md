@@ -28,7 +28,7 @@
 - [ ] 4.3 Verify: `just up && cargo nextest run -p ls-control-plane --test mcp_e2e`.
 
 ## 5. Console and desktop surface [sonnet]
-- [ ] 5.1 `apps/web` Tools page (one switch per tool, per layer) and Clients page (list, revoke), with Vitest tests including `403` and empty states.
+- [x] 5.1 `apps/web` Tools page (one switch per tool, per layer) and Clients page (list, revoke), with Vitest tests including `403` and empty states.
 - [ ] 5.2 `apps/desktop` Tools and Clients views on the same client methods, with Vitest tests.
 - [ ] 5.3 Verify: `npm test --workspace apps/web --workspace apps/desktop && just apps-build`.
 

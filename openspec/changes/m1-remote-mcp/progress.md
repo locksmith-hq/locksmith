@@ -93,3 +93,8 @@
 - Verified: `cargo nextest run -p ls-control-plane --test mcp_tools --test mcp --test mcp_auth --test users` -> 33 passed; `just ci` -> exit 0
 - Notes for next session: the gateway/agent half of 4.2 (revoked agent refused, live short-lived credentials dropped) depends on agent revoke from T8; either do it with a gateway-side check or have the lead accept the deferral. Issuer-side revoke via Keycloak admin API is not done. 4.3 verify (`just up && mcp_e2e`) and groups 5-7 remain; 2.2 still unticked (explain_block deferral).
 - Evaluator (Sonnet) first FAIL: resolve errors failed open and the revoke time was compared at whole seconds. Fixed both (only unverified-email passes through; comparison at full precision; boundary test added); `just ci` -> exit 0 after. Tokens with no client id skip the revoke check by design (rows are keyed by client id).
+
+## 2026-11-20 worker B
+- Task: m1-remote-mcp 5.1 - done (`apps/web` Tools page: one switch per tool grouped by layer, saved through `setMcpTool`; Clients page: list with revoke; loading, error/403 and empty states; new `mcp.test.tsx`, 7 tests)
+- Verified: `npx tsc --noEmit` and `npx vitest run` in apps/web -> 26 passed; `just ci` -> exit 0 (started before the page code landed, web part re-run by hand after)
+- Notes for next session: 5.2 desktop views on the same client methods; 4.2 gateway half and 4.3 still open; 2.2 still unticked.

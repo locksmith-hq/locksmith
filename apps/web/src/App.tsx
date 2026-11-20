@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createAuth, defaultConfig, type AuthService, type AuthState } from "./auth";
-import { auditOutcomeMatches as auditMatches, createClient, type Agent, type AuditOutcomeFilter as AuditFilter, type AgentGrant, type AuditEvent, type AuditStatus, type Client } from "@locksmith/control-plane-client";
+import { auditOutcomeMatches as auditMatches, createClient, type Agent, type AuditOutcomeFilter as AuditFilter, type AgentGrant, type AuditEvent, type AuditStatus, type Client, type McpClient, type McpToolSetting } from "@locksmith/control-plane-client";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
@@ -53,7 +53,7 @@ function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
 }
 
 function Console({ client, header }: { client: Client; header?: ReactNode }) {
-  const [page, setPage] = useState<"agents" | "audit">("agents");
+  const [page, setPage] = useState<"agents" | "audit" | "tools" | "clients">("agents");
   return (
     <main>
       <h1>Locksmith</h1>
@@ -61,8 +61,10 @@ function Console({ client, header }: { client: Client; header?: ReactNode }) {
       <nav aria-label="Pages">
         <button aria-pressed={page === "agents"} onClick={() => setPage("agents")}>Agents</button>
         <button aria-pressed={page === "audit"} onClick={() => setPage("audit")}>Audit</button>
+        <button aria-pressed={page === "tools"} onClick={() => setPage("tools")}>Tools</button>
+        <button aria-pressed={page === "clients"} onClick={() => setPage("clients")}>Clients</button>
       </nav>
-      {page === "audit" ? <Audit client={client} /> : <Agents client={client} />}
+      {page === "audit" ? <Audit client={client} /> : page === "tools" ? <McpTools client={client} /> : page === "clients" ? <McpClients client={client} /> : <Agents client={client} />}
     </main>
   );
 }
@@ -246,6 +248,105 @@ function Audit({ client }: { client: Client }) {
         </table>
       )}
       {next && <button disabled={loadingMore} onClick={more}>Load more</button>}
+    </section>
+  );
+}
+
+const layerName = (l: string) => (l === "hub" ? "Hub (people)" : "Gateway (agents)");
+
+function McpTools({ client }: { client: Client }) {
+  const [tools, setTools] = useState<McpToolSetting[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setTools(null); setError(null);
+    client.listMcpTools().then((t) => live && setTools(t), (e) => live && setError(errMsg(e)));
+    return () => { live = false; };
+  }, [client]);
+
+  const toggle = async (t: McpToolSetting, enabled: boolean) => {
+    setError(null);
+    try {
+      const u = await client.setMcpTool(t.layer, t.tool, enabled);
+      setTools((cur) => cur?.map((x) => (x.layer === u.layer && x.tool === u.tool ? u : x)) ?? cur);
+    } catch (e) { setError(errMsg(e)); }
+  };
+
+  return (
+    <section aria-label="Tools">
+      <h2>MCP tools</h2>
+      {error && <p role="alert">{error}</p>}
+      {!tools ? (error ? null : <p>Loading tools…</p>) : tools.length === 0 ? <p>No MCP tools.</p> : (
+        (["hub", "agent"] as const).map((layer) => {
+          const rows = tools.filter((t) => t.layer === layer);
+          if (rows.length === 0) return null;
+          return (
+            <div key={layer} aria-label={`${layerName(layer)} tools`}>
+              <h3>{layerName(layer)}</h3>
+              <ul>
+                {rows.map((t) => (
+                  <li key={t.tool}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label={`${t.tool} (${layer})`}
+                        checked={t.enabled}
+                        onChange={(e) => void toggle(t, e.target.checked)}
+                      />{" "}
+                      <strong>{t.tool}</strong>
+                    </label>{" "}
+                    {t.description} <em>{t.default_enabled ? "on by default" : "off by default"}{t.overridden ? ", changed" : ""}</em>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })
+      )}
+    </section>
+  );
+}
+
+function McpClients({ client }: { client: Client }) {
+  const [clients, setClients] = useState<McpClient[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setClients(null); setError(null);
+    client.listMcpClients().then((c) => live && setClients(c), (e) => live && setError(errMsg(e)));
+    return () => { live = false; };
+  }, [client]);
+
+  const revoke = async (c: McpClient) => {
+    setError(null);
+    try {
+      const u = await client.revokeMcpClient(c.id);
+      setClients((cur) => cur?.map((x) => (x.id === u.id ? u : x)) ?? cur);
+    } catch (e) { setError(errMsg(e)); }
+  };
+
+  const label = (c: McpClient) => c.client_name || c.client_id;
+  return (
+    <section aria-label="Clients">
+      <h2>MCP clients</h2>
+      {error && <p role="alert">{error}</p>}
+      {!clients ? (error ? null : <p>Loading clients…</p>) : clients.length === 0 ? <p>No MCP clients have signed in yet.</p> : (
+        <table>
+          <thead>
+            <tr><th>Client</th><th>Layer</th><th>Principal</th><th>Last seen</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            {clients.map((c) => (
+              <tr key={c.id}>
+                <td>{label(c)}</td><td>{layerName(c.layer)}</td><td>{c.principal}</td><td>{c.last_seen_at}</td>
+                <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
+                <td>{!c.revoked_at && <button onClick={() => void revoke(c)}>Revoke {label(c)}</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </section>
   );
 }

@@ -54,5 +54,5 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-20 worker (events)
 - Task: 6.1, 6.2 - done (gateway case G9 with STS stub: agent policy ignored, duration clamp/reject, STS error echo, base credential absent)
-- Verified: `run.sh gateway` 8 passed; run_test.sh, `just leak-scan`, `just audit-verify`, fmt, tree-check, task-guard ok; `just ci` test-rust 804/805, only ls-ipc `foreign_peer_is_closed_without_handling_a_request` failed (needs non-root; VM runs as root), later steps not run
+- Verified (evaluator PASS, sonnet, static): `run.sh gateway` 8 passed; run_test.sh, `just leak-scan`, `just audit-verify`, fmt, tree-check, task-guard ok; `just ci` test-rust 804/805, only ls-ipc `foreign_peer_is_closed_without_handling_a_request` failed (needs non-root; VM runs as root), later steps not run
 - Notes for next session: 5.1 (bindings page) needs the console pages from t3-console-mvp (not on main yet); do it after t3 merges. 7.x remain. Evaluator not run separately (static review only).

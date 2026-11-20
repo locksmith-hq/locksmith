@@ -49,3 +49,8 @@
 - Verified: `just up`, `just api`, `just web-e2e` -> 1 passed; just ci -> exit 0
 - Notes for next session: the earlier note "no secret-create route" was wrong (secrets::create exists). Remaining: 6.4 is an owner gate (no layout approval recorded); 6.5-6.6, 7.x follow it. Lead: needs the live console layout decision for 6.4.
 - Evaluator PASS (sonnet); caveats: bearer taken from first request without /v1 filter, ids set in async handler without wait, Activity asserts only the region.
+
+## 2026-11-20 07:05 lead
+- Task: 6.4 - blocked (owner gate raised)
+- Verified: `just up`, `just api`, `just web-e2e` -> 1 passed; live screenshots taken for the owner brief
+- Notes for next session: rescue #509 closed in favour of needs-owner #510 (layout options A/B/C; lead recommends B: the mockup frame on the live pages, which needs a styling task group before 6.5). On approval the lead records it in decisions.md and adjusts tasks on claude/planning-t3-console-mvp-tasks. Until then 6.5+ stay parked.

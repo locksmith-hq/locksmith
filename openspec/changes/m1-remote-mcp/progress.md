@@ -118,3 +118,9 @@
 - Task: m1-remote-mcp - blocked (no implementable task: 2.2 explain_block deferral, 4.2 gateway half needs T8, 4.3 names a nonexistent test `mcp_e2e`; 7.x wait on those)
 - Verified: main CI green; no code changed
 - Notes for next session: rescue issue #519 asks the lead to accept the deferrals and re-word 4.3 (`just mcp-e2e` passed 16/16 in 4.1). After that, run 7.1 and archive.
+
+## 2026-11-20 lead (rescue #519)
+- Task: m1-remote-mcp 2.2, 4.2, 4.3 - decided (design.md "Rescue #519 decisions"); no code changed, nothing ticked.
+- Cause: workers had no lead ruling on `explain_block` (no backing service), the gateway half of 4.2 (assumed to need T8) and 4.3's nonexistent `mcp_e2e` target.
+- Decisions: 2.2 `explain_block` is a static reason-code table in `ls-mcp-server`, used by hub and gateway (precedent: `locksmith-mcp` `explain()`); 4.2 is built in full now: Keycloak admin consent revoke on the hub (best-effort, `auth_time` rule enforces) and a gateway-side revoked-agent check with an agent-layer `mcp_clients` row; 4.3 is `just mcp-e2e`, extended with the revoke flow (task text fixed on `claude/planning-m1-remote-mcp-tasks`).
+- Notes for next session: order 2.2, then 4.2 hub issuer revoke, 4.2 gateway, then 4.3 and 7.x. 4.2 gateway is a good [opus] evaluator task (auth path).

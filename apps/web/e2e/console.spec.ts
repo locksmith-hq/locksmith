@@ -21,6 +21,17 @@ test("sign in, project, environment, agent, grant, activity; no value or materia
     if (u.pathname.startsWith("/v1/") || u.pathname.startsWith("/internal/")) calls.push(`${r.method()} ${u.pathname}`);
   });
 
+  let bearer = "";
+  let projectId = "";
+  let envId = "";
+  page.on("response", async (r) => {
+    const u = new URL(r.url());
+    bearer ||= r.request().headers()["authorization"] ?? "";
+    if (r.request().method() !== "POST" || r.status() !== 201) return;
+    if (/^\/v1\/projects$/.test(u.pathname)) projectId = ((await r.json()) as { id: string }).id;
+    if (/^\/v1\/projects\/[^/]+\/environments$/.test(u.pathname)) envId = ((await r.json()) as { id: string }).id;
+  });
+
   await signIn(page);
   await expect(page.getByRole("heading", { name: /overview/i }).first()).toBeVisible();
 
@@ -46,12 +57,21 @@ test("sign in, project, environment, agent, grant, activity; no value or materia
   await expect(page.getByTestId("enrollment-secret")).toHaveCount(0);
   await expect(page.getByText(agent, { exact: true })).toBeVisible();
 
-  // Grant: the control plane has no secret-create route yet, so a grant on an unknown id must surface
-  // an error alert (not crash). Create and revoke against a real secret is covered once the secret
-  // create route exists (see progress.md).
-  await page.getByLabel(`Secret id for ${agent}`).fill("00000000-0000-4000-8000-000000000000");
+  // Grant: seed a secret (metadata only; no value) through the API with the signed-in token, then
+  // create and revoke a grant for the agent in the UI.
+  const secretName = `E2E_SECRET_${stamp}`;
+  const created = await page.request.post(`/v1/projects/${projectId}/environments/${envId}/secrets`, {
+    headers: { authorization: bearer },
+    data: { name: secretName },
+  });
+  expect(created.status()).toBe(201);
+  const secretId = ((await created.json()) as { id: string }).id;
+  expect(secretId).toMatch(/^[0-9a-f-]{36}$/);
+  await page.getByLabel(`Secret id for ${agent}`).fill(secretId);
   await page.getByRole("button", { name: `Grant ${agent}` }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByText(secretName, { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: `Revoke ${secretName}` }).click();
+  await expect(page.getByRole("button", { name: `Revoke ${secretName}` })).toHaveCount(0);
 
   // Activity.
   await page.getByRole("link", { name: "Activity" }).click();

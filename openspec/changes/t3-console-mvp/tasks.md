@@ -31,9 +31,9 @@
 - [x] 5.3 Verify: `npm test --workspace apps/desktop && just apps-build`.
 
 ## 6. End-to-end [sonnet]
-- [ ] 6.1 Playwright setup, `just web-e2e` recipe (starts `just up` with the auth profile): sign in as a test user, create a project and environment, register an agent, create and revoke a grant, see activity.
+- [x] 6.1 Playwright setup, `just web-e2e` recipe (starts `just up` with the auth profile): sign in as a test user, create a project and environment, register an agent, create and revoke a grant, see activity.
 - [x] 6.2 Add a leak check: the e2e records all requests and fails on any value or material route.
-- [ ] 6.3 Verify: `just up && just web-e2e`.
+- [x] 6.3 Verify: `just up && just web-e2e`.
 - [ ] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
 - [ ] 6.5 Lock the Playwright screenshot baselines for Overview, Projects and Activity.
 - [ ] 6.6 Verify: `just web-e2e` passes against the locked baselines.

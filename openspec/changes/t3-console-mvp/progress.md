@@ -43,3 +43,8 @@
 - Task: 6.1 - blocked (no code change this run)
 - Verified: none; branch merged with main (already current); main CI green
 - Notes for next session: 6.1 grant create/revoke on a real secret still needs a seeded secret. Control plane has no secret-create route; seed via SQL (secrets row + secret_versions, see services/control-plane/tests/internal.rs ~l.178) from e2e global setup, or add the route. Needs `just up` (auth profile) + `just api` (cold build is long). 6.4 is an owner gate after 6.3.
+
+## 2026-11-20 worker
+- Task: 6.1, 6.3 - done (e2e seeds a secret via the existing POST .../secrets route with the console's own bearer, then creates and revokes a grant in the UI; leak check unchanged)
+- Verified: `just up`, `just api`, `just web-e2e` -> 1 passed; just ci -> exit 0
+- Notes for next session: the earlier note "no secret-create route" was wrong (secrets::create exists). Remaining: 6.4 is an owner gate (no layout approval recorded); 6.5-6.6, 7.x follow it. Lead: needs the live console layout decision for 6.4.

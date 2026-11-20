@@ -7,7 +7,7 @@ PRs merge themselves through GitHub auto-merge (owner 2026-11-20; the repo is pu
   - required checks: `hygiene` (layout, task-edit guard, public-check, gitleaks), `rust`, `web`, `desktop`, `macos`, `windows-check`, `adversarial`;
   - `merge-ready`, a commit status set only by `claude-review.yml` once auto-merge is on: the change is complete (planning-only PRs exempt) and the independent Claude (Opus) review posted `merge-review <sha>: PASS`. A PASS still holds while the PR's own diff (patch-id) is unchanged, e.g. after merging main in. Owner PRs pass it without review;
   - every review thread resolved, no conflicts;
-  - a code-owner approval for paths in `.github/CODEOWNERS`: the agent system and trust root (so the weekly harness release and hotfixes wait for the owner) and the secret-handling crates.
+  - for paths in main's `.github/CODEOWNERS` (the agent system and trust root, so the weekly harness release and hotfixes wait for the owner, and the secret-handling crates), the owner's approval of the head commit; `merge-ready` checks it and re-runs on the owner's review.
 - **Stop a merge:** `gh pr merge <n> --disable-auto`.
 - Merges always use a merge commit, so `git revert -m 1 <sha>` undoes any of them.
 - If main CI goes red after a merge, fixing it comes before any other work.

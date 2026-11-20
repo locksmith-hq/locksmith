@@ -8,10 +8,11 @@
 //! runs. A missing or unconfigured endpoint also answers `401` (fail closed).
 //!
 //! The verified agent is passed to handlers as an [`AgentIdentity`] request extension (read from
-//! `RequestContext.extensions` as `http::request::Parts`). The tools arrive in tasks 3.2 and 3.3;
-//! until then the server lists none. The `Host` allowlist is loopback plus the configured public
+//! `RequestContext.extensions` as `http::request::Parts`). The default-on tools are in
+//! [`crate::mcp_tools`] (task 3.2). The `Host` allowlist is loopback plus the configured public
 //! hosts and is never disabled. No token text is logged or echoed.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Router;
@@ -20,15 +21,21 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::any;
-use rmcp::ServerHandler;
-use rmcp::model::{ServerCapabilities, ServerConfig};
+use ls_mcp_server::{Layer, Registry, ToolDef, agent_tools};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResponse, JsonObject, ListToolsResult, PaginatedRequestParams,
+    ServerCapabilities, ServerConfig, Tool,
+};
+use rmcp::service::RequestContext;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
+use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
 use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::auth::AgentAuth;
-use crate::relay::error;
+use crate::auth::{AgentAuth, AgentIdentity};
+use crate::mcp_tools;
+use crate::relay::{Relay, error};
 
 /// The path the MCP service is mounted at.
 pub const MCP_PATH: &str = "/mcp";
@@ -54,15 +61,85 @@ impl McpEndpoint {
     }
 }
 
-/// The gateway MCP server. Tools are added by tasks 3.2 and 3.3.
+/// The gateway MCP server: the registry's default-on agent tools, run as the agent behind the
+/// verified token ([`crate::mcp_tools`]). Per-org switches and the per-call audit event are
+/// task 3.4; until then every tool is at its default, so `issue_short_lived_credential` (off by
+/// default, task 3.3) is neither listed nor callable.
 #[derive(Clone)]
-struct GatewayMcp;
+struct GatewayMcp {
+    relay: Option<Arc<Relay>>,
+    registry: Arc<Registry>,
+}
+
+impl GatewayMcp {
+    fn new(relay: Option<Arc<Relay>>) -> Self {
+        // The shipped registry carries no value field (tested in `ls-mcp-server`).
+        let registry = Registry::new(Layer::Agent, agent_tools())
+            .unwrap_or_else(|e| panic!("agent tool registry invalid: {e}"));
+        Self {
+            relay,
+            registry: Arc::new(registry),
+        }
+    }
+
+    fn agent(context: &RequestContext<RoleServer>) -> Result<AgentIdentity, McpError> {
+        context
+            .extensions
+            .get::<axum::http::request::Parts>()
+            .and_then(|p| p.extensions.get::<AgentIdentity>())
+            .cloned()
+            .ok_or_else(|| McpError::invalid_request("unauthenticated", None))
+    }
+}
+
+fn to_tool(def: &ToolDef) -> Tool {
+    let object = |v: &serde_json::Value| -> Arc<JsonObject> {
+        Arc::new(v.as_object().cloned().unwrap_or_default())
+    };
+    let mut tool = Tool::new(def.name, def.description, object(&def.input_schema));
+    tool.output_schema = def.output_schema.as_ref().map(object);
+    tool
+}
 
 impl ServerHandler for GatewayMcp {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Locksmith gateway. Tools return ids, names and relay results, never secret values.",
         )
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        Self::agent(&context)?;
+        let tools = self
+            .registry
+            .list(&HashMap::new())
+            .into_iter()
+            .map(to_tool)
+            .collect();
+        Ok(ListToolsResult {
+            tools,
+            ..ListToolsResult::default()
+        })
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResponse, McpError> {
+        let agent = Self::agent(&context)?;
+        // An off or unknown tool is refused the same way: not callable.
+        let def = self
+            .registry
+            .authorize(&request.name, &HashMap::new())
+            .map_err(|_| McpError::invalid_params("unknown tool", None))?;
+        let result =
+            mcp_tools::call(self.relay.as_ref(), &agent, def.name, request.arguments).await?;
+        Ok(result.into())
     }
 }
 
@@ -112,8 +189,9 @@ pub fn router(state: &AppState) -> Router<AppState> {
     let config = StreamableHttpServerConfig::default()
         .with_allowed_hosts(endpoint.allowed_hosts.clone())
         .with_legacy_session_mode(true);
+    let relay = state.relay();
     let service = StreamableHttpService::new(
-        || Ok(GatewayMcp),
+        move || Ok(GatewayMcp::new(relay.clone())),
         Arc::new(LocalSessionManager::default()),
         config,
     );

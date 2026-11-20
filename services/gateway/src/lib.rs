@@ -16,4 +16,5 @@ pub mod git;
 pub mod grants;
 pub mod http_client;
 pub mod mcp_endpoint;
+mod mcp_tools;
 pub mod relay;

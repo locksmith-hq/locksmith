@@ -473,10 +473,10 @@ pub fn agent_tools() -> Vec<ToolDef> {
             ),
             page_input(&[], json!({})),
             page_of(obj(
-                &["secret_id", "name", "version"],
+                &["secret_id", "name", "mode"],
                 json!({"secret_id": id(), "name": {"type": "string"},
-                       "version": {"type": "integer", "minimum": 1},
-                       "hosts": {"type": "array", "items": {"type": "string"}},
+                       "mode": {"type": "string"},
+                       "allowed_origin": {"type": ["string", "null"]},
                        "grant_expires_at": {"type": ["string", "null"], "format": "date-time"}}),
             )),
         ),
@@ -488,7 +488,7 @@ pub fn agent_tools() -> Vec<ToolDef> {
                 true,
             ),
             obj(
-                &["secret_id", "method", "url"],
+                &["secret_id", "version", "method", "url"],
                 json!({"secret_id": id(), "version": {"type": "integer", "minimum": 1},
                        "method": {"type": "string",
                                   "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]},

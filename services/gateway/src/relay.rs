@@ -404,6 +404,18 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
             return error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id);
         }
     };
+    handle_as(relay, agent, request_id, body).await
+}
+
+/// The relay for an already authenticated agent: every check, the audit events and the
+/// redaction are the ones `/v1/relay` runs. The MCP `relay_http_request` tool enters here
+/// (m1-remote-mcp task 3.2) after `/mcp` verified the same agent token.
+pub(crate) async fn handle_as(
+    relay: Arc<Relay>,
+    agent: crate::auth::AgentIdentity,
+    request_id: String,
+    body: Bytes,
+) -> Response {
     let Some(req) = parse(&body, relay.options.max_request_body) else {
         return error(StatusCode::BAD_REQUEST, "bad_request", &request_id);
     };
@@ -832,6 +844,9 @@ mod tests {
     /// Tasks 5.1 and 5.2 of s6-adversarial-gate-1: the G2 to G4 payloads, judged by the oracle.
     mod adversarial;
 
+    /// Task 3.2 of m1-remote-mcp: the gateway's default-on MCP tools over the same harness.
+    mod mcp;
+
     fn grant(secret_id: Uuid, name: &str, expires_at: Option<time::OffsetDateTime>) -> Grant {
         Grant {
             grant_id: Uuid::now_v7(),
@@ -1074,6 +1089,7 @@ mod tests {
             Some(a) => a,
             None => audit.clone(),
         };
+        let mcp = crate::mcp_endpoint::McpEndpoint::new(auth.clone(), &["gateway.test".to_owned()]);
         let relay = Relay::new(
             auth,
             Arc::new(cache),
@@ -1083,8 +1099,11 @@ mod tests {
             sink,
             setup.options,
         );
-        let app =
-            app::build(AppState::new(Arc::new(ReadyFlag::new(true))).with_relay(Arc::new(relay)));
+        let app = app::build(
+            AppState::new(Arc::new(ReadyFlag::new(true)))
+                .with_relay(Arc::new(relay))
+                .with_mcp(mcp),
+        );
         Harness {
             app,
             upstream,

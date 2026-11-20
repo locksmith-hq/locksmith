@@ -213,7 +213,8 @@ pub fn matches(conditions: &[Condition], claims: &Value) -> bool {
         .all(|c| match claims.get(&c.claim).and_then(Value::as_str) {
             Some(actual) => match c.op {
                 Op::Eq => actual == c.value,
-                Op::Prefix => actual.starts_with(&c.value),
+                // An empty stored prefix would match everything: treat it as no match.
+                Op::Prefix => !c.value.is_empty() && actual.starts_with(&c.value),
             },
             None => false,
         })

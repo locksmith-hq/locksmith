@@ -23,6 +23,9 @@ pub enum GitCmd {
     /// Git credential helper (called by Git, not by people).
     #[command(hide = true)]
     Credential { op: String },
+    /// Git credential helper for the hosted gateway (called by Git, not by people).
+    #[command(hide = true)]
+    GatewayCredential { op: String },
 }
 
 #[derive(Args)]
@@ -36,6 +39,10 @@ pub struct Scope {
     /// Also forward this host (e.g. a GitHub Enterprise server). Setup only.
     #[arg(long)]
     host: Vec<String>,
+    /// Route Git through the hosted Locksmith gateway at this URL instead of the local
+    /// forwarder (needs `smith login --agent`). Setup only.
+    #[arg(long, value_name = "URL")]
+    gateway: Option<String>,
 }
 
 fn fail(c: ExitCode, m: impl Into<String>) -> Fail {
@@ -116,6 +123,7 @@ fn add_hosts(hosts: &[String]) -> Result<(), Fail> {
 
 pub fn run(json: bool, cmd: GitCmd) -> Result<ExitCode, Fail> {
     match cmd {
+        GitCmd::Setup(s) if s.gateway.is_some() => gateway_setup(json, &s),
         GitCmd::Setup(s) => {
             let flag = scope_flag(&s)?;
             add_hosts(&s.host)?;
@@ -147,6 +155,7 @@ pub fn run(json: bool, cmd: GitCmd) -> Result<ExitCode, Fail> {
         }
         GitCmd::Teardown(s) => {
             let flag = scope_flag(&s)?;
+            remove_gateway_include(flag)?;
             let include = ls_core::config_dir()
                 .join("git")
                 .join("forwarder.gitconfig");
@@ -205,7 +214,120 @@ pub fn run(json: bool, cmd: GitCmd) -> Result<ExitCode, Fail> {
             })
         }
         GitCmd::Credential { op } => credential(&op),
+        GitCmd::GatewayCredential { op } => gateway_credential(&op),
     }
+}
+
+/// Include file for the hosted gateway, next to the forwarder's.
+pub fn gateway_include_path() -> PathBuf {
+    ls_core::config_dir().join("git").join("gateway.gitconfig")
+}
+
+/// Hosts Git is routed to the gateway for: github.com plus any `--host`.
+fn gateway_hosts(extra: &[String]) -> Result<Vec<String>, Fail> {
+    let mut hosts = vec!["github.com".to_string()];
+    for h in extra {
+        let h = h.trim().to_lowercase();
+        let ok = !h.is_empty()
+            && h.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b".-:".contains(&b));
+        if !ok {
+            return Err(fail(ExitCode::Usage, format!("invalid host {h:?}")));
+        }
+        if !hosts.contains(&h) {
+            hosts.push(h);
+        }
+    }
+    Ok(hosts)
+}
+
+/// Contents of the gateway include file. Pure: the URL is already validated, no token inside.
+pub fn gateway_gitconfig(gateway: &str, hosts: &[String]) -> String {
+    let mut out = String::from(
+        "# Written by `smith git setup --gateway`; `smith git teardown` removes it.\n",
+    );
+    for h in hosts {
+        out.push_str(&format!(
+            "[url \"{gateway}/git/{h}/\"]\n\tinsteadOf = https://{h}/\n"
+        ));
+    }
+    out.push_str(&format!(
+        "[credential \"{gateway}\"]\n\thelper =\n\thelper = !smith git gateway-credential\n"
+    ));
+    out
+}
+
+fn gateway_setup(json: bool, s: &Scope) -> Result<ExitCode, Fail> {
+    let flag = scope_flag(s)?;
+    let gateway = ls_connector::parse_endpoint(s.gateway.as_deref().unwrap_or_default())
+        .map_err(|e| fail(ExitCode::Usage, e.to_string()))?;
+    let hosts = gateway_hosts(&s.host)?;
+    let include = gateway_include_path();
+    let dir = include.parent().unwrap_or(Path::new("."));
+    ls_platform::fs::ensure_private_dir(dir).map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    std::fs::write(&include, gateway_gitconfig(&gateway, &hosts))
+        .map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    if !installed(flag, &include) {
+        let inc = include.display().to_string();
+        let o = git(&["config", flag, "--add", "include.path", &inc])?;
+        if !o.status.success() {
+            return Err(fail(
+                ExitCode::Failure,
+                String::from_utf8_lossy(&o.stderr).trim().to_string(),
+            ));
+        }
+    }
+    if json {
+        println!(
+            "{}",
+            json!({"scope": &flag[2..], "gateway": gateway, "hosts": hosts, "include": include})
+        );
+    } else {
+        println!(
+            "Git for {} now goes through the gateway {gateway} ({} config).",
+            hosts.join(", "),
+            &flag[2..]
+        );
+        println!("Sign in with `smith login --agent` (the agent token is the Git password).");
+    }
+    Ok(ExitCode::Ok)
+}
+
+fn remove_gateway_include(flag: &str) -> Result<(), Fail> {
+    let include = gateway_include_path();
+    if installed(flag, &include) {
+        let inc = include.display().to_string();
+        git(&[
+            "config",
+            flag,
+            "--fixed-value",
+            "--unset-all",
+            "include.path",
+            &inc,
+        ])?;
+    }
+    let _ = std::fs::remove_file(&include);
+    Ok(())
+}
+
+fn gateway_credential(op: &str) -> Result<ExitCode, Fail> {
+    if op != "get" {
+        return Ok(ExitCode::Ok);
+    }
+    // Consume Git's request; the answer does not depend on it.
+    for l in std::io::stdin().lock().lines() {
+        if l.map_err(|e| fail(ExitCode::Failure, e.to_string()))?
+            .is_empty()
+        {
+            break;
+        }
+    }
+    let st =
+        ls_connector::State::load_fresh().map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    let mut out = std::io::stdout().lock();
+    out.write_all(st.git_credential_lines().as_bytes())
+        .map_err(|e| fail(ExitCode::Failure, e.to_string()))?;
+    Ok(ExitCode::Ok)
 }
 
 /// `host/owner/repo` for a remote URL in any of the forms the include file rewrites.
@@ -322,7 +444,24 @@ pub fn gh(a: GhArgs) -> Result<ExitCode, Fail> {
 
 #[cfg(test)]
 mod tests {
-    use super::remote_id;
+    use super::{gateway_gitconfig, gateway_hosts, remote_id};
+
+    #[test]
+    fn git_gateway_config_has_rewrite_and_helper_but_no_token() {
+        let hosts = gateway_hosts(&["GHE.example.com".into()]).ok().unwrap();
+        assert_eq!(hosts, ["github.com", "ghe.example.com"]);
+        let c = gateway_gitconfig("https://gw.example.com", &hosts);
+        assert!(c.contains("[url \"https://gw.example.com/git/github.com/\"]"));
+        assert!(c.contains("insteadOf = https://github.com/"));
+        assert!(c.contains("insteadOf = https://ghe.example.com/"));
+        assert!(c.contains("helper = !smith git gateway-credential"));
+        assert!(!c.to_lowercase().contains("password"));
+    }
+
+    #[test]
+    fn git_gateway_rejects_bad_host() {
+        assert!(gateway_hosts(&["bad host".into()]).is_err_and(|_| true));
+    }
 
     #[test]
     fn remote_forms() {

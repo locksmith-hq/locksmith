@@ -12,6 +12,7 @@ pub mod auth;
 pub mod config;
 pub mod decrypt;
 pub mod egress;
+pub mod git;
 pub mod grants;
 pub mod http_client;
 pub mod relay;

@@ -157,6 +157,38 @@ fn upstream_auth() -> Outcome {
     upstream_outcome(in_repo, b.as_ref(), &remotes, &vault)
 }
 
+/// `listed`: the gateway include is in Git config. `file`: its contents. `logged_in`: an agent
+/// token state file exists.
+fn gateway_outcome(listed: bool, file: Option<&str>, logged_in: bool) -> Outcome {
+    const FIX: &str = "smith git setup --gateway <url>";
+    if !listed {
+        return Outcome::skip("Git gateway not set up");
+    }
+    match file {
+        None => Outcome::warn("Git gateway include file is missing", FIX),
+        Some(c) if !c.contains("gateway-credential") => {
+            Outcome::warn("Git gateway include has no credential helper", FIX)
+        }
+        Some(_) if !logged_in => Outcome::warn("no agent token", "smith login --agent"),
+        Some(_) => Outcome::ok("Git gateway include installed and agent signed in"),
+    }
+}
+
+fn gateway() -> Outcome {
+    let include = git_cmd::gateway_include_path();
+    let listed = |flag: &str| {
+        git_ok(&["config", flag, "--get-all", "include.path"])
+            .is_some_and(|s| s.lines().any(|l| Path::new(l) == include))
+    };
+    let listed = listed("--global") || listed("--local");
+    gateway_outcome(
+        listed,
+        std::fs::read_to_string(&include).ok().as_deref(),
+        ls_connector::State::path().exists(),
+    )
+}
+
+inventory::submit! { Check { id: "git.gateway", run: gateway } }
 inventory::submit! { Check { id: "git.forwarder", run: forwarder } }
 inventory::submit! { Check { id: "git.insteadof", run: insteadof } }
 inventory::submit! { Check { id: "git.upstream_auth", run: upstream_auth } }
@@ -172,6 +204,34 @@ mod tests {
         assert_eq!(out.status, status, "status for {summary:?}");
         assert_eq!(out.summary, summary);
         assert_eq!(out.remediation.as_deref(), remediation);
+    }
+
+    #[test]
+    fn git_gateway_branches() {
+        expect(
+            &gateway_outcome(false, None, false),
+            Status::Skip,
+            "Git gateway not set up",
+            None,
+        );
+        expect(
+            &gateway_outcome(true, None, true),
+            Status::Warn,
+            "Git gateway include file is missing",
+            Some("smith git setup --gateway <url>"),
+        );
+        expect(
+            &gateway_outcome(true, Some("helper = !smith git gateway-credential"), false),
+            Status::Warn,
+            "no agent token",
+            Some("smith login --agent"),
+        );
+        expect(
+            &gateway_outcome(true, Some("helper = !smith git gateway-credential"), true),
+            Status::Ok,
+            "Git gateway include installed and agent signed in",
+            None,
+        );
     }
 
     #[test]

@@ -84,6 +84,9 @@ pub mod kind {
     pub const RELAY_ATTEMPT: Code = Code::new("relay.attempt");
     pub const RELAY_OUTCOME: Code = Code::new("relay.outcome");
     pub const RELAY_DENIED: Code = Code::new("relay.denied");
+    pub const GIT_FETCH: Code = Code::new("git.fetch");
+    pub const GIT_PUSH: Code = Code::new("git.push");
+    pub const GIT_DENIED: Code = Code::new("git.denied");
     pub const AGENT_CREATED: Code = Code::new("agent.created");
     pub const AGENT_ROTATED: Code = Code::new("agent.rotated");
     pub const AGENT_DELETED: Code = Code::new("agent.deleted");

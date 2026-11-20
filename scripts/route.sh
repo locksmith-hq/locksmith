@@ -98,7 +98,7 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       read -r wf concl br trig pr < <(jq -r '.workflow_run|[.name, .conclusion, .head_branch, .event, (.pull_requests[0].number // "")]|@tsv' "$ev")
       if [ "$wf" = ci ] && [ "$concl" = failure ]; then
         if [ "$br" = main ]; then printf '%s\tCI failed on main\n' "$(cfgq .default_worker)"
-        elif [ "$trig" = pull_request ] && [[ "$br" == claude/change-* ]]; then printf '%s\tCI failed on PR #%s (%s)\n' "$(pr_worker "$pr")" "${pr:-?}" "$br"; fi
+        elif [ "$trig" = pull_request ] && [[ "$br" == claude/* ]]; then printf '%s\tCI failed on PR #%s (%s)\n' "$(pr_worker "$pr")" "${pr:-?}" "$br"; fi
       elif [ "$wf" = claude-review ] && [ "$trig" = pull_request ] && [ -n "$pr" ] && [[ "$concl" =~ ^(success|failure)$ ]]; then
         printf '%s\tmerge review finished on PR #%s\n' "$(pr_worker "$pr")" "$pr"
       fi ;;
@@ -215,6 +215,7 @@ no role marker"
   PR_AUTHOR='locksmith-josie[bot]' ev 'worker-b\tCI failed on PR #12 (claude/change-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
   PR_AUTHOR='locksmith-harriet[bot]' ev 'worker-c\tmerge review finished on PR #12' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
   PR_AUTHOR=tomer555 ev 'worker-a\tmerge review finished on PR #13' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"owner/x","event":"pull_request","pull_requests":[{"number":13}]}}'
+  PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tCI failed on PR #15 (claude/lead-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":15}]}}'
   PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tmerge review finished on PR #14' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"skipped","head_branch":"x","event":"pull_request","pull_requests":[{"number":12}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'

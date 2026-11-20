@@ -6,7 +6,7 @@ description: Finish and unblock your own Locksmith PRs through GitHub auto-merge
 # Finish your PRs (GitHub merges; `docs/agents/merge.md`)
 
 ## Whose PR
-A PR belongs to the App that opened it. Act only on your own (`gh pr list --author @me`). The lead may also fix or auto-merge a worker's PR. A worker never pushes to, labels or auto-merges another worker's PR or any PR the lead opened. Never approve, use `--admin` or call the merge API.
+A PR belongs to the App that opened it. Act only on your own: `gh pr list --author "locksmith-$AGENT_PERSONA[bot]"` (`@me` does not work with an App token). The lead may also fix or auto-merge a worker's PR. A worker never pushes to, labels or auto-merges another worker's PR or any PR the lead opened. Never approve, use `--admin` or call the merge API.
 
 ## Main first
 If the latest `ci` run on main failed, fix it first: `claude/fix-main-<date>`, the `evaluate-escalate` skill, then auto-merge it.
@@ -25,4 +25,5 @@ Oldest first, at most 4 per run; one failure does not stop the others. Lock the 
 - **Unchecked tasks:** finish them or turn auto-merge off (`gh pr merge <n> --disable-auto`).
 - **Conflicts:** merge `origin/main` into the branch. `Cargo.lock`, `package-lock.json`: take main's, rerun `cargo check` / `npm i`. Workspace members, `justfile` recipes, roadmap rows: keep both. Code: keep both behaviours; if they truly conflict, the later PR adapts. Run `just ci`, push once.
 - **Red CI:** read the failing job log (`gh run view <id> --log-failed | tail -200`), fix, push once.
+- **`merge-ready` stuck on pending** (review timed out): `gh pr merge <n> --disable-auto`, then `--auto --merge` again.
 - **Waiting on a code-owner review** (CODEOWNERS paths): leave it for the owner.

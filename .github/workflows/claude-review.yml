@@ -5,7 +5,7 @@ name: claude-review
 # GitHub merges once every required check is green. A push to a PR with auto-merge on re-runs it.
 # The status is set only here, so a PR whose job never ran has no status and cannot merge (a skipped job would
 # count as passing; a missing status does not). It checks, in order:
-#   1. owner PRs pass (the owner reviews their own work);
+#   1. owner PRs on a non-claude/* branch pass (the owner reviews their own work);
 #   2. complete: every tasks.md the PR touches is fully ticked (planning-only PRs exempt, #112);
 #   3. review: an independent Claude (Opus) review posts "merge-review <sha>: PASS|FAIL"; a PASS for an earlier
 #      head still counts while the PR's own diff (patch-id against main) is unchanged, e.g. after merging main in.
@@ -44,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - id: pre
         run: |
@@ -52,7 +53,8 @@ jobs:
           for l in review-passed review-failed; do
             gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$N/labels/$l" >/dev/null 2>&1 || true
           done
-          [ "$AUTHOR" = "${{ vars.OWNER_LOGIN || github.repository_owner }}" ] && { st success "owner PR"; echo done=1 >>"$GITHUB_OUTPUT"; exit 0; }
+          # Owner PRs on owner branches only: agents push claude/* and may post as the owner while identities are paused.
+          [ "$AUTHOR" = "${{ vars.OWNER_LOGIN || 'tomer555' }}" ] && [[ "$HEAD_REF" != claude/* ]] && { st success "owner PR"; echo done=1 >>"$GITHUB_OUTPUT"; exit 0; }
           git fetch -q origin main
           # 2 complete
           if [[ "$HEAD_REF" == claude/planning-* ]] && ! git diff --name-only origin/main...HEAD | grep -qv '^openspec/changes/'; then :

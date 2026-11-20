@@ -30,6 +30,9 @@ Request -> axum `/mcp` -> auth layer (person JWT on the hub, agent token on the 
 ## How an agent debugs this
 `just up` (with the auth profile); `curl` or the MCP Inspector against `http://localhost:<port>/mcp`; logs via the Grafana/Loki MCP and `docker compose logs control-plane gateway`; traces in Tempo per tool call; DB tables `mcp_tool_settings`, `mcp_clients`, `audit_events` via the postgres MCP (read-only); `cargo nextest run -p ls-mcp-server`.
 
+## Client binding for revoke
+Hub calls carry the person's OIDC token and Agent calls the per-agent token; neither names an MCP client. Revoke therefore needs a binding: on `initialize` the server issues an `mcp-session` identifier (a random id stored in `mcp_clients`, sent back as the `Mcp-Session-Id` header) tied to the authenticated principal, and every later call must present it. Revoking a client marks the row `revoked_at`, so its next call is refused with `401`. Revoking the person's or agent's own token is a separate, wider action. The research note (task 1.1) confirms how real clients keep the session id and token before task 4.2.
+
 ## Open questions
 - Remote MCP authorization: client registration (dynamic vs pre-registered), token audience, and how each agent tool stores a token. Unverified; resolved by the research note in task 1.1. If it needs an owner decision, the lead raises it before group 4.
 - Which Hub mutating tools ship now: revoke grant and pause agents only if T8 has not landed yet are stubbed behind the switch; otherwise they call the T8 API.

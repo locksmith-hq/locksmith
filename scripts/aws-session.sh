@@ -31,8 +31,13 @@ base_out() { tofu -chdir="$tf/base" output -json | jq -r "$1"; }
 
 # Writes the session variable file from base outputs and the caller's inputs. No secrets.
 write_vars() {
-  : "${LOCKSMITH_ALLOWED_CIDR:?set LOCKSMITH_ALLOWED_CIDR to your public IP as a /32}"
-  : "${LOCKSMITH_IMAGE_TAG:?set LOCKSMITH_IMAGE_TAG to the pushed ECR image tag}"
+  if [ "$cmd" = up ]; then
+    : "${LOCKSMITH_ALLOWED_CIDR:?set LOCKSMITH_ALLOWED_CIDR to your public IP as a /32}"
+    : "${LOCKSMITH_IMAGE_TAG:?set LOCKSMITH_IMAGE_TAG to the pushed ECR image tag}"
+  fi
+  # down/drift only need valid placeholders; the values do not matter for destroy or the plan diff.
+  LOCKSMITH_ALLOWED_CIDR="${LOCKSMITH_ALLOWED_CIDR:-192.0.2.1/32}"
+  LOCKSMITH_IMAGE_TAG="${LOCKSMITH_IMAGE_TAG:-unset}"
   mkdir -p target/aws
   tofu -chdir="$tf/base" output -json | jq \
     --arg cidr "$LOCKSMITH_ALLOWED_CIDR" --arg tag "$LOCKSMITH_IMAGE_TAG" \

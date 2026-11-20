@@ -87,7 +87,7 @@ resource "aws_iam_role_policy" "execution_extra" {
   policy = data.aws_iam_policy_document.execution_extra[0].json
 }
 
-# Task role: only the environment KMS key (wrap/unwrap) and the S3 buckets are reachable.
+# Task role: only the environment KMS key (wrap/unwrap) is reachable.
 resource "aws_iam_role" "task" {
   name               = "${var.name}-session-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_trust.json

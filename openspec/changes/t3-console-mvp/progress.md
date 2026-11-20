@@ -33,3 +33,8 @@
 - Task: 6.1 - blocked (not started)
 - Verified: none; tasks 1-5 already on branch, merge of main is current
 - Notes for next session: 6.1-6.3 need a Playwright `just web-e2e` recipe against `just up` (auth profile); 6.4 is an owner gate (live console layout approval, no approval recorded in openspec/decisions.md or issues). Do 6.1-6.3 next, then ask the lead for the layout decision.
+
+## 2026-11-20 worker
+- Task: 6.2 - done; 6.1 partial (not ticked)
+- Verified: `just up`, `just api`, `just web-e2e` -> 1 passed (one earlier run failed while `just ci` compiled in parallel; rerun green); just ci -> exit 0
+- Notes for next session: Playwright e2e in apps/web/e2e (sign in as seeded alice, project, environment, agent, leak check on all /v1 and /internal requests). 6.1 still needs grant create/revoke on a real secret: the control plane has no secret-create route, so the spec only asserts the error alert for an unknown secret id; seed a secret (DB or new route) then extend. 6.3 waits on 6.1. 6.4 is an owner gate. Run with `PW_CHROMIUM=/opt/pw-browsers/chromium just web-e2e` on the cloud VM. vitest now excludes e2e/.

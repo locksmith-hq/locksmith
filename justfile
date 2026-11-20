@@ -201,6 +201,14 @@ api:
     export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
 
+# T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
+# Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.
+web-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    curl -fsS http://127.0.0.1:8080/healthz >/dev/null || { echo "start the stack first: just up && just api" >&2; exit 1; }
+    cd apps/web && npx playwright test --trace off
+
 # T1 sign-up, verify, sign-in (auth code + PKCE), reset and API calls against Keycloak (needs `just up` and `just api`).
 auth-e2e:
     python3 -I scripts/auth-e2e.py

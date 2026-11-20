@@ -1,10 +1,10 @@
 # Tasks: T3 web console MVP
 
 ## 1. Contract and foundations [sonnet]
-- [ ] 1.1 Add `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
-- [ ] 1.2 Extend `createClient` in `packages/control-plane-client` with orgs, projects, environments, secrets and versions methods (web and desktop both get them), with unit tests in that package; `apps/web` maps `401` to sign-out in its wrapper; Vitest with a mocked fetch.
-- [ ] 1.3 Fixture data (MSW or in-memory handlers) for every route the console calls, in `apps/web/src/api/fixtures.ts`.
-- [ ] 1.4 Verify: `npm test --workspace apps/web`.
+- [x] 1.1 Add `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
+- [x] 1.2 Extend `createClient` in `packages/control-plane-client` with orgs, projects, environments, secrets and versions methods (web and desktop both get them), with unit tests in that package; `apps/web` maps `401` to sign-out in its wrapper; Vitest with a mocked fetch.
+- [x] 1.3 Fixture data (MSW or in-memory handlers) for every route the console calls, in `apps/web/src/api/fixtures.ts`.
+- [x] 1.4 Verify: `npm test --workspace apps/web`.
 
 ## 2. Tokens and shell [sonnet]
 - [ ] 2.1 Move design tokens and kit components from `mockup/kit.tsx` and the CSS into `packages/ui`; the mockup imports them; no visual change.

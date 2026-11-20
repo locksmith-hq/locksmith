@@ -30,7 +30,7 @@ Read every session in the window with `get_run_log`, paging older until the run'
 Give each its link, step, cause and evidence.
 
 **Worker output:** match sessions to PRs (session links in PR bodies, and pushes in the log). Classify each run as:
-- **shipped:** a task ticked, a PR marked ready, or a planning or archive PR opened;
+- **shipped:** a task ticked, a PR set to auto-merge, or a planning or archive PR opened;
 - **progress-only;**
 - **no output:** work was available, nothing pushed;
 - **idle.**

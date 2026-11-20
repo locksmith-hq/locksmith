@@ -84,10 +84,10 @@ resolve() { # <role or "raiser"> <event.json>
   printf '%s' "${r:-lead}"
 }
 
-# Each worker owns its PRs: the worker whose App opened PR <n>, else default_worker (owner or unknown author).
+# Each PR belongs to its author: the worker or lead whose App opened PR <n>, else default_worker (owner or unknown author).
 pr_worker() { # <pr number>; the author from GitHub (or $PR_AUTHOR in the selftest)
   local who r; who=${PR_AUTHOR:-$( [ -n "$1" ] && gh api "repos/$repo/pulls/$1" -q .user.login 2>/dev/null)}
-  r=$(role_of "$who"); case "$r" in worker-*) printf '%s' "$r" ;; *) cfgq .default_worker ;; esac
+  r=$(role_of "$who"); case "$r" in worker-*|lead) printf '%s' "$r" ;; *) cfgq .default_worker ;; esac
 }
 
 event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
@@ -98,7 +98,7 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       read -r wf concl br trig pr < <(jq -r '.workflow_run|[.name, .conclusion, .head_branch, .event, (.pull_requests[0].number // "")]|@tsv' "$ev")
       if [ "$wf" = ci ] && [ "$concl" = failure ]; then
         if [ "$br" = main ]; then printf '%s\tCI failed on main\n' "$(cfgq .default_worker)"
-        elif [ "$trig" = pull_request ] && [[ "$br" == claude/change-* ]]; then printf '%s\tCI failed on PR #%s (%s)\n' "$(pr_worker "$pr")" "${pr:-?}" "$br"; fi
+        elif [ "$trig" = pull_request ] && [[ "$br" == claude/* ]]; then printf '%s\tCI failed on PR #%s (%s)\n' "$(pr_worker "$pr")" "${pr:-?}" "$br"; fi
       elif [ "$wf" = claude-review ] && [ "$trig" = pull_request ] && [ -n "$pr" ] && [[ "$concl" =~ ^(success|failure)$ ]]; then
         printf '%s\tmerge review finished on PR #%s\n' "$(pr_worker "$pr")" "$pr"
       fi ;;
@@ -119,12 +119,15 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       who=$(jq -r .comment.user.login "$ev"); body=$(jq -r .comment.body "$ev")
       id=$(jq -r '.comment.id // 0' "$ev"); at=$(jq -r '.comment.created_at // ""' "$ev")
       owner=false; cfgq '.roles.owner.logins[]' | grep -qxF "$who" && ! grep -qE "$marker" <<<"$body" && owner=true
-      # Owner tags (@locksmith-lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
-      tags=$([ "$owner" = true ] && grep -oE '@locksmith-[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done)
+      # Owner tags (@locksmith-lead or the org team @locksmith-hq/lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
+      # The research bot (open internet, comments only) tags the roles its answer is for; it never wakes itself.
+      src=owner; [ "$owner" = false ] && [ "$(role_of "$who")" = research ] && src=research
+      tags=$({ [ "$owner" = true ] || [ "$src" = research ]; } && grep -oE '@locksmith-(hq/)?[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done | grep -vx "$([ "$src" = research ] && echo research)")
       if [ -n "$tags" ]; then
-        for to in $tags; do printf '%s\towner tagged you on #%s: %s\n' "$to" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
+        for to in $tags; do printf '%s\t%s tagged you on #%s: %s\n' "$to" "$src" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
         return 0
       fi
+      [ "$src" = research ] && return 0
       [ "$(jq -r '.issue.pull_request != null' "$ev")" = true ] && return 0
       for l in $labels; do
         to=$(resolve "$(cfgq --arg l "$l" '.channels[$l].on_reply // empty')" "$ev")
@@ -201,12 +204,20 @@ no role marker"
   ev 'pm\towner tagged you on #7: u\nresearch\towner tagged you on #7: u' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-pm and @locksmith-research: check this"}}'
   ev 'worker-a\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-worker rebase please"}}'
   ev 'worker-c\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-harriet rebase please"}}'
+  ev 'worker-b\towner tagged you on #8: u\nlead\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-hq/lead and @locksmith-hq/josie: look"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\n@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"stranger"},"body":"@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"@locksmith-nobody"}}'
+  # research (Ada) informs: her comment's tags wake those roles, never herself; other bots cannot tag
+  ev 'worker-b\tresearch tagged you on #6: u\npm\tresearch tagged you on #6: u' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-research"}]},"comment":{"html_url":"u","user":{"login":"locksmith-ada[bot]"},"body":"Answer: yes.\n@locksmith-pm @locksmith-josie @locksmith-ada"}}'
+  ev '' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"locksmith-ada[bot]"},"body":"no tags"}}'
+  ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"locksmith-alfie[bot]"},"body":"@locksmith-lead"}}'
+  ev 'research\towner tagged you on #9: u' issue_comment '{"issue":{"number":9,"labels":[]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-ada what does X cost?"}}'
   # no tag: the role that raised the issue gets the reply, else the lead
   ev 'pm\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"body":"x\n<!-- raised-by: pm -->","labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"yes"}}'
   ev 'research\tneeds-research #6 opened' issues '{"action":"labeled","label":{"name":"needs-research"},"issue":{"number":6,"labels":[{"name":"needs-research"}]}}'
+  ev 'pm\tneeds-work #16 opened' issues '{"action":"labeled","label":{"name":"needs-work"},"issue":{"number":16,"labels":[{"name":"needs-work"}]}}'
+  ev 'worker-c\tneeds-work #16 closed' issues '{"action":"closed","issue":{"number":16,"body":"<!-- raised-by: worker-c -->","labels":[{"name":"needs-work"}]}}'
   ev 'pm\tneeds-research #6 closed' issues '{"action":"closed","issue":{"number":6,"body":"<!-- raised-by: pm -->","labels":[{"name":"needs-research"}]}}'
   ev 'worker-a\tCI failed on main' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"main","event":"push","pull_requests":[]}}'
   ev '' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"feature","event":"pull_request","pull_requests":[]}}'
@@ -214,7 +225,8 @@ no role marker"
   PR_AUTHOR='locksmith-josie[bot]' ev 'worker-b\tCI failed on PR #12 (claude/change-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
   PR_AUTHOR='locksmith-harriet[bot]' ev 'worker-c\tmerge review finished on PR #12' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
   PR_AUTHOR=tomer555 ev 'worker-a\tmerge review finished on PR #13' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"owner/x","event":"pull_request","pull_requests":[{"number":13}]}}'
-  PR_AUTHOR='locksmith-linus[bot]' ev 'worker-a\tmerge review finished on PR #14' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
+  PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tCI failed on PR #15 (claude/lead-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":15}]}}'
+  PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tmerge review finished on PR #14' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"skipped","head_branch":"x","event":"pull_request","pull_requests":[{"number":12}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"

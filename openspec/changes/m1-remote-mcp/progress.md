@@ -87,3 +87,8 @@
 - Task: m1-remote-mcp 4.1 - done (realm client `locksmith-mcp`: public, PKCE S256, loopback redirect, consent required, fixed MCP audience mapper; `scripts/mcp-e2e.py` + `just mcp-e2e` drive discovery, consent sign-in with `resource`, refresh, `initialize` + `tools/list`, and the no-passthrough check; `just api` now sets `LOCKSMITH_MCP_RESOURCE_URL`)
 - Verified: `just mcp-e2e` against live Keycloak 26.0.8 + control plane -> all 16 checks passed; Keycloak keeps `auth_time` on refresh (strict fallback not needed); anonymous DCR refused, CIMD not advertised (research note section 5)
 - Notes for next session: 4.2 (revoke bound to client_id; issuer-side revoke via Keycloak admin API; refuse when `auth_time` < `revoked_at`). 2.2 still unticked (explain_block deferral).
+
+## 2026-11-20 worker A
+- Task: m1-remote-mcp 4.2 - partial (hub half done; 4.2 stays unticked). The hub `/mcp` middleware refuses with 401 any token whose client row (client_id + person) is revoked and whose `auth_time` is older than `revoked_at` (or absent); a fresh sign-in with a newer `auth_time` passes; fails closed if the check errors. `HumanIdentity` now carries `auth_time`.
+- Verified: `cargo nextest run -p ls-control-plane --test mcp_tools --test mcp --test mcp_auth --test users` -> 33 passed; `just ci` -> exit 0
+- Notes for next session: the gateway/agent half of 4.2 (revoked agent refused, live short-lived credentials dropped) depends on agent revoke from T8; either do it with a gateway-side check or have the lead accept the deferral. Issuer-side revoke via Keycloak admin API is not done. 4.3 verify (`just up && mcp_e2e`) and groups 5-7 remain; 2.2 still unticked (explain_block deferral).

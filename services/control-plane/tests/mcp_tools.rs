@@ -91,6 +91,17 @@ impl TestKey {
 
     /// As [`Self::token`], issued to the OAuth client `client` (the `azp` claim).
     fn token_for(&self, sub: &str, verified: bool, client: Option<&str>) -> String {
+        self.token_at(sub, verified, client, None)
+    }
+
+    /// As [`Self::token_for`], with the issuer's `auth_time` (unix seconds) when given.
+    fn token_at(
+        &self,
+        sub: &str,
+        verified: bool,
+        client: Option<&str>,
+        auth_time: Option<u64>,
+    ) -> String {
         let exp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -102,6 +113,9 @@ impl TestKey {
         });
         if let Some(c) = client {
             claims["azp"] = json!(c);
+        }
+        if let Some(t) = auth_time {
+            claims["auth_time"] = json!(t);
         }
         let mut header = JwtHeader::new(Algorithm::ES256);
         header.kid = Some("k1".to_owned());
@@ -200,6 +214,41 @@ impl Person {
             .await;
         assert!(s.is_success(), "initialized notification: {s}");
         p
+    }
+
+    /// A client holding `token`, not yet initialized.
+    fn raw(f: &Fixture, token: String) -> Self {
+        Self {
+            app: f.app.clone(),
+            token,
+            session: None,
+            next_id: 1,
+            transcript: Vec::new(),
+        }
+    }
+
+    /// As [`Self::init_status`], keeping the client (and its session) for further calls.
+    async fn init_status_keep(&mut self) -> StatusCode {
+        let (s, _, session) = self
+            .send(
+                json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {},
+                "clientInfo": {"name": "test", "version": "1.0"}}}),
+            )
+            .await;
+        self.session = session;
+        s
+    }
+
+    /// The status of an `initialize` with this token.
+    async fn init_status(mut self) -> StatusCode {
+        self.send(
+            json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "test", "version": "1.0"}}}),
+        )
+        .await
+        .0
     }
 
     /// A person whose token has an unverified email (no session needed: `initialize` only).
@@ -807,7 +856,8 @@ async fn mcp_initialize_records_the_client_and_never_unrevokes_it() {
         json!({}),
     )
     .await;
-    let _third = Person::connect_as(&f, "alice", Some("client-abc")).await;
+    let third = Person::raw(&f, f.key.token_for("alice", true, Some("client-abc")));
+    assert_eq!(third.init_status().await, StatusCode::UNAUTHORIZED);
     let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
     assert_eq!(rows["items"].as_array().unwrap().len(), 1, "{rows}");
     assert_eq!(rows["items"][0]["revoked_at"], revoked["revoked_at"]);
@@ -989,4 +1039,65 @@ async fn mcp_revoke_grant_is_attributed_to_the_person_and_the_call_is_audited() 
         .expect("revoke_grant call recorded");
     assert_eq!(row.2, "ok");
     assert_eq!(row.0, revoked[0].0);
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+#[tokio::test]
+async fn mcp_a_revoked_client_is_refused_on_the_next_call_and_on_a_fresh_initialize() {
+    let f = start().await;
+    let signed_in = now_secs() - 60;
+    let token = |client: &str, at: Option<u64>| f.key.token_at("alice", true, Some(client), at);
+    // Connect with an issued-before-revoke token.
+    let mut client = Person::raw(&f, token("client-abc", Some(signed_in)));
+    assert_eq!(client.init_status_keep().await, StatusCode::OK);
+    let (s, _, _) = client
+        .send(json!({"jsonrpc": "2.0", "id": 5, "method": "tools/list", "params": {}}))
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    let org = personal_org(&f, "alice").await;
+    let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    let row_id = rows["items"][0]["id"].as_str().unwrap().to_owned();
+    // Another client of the same person, to prove the revoke is per client.
+    let other = Person::connect_as(&f, "alice", Some("client-other")).await;
+    // The row stamps `revoked_at` with whole seconds of "now"; make sure it is after sign-in.
+    rest(
+        &f,
+        "POST",
+        &format!("/v1/mcp/clients/{row_id}/revoke"),
+        org,
+        json!({}),
+    )
+    .await;
+    // The next call on the live session is refused with 401 and a challenge.
+    let (s, _, _) = client
+        .send(json!({"jsonrpc": "2.0", "id": 6, "method": "tools/list", "params": {}}))
+        .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    // So is a fresh initialize with the same (older) token, and with a token that has no auth_time.
+    let same = Person::raw(&f, token("client-abc", Some(signed_in)));
+    assert_eq!(same.init_status().await, StatusCode::UNAUTHORIZED);
+    let none = Person::raw(&f, token("client-abc", None));
+    assert_eq!(none.init_status().await, StatusCode::UNAUTHORIZED);
+    // The person's other client and another person with the same client id are unaffected.
+    let mut other = other;
+    assert!(!other.list_tools().await.is_empty());
+    let bob = Person::raw(&f, f.key.token_at("bob", true, Some("client-abc"), None));
+    assert_eq!(bob.init_status().await, StatusCode::OK);
+    // A fresh sign-in after the revoke (newer auth_time) is let through; the row stays revoked.
+    let fresh = Person::raw(&f, token("client-abc", Some(now_secs() + 5)));
+    assert_eq!(fresh.init_status().await, StatusCode::OK);
+    let rows = rest(&f, "GET", "/v1/mcp/clients", org, Value::Null).await;
+    let row = rows["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["client_id"] == "client-abc")
+        .unwrap();
+    assert!(!row["revoked_at"].is_null(), "{rows}");
 }

@@ -315,7 +315,7 @@ fn unauthorized(endpoint: Option<&McpEndpoint>, token_presented: bool) -> Respon
 }
 
 async fn require_token(
-    State(endpoint): State<Arc<McpEndpoint>>,
+    State((endpoint, state)): State<(Arc<McpEndpoint>, AppState)>,
     mut request: Request,
     next: Next,
 ) -> Response {
@@ -328,7 +328,14 @@ async fn require_token(
     };
     match endpoint.auth.verify(token).await {
         Ok(identity) => {
-            request.extensions_mut().insert(McpPrincipal(identity));
+            let principal = McpPrincipal(identity);
+            // A revoked client is refused like a bad token, on every request (task 4.2). If the
+            // check cannot run, fail closed.
+            match mcp_tools::client_revoked(&state, &principal).await {
+                Ok(false) => {}
+                Ok(true) | Err(_) => return unauthorized(Some(&endpoint), true),
+            }
+            request.extensions_mut().insert(principal);
             next.run(request).await
         }
         Err(_) => unauthorized(Some(&endpoint), true),
@@ -356,7 +363,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
         Router::new()
             .nest_service(MCP_PATH, service)
             .layer(middleware::from_fn_with_state(
-                endpoint.clone(),
+                (endpoint.clone(), state.clone()),
                 require_token,
             ));
     let meta = endpoint.clone();

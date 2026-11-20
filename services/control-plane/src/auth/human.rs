@@ -45,6 +45,9 @@ pub struct HumanIdentity {
     /// The OAuth client the token was issued to (`client_id`, else `azp`), when the issuer sets
     /// one. Used by the MCP route to bind a call to an `mcp_clients` row.
     pub client_id: Option<String>,
+    /// When the person last signed in at the issuer (`auth_time`, unix seconds), when present.
+    /// A refresh keeps it, so a revoke can tell an old grant from a fresh sign-in.
+    pub auth_time: Option<i64>,
 }
 
 /// A refused token. Deliberately opaque: the only content is a static label for traces.
@@ -59,6 +62,7 @@ struct Claims {
     email_verified: Option<bool>,
     client_id: Option<String>,
     azp: Option<String>,
+    auth_time: Option<i64>,
 }
 
 /// Verifier for one issuer.
@@ -142,6 +146,7 @@ impl HumanAuth {
                 .or(c.azp)
                 .map(|id| id.trim().to_owned())
                 .filter(|id| !id.is_empty()),
+            auth_time: c.auth_time,
         })
     }
 }

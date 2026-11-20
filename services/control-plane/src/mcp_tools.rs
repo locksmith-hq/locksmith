@@ -489,3 +489,44 @@ pub async fn record_client(
         })
         .await
 }
+
+/// Whether this token's client has been revoked for the person. A client row is keyed by the
+/// token's OAuth client id and the person; a revoked row refuses every token issued before the
+/// revoke (`auth_time` older than `revoked_at`, or absent). A fresh sign-in after the revoke
+/// carries a newer `auth_time` and is let through. A token with no client id, or no row yet, is
+/// not revoked. A person who cannot be resolved is left to the tool handlers to refuse.
+pub async fn client_revoked(state: &AppState, principal: &McpPrincipal) -> Result<bool, ApiError> {
+    let Some(client_id) = principal.0.client_id.clone() else {
+        return Ok(false);
+    };
+    let Ok(user) = caller(state, principal).await else {
+        return Ok(false);
+    };
+    let who = format!("{}|{}", principal.0.issuer, principal.0.subject);
+    let revoked_at: Option<OffsetDateTime> = state
+        .db()
+        .with_org(user.org_id, move |c| {
+            Box::pin(async move {
+                let row = sql::query(
+                    "SELECT revoked_at FROM mcp_clients \
+                     WHERE layer = 'hub' AND client_id = $1 AND principal = $2",
+                )
+                .bind(client_id)
+                .bind(who)
+                .fetch_optional(c)
+                .await?;
+                match row {
+                    Some(r) => Ok::<_, ApiError>(r.try_get("revoked_at")?),
+                    None => Ok(None),
+                }
+            })
+        })
+        .await?;
+    let Some(revoked_at) = revoked_at else {
+        return Ok(false);
+    };
+    Ok(match principal.0.auth_time {
+        Some(t) => t < revoked_at.unix_timestamp(),
+        None => true,
+    })
+}

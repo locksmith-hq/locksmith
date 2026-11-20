@@ -26,3 +26,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 4.1 `smith git setup --gateway <url>` (insteadOf include + `gateway-credential` helper returning the agent token), teardown removes it, `git.gateway` doctor check.
 - Verified: `cargo nextest run -p smith-cli git` (8 pass), clippy on smith-cli and ls-connector clean. Full `just ci` not run this slice.
 - Notes for next session: 4.2 (console/desktop bindings page with Vitest), 4.3, then groups 5 and 6.
+
+## 2026-11-20 worker
+- Task: 5.1, 5.2 - done (4.2 blocked: see notes)
+- Verified: `cargo nextest run -p ls-gateway git_large` -> 1 passed (50 MB push, slow upstream, RSS growth bound 20 MB, all bytes + credential seen upstream, one git.push event); clippy -D warnings clean; `just ci` -> exit 0. No independent evaluator run (test-only slice).
+- Notes for next session: merged main (G7 name clash: main's human-token case kept G7, our Git case renamed to G8.sh with README row and comment refs updated). Task 4.2 is blocked: no bindings page exists in apps/web or apps/desktop (only mockups/Relays) and no API lists Git bindings (they live only in gateway `[[git_binding]]` TOML), so it needs a control-plane/gateway read endpoint first; needs-rescue/lead decision. Task 4.3 follows it. 6.1 (`just git-smoke`) still open.

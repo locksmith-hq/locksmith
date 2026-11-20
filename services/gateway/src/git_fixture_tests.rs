@@ -1131,3 +1131,128 @@ async fn git_redact_unaudited_response_is_withheld() {
     assert_eq!(r.status(), 500);
     assert!(r.text().await.unwrap().contains("audit_failed"));
 }
+
+// ---- D1 task 5: a large push is streamed, not buffered ----
+
+/// Resident set size of this process in bytes (Linux; `None` elsewhere).
+fn rss_bytes() -> Option<usize> {
+    let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+    let pages: usize = statm.split_whitespace().nth(1)?.parse().ok()?;
+    Some(pages * 4096)
+}
+
+/// A 50 MB `git-receive-pack` body goes through the gateway to an upstream that drains it
+/// slowly. The gateway must stream it: the upstream sees every byte with the injected
+/// credential, and the process (gateway, upstream and client share it) never holds anything
+/// near the body size. The gateway never reads the agent token's request body into memory.
+#[tokio::test(flavor = "multi_thread")]
+async fn git_large_push_is_streamed_with_bounded_memory() {
+    use http_body_util::BodyExt as _;
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    const TOTAL: usize = 50 * 1024 * 1024;
+    const CHUNK: usize = 64 * 1024;
+    // Generous for buffers and allocator slack, but far below the 50 MB body.
+    const BOUND: usize = 20 * 1024 * 1024;
+
+    let received = Arc::new(AtomicUsize::new(0));
+    let authorized = Arc::new(AtomicUsize::new(0));
+    let (rx, auth_seen) = (received.clone(), authorized.clone());
+    let expected = basic(PAT);
+    let app = Router::new().fallback(move |req: Request<Body>| {
+        let (rx, auth_seen, expected) = (rx.clone(), auth_seen.clone(), expected.clone());
+        async move {
+            let ok = req
+                .headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v == expected);
+            if ok {
+                auth_seen.fetch_add(1, Ordering::SeqCst);
+            }
+            let mut body = req.into_body();
+            while let Some(frame) = body.frame().await {
+                if let Ok(data) = frame
+                    .map(|f| f.into_data())
+                    .unwrap_or(Ok(Default::default()))
+                {
+                    rx.fetch_add(data.len(), Ordering::SeqCst);
+                }
+                // A slow consumer: a buffering gateway would pile the body up here.
+                tokio::time::sleep(Duration::from_micros(500)).await;
+            }
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "application/x-git-receive-pack-result")
+                .body(Body::from("000eunpack ok\n0000"))
+                .unwrap()
+        }
+    });
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let up_port = l.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let _ = axum::serve(l, app).await;
+    });
+
+    let binding = git_binding(
+        RW,
+        "acme/widgets",
+        vec![GitService::Fetch, GitService::Push],
+        up_port,
+    );
+    let gw = start_gateway(vec![binding], &[(RW, PAT.as_bytes().to_vec())], None).await;
+
+    // Sample the resident set while the push runs.
+    let base_rss = rss_bytes();
+    let peak = Arc::new(AtomicUsize::new(0));
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let sampler = {
+        let (peak, stop) = (peak.clone(), stop.clone());
+        tokio::spawn(async move {
+            while !stop.load(Ordering::SeqCst) {
+                if let Some(r) = rss_bytes() {
+                    peak.fetch_max(r, Ordering::SeqCst);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+    };
+
+    // The agent side: a raw HTTP/1.1 request, the body written in chunks (no buffering).
+    let addr = gw.base.trim_start_matches("http://").to_owned();
+    let mut sock = tokio::net::TcpStream::connect(&addr).await.unwrap();
+    let head = format!(
+        "POST /git/127.0.0.1/acme/widgets.git/git-receive-pack HTTP/1.1\r\nHost: {addr}\r\n\
+         Authorization: Bearer {}\r\nContent-Type: application/x-git-receive-pack-request\r\n\
+         Content-Length: {TOTAL}\r\nConnection: close\r\n\r\n",
+        gw.token
+    );
+    sock.write_all(head.as_bytes()).await.unwrap();
+    let chunk = vec![0xA5u8; CHUNK];
+    for _ in 0..TOTAL / CHUNK {
+        sock.write_all(&chunk).await.unwrap();
+    }
+    let mut reply = Vec::new();
+    sock.read_to_end(&mut reply).await.unwrap();
+    stop.store(true, Ordering::SeqCst);
+    let _ = sampler.await;
+
+    let reply = String::from_utf8_lossy(&reply);
+    assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+    assert!(reply.contains("unpack ok"), "{reply}");
+    // Every byte reached the upstream, with the injected credential and no other.
+    assert_eq!(received.load(Ordering::SeqCst), TOTAL);
+    assert_eq!(authorized.load(Ordering::SeqCst), 1);
+    assert!(!reply.contains(PAT));
+    // The ledger records the push and nothing about the pack.
+    let kinds: Vec<EventKind> = gw.audit.events().into_iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, vec![EventKind::GitPush(Outcome::Ok)], "{kinds:?}");
+
+    if let Some(base) = base_rss {
+        let grew = peak.load(Ordering::SeqCst).saturating_sub(base);
+        assert!(
+            grew < BOUND,
+            "resident set grew {grew} bytes during a {TOTAL} byte push (bound {BOUND})"
+        );
+    }
+}

@@ -21,8 +21,8 @@
 - [ ] 4.3 Verify: `cargo nextest run -p smith-cli git`, `npm test --workspace apps/web`, `just apps-build`.
 
 ## 5. Large body check [sonnet]
-- [ ] 5.1 A 50 MB push through the gateway with bounded memory asserted in the test.
-- [ ] 5.2 Verify: `cargo nextest run -p ls-gateway git_large`.
+- [x] 5.1 A 50 MB push through the gateway with bounded memory asserted in the test.
+- [x] 5.2 Verify: `cargo nextest run -p ls-gateway git_large`.
 
 ## 6. Local verification [sonnet]
 - [ ] 6.1 `just up`, a `just git-smoke` recipe (clone and push through the gateway to the fixture), `just apps-build`, then `just ci`.

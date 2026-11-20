@@ -27,7 +27,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tracing-log = "0.2.0"
 secrecy = "0.10"
 time = { version = "0.3.55", features = ["serde", "formatting"] }
-uuid = { version = "1.29", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.29", features = ["v4", "v5", "v7", "serde"] }
 http = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -57,6 +57,10 @@ sha2 = "0.10"
 ls-crypto = { path = "../../crates/ls-crypto" }
 # S5: the audit ledger (hash chain) and its Postgres store, appended inside tenant transactions.
 ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
+# T1: human JWT verification. `jsonwebtoken` (above) verifies; this fetches the issuer's JWKS.
+# Same TLS setup as ls-envelope's OpenBao client: rustls with ring, OS trust store.
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
+rustls-platform-verifier = "0.7.1"
 # Hashes in the audit API are shown as lowercase hex.
 hex = "0.4"
 
@@ -68,3 +72,5 @@ similar = "3.2.1"
 ls-pg-test = { path = "../../crates/ls-pg-test" }
 # S5 checkpoint tests: an in-process fake of the OpenBao transit sign endpoint.
 wiremock = { workspace = true }
+# T1: sign test tokens with deterministic P-256 keys (already in the tree through jsonwebtoken).
+p256 = "0.14"

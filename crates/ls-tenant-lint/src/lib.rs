@@ -9,6 +9,10 @@
 //! literal `false`. Test code is skipped: files under a crate's `tests/`, `benches/` or
 //! `examples/` directory, and items annotated `#[cfg(test)]`. Line comments are skipped.
 //!
+//! A second check covers migrations (T1 task 3.1, A0-4): every table a migration creates must have
+//! row-level security enabled and forced and at least one policy, so a new table cannot ship
+//! readable by the app role. See [`scan_migrations`].
+//!
 //! Limits (it is a text lint, not a parser): an `is_local` flag passed as a bind parameter is
 //! not seen, and braces inside string literals can confuse `#[cfg(test)]` item matching.
 
@@ -162,6 +166,89 @@ pub fn scan_tree(root: &Path) -> std::io::Result<Vec<Finding>> {
     Ok(findings)
 }
 
+pub const RULE_NO_RLS: &str = "table created without ENABLE ROW LEVEL SECURITY";
+pub const RULE_NO_FORCE_RLS: &str = "table created without FORCE ROW LEVEL SECURITY";
+pub const RULE_NO_POLICY: &str = "table created without a CREATE POLICY";
+
+/// A table whose migrations lack a row-level-security rule.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TableFinding {
+    pub table: String,
+    pub rule: &'static str,
+}
+
+/// Check the concatenated text of a migration set: every `CREATE TABLE` needs `ENABLE`, `FORCE`
+/// and a `CREATE POLICY` for that table somewhere in the set (policies may live in a later file).
+/// `--` comments are ignored. Tables created `TEMP` are skipped. A table dropped later is still
+/// checked at its creation, which is the conservative reading.
+pub fn scan_migration_sql(sql: &str) -> Vec<TableFinding> {
+    static CREATE: OnceLock<Regex> = OnceLock::new();
+    let create = CREATE.get_or_init(|| {
+        Regex::new(r#"(?i)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?"#)
+            .expect("valid regex")
+    });
+    let code: String = sql
+        .lines()
+        .map(|l| l.split("--").next().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let has = |kind: &str, table: &str| {
+        Regex::new(&format!(
+            r#"(?i){kind}\s+(?:public\.)?"?{}"?\b"#,
+            regex::escape(table)
+        ))
+        .expect("valid regex")
+        .is_match(&code)
+    };
+    let mut findings = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for cap in create.captures_iter(&code) {
+        let table = cap[1].to_lowercase();
+        if !seen.insert(table.clone()) {
+            continue;
+        }
+        let checks = [
+            (r"ALTER\s+TABLE", "ENABLE", RULE_NO_RLS),
+            (r"ALTER\s+TABLE", "FORCE", RULE_NO_FORCE_RLS),
+            (r"CREATE\s+POLICY\s+\S+\s+ON", "", RULE_NO_POLICY),
+        ];
+        for (kind, word, rule) in checks {
+            let ok = if word.is_empty() {
+                has(kind, &table)
+            } else {
+                Regex::new(&format!(
+                    r#"(?i){kind}\s+(?:ONLY\s+)?(?:public\.)?"?{}"?\s+{word}\s+ROW\s+LEVEL\s+SECURITY"#,
+                    regex::escape(&table)
+                ))
+                .expect("valid regex")
+                .is_match(&code)
+            };
+            if !ok {
+                findings.push(TableFinding {
+                    table: table.clone(),
+                    rule,
+                });
+            }
+        }
+    }
+    findings
+}
+
+/// Run [`scan_migration_sql`] over every `*.sql` file in `dir`, in file-name order.
+pub fn scan_migrations(dir: &Path) -> std::io::Result<Vec<TableFinding>> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "sql"))
+        .collect();
+    files.sort();
+    let mut all = String::new();
+    for f in files {
+        all.push_str(&std::fs::read_to_string(f)?);
+        all.push('\n');
+    }
+    Ok(scan_migration_sql(&all))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,5 +284,29 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         assert!(is_test_file(&root.join("tests/any.rs")));
         assert!(!is_test_file(&root.join("src/lib.rs")));
+    }
+
+    #[test]
+    fn migration_lint_requires_enable_force_and_a_policy() {
+        let ok = "CREATE TABLE a (id int);\nALTER TABLE a ENABLE ROW LEVEL SECURITY;\nALTER TABLE a FORCE ROW LEVEL SECURITY;\nCREATE POLICY p ON a USING (true);\n";
+        assert!(scan_migration_sql(ok).is_empty());
+
+        let none = "CREATE TABLE b (id int);\n-- ALTER TABLE b ENABLE ROW LEVEL SECURITY;\n";
+        let rules: Vec<_> = scan_migration_sql(none)
+            .into_iter()
+            .map(|f| f.rule)
+            .collect();
+        assert_eq!(rules, vec![RULE_NO_RLS, RULE_NO_FORCE_RLS, RULE_NO_POLICY]);
+
+        let no_force = "CREATE TABLE c (id int);\nALTER TABLE c ENABLE ROW LEVEL SECURITY;\nCREATE POLICY p ON c USING (true);\n";
+        let f = scan_migration_sql(no_force);
+        assert_eq!(f.len(), 1);
+        assert_eq!((f[0].table.as_str(), f[0].rule), ("c", RULE_NO_FORCE_RLS));
+
+        // A table name that only prefixes another's does not satisfy it.
+        let prefix = "CREATE TABLE d (id int);\nCREATE TABLE d2 (id int);\nALTER TABLE d2 ENABLE ROW LEVEL SECURITY;\nALTER TABLE d2 FORCE ROW LEVEL SECURITY;\nCREATE POLICY p ON d2 USING (true);\n";
+        let f = scan_migration_sql(prefix);
+        assert_eq!(f.len(), 3);
+        assert!(f.iter().all(|x| x.table == "d"));
     }
 }

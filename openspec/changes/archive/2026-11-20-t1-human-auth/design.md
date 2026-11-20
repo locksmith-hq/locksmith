@@ -14,7 +14,7 @@
 | # | Decision | Alternatives rejected | Evidence |
 |---|---|---|---|
 | 1 | **Verify JWTs in the control plane with `jsonwebtoken` plus a small cached JWKS client** (RS256/ES256 allow-list, 60 s leeway, one rate-limited refresh on unknown `kid`). | A full OIDC client crate in the resource server (not needed: it only verifies); an auth proxy sidecar (extra moving part, hides identity from RLS binding). | A0-15; RFC 8725 (JWT best practices); `jsonwebtoken` already in the lockfile. **[verify version and last release at apply]** |
-| 2 | **Keycloak (realm JSON imported at start) is the local issuer** in `just up`, pinned to a Docker Hub-reachable image (`quay.io` and `ghcr.io` may be blocked in the agent VM: pick the mirror that resolves at apply and record it). | Dex (no password store or email verification), Authentik/ZITADEL (heavier, less parity with Cognito flows), moto's Cognito (no browser flow). | A0-14 names Keycloak. **[verify image and Apache-2.0 licence at apply]** |
+| 2 | **Keycloak (realm JSON imported at start) is the local issuer** in `just up`, pinned to a Docker Hub-reachable image (`quay.io` and `ghcr.io` may be blocked in the agent VM: pick the mirror that resolves at apply and record it). | Dex (no password store or email verification), Authentik/ZITADEL (heavier, less parity with Cognito flows), moto's Cognito (no browser flow). | A0-14 names Keycloak. Verified at apply 2026-11-19: `keycloak/keycloak:26.0.8` from Docker Hub (`docker manifest inspect`), Apache-2.0; `quay.io` is blocked in the agent VM. Mail catcher `axllent/mailpit:v1.21.8` (MIT). |
 | 3 | **GitHub is brokered by the issuer.** Keycloak has a built-in GitHub identity provider; Cognito reaches GitHub through an OIDC-compatible wrapper or a Lambda shim decided in P1. Services only see an OIDC token. | Speaking GitHub OAuth in our service (duplicates provider logic, leaks the second protocol into the resource server). | Keycloak server docs, "Identity Brokering"; GitHub OAuth is OAuth 2.0 only (no `id_token`). **[verify Cognito path at P1]** |
 | 4 | **Authorization code + PKCE for web and desktop; device grant (RFC 8628) for `smith login --user`.** | Implicit flow (deprecated, RFC 9700); password grant (removed in OAuth 2.1). | OAuth 2.0 Security BCP (RFC 9700). |
 | 5 | **Tokens live in memory (web) and the OS keystore (desktop, via the `keyring` crate); refresh via a refresh token rotation handled by the issuer.** Never `localStorage`. | `localStorage` (XSS-readable); cookies with a BFF (more infrastructure than a first slice needs; revisit for hosted). | OWASP HTML5 Security cheat sheet; `keyring` (MIT/Apache-2.0) **[verify]**. |
@@ -26,11 +26,11 @@
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| jsonwebtoken | MIT | lockfile version **[verify at apply]** | **[verify]** | JWT verification | not AGPL |
-| reqwest (workspace) | MIT/Apache-2.0 | workspace | n/a | JWKS fetch | not AGPL |
+| jsonwebtoken | MIT | 12.0.0 (lockfile; `rust_crypto` backend) | 2026-11-13 | JWT verification | not AGPL |
+| reqwest | MIT OR Apache-2.0 | 0.13.5 (lockfile; rustls, no default features) | 2026-09-08 | JWKS fetch | not AGPL |
 | keyring | MIT/Apache-2.0 | **[verify]** | **[verify]** | desktop token storage | not AGPL |
-| Keycloak | Apache-2.0 | **[verify]** | **[verify]** | local issuer, compose only, not shipped | not AGPL |
-| openid-client or oidc-client-ts (web) | MIT / Apache-2.0 | **[verify]** | **[verify]** | PKCE flow in `apps/web` | not AGPL |
+| Keycloak | Apache-2.0 | 26.0.8 (image `keycloak/keycloak:26.0.8`, Docker Hub; `quay.io` is blocked in the agent VM) | 26.0.8 (26.0.x line) | local issuer, compose only (`start-dev`), not shipped | not AGPL |
+| oidc-client-ts (web) | Apache-2.0 | 3.5.0 (pinned in `apps/web/package.json`; depends only on `jwt-decode`) | 2026-03-13 | PKCE flow in `apps/web`; `InMemoryWebStorage` user store, so tokens never reach web storage (only the transient PKCE state, which holds no token, uses `sessionStorage`) | not AGPL |
 
 Built in-house: the JWKS cache and the `OrgBinding` extractor (about 200 lines). Searched first: `openidconnect`, `axum-oidc` and `jwks-client` crates; they bundle a client flow or an unmaintained cache. The choice between them and the small in-house cache is re-checked at task 1.1.
 

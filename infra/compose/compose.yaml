@@ -71,5 +71,41 @@ services:
       timeout: 5s
       retries: 20
 
+  # T1 local issuer (profile `auth`: `just up` starts it, `just up-lite` does not). start-dev is
+  # local only. The realm is imported at first start; KC_HOSTNAME fixes the issuer URL.
+  keycloak:
+    profiles: ["auth"]
+    image: ${KEYCLOAK_IMAGE:-keycloak/keycloak:26.0.8}
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-dev-only
+      KC_HOSTNAME: http://localhost:8180
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes: ["./keycloak/locksmith-realm.json:/opt/keycloak/data/import/locksmith-realm.json:ro"]
+    ports: ["127.0.0.1:8180:8080"]
+    depends_on:
+      mailpit: {condition: service_healthy}
+    healthcheck:
+      # No curl in the image: speak HTTP over bash's /dev/tcp to the management port.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  # Catches Keycloak's verification and reset mails: SMTP on 1025, web UI and API on 8025.
+  mailpit:
+    profiles: ["auth"]
+    image: axllent/mailpit:v1.21.8
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
 volumes:
   pgdata:

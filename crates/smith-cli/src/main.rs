@@ -27,6 +27,7 @@ mod precommit;
 mod run_cmd;
 mod scan_cmd;
 mod session;
+mod user_login;
 mod vault_cmds;
 
 // Keep the diagnostics crates linked so their `inventory` checks register.
@@ -142,7 +143,7 @@ enum Cmd {
         #[command(subcommand)]
         cmd: audit_cmds::AuditCmd,
     },
-    /// Log in to the Locksmith gateway as an agent (`--agent`); keeps only a short-lived token.
+    /// Log in as an agent (`--agent`, short-lived gateway token) or as a human (`--user`, device grant, token in the OS keystore).
     Login(connector::LoginArgs),
     /// List the secrets this agent may use through the gateway (names and hosts, never values).
     Grants,

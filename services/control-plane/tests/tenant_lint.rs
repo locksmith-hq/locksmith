@@ -37,3 +37,21 @@ fn lint_flags_a_session_level_setting_in_service_code() {
         vec![(2, ls_tenant_lint::RULE_SET_CONFIG_FALSE)]
     );
 }
+
+/// T1 task 3.1 (A0-4): every table the control-plane migrations create has RLS enabled, forced
+/// and a policy, so `users` (and any later table) cannot ship readable without a tenant bound.
+#[test]
+fn migrations_enable_force_and_police_every_table() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let findings = ls_tenant_lint::scan_migrations(&dir).expect("scan migrations");
+    let report: Vec<String> = findings
+        .iter()
+        .map(|f| format!("table `{}`: {}", f.table, f.rule))
+        .collect();
+    assert!(report.is_empty(), "RLS missing:\n{}", report.join("\n"));
+    let users = std::fs::read_to_string(dir.join("0011_users.sql")).expect("0011_users.sql");
+    assert!(
+        users.contains("CREATE TABLE users"),
+        "the lint must see the users table"
+    );
+}

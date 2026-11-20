@@ -5,6 +5,7 @@
 // No console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod auth;
 mod daemon;
 mod secure_input;
 mod tray;
@@ -107,6 +108,43 @@ async fn relay_info() -> Result<RelayInfo> {
     blocking(|| Daemon::default().relay_info()).await
 }
 
+fn auth_cmd_err(e: auth::AuthError) -> CommandError {
+    CommandError {
+        code: match e.kind {
+            auth::AuthErrorKind::BadRequest => CommandErrorCode::BadRequest,
+            auth::AuthErrorKind::Denied => CommandErrorCode::Denied,
+            auth::AuthErrorKind::Unavailable => CommandErrorCode::Unavailable,
+        },
+        message: e.message,
+    }
+}
+
+/// Browser sign-in (PKCE, loopback redirect). Tokens go to the OS keystore; the webview only
+/// learns whether a session exists. `provider`: "github", "google" or "email" (design D9).
+#[tauri::command]
+async fn sign_in(provider: Option<String>) -> Result<auth::AuthStatus> {
+    blocking(move || {
+        auth::sign_in(
+            &auth::AuthConfig::from_env(),
+            &auth::KeyringTokenStore,
+            &auth::SystemBrowser,
+            provider.as_deref(),
+        )
+        .map_err(auth_cmd_err)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn sign_out() -> Result<auth::AuthStatus> {
+    blocking(|| auth::sign_out(&auth::KeyringTokenStore).map_err(auth_cmd_err)).await
+}
+
+#[tauri::command]
+async fn auth_status() -> Result<auth::AuthStatus> {
+    blocking(|| auth::status(&auth::KeyringTokenStore).map_err(auth_cmd_err)).await
+}
+
 /// `locksmith-desktop --health [seconds]`: no window, no tray. Waits up to `seconds` (default 10)
 /// for `locksmithd` to answer a ping, prints one line, exits 0 when healthy and 1 otherwise.
 fn headless_health(wait_secs: u64) -> ! {
@@ -143,7 +181,10 @@ fn main() {
             put_secret_secure,
             token_list,
             token_revoke,
-            relay_info
+            relay_info,
+            sign_in,
+            sign_out,
+            auth_status
         ])
         .setup(|app| Ok(tray::setup(app)?))
         // Closing the window keeps the tray app running; "Quit" is in the tray menu.

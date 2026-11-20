@@ -37,9 +37,14 @@ export interface Client {
   auditStatus(): Promise<AuditStatus>;
 }
 
-export function createClient(orgId: string, baseUrl = ""): Client {
+/**
+ * `getToken` supplies the human bearer token (read per request, so a renewed token is used).
+ * With a token the dev org header is not sent: the control plane takes the org from the token.
+ */
+export function createClient(orgId: string, baseUrl = "", getToken?: () => string | undefined): Client {
   async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = { "x-locksmith-dev-org": orgId };
+    const token = getToken?.();
+    const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : { "x-locksmith-dev-org": orgId };
     if (body !== undefined) headers["content-type"] = "application/json";
     const res = await fetch(`${baseUrl}${path}`, {
       method,

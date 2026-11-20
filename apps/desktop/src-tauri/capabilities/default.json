@@ -16,6 +16,9 @@
     "allow-put-secret-secure",
     "allow-token-list",
     "allow-token-revoke",
-    "allow-relay-info"
+    "allow-relay-info",
+    "allow-sign-in",
+    "allow-sign-out",
+    "allow-auth-status"
   ]
 }

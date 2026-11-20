@@ -19,7 +19,7 @@ not (
   | (package(a0-spikes) & binary(rls))
   | (package(ls-audit) & binary(pg))
   | (package(locksmith-audit) & binary(/^(db|export|tamper)$/))
-  | (package(ls-control-plane) & binary(/^(agents|api|audit|checkpoint|checkpoint_span|internal|tenancy|versions)$/))
+  | (package(ls-control-plane) & binary(/^(agents|api|audit|checkpoint|checkpoint_span|human_auth|internal|tenancy|users|versions)$/))
   | (package(ls-gateway) & test(/^relay::tests::(relay_events_land_in_the_ledger|outcome_resend_is_idempotent)$/))
 )
 """

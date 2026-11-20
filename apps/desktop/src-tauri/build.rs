@@ -14,6 +14,9 @@ const COMMANDS: &[&str] = &[
     "token_list",
     "token_revoke",
     "relay_info",
+    "sign_in",
+    "sign_out",
+    "auth_status",
 ];
 
 fn main() {

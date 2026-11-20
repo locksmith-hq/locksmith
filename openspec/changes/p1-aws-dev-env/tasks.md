@@ -29,8 +29,8 @@
 - [x] 5.4 Verify: `just aws-validate`; scripts pass `shellcheck` and a dry run with no credentials exits with a clear message.
 
 ## 6. Claude inspection and runbook [sonnet]
-- [ ] 6.1 Add the read-only AWS MCP server to `.mcp.json` (if the file is protected, propose via the lead) and `docs/aws-runbook.md` with the change-brief template and the `created-by=claude-mcp` rule.
-- [ ] 6.2 Verify: `bash scripts/tree-check.sh` and `just ci`.
+- [x] 6.1 Add the read-only AWS MCP server to `.mcp.json` (if the file is protected, propose via the lead) and `docs/aws-runbook.md` with the change-brief template and the `created-by=claude-mcp` rule.
+- [x] 6.2 Verify: `bash scripts/tree-check.sh` and `just ci`.
 
 ## 7. Local verification
 - [ ] 7.1 `just aws-validate`, the policy tests, `just apps-build`, then `just ci`. Online `aws-up` and `aws-smoke` run only after the owner gate and are logged in progress.md.

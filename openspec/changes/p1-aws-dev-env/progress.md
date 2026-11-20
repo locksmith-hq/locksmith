@@ -33,3 +33,8 @@
 - Task: 5.1, 5.2, 5.3, 5.4 - done
 - Verified: `just aws-validate` -> 3x valid; `just ci` -> exit 0 (run before the last shellcheck-only edit); `shellcheck scripts/aws-session.sh` clean; each `just aws-*` exits 3 with a clear message when no aws CLI/credentials. No Opus/Sonnet independent evaluator was run this session (self-checked only); online `aws-up`/`aws-smoke` untested (gate 1.2 open).
 - Notes for next session: session stack takes base outputs via `target/aws/session.auto.tfvars.json` (written by the script from `tofu output -json` of base). Smoke check "Cognito token accepted by control plane" is a discovery-document check until T1 sign-in exists. Control plane DB URL comes from an optional SSM SecureString ARN; the env name `LOCKSMITH_DB_HOST`/`LOCKSMITH_OIDC_ISSUER` are informational, not yet read by the service. Remaining: 4.3/4.4 (lead PR, protected workflow), 6.1, 6.2, 7.1, gate 1.2.
+
+## 2026-11-20 worker
+- Task: 6.1, 6.2 - done
+- Verified: `bash scripts/tree-check.sh` OK; `just ci` -> exit 0. No independent evaluator run (config + docs only); self-checked.
+- Notes for next session: `.mcp.json` gets `aws` (awslabs.aws-api-mcp-server==1.6.1 via uvx, READ_OPERATIONS_ONLY, profile `locksmith-readonly`, us-east-1); package name/flags taken from PyPI, not verified against AWS docs (design decision 8 said verify): owner/lead should confirm. Remaining: 1.2 (owner gate), 4.3/4.4 (lead PR, protected workflow), 7.1 (`just apps-build`).

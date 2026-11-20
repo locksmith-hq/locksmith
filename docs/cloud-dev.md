@@ -151,7 +151,7 @@ It sets up the identity, pushes an empty commit, opens a PR, comments, labels an
 
 On the owner's Mac, the **optimizer** (`docs/agents/optimizer.md`, desktop scheduled task, 07:00 and 20:00, replaced the local lead 2026-11-19) runs as the owner in its own worktree `~/locksmith-optimizer`, detached at `origin/main`. It is the only agent that reads routine run logs (`RemoteTrigger`); it audits the schedules, agent communication and run efficiency, logs each cause on the pinned `harness-backlog` issue, and on Saturday at 07:00 builds the one weekly agent-system release (`claude/harness-release-<YYYY-WW>`), which the owner merges. It may only edit routine prompts; other routine changes go to the owner as `needs-owner`.
 
-**Agent System v3 (#470, 2026-11-19).** Agent-system files (`docs/agents`, `.claude/skills`, agent scripts, workflows) change only in that weekly release or on a `*hotfix-*` branch (red main, a security fix, every run failing), for owner sessions too; `scripts/check-task-edits.sh` enforces it and merge-gate gate 5 leaves those PRs to the owner. An owner `needs-owner` issue parks a change only when its next task is a `Gate:` task, so gates block just their own tasks. Each change has one tracking issue; per-task issues are retired.
+**Agent System v3 (#470, 2026-11-19).** Agent-system files (`docs/agents`, `.claude/skills`, agent scripts, workflows) change only in that weekly release or on a `*hotfix-*` branch (red main, a security fix, every run failing), for owner sessions too; `scripts/check-task-edits.sh` enforces it and `.github/CODEOWNERS` makes those PRs wait for the owner's approval. An owner `needs-owner` issue parks a change only when its next task is a `Gate:` task, so gates block just their own tasks. Each change has one tracking issue; per-task issues are retired.
 
 Cloud runs never see the app keys; they see the one-hour installation token, which reaches only this repo with the access above. Revoke a key in the app's settings page.
 
@@ -189,7 +189,6 @@ The weekly review turns these blocks into a stats table.
 
 ## Skills and scripts instead of long instructions
 Agent guidance lives in repo skills (`.claude/skills/`), so each run loads only the procedure it is using. Rules are enforced by scripts:
-- `merge-gate.sh` runs the merge gates;
 - `agent-start.sh` and `agent-preflight.sh` check the environment at the start of each run;
 - `bg.sh` runs long commands in the background;
 - `run-meta.sh` builds the run's metadata block;
@@ -201,7 +200,7 @@ Agent guidance lives in repo skills (`.claude/skills/`), so each run loads only 
 - each skill: 500 words
 - active lessons: 5
 
-The lead routine must not increase the total. Its PRs merge through the same gates as everything else, with no waiting window (owner decision, 2026-11-16).
+The lead routine must not increase the total. Its PRs merge through the same required checks as everything else, with no waiting window (owner decision, 2026-11-16).
 
 ## Independent review in GitHub Actions
-`.github/workflows/claude-review.yml` runs `anthropics/claude-code-action@v1` with the `merge-review` skill whenever the `ready-to-merge` label is added and on every push to a labelled PR. It authenticates with the owner's Claude subscription through the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, which the owner creates with `claude setup-token` and stores with `gh secret set`. Gate 6 of `merge-gate.sh` requires its `merge-review <sha>: PASS` verdict for the head SHA. Each review costs one Linux runner for up to 10 minutes and uses the Max subscription, not API credits.
+`.github/workflows/claude-review.yml` runs `anthropics/claude-code-action@v1` with the `merge-review` skill whenever auto-merge is enabled on a PR and on every push to such a PR. It authenticates with the owner's Claude subscription through the `CLAUDE_CODE_OAUTH_TOKEN` repository secret, which the owner creates with `claude setup-token` and stores with `gh secret set`. It sets the required `merge-ready` status from its `merge-review <sha>: PASS|FAIL` verdict. Each review costs one Linux runner for up to 10 minutes and uses the Max subscription, not API credits.

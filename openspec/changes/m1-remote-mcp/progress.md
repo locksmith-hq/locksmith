@@ -62,3 +62,8 @@
 - Task: m1-remote-mcp 2.5 - done (hub `/mcp` appends one `mcp.call` audit event per tools/call: layer, registry tool name or `unknown`, user actor, org target, outcome ok/denied/error with static reason; no arguments or results stored; MCP `revoke_grant` now attributed to the person, REST unchanged via `revoke_grant_as`)
 - Verified: `cargo nextest run -p ls-control-plane mcp` -> 24 passed; `just ci` -> exit 0; Sonnet evaluator PASS
 - Notes for next session: 2.6 is the verify step (run it and tick); 2.2 still unticked (explain_block deferral). Unverified-email callers get no per-call row (no org to chain to). Then group 3 (gateway MCP).
+
+## 2026-11-20 worker B
+- Task: m1-remote-mcp 3.1 - done (gateway `/mcp` via rmcp Streamable HTTP; reuses `AgentAuth` (aud `gateway`); 401 + `WWW-Authenticate` for missing/expired/wrong-audience/wrong-org tokens; Host allowlist loopback + `LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS`; fails closed if unconfigured)
+- Verified: `cargo nextest run -p ls-gateway mcp` -> 7 passed; `just ci` -> exit 0; Sonnet evaluator PASS
+- Notes for next session: 3.2 (gateway tools; `ls-mcp-server` dep already added, unused until then). Set `LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS` in infra/compose when deploying behind a hostname. 2.2 still unticked (explain_block deferral).

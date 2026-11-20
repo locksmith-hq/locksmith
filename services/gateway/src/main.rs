@@ -13,6 +13,7 @@ use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
 use ls_gateway::grants::{GrantCache, GrantCacheSettings};
+use ls_gateway::mcp_endpoint::McpEndpoint;
 use ls_gateway::relay::{Relay, RelayOptions};
 use secrecy::ExposeSecret;
 use tracing_subscriber::EnvFilter;
@@ -121,6 +122,8 @@ async fn main() -> ExitCode {
     // Audit (S5 task 3.1): relay events go to the org's ledger through the control plane's
     // internal append endpoint, with the same service token.
     let audit = Arc::new(HttpAudit::new(control_plane));
+    // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
+    let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts);
     let binding_count = config.bindings.bindings.len();
     let relay = Relay::new(
         auth,
@@ -132,7 +135,11 @@ async fn main() -> ExitCode {
         RelayOptions::default(),
     );
 
-    let router = app::build(AppState::new(readiness).with_relay(Arc::new(relay)));
+    let router = app::build(
+        AppState::new(readiness)
+            .with_relay(Arc::new(relay))
+            .with_mcp(mcp),
+    );
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {

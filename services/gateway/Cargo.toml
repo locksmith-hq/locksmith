@@ -47,6 +47,9 @@ zeroize = "1.9.1"
 # ls_control_plane::agent_token.
 jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
 time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
+# M1 task 3.1: the agent MCP server (`/mcp`), same rmcp pin and features as the hub.
+ls-mcp-server = { path = "../../crates/ls-mcp-server" }
+rmcp = { version = "=3.11.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
 
 [dev-dependencies]
 http-body-util = "0.1"

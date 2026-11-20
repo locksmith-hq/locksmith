@@ -8,4 +8,4 @@ secrets:
 keyProvider: {address: "https://openbao.example.internal:8200"}
 oidc: {issuer: "https://idp.example.com/realms/ls", audience: locksmith, jwksUrl: "https://idp.example.com/jwks"}
 ingress: {enabled: true, host: locksmith.example.com, tls: {enabled: true, secretName: locksmith-tls}}
-migration: {enabled: true, args: [migrate]}
+migration: {enabled: true, args: [--migrate-only]}

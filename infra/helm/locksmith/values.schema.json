@@ -288,6 +288,26 @@
           "type": "integer",
           "minimum": 1
         }
+      },
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "args"
+        ]
       }
     },
     "ingress": {

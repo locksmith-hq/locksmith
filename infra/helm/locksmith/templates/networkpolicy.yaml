@@ -75,6 +75,12 @@ spec:
         - {protocol: TCP, port: {{ .Values.gateway.port }}}
     {{- end }}
   egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "locksmith.selector" (dict "root" . "component" "control-plane") | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.controlPlane.port }}}
     - ports:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}

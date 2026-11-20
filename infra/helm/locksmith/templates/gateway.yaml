@@ -50,7 +50,7 @@ spec:
           ports:
             - {name: http, containerPort: {{ .Values.gateway.port }}}
           env:
-            - {name: LOCKSMITH_BIND, value: {{ printf "0.0.0.0:%v" .Values.gateway.port | quote }}}
+            - {name: LOCKSMITH_GATEWAY_BIND, value: {{ printf "0.0.0.0:%v" .Values.gateway.port | quote }}}
             - {name: LOCKSMITH_CONTROL_PLANE_URL, value: {{ printf "http://%s-control-plane:%v" $n .Values.controlPlane.port | quote }}}
             - {name: OPENBAO_ADDR, value: {{ .Values.keyProvider.address | quote }}}
             - {name: LOCKSMITH_GATEWAY_BINDINGS, value: /etc/locksmith/bindings.toml}

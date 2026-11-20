@@ -450,22 +450,11 @@ impl Call<'_> {
             GitService::Push => EventKind::GitPush(outcome),
         };
         let ev = git_event(kind, self.agent_id, self.binding, self.post, status);
-        let opts = self.relay.options();
-        let mut wait = opts.outcome_retry_backoff;
-        for try_no in 0..=opts.outcome_retries {
-            match self.relay.audit().append(ev.clone()).await {
-                Ok(_) => return true,
-                Err(crate::audit::AuditError::Rejected) => break,
-                Err(crate::audit::AuditError::Unavailable) => {
-                    if try_no < opts.outcome_retries {
-                        tokio::time::sleep(wait).await;
-                        wait = wait.saturating_mul(2);
-                    }
-                }
-            }
+        let ok = crate::relay::append_outcome(self.relay, ev).await;
+        if !ok {
+            tracing::error!(git.service = self.service.event(), "git event not appended");
         }
-        tracing::error!(git.service = self.service.event(), "git event not appended");
-        false
+        ok
     }
 
     async fn deny(&self, why: Outcome) {

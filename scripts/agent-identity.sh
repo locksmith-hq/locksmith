@@ -4,15 +4,17 @@
 #   agent-identity.sh token             prints a valid installation token (cached, re-minted after 50 minutes)
 #   agent-identity.sh credential get    git credential helper
 #   agent-identity.sh selftest          offline checks
-# In the cloud the app's auth on the token request is added by a network secret, so the key never enters the VM.
-# Locally the key comes from AGENT_APP_KEY_<PERSONA> (base64 of the PEM) or, on macOS, the login Keychain item
-# "locksmith-agent-<persona>" (same base64). Never print it or the token.
+# The key comes from AGENT_APP_KEY_<PERSONA> (base64 of the PEM; in the cloud an environment variable of that
+# routine's own environment, owner decision 2026-11-20) or, on macOS, the login Keychain item
+# "locksmith-agent-<persona>" (same base64). A network secret cannot do it: the JWT that the token request needs
+# expires within 10 minutes, so it is signed here on every mint. Never print the key or the token.
 set -uo pipefail
 repo=locksmith-hq/locksmith
 state="${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}"
 self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
 ids() { # <persona> -> "app_id installation_id bot_user_id" (none of these is secret)
+  [ -n "${AGENT_APP_IDS:-}" ] && { echo "$AGENT_APP_IDS"; return; }  # a new App (e.g. research) before it gets a row here
   case "$1" in
     linus) echo "5817262 183325623 358305577" ;;
     alfie) echo "5817280 183325819 358306025" ;;
@@ -42,18 +44,17 @@ token() {
   # Each failure records its cause in $state/why, so the WARN line says what to fix.
   key="${!var:-}"
   [ -n "$key" ] || ! command -v security >/dev/null || key=$(security find-generic-password -s "locksmith-agent-$persona" -w 2>/dev/null)
-  if [ -n "$key" ]; then # no key: send no auth and let the network secret add it
-    pem=$(umask 077 && mktemp) || return 1
-    printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
-    grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
-    auth=(-H "Authorization: Bearer $(jwt "$app" "$pem")")
-    rm -f "$pem"
-  fi
+  [ -n "$key" ] || { why "$var is not set in this environment"; return 1; }
+  pem=$(umask 077 && mktemp) || return 1
+  printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
+  grep -q 'PRIVATE KEY' "$pem" || { rm -f "$pem"; why "$var is not the base64 of a private key file (${#key} characters)"; return 1; }
+  auth=(-H "Authorization: Bearer $(jwt "$app" "$pem")")
+  rm -f "$pem"
   resp=$(curl -sS -w '\n%{http_code}' -X POST ${auth[@]+"${auth[@]}"} -H "Accept: application/vnd.github+json" \
     "https://api.github.com/app/installations/$inst/access_tokens" 2>/dev/null) || { why "cannot reach api.github.com (curl exit $?)"; return 1; }
   code=${resp##*$'\n'}
   t=$(jq -r '.token // empty' <<<"${resp%$'\n'*}" 2>/dev/null)
-  [ -n "$t" ] || { why "GitHub answered HTTP $code to the token request$([ -n "$key" ] || echo " (no key here: is the network secret for installation $inst set?)"): $(jq -r '.message // "no message"' <<<"${resp%$'\n'*}" 2>/dev/null | head -c 120)"; return 1; }
+  [ -n "$t" ] || { why "GitHub answered HTTP $code to the token request: $(jq -r '.message // "no message"' <<<"${resp%$'\n'*}" 2>/dev/null | head -c 120)"; return 1; }
   (umask 077 && printf '%s' "$t" >"$state/token" && date +%s >"$state/minted")
   printf '%s' "$t"
 }

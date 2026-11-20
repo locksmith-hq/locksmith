@@ -25,7 +25,7 @@
 ## 4. Sign-in and clients [sonnet]
 - [ ] 4.1 Hub OAuth flow per the research note (protected-resource metadata, issuer config for Keycloak locally); an end-to-end test with a scripted MCP client that signs in and lists tools.
 - [ ] 4.2 Client revoke bound to the OAuth `client_id` (hub) or the agent (gateway): a revoked client's next call is refused with `401`, and so is a fresh `initialize` after revoke; test both.
-- [ ] 4.3 Verify: `just up && cargo nextest run -p ls-control-plane --test mcp_e2e`.
+- [ ] 4.3 Verify: `just up && just mcp-e2e`, with `scripts/mcp-e2e.py` extended to cover the 4.2 hub revoke flow (revoke, then the refresh is refused or the next call is `401`, a fresh `initialize` is `401`, a new sign-in with consent is accepted); and `cargo nextest run -p ls-gateway mcp` covers the 4.2 agent revoke.
 
 ## 5. Console and desktop surface [sonnet]
 - [ ] 5.1 `apps/web` Tools page (one switch per tool, per layer) and Clients page (list, revoke), with Vitest tests including `403` and empty states.

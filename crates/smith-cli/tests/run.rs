@@ -284,9 +284,12 @@ print("WROTE=%d" % t); print("GOT:" + l); print("KEY:" + os.environ["STRIPE_KEY"
             - field(&out, "WROTE").parse::<i64>().unwrap();
         best = best.min(ms);
     }
-    // macOS CI runners are slower and noisier than Linux ones (observed 64 ms best of 3).
-    let bound = if cfg!(target_os = "macos") { 150 } else { 50 };
-    assert!(best < bound, "prompt took {best} ms (best of 3)");
+    // The property under test is that the unterminated prompt is relayed while the child still
+    // waits for input: a relay that held back partial lines would never show it, and expect
+    // would print NOPROMPT after 15 s. The bound only guards against a gross delay, so it is
+    // generous: tight figures (50 ms, then 150 ms on macOS) flaked on shared runners (#500).
+    // The redactor's idle-flush interval, which releases the prompt, is pinned in ls-redact.
+    assert!(best < 1000, "prompt took {best} ms (best of 3)");
 }
 
 #[test]

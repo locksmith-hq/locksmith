@@ -280,3 +280,18 @@ test name:
 images:
     docker build $IMAGE_BUILD_ARGS -f infra/docker/control-plane.Dockerfile -t locksmith-control-plane:dev .
     docker build $IMAGE_BUILD_ARGS -f infra/docker/gateway.Dockerfile -t locksmith-gateway:dev .
+
+# Self-host compose bundle (P2). Bootstraps secrets into infra/compose/selfhost/.env, then `up --wait`.
+# Args go to bootstrap.sh: --external-keys, --tls, --demo-oidc. Images come from .env (LOCKSMITH_VERSION or *_IMAGE).
+selfhost-up *args:
+    bash infra/compose/selfhost/bootstrap.sh {{args}}
+    docker compose --env-file infra/compose/selfhost/.env -f infra/compose/selfhost/compose.yaml up -d --wait --wait-timeout 240
+
+# Stop the self-host stack; volumes (data, keys, unseal material) are kept. Pass `-v` to delete them.
+selfhost-down *args:
+    docker compose --env-file infra/compose/selfhost/.env -f infra/compose/selfhost/compose.yaml --profile tls --profile demo-oidc --profile bundled-keys down {{args}}
+
+# Fresh self-host stack from locally built images (`just images` first): relay through the gateway, restart persistence, secret hygiene. Own project and volumes.
+selfhost-smoke:
+    bash scripts/selfhost-bootstrap.test.sh
+    bash scripts/selfhost-smoke.sh

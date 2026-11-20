@@ -1,0 +1,34 @@
+# Test-only overlay used by scripts/selfhost-smoke.sh; never part of a real install.
+# `provisioner` is a second control plane with dev auth on its own loopback (the only place the
+# control plane accepts dev auth), sharing the stack's database, keys and signing key, so the smoke
+# test can create an org, secret and agent without an OIDC issuer. `upstream` is the throwaway
+# upstream the gateway relays to. Neither publishes a port.
+services:
+  provisioner:
+    profiles: [smoke]
+    image: ${LOCKSMITH_CONTROL_PLANE_IMAGE:?set by selfhost-smoke.sh}
+    environment:
+      DATABASE_URL: postgres://locksmith_app:${LOCKSMITH_APP_PASSWORD}@postgres:5432/locksmith
+      DATABASE_OWNER_URL: postgres://locksmith:${POSTGRES_PASSWORD}@postgres:5432/locksmith
+      LOCKSMITH_GATEWAY_SERVICE_TOKEN: ${LOCKSMITH_GATEWAY_SERVICE_TOKEN}
+      LOCKSMITH_AGENT_SIGNING_KEY: ${LOCKSMITH_AGENT_SIGNING_KEY}
+      OPENBAO_ADDR: ${OPENBAO_ADDR}
+      OPENBAO_CONTROL_PLANE_TOKEN: ${OPENBAO_CONTROL_PLANE_TOKEN}
+      LOCKSMITH_DEV_AUTH: "1"
+      LOCKSMITH_ALLOW_DEV_AUTH: "1"
+      LOCKSMITH_BIND: 127.0.0.1:8081
+    depends_on:
+      control-plane: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  upstream:
+    profiles: [smoke]
+    image: wiremock/wiremock:3.13.2
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/__admin/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30

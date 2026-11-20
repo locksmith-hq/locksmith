@@ -44,3 +44,9 @@
 - Task: p2-packaging - blocked (no task started)
 - Verified: merge-ready status error "no review verdict": review run failed at the completeness check (unchecked tasks 4.1-8.3); auto-merge had been re-enabled, disabled again with --disable-auto
 - Notes for next session: sections 4-8 remain; helm is unavailable in the VM (get.helm.sh 403) so 4.5 must skip with a message; re-enable auto-merge only when every task is ticked.
+
+## 2026-11-20 worker (section 4)
+- Task: p2-packaging 4.1-4.3 - Helm chart (infra/helm/locksmith), values.schema.json with good/bad tests, scripts/helm-test.sh, `just helm-test`; evaluator PASS on attempt 2 (attempt 1 found wrong gateway bind env, gateway egress to control plane blocked, migration enabled without args; all fixed)
+- Verified: scripts/helm-schema.test.sh (python jsonschema; helm lint and kubeconform also clean when built via go install), test-recipes-check, tree-check, just quick. Not verified: kind install stage (kind/kubectl absent), so 4.4 and 4.5 stay unticked; the relay smoke request is not implemented (only /readyz).
+- Deviations: OIDC issuer/audience/JWKS are plain values (public), not existingSecret; migration hook Job defaults off because the control plane migrates in-process and has no migrate-only mode (good-values uses a placeholder `--migrate-only`).
+- Notes for next session: sections 4.4-4.5, 5-8 remain; keep auto-merge off until all ticked. Task 5.4 needs a lead PR (protected workflow).

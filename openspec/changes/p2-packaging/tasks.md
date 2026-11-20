@@ -22,9 +22,9 @@
 - [x] 3.7 Verify: `bash scripts/selfhost-bootstrap.test.sh` then `just selfhost-smoke`.
 
 ## 4. Helm chart [sonnet]
-- [ ] 4.1 `infra/helm/locksmith` scaffold: `Chart.yaml`, `values.yaml` (image digests, replicas, resources, `existingSecret` names for Postgres DSN, OIDC and key provider), Deployments, Services, optional Ingress.
-- [ ] 4.2 Migration Job (hook) and NetworkPolicy; pod security context non-root, read-only root filesystem, dropped capabilities, no service-account token unless needed.
-- [ ] 4.3 `values.schema.json` that rejects any literal password or token field and requires the secret reference names; unit tests with good and bad values files.
+- [x] 4.1 `infra/helm/locksmith` scaffold: `Chart.yaml`, `values.yaml` (image digests, replicas, resources, `existingSecret` names for Postgres DSN, OIDC and key provider), Deployments, Services, optional Ingress.
+- [x] 4.2 Migration Job (hook) and NetworkPolicy; pod security context non-root, read-only root filesystem, dropped capabilities, no service-account token unless needed.
+- [x] 4.3 `values.schema.json` that rejects any literal password or token field and requires the secret reference names; unit tests with good and bad values files.
 - [ ] 4.4 `scripts/helm-test.sh` (`just helm-test`): `helm lint`, `helm template | kubeconform`, then on a kind cluster install with prerequisite Secrets created from generated values, wait for ready pods and the migration Job, run the same smoke request as compose, and print pod status and events on failure. The script skips with a clear message (not a pass) when Docker or kind is absent.
 - [ ] 4.5 Verify: `just helm-test`.
 

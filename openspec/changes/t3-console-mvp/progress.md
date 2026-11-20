@@ -28,3 +28,8 @@
 - Task: 5.1-5.3 - done (desktop Projects/Environments views with create/rename/confirm-delete; Overview project+agent counts; Secrets metadata view; no value or material routes)
 - Verified: `npm test --workspace apps/desktop` -> 33 passed; tsc clean; `just apps-build` -> ok; just ci -> exit 0; evaluator PASS (sonnet)
 - Notes for next session: Overview has no secrets count (would need per-env listing). Group 6 (Playwright e2e, `just web-e2e`) next; 6.4 is an owner gate (layout approval), so 6.1-6.3 can proceed but 6.4+ park on it.
+
+## 2026-11-20 worker
+- Task: 6.1 - blocked (not started)
+- Verified: none; tasks 1-5 already on branch, merge of main is current
+- Notes for next session: 6.1-6.3 need a Playwright `just web-e2e` recipe against `just up` (auth profile); 6.4 is an owner gate (live console layout approval, no approval recorded in openspec/decisions.md or issues). Do 6.1-6.3 next, then ask the lead for the layout decision.

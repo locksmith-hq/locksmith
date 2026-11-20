@@ -372,18 +372,18 @@ impl CallAudit {
 
 /// Append the outcome of an attempt, retrying failures that may be transient. The control
 /// plane returns the stored event for a resent outcome, so a retry after a lost response does
-/// not append twice.
-async fn append_outcome(relay: &Relay, ev: RelayEvent) -> bool {
+/// not append twice. Git delegation records its outcomes through this too.
+pub(crate) async fn append_outcome(relay: &Relay, ev: RelayEvent) -> bool {
     let mut wait = relay.options.outcome_retry_backoff;
     for try_no in 0..=relay.options.outcome_retries {
         match relay.audit.append(ev.clone()).await {
             Ok(_) => return true,
             Err(crate::audit::AuditError::Rejected) => {
-                tracing::error!("relay outcome event refused by the ledger");
+                tracing::error!(kind = ?ev.kind, "outcome event refused by the ledger");
                 return false;
             }
             Err(crate::audit::AuditError::Unavailable) => {
-                tracing::warn!(attempt = try_no + 1, "relay outcome event not appended");
+                tracing::warn!(kind = ?ev.kind, attempt = try_no + 1, "outcome event not appended");
                 if try_no < relay.options.outcome_retries {
                     tokio::time::sleep(wait).await;
                     wait = wait.saturating_mul(2);

@@ -13,10 +13,10 @@
 - [x] 2.4 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web`.
 
 ## 3. Overview, projects and environments [sonnet]
-- [ ] 3.1 Overview page with counts, recent activity and the dismissible "Get started" checklist.
-- [ ] 3.2 Projects list, create, rename, delete with confirm dialog; API errors shown.
-- [ ] 3.3 Environments list and manage inside a project.
-- [ ] 3.4 Verify: `npm test --workspace apps/web` (fixtures cover `403`, `409`, empty, error).
+- [x] 3.1 Overview page with counts, recent activity and the dismissible "Get started" checklist.
+- [x] 3.2 Projects list, create, rename, delete with confirm dialog; API errors shown.
+- [x] 3.3 Environments list and manage inside a project.
+- [x] 3.4 Verify: `npm test --workspace apps/web` (fixtures cover `403`, `409`, empty, error).
 
 ## 4. Secrets, agents, grants and activity [sonnet]
 - [ ] 4.1 Secrets list and detail with versions; a test asserts no request to a value or material route.

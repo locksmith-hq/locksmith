@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
+import { installFixtureFetch } from "./api/fixtures";
 import type { AuthService, AuthState } from "./auth";
 
 const fetchMock = vi.fn();
@@ -37,6 +38,7 @@ test("signed out: every route shows sign-in and makes no API request", async () 
 });
 
 test("signed in: opens on Overview, sidebar links route to each page", async () => {
+  installFixtureFetch();
   window.history.pushState({}, "", "/");
   render(<App auth={fakeAuth(signedIn)} />);
   expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
@@ -45,7 +47,6 @@ test("signed in: opens on Overview, sidebar links route to each page", async () 
     await userEvent.click(screen.getByRole("link", { name }));
     expect(await screen.findByRole("heading", { name })).toBeInTheDocument();
   }
-  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 test("expired session: a 401 from the API signs out and drops the page", async () => {

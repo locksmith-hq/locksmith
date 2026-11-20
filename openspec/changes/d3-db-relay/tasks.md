@@ -25,9 +25,9 @@
 - [x] 4.4 Verify: `cargo nextest run -p ls-gateway pg_audit pg_revoke`, `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
 
 ## 5. Client setup [sonnet]
-- [ ] 5.1 `smith db connect <name> --gateway <url> [-- cmd]`: child env `PGHOST`, `PGPORT`, `PGDATABASE=<binding>`, `PGSSLMODE=verify-full` (or `require` with a warning), optional `PGSSLROOTCERT`, `PGPASSWORD` set to the agent token in the child only; nothing written to disk.
-- [ ] 5.2 `smith doctor` check `db.gateway` (listener reachable over TLS, no `~/.pgpass` entry for bound hosts); CLI and MCP help text.
-- [ ] 5.3 Verify: `cargo nextest run -p smith-cli db`.
+- [x] 5.1 `smith db connect <name> --gateway <url> [-- cmd]`: child env `PGHOST`, `PGPORT`, `PGDATABASE=<binding>`, `PGSSLMODE=verify-full` (or `require` with a warning), optional `PGSSLROOTCERT`, `PGPASSWORD` set to the agent token in the child only; nothing written to disk.
+- [x] 5.2 `smith doctor` check `db.gateway` (listener reachable over TLS, no `~/.pgpass` entry for bound hosts); CLI and MCP help text.
+- [x] 5.3 Verify: `cargo nextest run -p smith-cli db`.
 
 ## 6. Console and desktop [sonnet]
 - [ ] 6.1 Show Postgres bindings (name, host, port, user, database, TLS mode; never a password) on the bindings page in `apps/web` and `apps/desktop` with Vitest tests.

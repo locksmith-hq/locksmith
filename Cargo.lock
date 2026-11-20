@@ -4907,6 +4907,8 @@ dependencies = [
  "rcgen",
  "regex",
  "rpassword",
+ "rustls",
+ "rustls-native-certs",
  "secrecy",
  "semver",
  "serde",
@@ -4914,6 +4916,8 @@ dependencies = [
  "signal-hook",
  "tokio",
  "toml",
+ "url",
+ "webpki-roots 1.0.12",
  "wiremock",
  "zeroize",
 ]

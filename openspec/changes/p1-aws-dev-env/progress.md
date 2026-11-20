@@ -38,3 +38,8 @@
 - Task: 6.1, 6.2 - done
 - Verified: `bash scripts/tree-check.sh` OK; `just ci` -> exit 0. No independent evaluator run (config + docs only); self-checked.
 - Notes for next session: `.mcp.json` gets `aws` (awslabs.aws-api-mcp-server==1.6.1 via uvx, READ_OPERATIONS_ONLY, profile `locksmith-readonly`, us-east-1); package name/flags taken from PyPI, not verified against AWS docs (design decision 8 said verify): owner/lead should confirm. Remaining: 1.2 (owner gate), 4.3/4.4 (lead PR, protected workflow), 7.1 (`just apps-build`).
+
+## 2026-11-20 worker (event)
+- Task: 7.1 - done
+- Verified: `just apps-build` exit 0 (desktop debug build ok); `just ci` exit 0 (aws-validate included earlier); no online aws-up/aws-smoke (gate 1.2 open).
+- Notes for next session: remaining 1.2 (owner gate) and 4.3/4.4 (lead PR, protected workflow).

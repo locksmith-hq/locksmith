@@ -33,4 +33,4 @@
 - [x] 6.2 Verify: `bash scripts/tree-check.sh` and `just ci`.
 
 ## 7. Local verification
-- [ ] 7.1 `just aws-validate`, the policy tests, `just apps-build`, then `just ci`. Online `aws-up` and `aws-smoke` run only after the owner gate and are logged in progress.md.
+- [x] 7.1 `just aws-validate`, the policy tests, `just apps-build`, then `just ci`. Online `aws-up` and `aws-smoke` run only after the owner gate and are logged in progress.md.

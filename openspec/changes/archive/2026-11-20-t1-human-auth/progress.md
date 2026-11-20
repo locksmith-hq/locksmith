@@ -67,3 +67,9 @@
 - Verified: `just up`, `just auth-e2e` all checks passed, `just adversarial-gate` PASS (incl. leak-scan), `just audit-verify` ok, `just apps-build`, `just ci` exit 0 (746 tests)
 - Fix: G5's coverage sweep required a valid call for the new human-only `auth_sign_in`/`auth_sign_out`; G5 now probes them with no auth, dev header and agent token (all 401) in mode `human-refused`; the real human-token path is G7's.
 - Notes for next session: change complete; archived in the same PR. VM disk allowance fills after a cold `just ci` plus the stack (~15 GB target); `rm -rf target` frees it.
+
+## 2026-11-20 lead (rescue #491)
+- Cause: `auth_garbage_kids_cannot_turn_requests_into_a_fetch_storm` ran 30 requests inside a 300 ms JWKS refresh window; on a loaded runner the loop outlasted it and a second fetch fired (2 vs 1). The rotation test had the same race on its 5 in-window requests. The cache uses `std::time::Instant`, so tokio paused time cannot help.
+- Fix: test-only. `Issuer::app_with_refresh`; the garbage-kids test uses a 3600 s interval; the shared test interval is 1 s (was 300 ms), so the rotation test keeps proving rate limiting and a refresh after the interval.
+- Verified: under CPU load (3x nproc busy loops, load ~14-17) the old code failed `cargo nextest run -p ls-control-plane --test human_auth --retries 0` 5/5 runs, the new code passed 6/6; `just ci` exit 0 (770 tests); Sonnet evaluator PASS.
+- Note: `auth_verify_span_has_no_token_content` fails under plain `cargo test` (shared process; tracing callsite interest cached by another test), before and after this fix. nextest isolates tests, so CI is unaffected.

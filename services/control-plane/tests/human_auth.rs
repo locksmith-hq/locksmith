@@ -28,7 +28,11 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 const ISSUER: &str = "https://idp.test/realms/locksmith";
 const AUDIENCE: &str = "locksmith-api";
 const DEV_ORG: &str = "0197a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
-const MIN_REFRESH: Duration = Duration::from_millis(300);
+/// The refresh interval for tests that wait it out; kept well above the time a loaded CI runner
+/// needs for the handful of requests made inside it.
+const MIN_REFRESH: Duration = Duration::from_secs(1);
+/// For tests that must see no second fetch at all, however slow the runner (issue #491).
+const NO_REFRESH: Duration = Duration::from_secs(3600);
 
 /// A deterministic throwaway P-256 key (test only; `seed` makes keys distinct).
 struct TestKey {
@@ -128,13 +132,17 @@ impl Issuer {
     }
 
     fn app(&self, dev_auth: bool) -> Router {
+        self.app_with_refresh(dev_auth, MIN_REFRESH)
+    }
+
+    fn app_with_refresh(&self, dev_auth: bool, min_refresh: Duration) -> Router {
         let human = HumanAuth::with_refresh(
             &HumanAuthConfig {
                 issuer: ISSUER.to_owned(),
                 audience: AUDIENCE.to_owned(),
                 jwks_url: format!("{}/jwks", self.server.uri()),
             },
-            MIN_REFRESH,
+            min_refresh,
             Duration::from_secs(3600),
         )
         .unwrap();
@@ -387,7 +395,8 @@ async fn auth_rotated_key_is_accepted_after_one_rate_limited_refresh() {
 async fn auth_garbage_kids_cannot_turn_requests_into_a_fetch_storm() {
     let key = TestKey::new("k1", 1);
     let issuer = Issuer::start(&[&key]).await;
-    let app = issuer.app(false);
+    // The interval itself is covered by the rotation test; here it must not elapse mid-loop.
+    let app = issuer.app_with_refresh(false, NO_REFRESH);
     for i in 0..30 {
         let t = TestKey::new(&format!("random-{i}"), 3).mint(&claims("u"));
         assert_eq!(call(&app, Some(&t), None).await.0, StatusCode::UNAUTHORIZED);

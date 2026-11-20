@@ -61,3 +61,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 7.1 - done (`just aws-smoke`, `tests/e2e/tests/aws_smoke.rs`: real `aws` CLI through `smith aws credential-process` against moto; asserts identity, expiry capped by grant, no key in agent HOME)
 - Verified: `just up`, `just aws-smoke` -> 1 passed (run twice, real aws CLI v1 1.46.3 via pip); `just ci` -> exit 0 (aws-CLI-dependent tests skip on the VM without `aws`; with pip aws v1 installed, ls-proxy `aws_cli_through_the_relay` fails "You must specify a region" - pre-existing M7 test, not touched here; log on harness-backlog). Sonnet implemented, self-verified; no separate evaluator.
 - Notes for next session: remaining 5.1/5.2 (needs t3-console-mvp bindings page on main), then 7.2 (`just apps-build`, `just ci`, record the P1 real-AWS session-policy check). `just leak-scan` needs a canary file from the stack tests; not run.
+
+## 2026-11-20 worker (C)
+- Task: none - parked (merged origin/main into the branch; no code change)
+- Verified: merge clean, tree clean. Open tasks 5.1/5.2 need the bindings page from t3-console-mvp (28 tasks open there, nothing on main or its branch); 7.2 needs `just apps-build` after 5.x and a real AWS account for the P1 session-policy check.
+- Notes for next session: take 5.x after t3 lands a bindings page; do 7.2 last.

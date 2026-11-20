@@ -3,7 +3,10 @@ import { Logo } from "@locksmith/ui";
 import type { Client } from "@locksmith/control-plane-client";
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Agents, Audit } from "./App";
+import { Agents } from "./pages/Agents";
+import { GrantsPage } from "./pages/Grants";
+import { Activity } from "./pages/Activity";
+import { Secrets } from "./pages/Secrets";
 import { Overview } from "./pages/Overview";
 import { Projects } from "./pages/Projects";
 import { EmptyPage } from "./pages/EmptyPage";
@@ -39,10 +42,10 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<Overview client={client} />} />
           <Route path="projects/*" element={<Projects client={client} />} />
-          <Route path="secrets/*" element={<EmptyPage title="Secrets" />} />
+          <Route path="secrets/*" element={<Secrets client={client} />} />
           <Route path="agents" element={<Agents client={client} />} />
-          <Route path="grants" element={<EmptyPage title="Grants" />} />
-          <Route path="activity" element={<Audit client={client} />} />
+          <Route path="grants" element={<GrantsPage client={client} />} />
+          <Route path="activity" element={<Activity client={client} />} />
           <Route path="*" element={<EmptyPage title="Not found" />} />
         </Routes>
       </main>

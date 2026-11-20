@@ -18,3 +18,8 @@
 - Task: 3.1-3.4 - done (Overview with counts, recent activity and dismissible checklist; Projects list/create/rename/delete with confirm; Environments inside a project; Shell now provides the QueryClient)
 - Verified: `npm test --workspace apps/web` -> 37 passed (incl. 409, 403-with-retry, empty); tsc clean; just ci -> exit 0
 - Notes for next session: Overview shows no org name (still no org id after OIDC sign-in). Group 4 next: Secrets, then move Agents/Grants/Audit sections out of App.tsx (Shell and App still import each other). Evaluator PASS (sonnet); gaps: no test for 403/409 on mutations or env rename; org name on Overview deferred.
+
+## 2026-11-20 worker
+- Task: 4.1-4.5 - done (Secrets list/detail with versions, metadata only; Agents, Grants and Activity moved to routed pages in apps/web/src/pages; App/Shell import cycle gone)
+- Verified: `npm test --workspace apps/web` -> 38 passed; tsc clean; just ci -> exit 0; evaluator PASS (sonnet)
+- Notes for next session: gap: no test that the enrollment secret is absent from the react-query cache (structurally safe: Agents uses useState). Group 5 (desktop) next; 6.4 is an owner gate.

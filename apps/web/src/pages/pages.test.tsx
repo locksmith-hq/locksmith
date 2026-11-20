@@ -68,3 +68,12 @@ test("environments: list, create, delete inside a project", async () => {
   await userEvent.click(screen.getByText("Confirm delete"));
   await waitFor(() => expect(screen.queryByText("prod")).toBeNull());
 });
+
+test("secrets: list and detail with versions never request a value or material route", async () => {
+  const fx = open("/secrets");
+  expect(await screen.findByText("STRIPE_KEY")).toBeInTheDocument();
+  await userEvent.click(screen.getByText("STRIPE_KEY"));
+  expect((await screen.findAllByText("gateway:v1", { selector: "td" })).length).toBe(2);
+  expect(fx.requests.length).toBeGreaterThan(0);
+  expect(fx.requests.filter((r) => /value|material|reveal/i.test(r))).toEqual([]);
+});

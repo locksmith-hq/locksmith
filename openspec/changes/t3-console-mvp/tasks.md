@@ -19,11 +19,11 @@
 - [x] 3.4 Verify: `npm test --workspace apps/web` (fixtures cover `403`, `409`, empty, error).
 
 ## 4. Secrets, agents, grants and activity [sonnet]
-- [ ] 4.1 Secrets list and detail with versions; a test asserts no request to a value or material route.
-- [ ] 4.2 Move the existing Agents section to its routed page (keep its tests); the enrollment secret is shown once, kept out of the query cache, storage and logs, and cleared on close, with a test for each.
-- [ ] 4.3 Move the existing Grants section to its routed page (keep its tests) with mode, target, expiry.
-- [ ] 4.4 Move the existing Audit section to the Activity page (keep paging, outcome filter and ledger status tests).
-- [ ] 4.5 Verify: `npm test --workspace apps/web`.
+- [x] 4.1 Secrets list and detail with versions; a test asserts no request to a value or material route.
+- [x] 4.2 Move the existing Agents section to its routed page (keep its tests); the enrollment secret is shown once, kept out of the query cache, storage and logs, and cleared on close, with a test for each.
+- [x] 4.3 Move the existing Grants section to its routed page (keep its tests) with mode, target, expiry.
+- [x] 4.4 Move the existing Audit section to the Activity page (keep paging, outcome filter and ledger status tests).
+- [x] 4.5 Verify: `npm test --workspace apps/web`.
 
 ## 5. Desktop surface [sonnet]
 - [ ] 5.1 Desktop Projects and Environments views in `apps/desktop/src` using the shared client methods from 1.2; Vitest tests including `403`, `409` and empty states.

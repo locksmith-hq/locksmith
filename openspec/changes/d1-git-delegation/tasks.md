@@ -17,8 +17,8 @@
 
 ## 4. Client setup [sonnet]
 - [ ] 4.1 `smith git setup --gateway <url>` writes `insteadOf` and the credential helper returning the agent token; `smith doctor` check; `teardown` removes it.
-- [ ] 4.2 Console and desktop: show Git bindings (repo, services) on the bindings page in `apps/web` and `apps/desktop` with Vitest tests.
-- [ ] 4.3 Verify: `cargo nextest run -p smith-cli git`, `npm test --workspace apps/web`, `just apps-build`.
+- 4.2 Moved to `t3-console-mvp` (design.md decision 6, rescue #482): no bindings page or bindings list API exists yet.
+- [ ] 4.3 Verify: `cargo nextest run -p smith-cli git`.
 
 ## 5. Large body check [sonnet]
 - [ ] 5.1 A 50 MB push through the gateway with bounded memory asserted in the test.

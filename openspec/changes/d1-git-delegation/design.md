@@ -17,6 +17,7 @@
 | 3 | **Allow only the three smart-HTTP paths**; map `git-upload-pack` to `fetch` and `git-receive-pack` to `push`. | Generic path passthrough (turns the route into an open relay for the GitHub API). | Git HTTP protocol path set. |
 | 4 | **Redact headers and `text/plain` error bodies only**, not pack streams. | Scan packs (binary, huge, and the agent already owns that data). | Containment is labelled honestly; adversarial gate G2 style test on the error channel. |
 | 5 | **Reuse `ls-proxy::github` credential parsing and App token minting** rather than rewriting. | Duplicating JWT minting in the gateway. | Already in-tree and tested. |
+| 6 | **No Git bindings UI in D1; the bindings view (HTTP and Git bindings, repo and services) belongs to `t3-console-mvp`**, with a read-only bindings list API on the control plane. Task 4.2 moved there (rescue #482). | (a) a gateway or control-plane list endpoint plus UI now: there is no bindings page to extend, and a gateway-local TOML list endpoint would be thrown away once T3 serves bindings from the real API; (b) a local status field on the desktop Relays screen: the daemon does not know hosted gateway bindings. | `apps/web/src` has only `App.tsx`, `auth.ts` and `mockup/`; `apps/desktop/src` has the Relays screen only; Git bindings exist only as `[[git_binding]]` in the gateway TOML (`services/gateway/src/git.rs`); roadmap T3 owns the console on the real API. |
 
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |

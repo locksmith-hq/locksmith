@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-const mk = () => render(<App client={createClient("org1")} />);
+const mk = (path = "/agents") => render(<App client={createClient("org1")} initialPath={path} />);
 
 test("lists agents and grants, sending the org header", async () => {
   mk();
@@ -95,7 +95,7 @@ test("shows problem detail on error", async () => {
 
 test("audit page shows chain status, events, and pages on demand", async () => {
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   expect(await screen.findByText("relay.outcome")).toBeInTheDocument();
   expect(screen.getByText(/seq 2 at/)).toBeInTheDocument();
   expect(screen.getByTestId("verify-result")).toHaveTextContent("Verified OK");
@@ -110,7 +110,7 @@ test("audit page never renders attrs, shows a failed verify, and surfaces load e
     return json({ title: "Bad", detail: "ledger down" }, 503);
   });
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("ledger down");
   expect(await screen.findByTestId("verify-result")).toHaveTextContent("FAILED at t2 (first broken seq 2, hash)");
   expect(screen.getByText(/none yet/)).toBeInTheDocument();
@@ -120,7 +120,7 @@ test("audit page never renders attrs, shows a failed verify, and surfaces load e
 
 test("audit load more cannot double-append on a double click", async () => {
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   const btn = await screen.findByText("Load more");
   btn.click(); btn.click();
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
@@ -135,7 +135,7 @@ test("audit outcome filter narrows to denied and redaction_failed events", async
     return json({ items: [ev(3, "relay.outcome", "redaction_failed"), ev(2, "relay.denied", "no_grant"), ev(1, "agent.created", "ok")] });
   });
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
   const sel = screen.getByRole("combobox", { name: "Outcome filter" });
   await userEvent.selectOptions(sel, "denied");

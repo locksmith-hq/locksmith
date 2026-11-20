@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BrowserRouter, MemoryRouter } from "react-router";
+import { Shell } from "./Shell";
+import { withUnauthorizedHandler } from "./api/client";
 import { createAuth, defaultConfig, type AuthService, type AuthState } from "./auth";
 import { auditOutcomeMatches as auditMatches, createClient, type Agent, type AuditOutcomeFilter as AuditFilter, type AgentGrant, type AuditEvent, type AuditStatus, type Client } from "@locksmith/control-plane-client";
 
@@ -8,9 +11,10 @@ let defaultAuth: AuthService | undefined;
 const getDefaultAuth = () => (defaultAuth ??= createAuth(defaultConfig()));
 
 // `client` (tests, embedding) bypasses sign-in; otherwise the console is gated on an OIDC session.
-export function App({ client, auth }: { client?: Client; auth?: AuthService }) {
-  if (client) return <Console client={client} />;
-  return <AuthGate auth={auth ?? getDefaultAuth()} />;
+// `initialPath` (tests) swaps the browser history for an in-memory one.
+export function App({ client, auth, initialPath }: { client?: Client; auth?: AuthService; initialPath?: string }) {
+  const body = client ? <Shell client={client} /> : <AuthGate auth={auth ?? getDefaultAuth()} />;
+  return initialPath ? <MemoryRouter initialEntries={[initialPath]}>{body}</MemoryRouter> : <BrowserRouter>{body}</BrowserRouter>;
 }
 
 function AuthGate({ auth }: { auth: AuthService }) {
@@ -21,21 +25,12 @@ function AuthGate({ auth }: { auth: AuthService }) {
     void auth.start();
     return off;
   }, [auth]);
-  const client = useMemo(() => createClient("", "", () => auth.token()), [auth]);
+  // A 401 from the API means the session is gone: sign out, which returns to the sign-in screen.
+  const client = useMemo(() => withUnauthorizedHandler(createClient("", "", () => auth.token()), () => void auth.signOut()), [auth]);
 
   if (state.status === "loading") return <main><p>Signing in…</p></main>;
   if (state.status === "signed-out") return <SignIn auth={auth} notice={state.notice} />;
-  return (
-    <Console
-      client={client}
-      header={
-        <div aria-label="Account">
-          <span data-testid="signed-in-as">{state.user.email ?? state.user.name ?? "Signed in"}</span>
-          <button onClick={() => void auth.signOut()}>Sign out</button>
-        </div>
-      }
-    />
-  );
+  return <Shell client={client} user={state.user.email ?? state.user.name ?? "Signed in"} onSignOut={() => void auth.signOut()} />;
 }
 
 function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
@@ -52,22 +47,7 @@ function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
   );
 }
 
-function Console({ client, header }: { client: Client; header?: ReactNode }) {
-  const [page, setPage] = useState<"agents" | "audit">("agents");
-  return (
-    <main>
-      <h1>Locksmith</h1>
-      {header}
-      <nav aria-label="Pages">
-        <button aria-pressed={page === "agents"} onClick={() => setPage("agents")}>Agents</button>
-        <button aria-pressed={page === "audit"} onClick={() => setPage("audit")}>Audit</button>
-      </nav>
-      {page === "audit" ? <Audit client={client} /> : <Agents client={client} />}
-    </main>
-  );
-}
-
-function Agents({ client }: { client: Client }) {
+export function Agents({ client }: { client: Client }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Held in React state only; cleared on dismiss. Never written to storage or logged.
@@ -179,7 +159,7 @@ function chainSummary(s: AuditStatus): string {
   return `Verification FAILED at ${v.finished_at}${v.broken_seq != null ? ` (first broken seq ${v.broken_seq}${v.break_kind ? `, ${v.break_kind}` : ""})` : ""}`;
 }
 
-function Audit({ client }: { client: Client }) {
+export function Audit({ client }: { client: Client }) {
   const [status, setStatus] = useState<AuditStatus | null>(null);
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [next, setNext] = useState<string | null>(null);

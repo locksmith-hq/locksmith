@@ -4,7 +4,11 @@ yanked = "deny"
 # ls-control-plane, used to start a throwaway Postgres in tests). It is flagged
 # unmaintained, not vulnerable, and never ships in a release binary.
 # Revisit when testcontainers moves off it.
-ignore = ["RUSTSEC-2026-0440"]
+#
+# chrono comes in through oauth2 (smith login --user, device grant; T1 6.3). Flagged
+# unmaintained (RUSTSEC-2026-0543), not vulnerable; oauth2 uses it for device-code expiry
+# arithmetic only. Revisit when oauth2 moves off it.
+ignore = ["RUSTSEC-2026-0440", "RUSTSEC-2026-0543"]
 
 [licenses]
 allow = [

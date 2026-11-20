@@ -6,7 +6,7 @@
 //! [`Target`], ids, integers, validated hosts): no string from a request reaches the ledger.
 
 use ls_audit::pg::{Appended, append_in_tx};
-use ls_audit::{Actor, Attrs, Code, Event, Target, attr, kind, outcome};
+use ls_audit::{Actor, Attrs, Code, Event, Host, Target, attr, kind, outcome};
 use time::OffsetDateTime;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -162,5 +162,73 @@ pub fn grant_revoked(actor: Actor, grant_id: Uuid, agent_id: Uuid) -> Event {
         actor,
         Target::Grant(grant_id),
         Attrs::new().id(attr::AGENT_ID, agent_id),
+    )
+}
+
+/// Host name of an OIDC issuer URL, if it is one the ledger accepts. The issuer is the only
+/// identity attribute recorded besides the user id: no subject, email, token or claim text.
+fn issuer_host(issuer: &str) -> Option<Host> {
+    let rest = issuer.split_once("://")?.1;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let host = authority.rsplit('@').next()?;
+    let host = host.split(':').next()?;
+    Host::parse(host).ok()
+}
+
+fn auth(
+    kind: Code,
+    user: Uuid,
+    org_id: Uuid,
+    outcome: Code,
+    issuer: &str,
+    reason: Option<Code>,
+) -> Event {
+    let mut attrs = Attrs::new();
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    if let Some(r) = reason {
+        attrs = attrs.code(attr::REASON, r);
+    }
+    Event {
+        kind,
+        actor: Actor::User(user),
+        target: Some(Target::Org(org_id)),
+        outcome,
+        attrs,
+    }
+}
+
+/// `auth.sign_in`: a verified human started a session.
+pub fn auth_sign_in(user: Uuid, org_id: Uuid, issuer: &str) -> Event {
+    auth(kind::AUTH_SIGN_IN, user, org_id, outcome::OK, issuer, None)
+}
+
+/// `auth.sign_out`: the human ended the session (the client discards its tokens).
+pub fn auth_sign_out(user: Uuid, org_id: Uuid, issuer: &str) -> Event {
+    auth(kind::AUTH_SIGN_OUT, user, org_id, outcome::OK, issuer, None)
+}
+
+/// `auth.verify_failed`: a known user's identity was refused; `reason` is a static code.
+pub fn auth_verify_failed(user: Uuid, org_id: Uuid, issuer: &str, reason: Code) -> Event {
+    auth(
+        kind::AUTH_VERIFY_FAILED,
+        user,
+        org_id,
+        outcome::DENIED,
+        issuer,
+        Some(reason),
+    )
+}
+
+/// `org.personal_created`: a first sign-in created the user's personal org.
+pub fn org_personal_created(user: Uuid, org_id: Uuid, issuer: &str) -> Event {
+    auth(
+        kind::ORG_PERSONAL_CREATED,
+        user,
+        org_id,
+        outcome::OK,
+        issuer,
+        None,
     )
 }

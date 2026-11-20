@@ -66,6 +66,7 @@ and its own environment.
 | `G4` | encodings | base32, UTF-16LE/BE, `\u` escapes, HTML entities, quoted-printable, unlabelled gzip, reversed, split across headers, one character per line |
 | `G5` | control plane and ledger | every agent-reachable route in `openapi.json` with valid, malformed and cross-org inputs, internal routes without the service token (401), audit events and export |
 | `G6` | token abuse | forged, foreign-org and stale tokens, the agent token at internal routes, replay after grant revoke (one `relay.denied`, no decrypt) |
+| `G7` | human-token abuse | forged and replayed Keycloak human tokens at the control plane, the dev header refused when dev auth is off (second control plane), a human token at the gateway's agent routes and the internal routes (needs Keycloak: `just up`) |
 
 Residual register. `gateway/residuals.toml` lists the leak paths the gate accepts for now, each
 with a case, an oracle encoding label, a protection label (prevention, containment or detection)

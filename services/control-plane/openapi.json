@@ -1385,6 +1385,16 @@
             },
             "description": "Missing or invalid service token or org header"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -1483,6 +1493,16 @@
               }
             },
             "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "409": {
             "content": {
@@ -1593,6 +1613,16 @@
             },
             "description": "Missing or invalid service token or org header"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -1695,6 +1725,16 @@
             },
             "description": "Invalid, unknown or replaced enrollment secret"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "413": {
             "content": {
               "application/problem+json": {
@@ -1788,6 +1828,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -1876,6 +1926,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "409": {
             "content": {
               "application/problem+json": {
@@ -1937,6 +1997,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -2014,6 +2084,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -2090,6 +2170,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -2189,6 +2279,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -2283,6 +2383,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -2364,6 +2474,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -2463,6 +2583,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -2519,6 +2649,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -2548,6 +2688,114 @@
         "summary": "Get the audit chain status",
         "tags": [
           "audit"
+        ]
+      }
+    },
+    "/v1/auth/sign-in": {
+      "post": {
+        "operationId": "auth_sign_in",
+        "responses": {
+          "204": {
+            "description": "Recorded"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Record a sign-in in the audit ledger",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/sign-out": {
+      "post": {
+        "operationId": "auth_sign_out",
+        "responses": {
+          "204": {
+            "description": "Recorded"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Record a sign-out in the audit ledger",
+        "tags": [
+          "auth"
         ]
       }
     },
@@ -2603,6 +2851,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "503": {
             "content": {
               "application/problem+json": {
@@ -2655,6 +2913,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -2744,6 +3012,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -2826,6 +3104,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "409": {
             "content": {
               "application/problem+json": {
@@ -2886,6 +3174,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -2962,6 +3260,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -3048,6 +3356,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -3157,6 +3475,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -3251,6 +3579,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -3331,6 +3669,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -3417,6 +3765,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -3513,6 +3871,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -3632,6 +4000,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -3736,6 +4114,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -3826,6 +4214,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -3922,6 +4320,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -4029,6 +4437,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -4126,6 +4544,16 @@
               }
             },
             "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
           },
           "404": {
             "content": {
@@ -4241,6 +4669,16 @@
             },
             "description": "Missing or invalid org binding"
           },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
           "404": {
             "content": {
               "application/problem+json": {
@@ -4298,6 +4736,10 @@
     {
       "description": "Liveness and readiness",
       "name": "health"
+    },
+    {
+      "description": "Sign-in and sign-out markers for the audit ledger; human bearer token only",
+      "name": "auth"
     },
     {
       "name": "orgs"

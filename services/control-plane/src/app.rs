@@ -21,6 +21,7 @@ use utoipa_axum::routes;
 
 use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
+use crate::auth::human::HumanAuth;
 use crate::db::Database;
 use crate::kms::DekWrapper;
 use crate::problem::ApiError;
@@ -43,6 +44,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
     modifiers(&DevOrgSecurity),
     tags(
         (name = "health", description = "Liveness and readiness"),
+        (name = "auth", description = "Sign-in and sign-out markers for the audit ledger; human bearer token only"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
         (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
@@ -86,6 +88,7 @@ pub struct AppState {
     kms: Option<Arc<dyn DekWrapper>>,
     service_token: Option<Arc<ServiceToken>>,
     agent_signer: Option<Arc<AgentTokenSigner>>,
+    human_auth: Option<Arc<HumanAuth>>,
 }
 
 impl AppState {
@@ -98,6 +101,7 @@ impl AppState {
             kms: None,
             service_token: None,
             agent_signer: None,
+            human_auth: None,
         }
     }
 
@@ -111,6 +115,17 @@ impl AppState {
     /// The agent-token signing key, if one is configured.
     pub fn agent_signer(&self) -> Option<&AgentTokenSigner> {
         self.agent_signer.as_deref()
+    }
+
+    /// Verify human bearer tokens with `auth` (T1). Without it every bearer token is refused.
+    pub fn with_human_auth(mut self, auth: HumanAuth) -> Self {
+        self.human_auth = Some(Arc::new(auth));
+        self
+    }
+
+    /// The human token verifier, if an issuer is configured.
+    pub fn human_auth(&self) -> Option<&HumanAuth> {
+        self.human_auth.as_deref()
     }
 
     /// Accept `token` on the `/internal/v1` routes. Without one they answer `401` (fail closed).

@@ -17,6 +17,7 @@ mod orgs;
 mod projects;
 mod responses;
 mod secrets;
+mod session;
 mod versions;
 
 use axum::http::{HeaderValue, StatusCode, header};
@@ -66,11 +67,30 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(agents::delete_grant))
         .routes(routes!(agents::mint_token))
         .routes(routes!(agents::jwks))
+        .routes(routes!(session::sign_in))
+        .routes(routes!(session::sign_out))
         .routes(routes!(audit::list_events))
         .routes(routes!(audit::status))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
         .routes(routes!(internal::append_event))
+}
+
+/// Append `event` to `org_id`'s ledger in its own tenant transaction.
+pub(crate) async fn audit_append(
+    state: &AppState,
+    org_id: Uuid,
+    event: ls_audit::Event,
+) -> Result<(), ApiError> {
+    state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                crate::audit::append(c, org_id, &event).await?;
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await
 }
 
 /// SQL column list shared by projects, environments and secrets.

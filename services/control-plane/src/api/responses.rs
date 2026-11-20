@@ -19,6 +19,12 @@ pub enum ReadErrors {
     )]
     Unauthenticated(Problem),
     #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
         status = 404,
         description = "Not found",
         content_type = "application/problem+json"
@@ -48,6 +54,12 @@ pub enum ListErrors {
         content_type = "application/problem+json"
     )]
     Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
     #[response(
         status = 404,
         description = "Not found",
@@ -79,6 +91,12 @@ pub enum CreateErrors {
     )]
     Unauthenticated(Problem),
     #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
         status = 409,
         description = "Conflict",
         content_type = "application/problem+json"
@@ -109,6 +127,12 @@ pub enum WriteErrors {
     )]
     Unauthenticated(Problem),
     #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
         status = 404,
         description = "Not found",
         content_type = "application/problem+json"
@@ -138,6 +162,12 @@ pub enum DeleteErrors {
         content_type = "application/problem+json"
     )]
     Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
     #[response(
         status = 404,
         description = "Not found",
@@ -175,6 +205,12 @@ pub enum DevCreateErrors {
     )]
     Unauthenticated(Problem),
     #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
         status = 503,
         description = "Service unavailable",
         content_type = "application/problem+json"
@@ -199,6 +235,12 @@ pub enum VersionWriteErrors {
         content_type = "application/problem+json"
     )]
     Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
     #[response(
         status = 404,
         description = "Not found",
@@ -236,6 +278,12 @@ pub enum InternalReadErrors {
     )]
     Unauthenticated(Problem),
     #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
         status = 404,
         description = "Not found (including another org's secret)",
         content_type = "application/problem+json"
@@ -265,6 +313,12 @@ pub enum InternalWriteErrors {
         content_type = "application/problem+json"
     )]
     Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
     #[response(
         status = 413,
         description = "Request body too large",
@@ -302,6 +356,12 @@ pub enum TokenErrors {
         content_type = "application/problem+json"
     )]
     Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
     #[response(
         status = 413,
         description = "Request body too large",

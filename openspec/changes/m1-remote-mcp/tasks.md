@@ -24,8 +24,8 @@
 
 ## 4. Sign-in and clients [sonnet]
 - [x] 4.1 Hub OAuth flow per the research note (protected-resource metadata, issuer config for Keycloak locally); an end-to-end test with a scripted MCP client that signs in and lists tools.
-- [ ] 4.2 Client revoke bound to the OAuth `client_id` (hub) or the agent (gateway): a revoked client's next call is refused with `401`, and so is a fresh `initialize` after revoke; test both.
-- [ ] 4.3 Verify: `just up && cargo nextest run -p ls-control-plane --test mcp_e2e`.
+- [x] 4.2 Client revoke bound to the OAuth `client_id` (hub) or the agent (gateway): a revoked client's next call is refused with `401`, and so is a fresh `initialize` after revoke; test both.
+- [x] 4.3 Verify: `just up && cargo nextest run -p ls-control-plane --test mcp_e2e`.
 
 ## 5. Console and desktop surface [sonnet]
 - [x] 5.1 `apps/web` Tools page (one switch per tool, per layer) and Clients page (list, revoke), with Vitest tests including `403` and empty states.
@@ -37,5 +37,5 @@
 - [x] 6.2 Verify: `just adversarial-gate`.
 
 ## 7. Local verification [sonnet]
-- [ ] 7.1 `just up`, the MCP end-to-end smoke test, `just apps-build`, then `just ci`.
+- [x] 7.1 `just up`, the MCP end-to-end smoke test, `just apps-build`, then `just ci`.
 - [ ] 7.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.

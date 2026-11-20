@@ -2,13 +2,13 @@
 
 ## 1. Contract and foundations [sonnet]
 - [ ] 1.1 Add `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
-- [ ] 1.2 Extend `createClient` in `packages/control-plane-client` with orgs, projects, environments, secrets and versions methods (web and desktop both get them); `apps/web` maps `401` to sign-out; Vitest with a mocked fetch.
+- [ ] 1.2 Extend `createClient` in `packages/control-plane-client` with orgs, projects, environments, secrets and versions methods (web and desktop both get them), with unit tests in that package; `apps/web` maps `401` to sign-out in its wrapper; Vitest with a mocked fetch.
 - [ ] 1.3 Fixture data (MSW or in-memory handlers) for every route the console calls, in `apps/web/src/api/fixtures.ts`.
 - [ ] 1.4 Verify: `npm test --workspace apps/web`.
 
 ## 2. Tokens and shell [sonnet]
 - [ ] 2.1 Move design tokens and kit components from `mockup/kit.tsx` and the CSS into `packages/ui`; the mockup imports them; no visual change.
-- [ ] 2.2 `AuthGate`, `Shell` (sidebar, org header, sign-out) and routes with empty pages; signed-out and expired-session tests.
+- [ ] 2.2 Keep the existing `AuthGate`; add `Shell` (sidebar, org header, sign-out) and routes with empty pages; signed-out and expired-session tests.
 - [ ] 2.3 Shared `QueryState` component: loading, empty, error with retry; tests.
 - [ ] 2.4 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web`.
 
@@ -20,9 +20,9 @@
 
 ## 4. Secrets, agents, grants and activity [sonnet]
 - [ ] 4.1 Secrets list and detail with versions; a test asserts no request to a value or material route.
-- [ ] 4.2 Agents list, register, revoke; the enrollment secret is shown once, kept out of the query cache, storage and logs, and cleared on close, with a test for each.
-- [ ] 4.3 Grants list, create, revoke with mode, target, expiry.
-- [ ] 4.4 Activity page with paging and ledger status.
+- [ ] 4.2 Move the existing Agents section to its routed page (keep its tests); the enrollment secret is shown once, kept out of the query cache, storage and logs, and cleared on close, with a test for each.
+- [ ] 4.3 Move the existing Grants section to its routed page (keep its tests) with mode, target, expiry.
+- [ ] 4.4 Move the existing Audit section to the Activity page (keep paging, outcome filter and ledger status tests).
 - [ ] 4.5 Verify: `npm test --workspace apps/web`.
 
 ## 5. End-to-end [sonnet]

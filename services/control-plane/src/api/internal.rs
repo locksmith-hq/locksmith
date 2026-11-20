@@ -12,7 +12,7 @@
 //! same service token and org scoping apply.
 //!
 //! `POST /internal/v1/audit/events` appends a relay event (`relay.attempt`, `relay.outcome`,
-//! `relay.denied`) to the org's audit ledger (S5 design decision 5). The body is typed end to
+//! `relay.denied`, and for Git `git.fetch`, `git.push`, `git.denied`) to the org's audit ledger (S5 design decision 5). The body is typed end to
 //! end: kinds, outcomes and methods are closed enums mapped to static codes, ids are UUIDs, the
 //! host is validated as a bare host name or IP, and unknown fields are refused. There is no field
 //! for a URL, path, query, header or body, so none of them can reach the ledger.
@@ -208,6 +208,16 @@ pub enum RelayEventKind {
     /// A refused call; outcome `denied`, `no_grant`, `grants_unavailable` or `denied_address`.
     #[serde(rename = "relay.denied")]
     Denied,
+    /// A completed Git clone or fetch through `/git/...` (D1); any outcome but `pending` and the
+    /// denials. One event per call, no attempt.
+    #[serde(rename = "git.fetch")]
+    GitFetch,
+    /// A completed Git push through `/git/...` (D1); same outcomes as `git.fetch`.
+    #[serde(rename = "git.push")]
+    GitPush,
+    /// A refused Git call; outcome `denied`, `grants_unavailable`, `no_grant` or `denied_address`.
+    #[serde(rename = "git.denied")]
+    GitDenied,
 }
 
 impl RelayEventKind {
@@ -216,6 +226,9 @@ impl RelayEventKind {
             Self::Attempt => kind::RELAY_ATTEMPT,
             Self::Outcome => kind::RELAY_OUTCOME,
             Self::Denied => kind::RELAY_DENIED,
+            Self::GitFetch => kind::GIT_FETCH,
+            Self::GitPush => kind::GIT_PUSH,
+            Self::GitDenied => kind::GIT_DENIED,
         }
     }
 }
@@ -327,7 +340,10 @@ impl NewRelayEvent {
         let ok = match self.kind {
             RelayEventKind::Attempt => self.outcome == RelayOutcome::Pending,
             RelayEventKind::Outcome => self.outcome != RelayOutcome::Pending,
-            RelayEventKind::Denied => self.outcome.is_denial(),
+            RelayEventKind::GitFetch | RelayEventKind::GitPush => {
+                self.outcome != RelayOutcome::Pending && !self.outcome.is_denial()
+            }
+            RelayEventKind::Denied | RelayEventKind::GitDenied => self.outcome.is_denial(),
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));

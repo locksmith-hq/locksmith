@@ -110,6 +110,9 @@ pub struct Bindings {
     /// AWS credential-vending bindings (D2); none by default.
     #[serde(default, rename = "aws_binding")]
     pub aws_bindings: Vec<crate::aws_policy::AwsBinding>,
+    /// Git repositories a secret may be used for through `/git/...` (D1).
+    #[serde(default, rename = "git_binding")]
+    pub git_bindings: Vec<crate::git::GitBinding>,
 }
 
 impl Bindings {
@@ -122,6 +125,17 @@ impl Bindings {
 
     fn validate(&self) -> Result<(), ConfigError> {
         let mut seen = HashSet::new();
+        let mut git_seen = HashSet::new();
+        for (index, g) in self.git_bindings.iter().enumerate() {
+            g.validate()
+                .map_err(|field| ConfigError::Binding { index, field })?;
+            if !git_seen.insert(g.secret_id) {
+                return Err(ConfigError::Binding {
+                    index,
+                    field: "git_binding.secret_id",
+                });
+            }
+        }
         for (index, b) in self.bindings.iter().enumerate() {
             let bad = |field| ConfigError::Binding { index, field };
             if !seen.insert(b.secret_id) {
@@ -148,6 +162,11 @@ impl Bindings {
             }
         }
         Ok(())
+    }
+
+    /// The Git binding for `secret_id`, if any.
+    pub fn git_for_secret(&self, secret_id: Uuid) -> Option<&crate::git::GitBinding> {
+        self.git_bindings.iter().find(|b| b.secret_id == secret_id)
     }
 
     /// The binding for `secret_id`, if any.

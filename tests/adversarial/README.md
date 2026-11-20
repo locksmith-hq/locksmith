@@ -67,6 +67,7 @@ and its own environment.
 | `G5` | control plane and ledger | every agent-reachable route in `openapi.json` with valid, malformed and cross-org inputs, internal routes without the service token (401), audit events and export |
 | `G6` | token abuse | forged, foreign-org and stale tokens, the agent token at internal routes, replay after grant revoke (one `relay.denied`, no decrypt) |
 | `G7` | human-token abuse | forged and replayed Keycloak human tokens at the control plane, the dev header refused when dev auth is off (second control plane), a human token at the gateway's agent routes and the internal routes (needs Keycloak: `just up`) |
+| `G8` | Git delegation | the `/git/...` route against a provider that echoes the injected credential in a 200 page, in the error pages of `err403`, `err404` and `err500` repositories and in Cache-Control, Pragma and Expires; denials (push on a fetch-only binding, unbound owner, other paths) never reach the provider; one `git.fetch` or `git.denied` ledger event per call. A 2xx `application/x-git-*` stream is relayed raw (rewriting would corrupt packs) and is not covered |
 
 Residual register. `gateway/residuals.toml` lists the leak paths the gate accepts for now, each
 with a case, an oracle encoding label, a protection label (prevention, containment or detection)

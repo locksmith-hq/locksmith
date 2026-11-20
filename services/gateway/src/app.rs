@@ -1,5 +1,5 @@
 //! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
-//! ([`crate::grants`]).
+//! ([`crate::grants`]) and `/git/{host}/...` ([`crate::git`]).
 
 use std::sync::Arc;
 
@@ -9,6 +9,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use ls_control_plane::readiness::Readiness;
 
+use crate::git;
 use crate::grants;
 use crate::relay::{self, Relay};
 
@@ -52,6 +53,13 @@ pub fn build(state: AppState) -> Router {
             post(relay::route).layer(DefaultBodyLimit::max(body_limit)),
         )
         .route("/v1/grants", get(grants::route))
+        // Smart-HTTP Git (D1): bodies are streamed, so no whole-body limit applies.
+        .route(
+            "/git/{host}/{*rest}",
+            get(git::route)
+                .post(git::route)
+                .layer(DefaultBodyLimit::disable()),
+        )
         .with_state(state)
 }
 

@@ -13,6 +13,7 @@ pub mod aws_policy;
 pub mod config;
 pub mod decrypt;
 pub mod egress;
+pub mod git;
 pub mod grants;
 pub mod http_client;
 pub mod relay;

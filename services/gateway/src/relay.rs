@@ -130,6 +130,7 @@ pub struct Relay {
     resolver: Arc<dyn Resolver>,
     audit: Arc<dyn AuditSink>,
     options: RelayOptions,
+    git: crate::git::GitState,
 }
 
 impl Relay {
@@ -151,7 +152,30 @@ impl Relay {
             resolver,
             audit,
             options,
+            git: crate::git::GitState::default(),
         }
+    }
+
+    /// Replace the Git route's timeouts and token cache (D1).
+    pub fn with_git(mut self, git: crate::git::GitState) -> Self {
+        self.git = git;
+        self
+    }
+
+    pub(crate) fn git(&self) -> &crate::git::GitState {
+        &self.git
+    }
+
+    pub(crate) fn audit(&self) -> &dyn AuditSink {
+        self.audit.as_ref()
+    }
+
+    pub(crate) fn decryptor(&self) -> &Decryptor {
+        &self.decryptor
+    }
+
+    pub(crate) fn resolver(&self) -> &dyn Resolver {
+        self.resolver.as_ref()
     }
 
     pub fn options(&self) -> &RelayOptions {
@@ -330,6 +354,7 @@ impl CallAudit {
         let host_ok = match kind {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
+            EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => true,
         };
         RelayEvent {
             kind,
@@ -1004,6 +1029,7 @@ mod tests {
                 binding(DEAD, format!("http://dead.test:{dead_port}"), true),
             ],
             aws_bindings: Vec::new(),
+            git_bindings: Vec::new(),
         };
         let control_plane =
             ControlPlane::new(cp.uri().parse().unwrap(), ORG, "s".repeat(32).into()).unwrap();
@@ -1141,6 +1167,9 @@ mod tests {
                 .filter_map(|e| match e.kind {
                     EventKind::Attempt => None,
                     EventKind::Outcome(o) | EventKind::Denied(o) => Some((o, e)),
+                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {
+                        None
+                    }
                 })
                 .collect()
         }
@@ -1161,6 +1190,7 @@ mod tests {
                         assert!(o.is_denial());
                         assert!(e.attempt_id.is_none());
                     }
+                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {}
                 }
             }
             assert!(open.is_none(), "attempt left open");
@@ -1740,6 +1770,7 @@ mod tests {
                 org_id: ORG,
                 bindings: Vec::new(),
                 aws_bindings: Vec::new(),
+                git_bindings: Vec::new(),
             },
             Decryptor::new(
                 ORG,

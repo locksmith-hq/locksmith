@@ -21,6 +21,9 @@ Location, WWW-Authenticate). The query selects how the body is sent:
   split=1                    chunked, one byte per chunk with pauses (cross-chunk redaction)
   sse=1                      text/event-stream, dripped in pieces 60 ms apart
   redirect=301|302|303|307|308 &to=URL   that status with `Location: URL` and the usual echo
+  /<owner>/errNNN.git/...    (G8, Git) the status NNN (an error page) instead of 200; any `.git/`
+                             path also echoes the credential in Cache-Control, Pragma and Expires,
+                             the headers the gateway's Git route passes back
   g4=FORM                    (G4) only the credential of the Authorization header (the value
                              after the scheme) in one form, with no other echo:
                              plain, b32, b32-lower (unpadded), utf16le, utf16be, json-u (\\uXXXX
@@ -31,6 +34,7 @@ Location, WWW-Authenticate). The query selects how the body is sent:
 import base64
 import gzip
 import json
+import re
 import struct
 import sys
 import time
@@ -231,6 +235,18 @@ class H(BaseHTTPRequestHandler):
             ("WWW-Authenticate", 'Bearer error="invalid_token", token="%s"' % auth),
             ("Connection", "close"),
         ]
+        status = 200
+        path = urllib.parse.urlsplit(self.path).path
+        if ".git/" in path:
+            # Git smart-HTTP paths (G8): the echo also rides in headers a Git route passes back.
+            hdrs += [
+                ("Cache-Control", "no-cache, echo=%s" % auth),
+                ("Pragma", "echo=%s" % base64.b64encode(auth.encode("latin-1")).decode()),
+                ("Expires", urllib.parse.quote(auth, safe="")),
+            ]
+            m = re.search(r"/err([1-5][0-9]{2})\.git/", path)
+            if m:
+                status = int(m.group(1))
         self.close_connection = True
         enc = q.get("enc", [""])[0]
         if q.get("split") or q.get("sse"):
@@ -271,7 +287,7 @@ class H(BaseHTTPRequestHandler):
             for e in enc.split(","):
                 payload = ENCODE[e](payload)
             hdrs.append(("Content-Encoding", ", ".join(enc.split(","))))
-        self.send_response(200)
+        self.send_response(status)
         for k, v in hdrs:
             self.send_header(k, v)
         self.send_header("Content-Length", str(len(payload)))

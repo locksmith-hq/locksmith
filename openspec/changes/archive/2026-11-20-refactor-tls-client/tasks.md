@@ -11,4 +11,4 @@
 
 ## 3. Local verification
 - [x] 3.1 `rg -n 'with_platform_verifier' crates services --glob '!crates/ls-http/**'` prints nothing.
-- [ ] 3.2 `just up` and `just api`, then `just adversarial-gate`, `just apps-build` and `just ci`.
+- [x] 3.2 `just up` and `just api`, then `just adversarial-gate`, `just apps-build` and `just ci`.

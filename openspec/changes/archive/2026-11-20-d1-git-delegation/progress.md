@@ -42,3 +42,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 4.3, 6.1 - done (4.2 moved to t3 by the lead; planning PR #483 not yet on main, so its tasks.md text is not merged here)
 - Verified: `cargo nextest run -p smith-cli git` 8 passed; `just git-smoke` (new recipe: clone and push through the gateway to a real `git http-backend` fixture, fetch-only cannot push, smith-cli git) passed; `just apps-build` ok; `just ci` exit 0.
 - Notes for next session: once #483 merges, merge origin/main here (tasks.md 4.1/4.2 conflict: keep ticks, take main's text); then archive if every remaining task is ticked.
+
+## 2026-11-20 worker B
+- Task: none new - merged main (tasks.md conflict: kept main's 4.2 move to t3, re-ticked all verified tasks), archived the change
+- Verified: `just ci` -> exit 0 (after `npm ci`; stale node_modules made web lint fail at first); task-edit guard OK
+- Notes for next session: none; d1 complete.

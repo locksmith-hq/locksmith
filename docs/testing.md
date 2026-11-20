@@ -16,6 +16,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-diag` | Rust lib | `just test ls-diag` | no | `just test-rust` |  |
 | `crates/ls-envelope` | Rust lib | `just test ls-envelope` | no | `just test-rust` | Envelope crypto |
 | `crates/ls-hooks` | Rust lib | `just test ls-hooks` | no | `just test-rust` |  |
+| `crates/ls-mcp-server` | Rust lib | `just test ls-mcp-server` | no | `just test-rust` | Shared Hub and Agent MCP tool registry, switch check and no-value schema test |
 | `crates/ls-ipc` | Rust lib | `just test ls-ipc` | no | `just test-rust` | `just api-types` regenerates `packages/api-types` from it |
 | `crates/ls-license` | Rust lib | `just test ls-license` | no | `just test-rust` |  |
 | `crates/ls-platform` | Rust lib | `just test ls-platform` | no | `just test-rust` |  |

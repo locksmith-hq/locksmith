@@ -94,24 +94,55 @@ pub fn find_value_like_field(schema: &Value) -> Option<String> {
     find_in(schema, &[])
 }
 
+fn is_object_schema(o: &serde_json::Map<String, Value>) -> bool {
+    o.contains_key("properties")
+        || match o.get("type") {
+            Some(Value::String(t)) => t == "object",
+            Some(Value::Array(ts)) => ts.iter().any(|t| t == "object"),
+            _ => false,
+        }
+}
+
+/// The exception field must be exactly a string, so nothing else can hide inside it.
+fn is_plain_string_schema(v: &Value) -> bool {
+    v.as_object().is_some_and(|o| {
+        o.get("type") == Some(&Value::String("string".into()))
+            && o.keys().all(|k| k == "type" || k == "description")
+    })
+}
+
 fn find_in(schema: &Value, allowed_top: &[&str]) -> Option<String> {
     match schema {
-        Value::Object(o) => o.iter().find_map(|(k, v)| match k.as_str() {
-            "properties" => v.as_object().and_then(|props| {
-                props.iter().find_map(|(name, sub)| {
-                    if is_value_like_name(name) && !allowed_top.contains(&name.as_str()) {
-                        Some(name.clone())
-                    } else {
-                        find_in(sub, &[])
-                    }
-                })
-            }),
-            "patternProperties" => Some("patternProperties (open map)".to_string()),
-            "additionalProperties" if *v != Value::Bool(false) => {
-                Some("additionalProperties (open map)".to_string())
+        // `true` and `{}` accept anything, an object of any shape included.
+        Value::Bool(true) => Some("open schema".to_string()),
+        Value::Object(o) if o.is_empty() => Some("open schema".to_string()),
+        Value::Object(o) => {
+            if is_object_schema(o) && o.get("additionalProperties") != Some(&Value::Bool(false)) {
+                return Some("object without additionalProperties: false (open map)".to_string());
             }
-            _ => find_in(v, &[]),
-        }),
+            o.iter().find_map(|(k, v)| match k.as_str() {
+                "properties" => v.as_object().and_then(|props| {
+                    props.iter().find_map(|(name, sub)| {
+                        let excepted =
+                            allowed_top.contains(&name.as_str()) && is_plain_string_schema(sub);
+                        if is_value_like_name(name) && !excepted {
+                            Some(name.clone())
+                        } else {
+                            find_in(sub, &[])
+                        }
+                    })
+                }),
+                "patternProperties" => Some("patternProperties (open map)".to_string()),
+                "additionalProperties" | "unevaluatedProperties" if *v != Value::Bool(false) => {
+                    Some(format!("{k} (open map)"))
+                }
+                // Keyword values that are not schemas.
+                "required" | "enum" | "const" | "default" | "examples" | "type" | "format"
+                | "description" | "title" | "pattern" => None,
+                "additionalProperties" | "unevaluatedProperties" => None,
+                _ => find_in(v, &[]),
+            })
+        }
         Value::Array(a) => a.iter().find_map(|v| find_in(v, &[])),
         _ => None,
     }
@@ -125,7 +156,7 @@ pub const SHORT_LIVED_OUTPUT_FIELD: &str = "credential";
 impl ToolDef {
     /// Error naming the offending field if an input or output schema could carry a value.
     /// Every shipped tool must declare an output schema, so the output half always runs.
-    pub fn check_no_value_field(&self) -> Result<(), String> {
+    pub fn check_no_value_field(&self, layer: Layer) -> Result<(), String> {
         if let Some(f) = find_value_like_field(&self.input_schema) {
             return Err(format!(
                 "tool `{}` input schema has a `{f}` field",
@@ -136,7 +167,7 @@ impl ToolDef {
             .output_schema
             .as_ref()
             .ok_or_else(|| format!("tool `{}` has no output schema", self.name))?;
-        let allowed: &[&str] = if self.name == SHORT_LIVED_TOOL {
+        let allowed: &[&str] = if layer == Layer::Agent && self.name == SHORT_LIVED_TOOL {
             &[SHORT_LIVED_OUTPUT_FIELD]
         } else {
             &[]
@@ -170,7 +201,7 @@ impl Registry {
     pub fn new(layer: Layer, tools: Vec<ToolDef>) -> Result<Self, String> {
         let mut seen = std::collections::HashSet::new();
         for t in &tools {
-            t.check_no_value_field()?;
+            t.check_no_value_field(layer)?;
             if !seen.insert(t.name) {
                 return Err(format!("duplicate tool `{}`", t.name));
             }
@@ -503,11 +534,14 @@ mod tests {
     #[test]
     fn no_value_check_fails_on_nested_input_and_output_fields() {
         let ok = obj(&[], json!({"id": id()}));
-        let nested = json!({"type":"object","properties":{"a":{"type":"array",
-            "items":{"type":"object","properties":{"Password":{"type":"string"}}}}}});
+        let nested = obj(
+            &[],
+            json!({"a": {"type": "array",
+                         "items": obj(&[], json!({"Password": {"type": "string"}}))}}),
+        );
         let e = Registry::new(Layer::Hub, vec![with_out("bad", nested, ok.clone())]).unwrap_err();
         assert!(e.contains("input") && e.contains("Password"), "{e}");
-        let out = json!({"type":"object","properties":{"value":{"type":"string"}}});
+        let out = obj(&[], json!({"value": {"type": "string"}}));
         let e = Registry::new(Layer::Agent, vec![with_out("bad2", ok, out)]).unwrap_err();
         assert!(e.contains("output") && e.contains("value"), "{e}");
     }
@@ -614,6 +648,43 @@ mod tests {
         let extra = obj(&[], json!({"credential": {}, "refresh_token": {}}));
         let bad_extra = with_out(SHORT_LIVED_TOOL, obj(&[], json!({})), extra);
         assert!(Registry::new(Layer::Agent, vec![bad_extra]).is_err());
+    }
+
+    #[test]
+    fn hardening_open_objects_layer_and_exact_credential() {
+        let ok_in = obj(&[], json!({}));
+        let out = |p: Value| obj(&[], p);
+        // A nested object with no `additionalProperties: false`, `{}` and `true` are open.
+        for open in [
+            json!({"meta": {"type": "object"}}),
+            json!({"meta": {}}),
+            json!({"meta": true}),
+            json!({"meta": {"type": "object", "additionalProperties": false,
+                            "unevaluatedProperties": true}}),
+        ] {
+            let t = with_out("t", ok_in.clone(), out(open.clone()));
+            assert!(Registry::new(Layer::Agent, vec![t]).is_err(), "{open}");
+        }
+        // The exception is Agent-only.
+        let cred = out(json!({"credential": {"type": "string"}}));
+        let t = with_out(SHORT_LIVED_TOOL, ok_in.clone(), cred.clone());
+        assert!(Registry::new(Layer::Hub, vec![t]).is_err());
+        let t = with_out(SHORT_LIVED_TOOL, ok_in.clone(), cred);
+        assert!(Registry::new(Layer::Agent, vec![t]).is_ok());
+        // ...and the field must be exactly a string.
+        for inner in [
+            json!({"type": "object", "additionalProperties": false,
+                   "properties": {"stored": {"type": "string"}}}),
+            json!({}),
+            json!({"type": ["string", "object"]}),
+        ] {
+            let t = with_out(
+                SHORT_LIVED_TOOL,
+                ok_in.clone(),
+                out(json!({"credential": inner})),
+            );
+            assert!(Registry::new(Layer::Agent, vec![t]).is_err());
+        }
     }
 
     #[test]

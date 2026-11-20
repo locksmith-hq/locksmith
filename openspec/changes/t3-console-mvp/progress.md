@@ -8,3 +8,8 @@
 - Task: 1.1-1.4 - done
 - Verified: just ci -> green; npm test (web, control-plane-client) -> pass; evaluator PASS
 - Notes for next session: fixtures.ts imports vitest, so only tests may import it. Groups 2-7 remain; 6.4 is an owner gate.
+
+## 2026-11-20 worker
+- Task: 2.1-2.4 - done (tokens and kit moved to packages/ui, Shell and routes, QueryState)
+- Verified: just ci -> green; npm test (web 31, desktop 25) and web build -> pass; evaluator PASS
+- Notes for next session: org header shows the user's email because the console has no org id for getOrg after OIDC sign-in; task 3.1 (Overview with org name) needs that. Shell and App import each other (temporary until group 4). Groups 3-7 remain; 6.4 is an owner gate.

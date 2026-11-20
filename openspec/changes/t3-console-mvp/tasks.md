@@ -7,10 +7,10 @@
 - [x] 1.4 Verify: `npm test --workspace apps/web`.
 
 ## 2. Tokens and shell [sonnet]
-- [ ] 2.1 Move design tokens and kit components from `mockup/kit.tsx` and the CSS into `packages/ui`; the mockup imports them; no visual change.
-- [ ] 2.2 Keep the existing `AuthGate`; add `Shell` (sidebar, org header, sign-out) and routes with empty pages; signed-out and expired-session tests.
-- [ ] 2.3 Shared `QueryState` component: loading, empty, error with retry; tests.
-- [ ] 2.4 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web`.
+- [x] 2.1 Move design tokens and kit components from `mockup/kit.tsx` and the CSS into `packages/ui`; the mockup imports them; no visual change.
+- [x] 2.2 Keep the existing `AuthGate`; add `Shell` (sidebar, org header, sign-out) and routes with empty pages; signed-out and expired-session tests.
+- [x] 2.3 Shared `QueryState` component: loading, empty, error with retry; tests.
+- [x] 2.4 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web`.
 
 ## 3. Overview, projects and environments [sonnet]
 - [ ] 3.1 Overview page with counts, recent activity and the dismissible "Get started" checklist.

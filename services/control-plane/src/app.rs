@@ -216,7 +216,7 @@ fn desktop_cors() -> CorsLayer {
 /// Apply the standard layer stack and state to a router.
 pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
     let id_header = HeaderName::from_static(REQUEST_ID_HEADER);
-    let router = router.merge(mcp_endpoint::router(state.mcp()));
+    let router = router.merge(mcp_endpoint::router(&state));
     router.with_state(state).layer(
         ServiceBuilder::new()
             .layer(SetRequestIdLayer::new(id_header.clone(), MakeRequestUuid))

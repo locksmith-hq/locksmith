@@ -284,13 +284,15 @@ fn page_of(item: Value) -> Value {
     )
 }
 
-fn page_input(extra: Value) -> Value {
+/// Paging input (`limit` 1 to 100 like the REST API) plus tool fields; `required` names the
+/// tool fields that must be given.
+fn page_input(required: &[&str], extra: Value) -> Value {
     let mut props = json!({"cursor": {"type": "string"},
-                           "limit": {"type": "integer", "minimum": 1, "maximum": 200}});
+                           "limit": {"type": "integer", "minimum": 1, "maximum": 100}});
     if let (Some(p), Value::Object(e)) = (props.as_object_mut(), extra) {
         p.extend(e);
     }
-    obj(&[], props)
+    obj(required, props)
 }
 
 const UUID: &str = "uuid";
@@ -331,60 +333,89 @@ fn explain_block_tool() -> ToolDef {
 pub fn hub_tools() -> Vec<ToolDef> {
     vec![
         schemas(
-            tool("list_projects", "Projects in your org.", true),
-            page_input(json!({})),
+            tool(
+                "list_projects",
+                "Projects in your org, with their environments (ids and names).",
+                true,
+            ),
+            page_input(&[], json!({})),
             page_of(obj(
-                &["id", "name"],
+                &["id", "name", "description", "environments"],
                 json!({"id": id(), "name": {"type": "string"},
-                       "environments": {"type": "array", "items": {"type": "string"}}}),
+                       "description": {"type": "string"},
+                       "environments": {"type": "array", "items": obj(
+                           &["id", "name"],
+                           json!({"id": id(), "name": {"type": "string"}}))}}),
             )),
         ),
         schemas(
             tool(
                 "list_secret_names",
-                "Secret names and versions in a project environment. Never values.",
+                "Secret names and their versions (numbers and dates) in a project environment. \
+                 Never values.",
                 true,
             ),
-            page_input(json!({"project_id": id(), "environment": {"type": "string"}})),
+            page_input(
+                &["project_id", "environment_id"],
+                json!({"project_id": id(), "environment_id": id()}),
+            ),
             page_of(obj(
-                &["secret_id", "name", "latest_version"],
+                &["secret_id", "name", "latest_version", "versions"],
                 json!({"secret_id": id(), "name": {"type": "string"},
-                       "latest_version": {"type": "integer", "minimum": 1},
+                       "description": {"type": "string"},
+                       "latest_version": {"type": ["integer", "null"], "minimum": 1},
+                       "versions": {"type": "array", "items": obj(
+                           &["version", "created_at"],
+                           json!({"version": {"type": "integer", "minimum": 1},
+                                  "created_at": time()}))},
                        "updated_at": time()}),
             )),
         ),
         schemas(
-            tool("read_activity", "Recent audit events you may see.", true),
-            page_input(json!({"project_id": id(), "since": time()})),
+            tool(
+                "read_activity",
+                "Recent audit events in your org, newest first.",
+                true,
+            ),
+            page_input(&[], json!({})),
             page_of(obj(
-                &["event_id", "at", "action", "outcome"],
-                json!({"event_id": id(), "at": time(), "action": {"type": "string"},
-                       "actor": {"type": "string"}, "target": {"type": "string"},
-                       "outcome": {"type": "string", "enum": ["allowed", "denied", "error"]}}),
+                &["event_id", "seq", "at", "action", "actor", "outcome"],
+                json!({"event_id": id(), "seq": {"type": "integer", "minimum": 1}, "at": time(),
+                       "action": {"type": "string"}, "actor": {"type": "string"},
+                       "target": {"type": "string"}, "outcome": {"type": "string"}}),
             )),
         ),
         schemas(
-            tool("list_agents", "Enrolled agents and their status.", true),
-            page_input(json!({"project_id": id()})),
+            tool("list_agents", "Enrolled agents in your org.", true),
+            page_input(&[], json!({})),
             page_of(obj(
-                &["agent_id", "name", "status"],
+                &["agent_id", "name", "description", "created_at"],
                 json!({"agent_id": id(), "name": {"type": "string"},
-                       "status": {"type": "string", "enum": ["active", "paused", "revoked"]},
-                       "last_seen_at": {"type": ["string", "null"], "format": "date-time"}}),
+                       "description": {"type": "string"}, "created_at": time()}),
             )),
         ),
         schemas(
             tool(
                 "list_grants",
-                "Grants: which agent may use which secret. Never values.",
+                "An agent's grants: which secret it may use, in which mode, until when. Never \
+                 values.",
                 true,
             ),
-            page_input(json!({"agent_id": id(), "project_id": id()})),
+            page_input(&["agent_id"], json!({"agent_id": id()})),
             page_of(obj(
-                &["grant_id", "agent_id", "secret_id"],
+                &[
+                    "grant_id",
+                    "agent_id",
+                    "secret_id",
+                    "secret_name",
+                    "mode",
+                    "created_at",
+                ],
                 json!({"grant_id": id(), "agent_id": id(), "secret_id": id(),
-                       "hosts": {"type": "array", "items": {"type": "string"}},
-                       "expires_at": {"type": ["string", "null"], "format": "date-time"}}),
+                       "secret_name": {"type": "string"},
+                       "mode": {"type": "string", "enum": ["relay"]},
+                       "expires_at": {"type": ["string", "null"], "format": "date-time"},
+                       "created_at": time()}),
             )),
         ),
         explain_block_tool(),
@@ -424,7 +455,7 @@ pub fn agent_tools() -> Vec<ToolDef> {
                 "Secrets this agent holds a grant for: names and ids only. Never values.",
                 true,
             ),
-            page_input(json!({})),
+            page_input(&[], json!({})),
             page_of(obj(
                 &["secret_id", "name", "version"],
                 json!({"secret_id": id(), "name": {"type": "string"},

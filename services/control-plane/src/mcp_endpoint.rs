@@ -14,9 +14,10 @@
 //!   loopback; it is never disabled.
 //!
 //! The verified person is passed to handlers as an [`McpPrincipal`] request extension (read from
-//! `RequestContext.extensions` as `http::request::Parts`). Tools, switches and audit are later
-//! tasks (2.2 to 2.5); this server lists none yet. No token text is logged or echoed.
+//! `RequestContext.extensions` as `http::request::Parts`). Tools live in `mcp_tools` (task 2.2);
+//! switches (2.3) and audit (2.5) are later tasks. No token text is logged or echoed.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Json;
@@ -26,11 +27,19 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
+use ls_mcp_server::{Layer, Registry, ToolDef, hub_tools};
 use rmcp::ServerHandler;
-use rmcp::model::{ServerCapabilities, ServerConfig};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResponse, JsonObject, ListToolsResult, PaginatedRequestParams,
+    ServerCapabilities, ServerConfig, Tool, ToolAnnotations,
+};
+use rmcp::service::RequestContext;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
+use rmcp::{ErrorData as McpError, RoleServer};
 use serde_json::json;
+
+use crate::mcp_tools;
 
 use crate::app::AppState;
 use crate::auth::bearer;
@@ -154,15 +163,85 @@ impl McpEndpoint {
     }
 }
 
-/// What the rmcp service answers until tools land (tasks 2.2 and later).
+/// The hub MCP server: the registry's hub tools (defaults only until the per-org switch of task
+/// 2.3), each run as the person behind the request token ([`crate::mcp_tools`]).
 #[derive(Clone)]
-struct HubMcp;
+struct HubMcp {
+    state: AppState,
+    registry: Arc<Registry>,
+}
+
+impl HubMcp {
+    fn new(state: AppState) -> Self {
+        // The shipped registry carries no value field (tested in `ls-mcp-server`).
+        let registry = Registry::new(Layer::Hub, hub_tools())
+            .map_err(|e| format!("hub tool registry invalid: {e}"))
+            .map(Arc::new);
+        Self {
+            state,
+            registry: registry.unwrap_or_else(|e| panic!("{e}")),
+        }
+    }
+
+    fn principal(context: &RequestContext<RoleServer>) -> Result<McpPrincipal, McpError> {
+        context
+            .extensions
+            .get::<http::request::Parts>()
+            .and_then(|p| p.extensions.get::<McpPrincipal>())
+            .cloned()
+            .ok_or_else(|| McpError::invalid_request("unauthenticated", None))
+    }
+}
+
+fn to_tool(def: &ToolDef) -> Tool {
+    let object = |v: &serde_json::Value| -> Arc<JsonObject> {
+        Arc::new(v.as_object().cloned().unwrap_or_default())
+    };
+    let mut tool = Tool::new(def.name, def.description, object(&def.input_schema));
+    tool.output_schema = def.output_schema.as_ref().map(object);
+    // Read tools are those that ship on; state-changing tools ship off.
+    tool.annotations = Some(ToolAnnotations::new().read_only(def.default_enabled));
+    tool
+}
 
 impl ServerHandler for HubMcp {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Locksmith hub. Tools return ids, names and metadata, never secret values.",
         )
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        Self::principal(&context)?;
+        let tools = self
+            .registry
+            .list(&HashMap::new())
+            .into_iter()
+            .map(to_tool)
+            .collect();
+        Ok(ListToolsResult {
+            tools,
+            ..ListToolsResult::default()
+        })
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResponse, McpError> {
+        let principal = Self::principal(&context)?;
+        let def = self
+            .registry
+            .authorize(&request.name, &HashMap::new())
+            .map_err(|_| McpError::invalid_params("unknown tool", None))?;
+        // Tools that change state are built by task 2.4; until then they have no handler.
+        let result = mcp_tools::call(&self.state, &principal, def.name, request.arguments).await?;
+        Ok(result.into())
     }
 }
 
@@ -200,8 +279,8 @@ async fn require_token(
 
 /// The `/mcp` service and the protected-resource metadata routes. Without a configured endpoint
 /// `/mcp` answers `401` to everything (fail closed) and no metadata is served.
-pub fn router(endpoint: Option<&Arc<McpEndpoint>>) -> Router<AppState> {
-    let Some(endpoint) = endpoint else {
+pub fn router(state: &AppState) -> Router<AppState> {
+    let Some(endpoint) = state.mcp() else {
         return Router::new()
             .route(MCP_PATH, any(|| async { unauthorized(None, false) }))
             .route("/mcp/{*rest}", any(|| async { unauthorized(None, false) }));
@@ -209,8 +288,9 @@ pub fn router(endpoint: Option<&Arc<McpEndpoint>>) -> Router<AppState> {
     let config = StreamableHttpServerConfig::default()
         .with_allowed_hosts(endpoint.allowed_hosts.clone())
         .with_legacy_session_mode(true);
+    let hub_state = state.clone();
     let service = StreamableHttpService::new(
-        || Ok(HubMcp),
+        move || Ok(HubMcp::new(hub_state.clone())),
         Arc::new(LocalSessionManager::default()),
         config,
     );

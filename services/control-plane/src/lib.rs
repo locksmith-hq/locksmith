@@ -11,6 +11,7 @@ pub mod db;
 pub mod enrollment;
 pub mod kms;
 pub mod mcp_endpoint;
+pub mod mcp_tools;
 pub mod migrate;
 pub mod problem;
 pub mod readiness;

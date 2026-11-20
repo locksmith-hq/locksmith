@@ -8,18 +8,18 @@
 //! credential a response carries is an agent's enrollment secret (shown once, at registration or
 //! rotation) and the short-lived agent token from `POST /v1/agent-tokens` (`agents.rs`).
 
-mod agents;
-mod audit;
-mod environments;
-mod extract;
+pub(crate) mod agents;
+pub(crate) mod audit;
+pub(crate) mod environments;
+pub(crate) mod extract;
 mod internal;
 mod mcp;
 mod orgs;
-mod projects;
+pub(crate) mod projects;
 mod responses;
-mod secrets;
+pub(crate) mod secrets;
 mod session;
-mod versions;
+pub(crate) mod versions;
 
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};

@@ -19,7 +19,7 @@ After sign-in (T1) a person lands on a bare page. The control-plane API already 
 <!-- none -->
 
 ## Impact
-`apps/web` (new routes, pages, tests), `packages/ui` (tokens, kit), `packages/control-plane-client` (typed hooks only; schema unchanged), `tests/e2e` (Playwright), `justfile` (`web-e2e`). No Rust, schema or migration changes. If an API gap is found, it is logged on the change's `progress.md` and raised to the lead, not patched here.
+`apps/web` (new routes, pages, tests), `packages/ui` (tokens, kit), `packages/control-plane-client` (new methods on the shared `createClient`; schema unchanged), `tests/e2e` (Playwright), `justfile` (`web-e2e`). No Rust, schema or migration changes. If an API gap is found, it is logged on the change's `progress.md` and raised to the lead, not patched here.
 
 ## Out of scope
 Secret value entry (T7), live sessions and revoke-all (T8), organization members and invites (T6), policy (T2), access requests (T4), notifications (N1), billing and settings mockup pages, desktop parity for these pages, hosting the static console in AWS (P1).

@@ -1,8 +1,8 @@
 # Tasks: T3 web console MVP
 
 ## 1. Contract and foundations [sonnet]
-- [ ] 1.1 Add `openapi-fetch`, `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
-- [ ] 1.2 `apps/web/src/api/client.ts`: bearer-token client over `@locksmith/control-plane-client`, `401` -> sign-out, problem+json -> typed error; Vitest with a mocked fetch.
+- [ ] 1.1 Add `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
+- [ ] 1.2 Extend `createClient` in `packages/control-plane-client` with orgs, projects, environments, secrets and versions methods (web and desktop both get them); `apps/web` maps `401` to sign-out; Vitest with a mocked fetch.
 - [ ] 1.3 Fixture data (MSW or in-memory handlers) for every route the console calls, in `apps/web/src/api/fixtures.ts`.
 - [ ] 1.4 Verify: `npm test --workspace apps/web`.
 

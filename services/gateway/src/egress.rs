@@ -111,6 +111,18 @@ impl EgressTarget {
         let pin = self.pin.as_ref().map(|(h, a)| (h.as_str(), a.as_slice()));
         http_client::build(connect_timeout, timeout, pin)
     }
+
+    /// As [`Self::client`] for streamed bodies: `timeout` caps the whole exchange, `idle` the
+    /// wait for the next chunk.
+    pub fn streaming_client(
+        &self,
+        connect_timeout: Duration,
+        timeout: Duration,
+        idle: Duration,
+    ) -> Result<reqwest::Client, http_client::ClientBuildError> {
+        let pin = self.pin.as_ref().map(|(h, a)| (h.as_str(), a.as_slice()));
+        http_client::build_with_idle(connect_timeout, timeout, Some(idle), pin)
+    }
 }
 
 /// Rules 1 and 2: check the origin, resolve once and check every address.

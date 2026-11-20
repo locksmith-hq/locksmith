@@ -37,6 +37,17 @@ pub fn build(
     timeout: Duration,
     pin: Option<(&str, &[SocketAddr])>,
 ) -> Result<reqwest::Client, ClientBuildError> {
+    build_with_idle(connect_timeout, timeout, None, pin)
+}
+
+/// As [`build`], plus an idle (per-read) timeout for streamed bodies (Git, D1): `timeout` caps
+/// the whole exchange, `idle` caps the wait for the next chunk.
+pub fn build_with_idle(
+    connect_timeout: Duration,
+    timeout: Duration,
+    idle: Option<Duration>,
+    pin: Option<(&str, &[SocketAddr])>,
+) -> Result<reqwest::Client, ClientBuildError> {
     let mut b = reqwest::Client::builder()
         .tls_backend_preconfigured(tls()?)
         .redirect(reqwest::redirect::Policy::none())
@@ -44,6 +55,9 @@ pub fn build(
         .connect_timeout(connect_timeout)
         .timeout(timeout)
         .pool_max_idle_per_host(0);
+    if let Some(idle) = idle {
+        b = b.read_timeout(idle);
+    }
     if let Some((host, addrs)) = pin {
         b = b.resolve_to_addrs(host, addrs);
     }

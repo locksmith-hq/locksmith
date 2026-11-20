@@ -24,3 +24,8 @@
 - Deviation: task 3.1 and design decision 6 say OpenBao "file storage", but OpenBao 2.7.2 has no `file` backend ("unknown storage type file"). The bundle uses single-node integrated raft storage on the `openbao-data` volume (mounted at /openbao/file). tasks.md and design.md text left as written; lead or owner can reconcile the wording, and the task 1.1 research note should list the finding.
 - Verified: selfhost-bootstrap.test.sh, selfhost-smoke.sh (passed 4 times in the sandbox), shellcheck clean. Not verified: --external-keys against a real OpenBao, the tls (Caddy) and demo-oidc profiles beyond `docker compose config`, offline start.
 - Notes for next session: section 4 (Helm chart; helm binary is unavailable here, get.helm.sh is 403). PR #534 still has unticked tasks, keep auto-merge off until all are ticked.
+
+## 2026-11-20 worker
+- Task: p2-packaging 3.1-3.7 - done (ticked after evaluator PASS and green just ci)
+- Verified: just ci -> exit 0; selfhost-bootstrap.test.sh and selfhost-smoke.sh pass
+- Notes for next session: section 4 (Helm) next; helm is unavailable here (get.helm.sh 403), so helm-test must skip with a message. Keep auto-merge off until all tasks are ticked.

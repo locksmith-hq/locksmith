@@ -316,7 +316,10 @@ async fn gateway_reads_agent_tool_settings_and_appends_mcp_calls() {
     );
     assert_eq!(get(Some(b), Some(&auth)).await.body["items"], json!([]));
     assert_eq!(get(Some(a), None).await.status, StatusCode::UNAUTHORIZED);
-    assert_eq!(get(Some(a), Some(&bearer(WRONG))).await.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        get(Some(a), Some(&bearer(WRONG))).await.status,
+        StatusCode::UNAUTHORIZED
+    );
 
     // Calls: a registry name is recorded as is, anything else as `unknown`.
     let agent = Uuid::now_v7();
@@ -354,12 +357,19 @@ async fn gateway_reads_agent_tool_settings_and_appends_mcp_calls() {
         .collect();
     assert_eq!(
         seen,
-        [("mcp.call", "ok"), ("mcp.call", "denied"), ("mcp.call", "denied")]
+        [
+            ("mcp.call", "ok"),
+            ("mcp.call", "denied"),
+            ("mcp.call", "denied")
+        ]
     );
     let text = f.ledger_text().await;
     assert!(text.contains("issue_short_lived_credential"), "{text}");
     assert!(text.contains("unknown"), "{text}");
-    assert!(!text.contains("sk_live_abc"), "client text reached the ledger");
+    assert!(
+        !text.contains("sk_live_abc"),
+        "client text reached the ledger"
+    );
 }
 
 /// A migrated database and the app as `locksmith_app`.

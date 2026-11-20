@@ -76,7 +76,10 @@ async fn a_switch_flipped_in_the_org_settings_applies_to_the_next_list_and_call(
     let sw = Switches::new(&[("list_my_keys", false)]);
     let h = with(&sw).await;
     let sid = session(&h).await;
-    assert_eq!(names(&list(&h, &sid).await), ["explain_block", "relay_http_request"]);
+    assert_eq!(
+        names(&list(&h, &sid).await),
+        ["explain_block", "relay_http_request"]
+    );
     // Off by the org: hidden and refused by name.
     let refused = call_tool(&h, &sid, "list_my_keys", json!({})).await;
     assert!(refused["error"].is_object(), "{refused}");
@@ -84,7 +87,12 @@ async fn a_switch_flipped_in_the_org_settings_applies_to_the_next_list_and_call(
     sw.set(Some(&[("list_my_keys", true), (TOOL, true)]));
     assert_eq!(
         names(&list(&h, &sid).await),
-        ["explain_block", "issue_short_lived_credential", "list_my_keys", "relay_http_request"]
+        [
+            "explain_block",
+            "issue_short_lived_credential",
+            "list_my_keys",
+            "relay_http_request"
+        ]
     );
     let ok = call_tool(&h, &sid, "list_my_keys", json!({})).await;
     assert!(structured(&ok)["items"].is_array(), "{ok}");
@@ -117,7 +125,13 @@ async fn every_call_appends_one_mcp_call_event_with_no_arguments() {
     // ok
     call_tool(&h, &sid, "list_my_keys", json!({})).await;
     // refused: the default-off tool (denied, tool_off)
-    call_tool(&h, &sid, TOOL, json!({"secret_id": SECRET, "job": "j", "ttl_secs": 60})).await;
+    call_tool(
+        &h,
+        &sid,
+        TOOL,
+        json!({"secret_id": SECRET, "job": "j", "ttl_secs": 60}),
+    )
+    .await;
     // an unknown name is recorded as `unknown`, never as the client's text
     call_tool(&h, &sid, "drop_table_users", json!({})).await;
     // bad arguments are an error
@@ -145,11 +159,22 @@ async fn every_call_appends_one_mcp_call_event_with_no_arguments() {
         ]
     );
     assert_eq!(c[0].outcome, McpOutcome::Ok);
-    assert_eq!((c[1].outcome, c[1].reason), (McpOutcome::Denied, Some(McpReason::ToolOff)));
-    assert_eq!((c[2].outcome, c[2].reason), (McpOutcome::Denied, Some(McpReason::ToolOff)));
+    assert_eq!(
+        (c[1].outcome, c[1].reason),
+        (McpOutcome::Denied, Some(McpReason::ToolOff))
+    );
+    assert_eq!(
+        (c[2].outcome, c[2].reason),
+        (McpOutcome::Denied, Some(McpReason::ToolOff))
+    );
     assert_eq!(
         (c[3].outcome, c[3].reason),
         (McpOutcome::Error, Some(McpReason::InvalidArguments))
+    );
+    assert_eq!(
+        (c[4].outcome, c[4].reason),
+        (McpOutcome::Denied, Some(McpReason::ToolError)),
+        "a relay refusal (403) is a denial"
     );
     assert!(c.iter().all(|e| e.agent_id == AGENT));
     // Nothing from the arguments reaches the event.

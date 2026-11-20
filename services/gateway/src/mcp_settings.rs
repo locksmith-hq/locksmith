@@ -146,8 +146,10 @@ mod tests {
 
     #[test]
     fn parse_reads_overrides_and_refuses_garbage() {
-        let m = parse_settings(br#"{"items":[{"tool":"a","enabled":true},{"tool":"b","enabled":false}]}"#)
-            .unwrap();
+        let m = parse_settings(
+            br#"{"items":[{"tool":"a","enabled":true},{"tool":"b","enabled":false}]}"#,
+        )
+        .unwrap();
         assert_eq!(m.get("a"), Some(&true));
         assert_eq!(m.get("b"), Some(&false));
         assert!(parse_settings(b"not json").is_err());
@@ -156,7 +158,10 @@ mod tests {
 
     #[tokio::test]
     async fn cache_serves_within_ttl_then_refetches() {
-        let src = Arc::new(Counting { calls: AtomicUsize::new(0), fail: false });
+        let src = Arc::new(Counting {
+            calls: AtomicUsize::new(0),
+            fail: false,
+        });
         let cache = SettingsCache::new(src.clone(), Duration::from_millis(60));
         cache.settings().await.unwrap();
         cache.settings().await.unwrap();
@@ -168,7 +173,10 @@ mod tests {
 
     #[tokio::test]
     async fn ttl_is_clamped_and_errors_are_not_cached() {
-        let src = Arc::new(Counting { calls: AtomicUsize::new(0), fail: true });
+        let src = Arc::new(Counting {
+            calls: AtomicUsize::new(0),
+            fail: true,
+        });
         let cache = SettingsCache::new(src.clone(), Duration::from_secs(3600));
         assert_eq!(cache.ttl, MAX_SETTINGS_TTL);
         assert!(cache.settings().await.is_err());
@@ -178,7 +186,10 @@ mod tests {
 
     #[tokio::test]
     async fn zero_ttl_never_caches() {
-        let src = Arc::new(Counting { calls: AtomicUsize::new(0), fail: false });
+        let src = Arc::new(Counting {
+            calls: AtomicUsize::new(0),
+            fail: false,
+        });
         let cache = SettingsCache::new(src.clone(), Duration::ZERO);
         cache.settings().await.unwrap();
         cache.settings().await.unwrap();

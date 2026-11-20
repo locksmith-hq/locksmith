@@ -435,7 +435,10 @@ pub struct MemoryAudit {
 impl MemoryAudit {
     /// The `mcp.call` events in order.
     pub fn mcp_calls(&self) -> Vec<McpCallEvent> {
-        self.mcp_calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.mcp_calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// The stored events in order.

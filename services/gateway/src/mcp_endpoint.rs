@@ -33,8 +33,8 @@ use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
 use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::auth::{AgentAuth, AgentIdentity};
 use crate::audit::{McpCallEvent, McpOutcome, McpReason};
+use crate::auth::{AgentAuth, AgentIdentity};
 use crate::mcp_settings::{StaticSettings, ToolSettingsSource};
 use crate::mcp_tools;
 use crate::relay::{Relay, error};

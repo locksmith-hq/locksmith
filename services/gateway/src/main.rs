@@ -127,10 +127,7 @@ async fn main() -> ExitCode {
     // Audit (S5 task 3.1): relay events go to the org's ledger through the control plane's
     // internal append endpoint, with the same service token.
     // The org's agent MCP tool switches (m1-remote-mcp task 3.4), cached for at most 10 s.
-    let tool_settings = Arc::new(SettingsCache::new(
-        control_plane.clone(),
-        MAX_SETTINGS_TTL,
-    ));
+    let tool_settings = Arc::new(SettingsCache::new(control_plane.clone(), MAX_SETTINGS_TTL));
     let audit = Arc::new(HttpAudit::new(control_plane));
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)

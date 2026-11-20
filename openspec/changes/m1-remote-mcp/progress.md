@@ -57,3 +57,8 @@
 - Task: m1-remote-mcp 2.4 - done (hub `revoke_grant` calls the console's delete-grant handler as the person, org-scoped, audited by that handler; `pause_agents` returns a typed `not_available` error until T8 lands; both stay off by default)
 - Verified: `cargo nextest run -p ls-control-plane mcp` -> 22 passed; `just ci` -> exit 0; Sonnet evaluator PASS
 - Notes for next session: 2.2 still unticked (explain_block deferral); next 2.5 (audit event per call, which should also replace the DEV_AUTH_ACTOR attribution on MCP revoke), then 2.6.
+
+## 2026-11-20 worker A
+- Task: m1-remote-mcp 2.5 - done (hub `/mcp` appends one `mcp.call` audit event per tools/call: layer, registry tool name or `unknown`, user actor, org target, outcome ok/denied/error with static reason; no arguments or results stored; MCP `revoke_grant` now attributed to the person, REST unchanged via `revoke_grant_as`)
+- Verified: `cargo nextest run -p ls-control-plane mcp` -> 24 passed; `just ci` -> exit 0; Sonnet evaluator PASS
+- Notes for next session: 2.6 is the verify step (run it and tick); 2.2 still unticked (explain_block deferral). Unverified-email callers get no per-call row (no org to chain to). Then group 3 (gateway MCP).

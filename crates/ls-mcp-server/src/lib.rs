@@ -15,6 +15,16 @@ pub enum Layer {
     Agent,
 }
 
+impl Layer {
+    /// The layer's stable lower-case name (audit attribute, `mcp_tool_settings.layer`).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hub => "hub",
+            Self::Agent => "agent",
+        }
+    }
+}
+
 /// One tool: name, description, JSON schemas and whether it ships on.
 #[derive(Debug, Clone)]
 pub struct ToolDef {
@@ -219,6 +229,12 @@ impl Registry {
             .iter()
             .map(|t| (t.name, t.default_enabled))
             .collect()
+    }
+
+    /// The registry's own (static) name for a requested tool name, if it has such a tool. Lets a
+    /// caller record a refused call without ever recording client-supplied text.
+    pub fn tool_name(&self, name: &str) -> Option<&'static str> {
+        self.tools.iter().find(|t| t.name == name).map(|t| t.name)
     }
 
     fn enabled(t: &ToolDef, overrides: &HashMap<String, bool>) -> bool {

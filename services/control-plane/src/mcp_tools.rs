@@ -8,7 +8,8 @@
 //! secret value, and no tool argument is echoed back.
 //!
 //! The per-org tool switch (task 2.3) is read by [`tool_overrides`] and the signed-in client is
-//! recorded by [`record_client`]. Out of scope here: the audit event per call (task 2.5).
+//! recorded by [`record_client`]. Every call, allowed or refused, is appended to the audit ledger
+//! by [`record_call`] (task 2.5): layer, tool name, person, outcome, never the arguments.
 
 use std::collections::HashMap;
 
@@ -28,11 +29,13 @@ use crate::api::audit::{self, AuditEventParams};
 use crate::api::extract::{ApiPath, ApiQuery};
 use crate::api::{PageParams, environments, projects, secrets, versions};
 use crate::app::AppState;
+use crate::audit as ledger;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
 use crate::mcp_endpoint::McpPrincipal;
 use crate::problem::{ApiError, Kind};
-use crate::users;
+use crate::users::{self, ResolvedUser};
+use ls_audit::{Actor, Code, outcome};
 
 /// A tool that is in the hub registry but has no service code behind it yet.
 const NOT_AVAILABLE_EXPLAIN_BLOCK: &str = "No block explanations are recorded on the hub yet; \
@@ -184,12 +187,68 @@ pub async fn call(
     }
 }
 
+/// The person behind the token, resolved as a console sign-in does (`403` for an unverified
+/// email, which has no user or org to attribute anything to).
+pub async fn caller(state: &AppState, principal: &McpPrincipal) -> Result<ResolvedUser, ApiError> {
+    users::resolve(state.db(), &principal.0).await
+}
+
 /// The person's org, resolved as a console sign-in does (`403` for an unverified email).
 async fn org_of(state: &AppState, principal: &McpPrincipal) -> Result<OrgBinding, ApiError> {
-    let user = users::resolve(state.db(), &principal.0).await?;
+    let user = caller(state, principal).await?;
     Ok(OrgBinding {
         org_id: user.org_id,
     })
+}
+
+/// Append an `mcp.call` event to the org's ledger. `tool` is a registry name (or `unknown`),
+/// never text from the request. Arguments and results are not recorded.
+pub async fn record_call(
+    state: &AppState,
+    user: &ResolvedUser,
+    layer: &'static str,
+    tool: &'static str,
+    outcome: Code,
+    reason: Option<Code>,
+) -> Result<(), ApiError> {
+    let event = ledger::mcp_call(
+        user.user_id,
+        user.org_id,
+        Code::try_new(layer).unwrap_or(Code::new("unknown")),
+        Code::try_new(tool).unwrap_or(Code::new("unknown")),
+        outcome,
+        reason,
+    );
+    let org_id = user.org_id;
+    state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                ledger::append(c, org_id, &event).await?;
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await
+}
+
+/// The audit outcome of a finished call: `ok`; `denied` for a tool error the REST API would give
+/// as `401`/`403`; `error` for any other failure. The reason is a static code.
+pub fn call_outcome(result: &Result<CallToolResult, McpError>) -> (Code, Option<Code>) {
+    match result {
+        Err(_) => (outcome::ERROR, Some(Code::new("invalid_arguments"))),
+        Ok(r) if r.is_error != Some(true) => (outcome::OK, None),
+        Ok(r) => {
+            let status = r
+                .structured_content
+                .as_ref()
+                .and_then(|v| v["error"]["status"].as_u64());
+            match status {
+                Some(401 | 403) => (outcome::DENIED, Some(Code::new("forbidden"))),
+                Some(501) => (outcome::ERROR, Some(Code::new("not_available"))),
+                _ => (outcome::ERROR, Some(Code::new("tool_error"))),
+            }
+        }
+    }
 }
 
 async fn run_page(
@@ -334,7 +393,10 @@ async fn revoke_grant(
     principal: &McpPrincipal,
     a: RevokeGrantArgs,
 ) -> Result<Value, ApiError> {
-    let org = org_of(state, principal).await?;
+    let user = caller(state, principal).await?;
+    let org = OrgBinding {
+        org_id: user.org_id,
+    };
     let grant_id = a.grant_id;
     let agent_id = state
         .db()
@@ -351,7 +413,8 @@ async fn revoke_grant(
             })
         })
         .await?;
-    agents::delete_grant(State(state.clone()), org, ApiPath((agent_id, grant_id))).await?;
+    // The event is attributed to the person, not the dev actor.
+    agents::revoke_grant_as(state, org, Actor::User(user.user_id), agent_id, grant_id).await?;
     Ok(json!({"grant_id": grant_id, "revoked_at": ts(OffsetDateTime::now_utc())}))
 }
 
@@ -360,10 +423,17 @@ pub async fn tool_overrides(
     state: &AppState,
     principal: &McpPrincipal,
 ) -> Result<HashMap<String, bool>, ApiError> {
-    let org = org_of(state, principal).await?;
+    overrides_for(state, caller(state, principal).await?.org_id).await
+}
+
+/// As [`tool_overrides`] for an org already resolved.
+pub async fn overrides_for(
+    state: &AppState,
+    org_id: Uuid,
+) -> Result<HashMap<String, bool>, ApiError> {
     let rows = state
         .db()
-        .with_org(org.org_id, move |c| {
+        .with_org(org_id, move |c| {
             Box::pin(async move {
                 let rows =
                     sql::query("SELECT tool, enabled FROM mcp_tool_settings WHERE layer = 'hub'")

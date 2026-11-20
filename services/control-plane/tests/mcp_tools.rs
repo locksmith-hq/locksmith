@@ -874,3 +874,119 @@ async fn mcp_mutating_tools_work_only_when_switched_on_and_stay_in_the_callers_o
     assert_eq!(out["error"]["code"], "not_available");
     assert!(!out.to_string().contains(&a.agent.to_string()));
 }
+
+/// `(kind, actor, target, outcome, attrs)` of every ledger row of `kind`, oldest first.
+async fn ledger(f: &Fixture, kind: &str) -> Vec<(String, String, String, String)> {
+    let mut c = f.pg.admin().await;
+    let rows: Vec<(String, String, String, String)> = sqlx_core::query_as::query_as(
+        "SELECT actor, COALESCE(target, ''), outcome, attrs::text FROM audit_events \
+         WHERE kind = $1 ORDER BY seq",
+    )
+    .bind(kind)
+    .fetch_all(&mut c)
+    .await
+    .unwrap();
+    c.close().await.unwrap();
+    rows
+}
+
+#[tokio::test]
+async fn mcp_every_call_is_audited_denied_ones_too_and_arguments_are_never_recorded() {
+    let f = start().await;
+    let mut alice = Person::connect(&f, "alice").await;
+    let canary = "ARG-CANARY-5e1d-do-not-record";
+
+    // Allowed, off (revoke_grant ships off), unknown, bad arguments, and a failed read.
+    let (err, _) = alice.call("list_projects", json!({})).await;
+    assert!(!err);
+    // The first call created the person and the org.
+    let org = personal_org(&f, "alice").await;
+    for (tool, args) in [
+        (
+            "revoke_grant",
+            json!({"grant_id": Uuid::nil(), "note": canary}),
+        ),
+        ("no_such_tool", json!({"password": canary})),
+        ("list_grants", json!({"agent_id": canary})),
+    ] {
+        let r = alice
+            .rpc("tools/call", json!({"name": tool, "arguments": args}))
+            .await;
+        assert!(r["error"].is_object(), "{tool}: {r}");
+    }
+    let (err, _) = alice
+        .call("list_grants", json!({"agent_id": Uuid::new_v4()}))
+        .await;
+    // An unknown agent lists nothing or 404s; either way it is a recorded call.
+    let _ = err;
+
+    let rows = ledger(&f, "mcp.call").await;
+    let user = {
+        let mut c = f.pg.admin().await;
+        let id: Uuid = query_scalar("SELECT id FROM users WHERE subject = 'alice'")
+            .fetch_one(&mut c)
+            .await
+            .unwrap();
+        c.close().await.unwrap();
+        format!("user:{id}")
+    };
+    assert_eq!(rows.len(), 5, "{rows:?}");
+    for (actor, target, _, attrs) in &rows {
+        assert_eq!(actor, &user);
+        assert_eq!(target, &format!("org:{org}"));
+        assert!(attrs.contains("hub"), "layer missing: {attrs}");
+    }
+    let has = |i: usize, outcome: &str, tool: &str, reason: Option<&str>| {
+        let (_, _, o, attrs) = &rows[i];
+        assert_eq!(o, outcome, "row {i}: {rows:?}");
+        assert!(attrs.contains(tool), "row {i} tool {tool}: {attrs}");
+        if let Some(r) = reason {
+            assert!(attrs.contains(r), "row {i} reason {r}: {attrs}");
+        }
+    };
+    has(0, "ok", "list_projects", None);
+    // A denied call is recorded, with the typed reason.
+    has(1, "denied", "revoke_grant", Some("tool_off"));
+    has(2, "denied", "unknown", Some("unknown_tool"));
+    has(3, "error", "list_grants", Some("invalid_arguments"));
+
+    // Nothing the client sent (tool name of an unknown tool, argument names or values) is stored.
+    let mut c = f.pg.admin().await;
+    let all: String = query_scalar("SELECT string_agg(t::text, E'\n') FROM audit_events t")
+        .fetch_one(&mut c)
+        .await
+        .unwrap();
+    c.close().await.unwrap();
+    for leaked in [canary, "no_such_tool", "password"] {
+        assert!(!all.contains(leaked), "ledger contains {leaked}");
+    }
+}
+
+#[tokio::test]
+async fn mcp_revoke_grant_is_attributed_to_the_person_and_the_call_is_audited() {
+    let (f, mut alice, _bob, a, _b) = two_people().await;
+    let org = personal_org(&f, "alice").await;
+    rest(
+        &f,
+        "PUT",
+        "/v1/mcp/tools/hub/revoke_grant",
+        org,
+        json!({"enabled": true}),
+    )
+    .await;
+    let (err, out) = alice
+        .call("revoke_grant", json!({"grant_id": a.grant}))
+        .await;
+    assert!(!err, "{out}");
+    let revoked = ledger(&f, "grant.revoked").await;
+    assert_eq!(revoked.len(), 1, "{revoked:?}");
+    assert!(revoked[0].0.starts_with("user:"), "{revoked:?}");
+    assert_ne!(revoked[0].0, "service:dev_auth");
+    let calls = ledger(&f, "mcp.call").await;
+    let row = calls
+        .iter()
+        .find(|r| r.3.contains("revoke_grant"))
+        .expect("revoke_grant call recorded");
+    assert_eq!(row.2, "ok");
+    assert_eq!(row.0, revoked[0].0);
+}

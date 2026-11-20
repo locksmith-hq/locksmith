@@ -99,6 +99,9 @@ pub mod kind {
     pub const AUTH_VERIFY_FAILED: Code = Code::new("auth.verify_failed");
     /// A first sign-in created the user's personal org.
     pub const ORG_PERSONAL_CREATED: Code = Code::new("org.personal_created");
+    /// A remote MCP tool call (allowed, refused or failed). Records the layer, the tool name and
+    /// the outcome only, never the call's arguments or result.
+    pub const MCP_CALL: Code = Code::new("mcp.call");
 }
 
 /// Common outcomes.
@@ -130,6 +133,10 @@ pub mod attr {
     pub const ISSUER: Code = Code::new("issuer");
     /// Static reason code for a refusal.
     pub const REASON: Code = Code::new("reason");
+    /// The MCP server layer (`hub` or `agent`).
+    pub const LAYER: Code = Code::new("layer");
+    /// The MCP tool name, from the registry (`unknown` for a name the registry does not have).
+    pub const TOOL: Code = Code::new("tool");
 }
 
 /// Who acted.

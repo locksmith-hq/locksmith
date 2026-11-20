@@ -165,6 +165,30 @@ pub fn grant_revoked(actor: Actor, grant_id: Uuid, agent_id: Uuid) -> Event {
     )
 }
 
+/// `mcp.call`: one remote MCP tool call by `user` in `org_id`. Only the layer, the tool name
+/// (a registry name, or `unknown`), the outcome and a static `reason` are recorded: never the
+/// call's arguments or result.
+pub fn mcp_call(
+    user: Uuid,
+    org_id: Uuid,
+    layer: Code,
+    tool: Code,
+    outcome: Code,
+    reason: Option<Code>,
+) -> Event {
+    let mut attrs = Attrs::new().code(attr::LAYER, layer).code(attr::TOOL, tool);
+    if let Some(r) = reason {
+        attrs = attrs.code(attr::REASON, r);
+    }
+    Event {
+        kind: kind::MCP_CALL,
+        actor: Actor::User(user),
+        target: Some(Target::Org(org_id)),
+        outcome,
+        attrs,
+    }
+}
+
 /// Host name of an OIDC issuer URL, if it is one the ledger accepts. The issuer is the only
 /// identity attribute recorded besides the user id: no subject, email, token or claim text.
 fn issuer_host(issuer: &str) -> Option<Host> {

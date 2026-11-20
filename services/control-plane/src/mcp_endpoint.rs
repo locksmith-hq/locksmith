@@ -15,7 +15,7 @@
 //!
 //! The verified person is passed to handlers as an [`McpPrincipal`] request extension (read from
 //! `RequestContext.extensions` as `http::request::Parts`). Tools live in `mcp_tools` (task 2.2);
-//! the per-org switches and the client upsert on `initialize` are task 2.3; audit (2.5) is later. No token text is logged or echoed.
+//! the per-org switches and the client upsert on `initialize` are task 2.3; audit (2.5) is `mcp.call` per tool call. No token text is logged or echoed.
 
 use std::sync::Arc;
 
@@ -26,7 +26,8 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
-use ls_mcp_server::{Layer, Registry, ToolDef, hub_tools};
+use ls_audit::{Code, outcome};
+use ls_mcp_server::{Layer, Refusal, Registry, ToolDef, hub_tools};
 use rmcp::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult, JsonObject,
@@ -255,19 +256,50 @@ impl ServerHandler for HubMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let principal = Self::principal(&context)?;
-        let overrides = match mcp_tools::tool_overrides(&self.state, &principal).await {
-            Ok(o) => o,
-            // The same typed refusal the REST API gives (an unverified email, say).
+        // The same typed refusal the REST API gives (an unverified email, say). Such a person has
+        // no user or org, so there is no ledger to record the call in.
+        let user = match mcp_tools::caller(&self.state, &principal).await {
+            Ok(u) => u,
             Err(e) => return Ok(mcp_tools::result(Err(e)).into()),
         };
-        // An off tool is refused exactly like an unknown one.
-        let def = self
-            .registry
-            .authorize(&request.name, &overrides)
-            .map_err(|_| McpError::invalid_params("unknown tool", None))?;
+        let overrides = match mcp_tools::overrides_for(&self.state, user.org_id).await {
+            Ok(o) => o,
+            Err(e) => return Ok(mcp_tools::result(Err(e)).into()),
+        };
+        let layer = self.registry.layer().as_str();
+        // An off tool is refused exactly like an unknown one; the ledger keeps the typed reason.
+        // Only a registry name is ever recorded, never the requested text.
+        let def = match self.registry.authorize(&request.name, &overrides) {
+            Ok(def) => def,
+            Err(refusal) => {
+                let (tool, reason) = match refusal {
+                    Refusal::Disabled => (
+                        self.registry.tool_name(&request.name).unwrap_or("unknown"),
+                        Code::new("tool_off"),
+                    ),
+                    Refusal::Unknown => ("unknown", Code::new("unknown_tool")),
+                };
+                mcp_tools::record_call(
+                    &self.state,
+                    &user,
+                    layer,
+                    tool,
+                    outcome::DENIED,
+                    Some(reason),
+                )
+                .await
+                .map_err(internal)?;
+                return Err(McpError::invalid_params("unknown tool", None));
+            }
+        };
         // Mutating tools (revoke_grant, pause_agents) are handled in `mcp_tools::call`, off by default.
-        let result = mcp_tools::call(&self.state, &principal, def.name, request.arguments).await?;
-        Ok(result.into())
+        let result = mcp_tools::call(&self.state, &principal, def.name, request.arguments).await;
+        // Fail closed: a call that cannot be recorded is reported as failed.
+        let (call_outcome, reason) = mcp_tools::call_outcome(&result);
+        mcp_tools::record_call(&self.state, &user, layer, def.name, call_outcome, reason)
+            .await
+            .map_err(internal)?;
+        Ok(result?.into())
     }
 }
 

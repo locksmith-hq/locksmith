@@ -23,10 +23,10 @@
 - [ ] 4.4 Verify: `just aws-validate`, `actionlint` on the workflow.
 
 ## 5. Session stack and smoke checks [sonnet]
-- [ ] 5.1 `infra/tofu/session`: ECS cluster, ARM Fargate task definitions for control plane and gateway from ECR images, public IP, task role, one-day log groups, auto-destroy timer.
-- [ ] 5.2 `just aws-up`, `aws-down`, `aws-status`, `aws-drift`; they refuse to run without credentials and never print them.
-- [ ] 5.3 `just aws-smoke` with the five named checks; output contains no secret or token.
-- [ ] 5.4 Verify: `just aws-validate`; scripts pass `shellcheck` and a dry run with no credentials exits with a clear message.
+- [x] 5.1 `infra/tofu/session`: ECS cluster, ARM Fargate task definitions for control plane and gateway from ECR images, public IP, task role, one-day log groups, auto-destroy timer.
+- [x] 5.2 `just aws-up`, `aws-down`, `aws-status`, `aws-drift`; they refuse to run without credentials and never print them.
+- [x] 5.3 `just aws-smoke` with the five named checks; output contains no secret or token.
+- [x] 5.4 Verify: `just aws-validate`; scripts pass `shellcheck` and a dry run with no credentials exits with a clear message.
 
 ## 6. Claude inspection and runbook [sonnet]
 - [ ] 6.1 Add the read-only AWS MCP server to `.mcp.json` (if the file is protected, propose via the lead) and `docs/aws-runbook.md` with the change-brief template and the `created-by=claude-mcp` rule.

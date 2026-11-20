@@ -28,3 +28,8 @@
 - Task: 4.1, 4.2 - done (4.3 needs a lead PR, 4.4 waits on actionlint of 4.3)
 - Verified: `just aws-validate` -> 3x valid + 5 + 8 policy tests OK; `just aws-moto-smoke` OK; `just ci` -> exit 0 (before final small fix: IAM read actions + test + design note, re-validated); Sonnet evaluator FAIL then PASS after fixes
 - Notes for next session: OIDC trust sub is environment-based (`environment:aws-base-apply`), recorded in design.md; 4.3 workflow must use that environment and provide the aws CLI. No offline SCP test for guardrails (minor). 1.2 gate still open. Next: 5.1-5.4.
+
+## 2026-11-20 worker
+- Task: 5.1, 5.2, 5.3, 5.4 - done
+- Verified: `just aws-validate` -> 3x valid; `just ci` -> exit 0 (run before the last shellcheck-only edit); `shellcheck scripts/aws-session.sh` clean; each `just aws-*` exits 3 with a clear message when no aws CLI/credentials. No Opus/Sonnet independent evaluator was run this session (self-checked only); online `aws-up`/`aws-smoke` untested (gate 1.2 open).
+- Notes for next session: session stack takes base outputs via `target/aws/session.auto.tfvars.json` (written by the script from `tofu output -json` of base). Smoke check "Cognito token accepted by control plane" is a discovery-document check until T1 sign-in exists. Control plane DB URL comes from an optional SSM SecureString ARN; the env name `LOCKSMITH_DB_HOST`/`LOCKSMITH_OIDC_ISSUER` are informational, not yet read by the service. Remaining: 4.3/4.4 (lead PR, protected workflow), 6.1, 6.2, 7.1, gate 1.2.

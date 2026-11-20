@@ -274,3 +274,19 @@ aws-validate:
 # Opt-in (not in `just ci`): apply the base S3 and KMS pieces to a local moto server and assert Object Lock and the KMS alias. Installs moto into a cached venv.
 aws-moto-smoke:
     bash infra/tofu/base/tests/moto-smoke.sh
+
+# AWS dev session (owner machine, needs AWS credentials; refuses to run without them). Set LOCKSMITH_ALLOWED_CIDR and LOCKSMITH_IMAGE_TAG for aws-up.
+aws-up:
+    bash scripts/aws-session.sh up
+
+aws-down:
+    bash scripts/aws-session.sh down
+
+aws-status:
+    bash scripts/aws-session.sh status
+
+aws-drift:
+    bash scripts/aws-session.sh drift
+
+aws-smoke:
+    bash scripts/aws-session.sh smoke

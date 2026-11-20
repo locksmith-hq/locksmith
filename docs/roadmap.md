@@ -62,35 +62,36 @@ builds against the mocks until the real code lands. The lead keeps the column ri
 
 Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmith/issues/363)): sign-in first, then the cloud dev environment, then the console in slices, so a person can use the product in the cloud early. Design: [design/hub-technical-design.md](design/hub-technical-design.md).
 
-| # | Change | Usable outcome | Needs |
-|---|---|---|---|
-| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). | - |
-| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). | - |
-| T3 | `t3-console-mvp` | React console shell on the real API, built from the mockup in `apps/web/src/mockup`: hub home, projects, environments, secret names and versions, agents, grants and activity. Design tokens move to `packages/ui`. No secret value entry yet. Playwright e2e. | t1-human-auth:contract |
-| T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. | t3-console-mvp |
-| T8 | `t8-sessions-and-revoke` | Live agent sessions are listed in the console; revoke one, revoke all, or pause every agent, and it takes effect within seconds. | t3-console-mvp |
-| T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. | t1-human-auth:contract, t3-console-mvp |
-| T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. | t6-org-members:contract |
-| T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. | t2-policy-engine:contract, t3-console-mvp |
-| N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). | t3-console-mvp |
-| M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). | t1-human-auth:contract |
-| T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. | n1-notifications:contract |
+| # | Change | Usable outcome | Needs | Status |
+|---|---|---|---|---|
+| T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). | - | ☑ |
+| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). | - | ◐ |
+| T3 | `t3-console-mvp` | React console shell on the real API, built from the mockup in `apps/web/src/mockup`: hub home, projects, environments, secret names and versions, agents, grants and activity. Design tokens move to `packages/ui`. No secret value entry yet. Playwright e2e. | t1-human-auth:contract | ◐ |
+| T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. | t3-console-mvp | ☐ |
+| T8 | `t8-sessions-and-revoke` | Live agent sessions are listed in the console; revoke one, revoke all, or pause every agent, and it takes effect within seconds. | t3-console-mvp | ☐ |
+| T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. | t1-human-auth:contract, t3-console-mvp | ☐ |
+| T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. | t6-org-members:contract | ☐ |
+| T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. | t2-policy-engine:contract, t3-console-mvp | ☐ |
+| N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). | t3-console-mvp | ☐ |
+| M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). | t1-human-auth:contract | ◐ |
+| T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. | n1-notifications:contract | ☐ |
 
 ## Phase 3: Delegation beyond HTTP
 
-| # | Change | Usable outcome | Needs |
-|---|---|---|---|
-| D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. | - |
-| D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - |
-| D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract |
+| # | Change | Usable outcome | Needs | Status |
+|---|---|---|---|---|
+| D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - | ☑ |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. | - | ◐ |
+| D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - | ◐ |
+| D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract | ☐ |
 
 ## Phase 4: Deployable
 
-| # | Change | Usable outcome | Needs |
-|---|---|---|---|
-| P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - |
-| P3 | `p3-sdks-and-plugins` | SDKs generated from OpenAPI, plus plugins or skills for the widely used agent frameworks: Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, each with a live smoke test, and a generic MCP setup for any other MCP client. | m1-remote-mcp:contract |
+| # | Change | Usable outcome | Needs | Status |
+|---|---|---|---|---|
+| P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ☐ |
+| P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - | ☐ |
+| P4 | `p4-sdks` | SDKs generated from OpenAPI, and the plugins switched to the remote Agent MCP where it helps. | m1-remote-mcp:contract | ☐ |
 
 ## Phase 5: Parity and beyond (ordered later, by demand)
 

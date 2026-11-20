@@ -732,3 +732,192 @@ async fn pg_relay_error_and_notice_text_is_redacted() {
         assert!(t.contains("boom"), "the rest of the message survives");
     }
 }
+
+/// Send a simple query without reading the reply.
+async fn send_query(c: &mut Client, sql: &str) {
+    let mut m = BytesMut::new();
+    m.put_u8(b'Q');
+    m.put_i32(sql.len() as i32 + 5);
+    m.put_slice(sql.as_bytes());
+    m.put_u8(0);
+    c.stream.write_all(&m).await.unwrap();
+    c.stream.flush().await.unwrap();
+}
+
+/// Adversarial case (G10): a real server that raises the password in `RAISE EXCEPTION` and
+/// `RAISE NOTICE` (message, DETAIL and HINT) cannot get it past the relay.
+#[tokio::test]
+async fn pg_relay_raise_error_and_notice_echo_of_the_password_is_redacted() {
+    let pg = Postgres::start().await;
+    let h = Harness::start(
+        binding(pg.port, SCRAM_USER, PgTls::Require, "db.test"),
+        "127.0.0.1",
+        SCRAM_PASSWORD,
+    )
+    .await;
+    let mut c = h.login().await;
+    c.ready().await;
+    // The password is a literal in the statement the (hostile) agent sends, as if the server
+    // had read it from somewhere: the relay must scrub server text, whatever its source.
+    let sql = format!(
+        "DO $do$ BEGIN \
+         RAISE NOTICE 'notice %', '{p}' USING DETAIL = '{p}', HINT = 'hint {p}'; \
+         RAISE EXCEPTION 'error %', '{p}' USING DETAIL = '{p}', HINT = 'hint {p}'; \
+         END $do$",
+        p = SCRAM_PASSWORD
+    );
+    send_query(&mut c, &sql).await;
+    let mut seen = Vec::new();
+    loop {
+        let (tag, body) = read_message(&mut c.stream).await.expect("reply");
+        if tag == b'Z' {
+            break;
+        }
+        assert!(matches!(tag, b'N' | b'E'), "unexpected tag {}", tag as char);
+        seen.push((tag, String::from_utf8_lossy(&body).into_owned()));
+    }
+    assert!(seen.iter().any(|(t, _)| *t == b'N'), "the notice arrived");
+    assert!(seen.iter().any(|(t, _)| *t == b'E'), "the error arrived");
+    for (_, t) in &seen {
+        assert!(
+            !t.contains(SCRAM_PASSWORD),
+            "password reached the client: {t}"
+        );
+        assert!(t.contains("[REDACTED"), "no redaction marker: {t}");
+    }
+    // The session survives the error.
+    assert_eq!(c.query("SELECT 5").await.unwrap(), vec!["5".to_owned()]);
+}
+
+/// Adversarial case (G10): none of a hostile client's startup parameters beyond the allow-list
+/// reach the upstream; `user`, `database` and the role come from the binding.
+#[tokio::test]
+async fn pg_relay_startup_parameter_injection_is_not_forwarded() {
+    let fake = FakeServer::start(Fake::Cleartext).await;
+    let h = Harness::start(
+        binding(fake.port, "app_rw", PgTls::Disable, "db.test"),
+        "127.0.0.1",
+        SCRAM_PASSWORD,
+    )
+    .await;
+    let mut c = h
+        .login_with(&[
+            (
+                "options",
+                "-c role=postgres -c search_path=evil --search_path=evil",
+            ),
+            ("role", "postgres"),
+            ("session_authorization", "postgres"),
+            ("search_path", "evil,public"),
+            ("replication", "database"),
+            ("statement_timeout", "0"),
+            ("default_transaction_read_only", "off"),
+            ("log_statement", "all"),
+            ("host", "169.254.169.254"),
+            ("port", "22"),
+            ("dbname", "postgres"),
+            ("application_name", "agent-x"),
+            ("client_encoding", "UTF8"),
+            ("DateStyle", "ISO"),
+            ("TimeZone", "UTC"),
+            ("extra_float_digits", "1"),
+        ])
+        .await;
+    let _ = read_all(&mut c.stream).await;
+    let params = fake.startup.await.unwrap();
+    assert_eq!(
+        params,
+        BTreeMap::from([
+            ("user".to_owned(), "app_rw".to_owned()),
+            ("database".to_owned(), "app".to_owned()),
+            ("application_name".to_owned(), "agent-x".to_owned()),
+            ("client_encoding".to_owned(), "UTF8".to_owned()),
+            ("DateStyle".to_owned(), "ISO".to_owned()),
+            ("TimeZone".to_owned(), "UTC".to_owned()),
+            ("extra_float_digits".to_owned(), "1".to_owned()),
+        ])
+    );
+}
+
+/// Adversarial case (G10): `options` and friends against a real server leave the session on the
+/// bound user with no role switch.
+#[tokio::test]
+async fn pg_relay_options_role_switch_runs_as_the_bound_user() {
+    let pg = Postgres::start().await;
+    let h = Harness::start(
+        binding(pg.port, SCRAM_USER, PgTls::Require, "db.test"),
+        "127.0.0.1",
+        SCRAM_PASSWORD,
+    )
+    .await;
+    let mut c = h
+        .login_with(&[
+            (
+                "options",
+                "-c role=postgres -c session_authorization=postgres",
+            ),
+            ("search_path", "evil"),
+        ])
+        .await;
+    c.ready().await;
+    let rows = c
+        .query("SELECT current_user || '|' || session_user || '|' || current_setting('role') || '|' || current_setting('search_path')")
+        .await
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![format!("{SCRAM_USER}|{SCRAM_USER}|none|\"$user\", public")]
+    );
+}
+
+/// Adversarial case (G10): cancel requests with guessed keys, including the upstream's real
+/// backend pid (learned through `pg_backend_pid()`), cancel nothing.
+#[tokio::test]
+async fn pg_relay_cancel_with_guessed_keys_cancels_nothing() {
+    let pg = Postgres::start().await;
+    let h = Harness::start(
+        binding(pg.port, SCRAM_USER, PgTls::Require, "db.test"),
+        "127.0.0.1",
+        SCRAM_PASSWORD,
+    )
+    .await;
+    let mut c = h.login().await;
+    let ready = c.ready().await;
+    let upstream_pid: i32 = c.query("SELECT pg_backend_pid()").await.unwrap()[0]
+        .parse()
+        .unwrap();
+    assert_ne!(upstream_pid, ready.pid, "the client sees the gateway's pid");
+    let real_key = i32::from_be_bytes(ready.secret[..4].try_into().unwrap());
+
+    send_query(&mut c, "SELECT pg_sleep(3), 9").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let guesses = [
+        (upstream_pid, 0),
+        (upstream_pid, 1),
+        (upstream_pid, i32::MAX),
+        (upstream_pid, real_key),
+        (ready.pid, 0),
+        (ready.pid, real_key.wrapping_add(1)),
+        (ready.pid, real_key ^ 0x5555),
+        (ready.pid.wrapping_add(1), real_key),
+        (0, 0),
+        (-1, -1),
+    ];
+    for (pid, key) in guesses {
+        send_cancel(&h, &CancelRequest::new(pid, SecretKey::I32(key))).await;
+    }
+    let mut errors = 0;
+    let mut rows = 0;
+    loop {
+        let (tag, _) = read_message(&mut c.stream).await.expect("reply");
+        match tag {
+            b'E' => errors += 1,
+            b'D' => rows += 1,
+            b'Z' => break,
+            _ => {}
+        }
+    }
+    assert_eq!((errors, rows), (0, 1), "the query was cancelled by a guess");
+    assert_eq!(h.cancels.len(), 1, "the session's cancel entry is intact");
+    assert_eq!(c.query("SELECT 4").await.unwrap(), vec!["4".to_owned()]);
+}

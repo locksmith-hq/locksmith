@@ -21,8 +21,8 @@
 ## 4. Redaction, revocation and audit [sonnet]
 - [x] 4.1 `db.session.opened` and `db.session.closed` (reason, duration, bytes) ledger events; fail closed (no upstream connect) if the opened event cannot be appended.
 - [x] 4.2 Per-session watcher: re-check grant through `GrantCache` and token expiry every TTL; close both legs and record reason `revoked` or `expired`.
-- [ ] 4.3 Add Postgres cases to `tests/adversarial/gateway/`: password echoed in `RAISE` error and notice, `options` role switch, startup parameter injection, cancel with a guessed key.
-- [ ] 4.4 Verify: `cargo nextest run -p ls-gateway pg_audit pg_revoke`, `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
+- [x] 4.3 Add Postgres cases to `tests/adversarial/gateway/`: password echoed in `RAISE` error and notice, `options` role switch, startup parameter injection, cancel with a guessed key.
+- [x] 4.4 Verify: `cargo nextest run -p ls-gateway pg_audit pg_revoke`, `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
 
 ## 5. Client setup [sonnet]
 - [ ] 5.1 `smith db connect <name> --gateway <url> [-- cmd]`: child env `PGHOST`, `PGPORT`, `PGDATABASE=<binding>`, `PGSSLMODE=verify-full` (or `require` with a warning), optional `PGSSLROOTCERT`, `PGPASSWORD` set to the agent token in the child only; nothing written to disk.

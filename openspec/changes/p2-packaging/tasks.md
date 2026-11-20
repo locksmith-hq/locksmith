@@ -7,10 +7,10 @@
 - [x] 1.4 Verify: `bash scripts/tree-check.sh` and `bash scripts/ci-tools.sh --check` (or the script's documented dry mode).
 
 ## 2. Container images [sonnet]
-- [ ] 2.1 `infra/docker/control-plane.Dockerfile`: multi-stage `cargo build --release --locked -p <control-plane package>`, minimal runtime base, non-root user, health check, AGPL licence text and source link in the image, no shell secrets.
-- [ ] 2.2 `infra/docker/gateway.Dockerfile` likewise, plus a `.dockerignore` that excludes `.env`, `target/` and `.git`.
-- [ ] 2.3 `just images` recipe building both for the host architecture with `docker build`; `scripts/image-check.sh` asserts non-root user, no `dev-only` string in any layer, and a started container answers its health endpoint.
-- [ ] 2.4 Verify: `just images && bash scripts/image-check.sh`.
+- [x] 2.1 `infra/docker/control-plane.Dockerfile`: multi-stage `cargo build --release --locked -p <control-plane package>`, minimal runtime base, non-root user, health check, AGPL licence text and source link in the image, no shell secrets.
+- [x] 2.2 `infra/docker/gateway.Dockerfile` likewise, plus a `.dockerignore` that excludes `.env`, `target/` and `.git`.
+- [x] 2.3 `just images` recipe building both for the host architecture with `docker build`; `scripts/image-check.sh` asserts non-root user, no `dev-only` string in any layer, and a started container answers its health endpoint.
+- [x] 2.4 Verify: `just images && bash scripts/image-check.sh`.
 
 ## 3. Compose self-host [sonnet]
 - [ ] 3.1 `infra/compose/selfhost/compose.yaml`: Postgres 18, OpenBao production mode with file storage, control plane, gateway; healthchecks, `depends_on` conditions, localhost-only published ports, no fixed tokens, restart policy, named volumes.

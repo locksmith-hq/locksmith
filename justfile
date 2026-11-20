@@ -275,3 +275,8 @@ test name:
           elif grep -q 'just test-web' <<<"$cov"; then run just test-web; fi
         fi ;;
     esac
+
+# Build the control-plane and gateway images for the host architecture (P2). Extra flags (proxy, CA secret) go in IMAGE_BUILD_ARGS. Check: scripts/image-check.sh.
+images:
+    docker build $IMAGE_BUILD_ARGS -f infra/docker/control-plane.Dockerfile -t locksmith-control-plane:dev .
+    docker build $IMAGE_BUILD_ARGS -f infra/docker/gateway.Dockerfile -t locksmith-gateway:dev .

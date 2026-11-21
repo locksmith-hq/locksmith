@@ -266,6 +266,14 @@ connector-smoke:
 adversarial-gate *args:
     @bash tests/adversarial/gate.sh "$@"
 
+# Regenerate packages/sdk/src/schema.d.ts from the control-plane OpenAPI file.
+sdk-gen:
+    npm run gen --workspace packages/sdk
+
+# SDK smoke against `just up` + `just api`: create, list, delete an agent, then leak-scan the output.
+sdk-smoke:
+    bash scripts/sdk-smoke.sh
+
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
     cargo nextest run -p ls-e2e

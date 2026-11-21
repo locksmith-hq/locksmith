@@ -624,6 +624,18 @@ pub async fn delete_grant(
     org: OrgBinding,
     ApiPath((agent_id, grant_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
+    revoke_grant_as(&state, org, DEV_AUTH_ACTOR, agent_id, grant_id).await
+}
+
+/// Revoke a grant, attributing the `grant.revoked` event to `actor` (the console uses the dev
+/// actor until its session lands; the MCP tool passes the verified person).
+pub async fn revoke_grant_as(
+    state: &AppState,
+    org: OrgBinding,
+    actor: ls_audit::Actor,
+    agent_id: Uuid,
+    grant_id: Uuid,
+) -> Result<StatusCode, ApiError> {
     let status = state
         .db()
         .with_org(org.org_id, move |c| {
@@ -638,7 +650,7 @@ pub async fn delete_grant(
                 audit::append(
                     c,
                     org.org_id,
-                    &audit::grant_revoked(DEV_AUTH_ACTOR, grant_id, agent_id),
+                    &audit::grant_revoked(actor, grant_id, agent_id),
                 )
                 .await?;
                 Ok::<_, ApiError>(status)

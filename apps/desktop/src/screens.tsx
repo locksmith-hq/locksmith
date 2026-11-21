@@ -822,3 +822,105 @@ export function OrgAudit(_: ScreenProps) {
     </section>
   );
 }
+
+const layerName = (l: string) => (l === "hub" ? "Hub (people)" : "Gateway (agents)");
+
+/** One switch per MCP tool, grouped by layer; saved through the control plane. */
+export function McpTools(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [tools, setTools] = useState<api.McpToolSetting[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!client) return;
+    let live = true;
+    client.listMcpTools().then((t) => live && setTools(t), (e) => live && setErr(msg(e)));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const toggle = async (t: api.McpToolSetting, enabled: boolean) => {
+    if (!client) return;
+    setErr("");
+    try {
+      const u = await client.setMcpTool(t.layer, t.tool, enabled);
+      setTools((cur) => cur?.map((x) => (x.layer === u.layer && x.tool === u.tool ? u : x)) ?? cur);
+    } catch (e) { setErr(msg(e)); }
+  };
+  return (
+    <section className="screen" aria-labelledby="h-mcp-tools">
+      <Head id="h-mcp-tools" title="MCP tools" sub="Which tools the Hub and the Gateway offer to MCP clients." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="key">Connect a control plane on the Agents screen to manage MCP tools.</Empty>
+        : !tools ? (err ? null : <Loading what="MCP tools" />)
+        : tools.length === 0 ? <Empty icon="key">No MCP tools.</Empty>
+        : (["hub", "agent"] as const).map((layer) => {
+          const rows = tools.filter((t) => t.layer === layer);
+          if (rows.length === 0) return null;
+          return (
+            <div key={layer} className="card" role="group" aria-label={`${layerName(layer)} tools`}>
+              <h2>{layerName(layer)}</h2>
+              <ul>
+                {rows.map((t) => (
+                  <li key={t.tool}>
+                    <label>
+                      <input type="checkbox" role="switch" aria-label={`${t.tool} (${layer})`} checked={t.enabled} onChange={(e) => void toggle(t, e.target.checked)} />{" "}
+                      <strong>{t.tool}</strong>
+                    </label>{" "}
+                    <span className="muted">{t.description} {t.default_enabled ? "On by default" : "Off by default"}{t.overridden ? ", changed" : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+    </section>
+  );
+}
+
+/** MCP clients that have signed in, with revoke. */
+export function McpClients(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [clients, setClients] = useState<api.McpClient[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!client) return;
+    let live = true;
+    client.listMcpClients().then((c) => live && setClients(c), (e) => live && setErr(msg(e)));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const revoke = async (c: api.McpClient) => {
+    if (!client) return;
+    setErr("");
+    try {
+      const u = await client.revokeMcpClient(c.id);
+      setClients((cur) => cur?.map((x) => (x.id === u.id ? u : x)) ?? cur);
+    } catch (e) { setErr(msg(e)); }
+  };
+  const label = (c: api.McpClient) => c.client_name || c.client_id;
+  return (
+    <section className="screen" aria-labelledby="h-mcp-clients">
+      <Head id="h-mcp-clients" title="MCP clients" sub="Apps that signed in over MCP. Revoking one refuses its next call." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="sessions">Connect a control plane on the Agents screen to see MCP clients.</Empty>
+        : !clients ? (err ? null : <Loading what="MCP clients" />)
+        : clients.length === 0 ? <Empty icon="sessions">No MCP clients have signed in yet.</Empty>
+        : (
+          <div className="table-wrap">
+            <table className="grid">
+              <caption className="sr-only">MCP clients</caption>
+              <thead><tr><th>Client</th><th>Layer</th><th>Principal</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {clients.map((c) => (
+                  <tr key={c.id}>
+                    <td className="strong">{label(c)}</td><td>{layerName(c.layer)}</td><td className="mono">{c.principal}</td><td className="mono nowrap">{c.last_seen_at}</td>
+                    <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
+                    <td>{!c.revoked_at && <button type="button" className="btn sm" onClick={() => void revoke(c)}>Revoke {label(c)}</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+    </section>
+  );
+}

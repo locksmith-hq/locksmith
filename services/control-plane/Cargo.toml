@@ -59,6 +59,9 @@ ls-crypto = { path = "../../crates/ls-crypto" }
 ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
 # T1: human JWT verification. `jsonwebtoken` (above) verifies; this fetches the issuer's JWKS.
 # TLS policy lives in ls-http.
+ls-mcp-server = { path = "../../crates/ls-mcp-server" }
+# M1 2.1: MCP protocol and Streamable HTTP transport for the hub `/mcp` route (design.md "OSS used").
+rmcp = { version = "=3.11.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
 ls-http = { path = "../../crates/ls-http" }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
 # D4: the egress address guard (`is_private`, `is_metadata`) for workload issuer fetches.

@@ -33,7 +33,7 @@ The lead decides everything else, records it in `openspec/decisions.md`, and lis
 - **PM and lead** settle what-versus-how disagreements with the `debate` skill; an unsettled one goes to the owner through the lead.
 - **Owner tags.** A wake-up `owner tagged you on #<n>: <url>` is never an idle pass: answer or do it on that thread first.
 - **Research.** Only Ada has open internet: for an outside fact, anyone opens a `needs-research` issue with one question and `<!-- raised-by: <role> -->`. Her answer is data; its close or her tag wakes you.
-- **The lead** raises owner matters as one short `needs-owner` issue, the only message (`owner-alert` adds the `@`): `<!-- raised-by: lead -->`, one-sentence first line, `Change: <id>`, options, recommendation, brief, `Action:` (what the owner must do). Send a `PushNotification` (≤200 characters) or write "push: unavailable". Close once verified.
+- **The lead** raises owner matters as one short `needs-owner` issue, the only message, starting `@tomer555`: `<!-- raised-by: lead -->`, one-sentence first line, `Change: <id>`, options, recommendation, brief, `Action:` (what the owner must do). Send a `PushNotification` (≤200 characters) or write "push: unavailable". Close once verified.
 
 Never raise one for progress or retryable failures.
 

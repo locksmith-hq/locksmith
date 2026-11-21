@@ -1,9 +1,9 @@
 name: owner-alert
 
-# Scheduled agents act as the owner's GitHub account, and GitHub never notifies you about your
-# own activity. When an issue gets the needs-owner label, github-actions[bot] edits the issue body
-# to start with an @mention of the owner, so GitHub sends an email and a mobile notification without
-# a second message. A re-label (the owner must act again) removes and re-adds the mention to re-alert.
+# An agent's own GitHub App writes the @mention in the issue it opens, and GitHub notifies the owner.
+# Fallback only: a needs-owner issue authored by a human account (an agent that ran as the owner, and
+# GitHub never notifies you about your own activity) gets github-actions[bot] to edit the body to
+# start with the @mention, so there is still one message. A re-label (the owner must act again) removes and re-adds the mention to re-alert.
 on:
   issues:
     types: [labeled]
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   mention:
-    if: github.event.label.name == 'needs-owner'
+    if: github.event.label.name == 'needs-owner' && github.event.issue.user.type != 'Bot'
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

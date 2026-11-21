@@ -366,7 +366,7 @@ test("org audit: outcome filter narrows to denied and redaction_failed events", 
 
 test("workload identities: list, prefix warning, create, delete with confirm, no secret rendered or requested", async () => {
   const wl = { id: "w1", name: "ci-deploy", agent_id: "a1", audience: "https://cp.example", issuer_kind: "github", issuer: "https://token.actions.githubusercontent.com",
-    handle: "lsw_abc", conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/release-*" }] };
+    handle: "lsw_abc", conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/release-*" }], last_used_at: null };
   const client = {
     listWorkloadIdentities: vi.fn().mockResolvedValue([wl]),
     createWorkloadIdentity: vi.fn().mockResolvedValue(wl),
@@ -377,6 +377,7 @@ test("workload identities: list, prefix warning, create, delete with confirm, no
   await nav("Workload identities");
   expect(await screen.findByText("ci-deploy")).toBeInTheDocument();
   expect(screen.getByText("lsw_abc")).toBeInTheDocument();
+  expect(screen.getByText(/last used never/)).toBeInTheDocument();
   expect(screen.getByText(/uses a prefix/)).toBeInTheDocument();
 
   expect(screen.queryByTestId("prefix-warning")).toBeNull();

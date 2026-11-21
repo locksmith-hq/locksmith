@@ -725,7 +725,7 @@ export function WorkloadIdentities(_: ScreenProps) {
               {items.map((w) => (
                 <article key={w.id} className="card" aria-label={`Workload identity ${w.name}`}>
                   <div className="who"><b>{w.name}</b><span className="mono">{w.issuer_kind} {w.issuer}</span></div>
-                  <p>Handle: <code className="mono">{w.handle}</code> (not a secret) · audience {w.audience} · agent <span className="mono">{w.agent_id}</span></p>
+                  <p>Handle: <code className="mono">{w.handle}</code> (not a secret) · audience {w.audience} · agent <span className="mono">{w.agent_id}</span> · last used {w.last_used_at ?? "never"}</p>
                   <ul>
                     {w.conditions.map((c) => (
                       <li key={`${c.claim}=${c.pattern}`}><span className="mono">{c.claim} = {c.pattern}</span>{isPrefixPattern(c) ? " (prefix match)" : ""}</li>

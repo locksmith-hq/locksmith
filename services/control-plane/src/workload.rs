@@ -146,13 +146,15 @@ pub fn validate(
     if inputs.len() > MAX_CONDITIONS {
         return Err(PolicyError::TooManyConditions);
     }
+    // The GitHub issuer is shared by all of github.com, whichever kind names it.
+    let shared = kind == IssuerKind::Github || issuer == GITHUB_ISSUER;
     let mut conditions = Vec::with_capacity(inputs.len());
     for i in inputs {
         conditions.push(parse_condition(i)?);
     }
     let pinned = conditions
         .iter()
-        .any(|c| kind.subject_claims().contains(&c.claim.as_str()) && pins_subject(kind, c));
+        .any(|c| kind.subject_claims().contains(&c.claim.as_str()) && pins_subject(shared, c));
     if !pinned {
         return Err(PolicyError::NoSubjectPin);
     }
@@ -167,8 +169,8 @@ pub fn validate(
 /// A subject pin must narrow the caller to one owner. An exact value always does. A prefix
 /// on a shared issuer (GitHub) must fix the owner: `repo:*`, `a*` or `acme*` would let any
 /// outside workflow match, so the owner segment must be closed by a `/`.
-fn pins_subject(kind: IssuerKind, c: &Condition) -> bool {
-    if c.op == Op::Eq || kind != IssuerKind::Github {
+fn pins_subject(shared_issuer: bool, c: &Condition) -> bool {
+    if c.op == Op::Eq || !shared_issuer {
         return true;
     }
     let owner_and_rest = if c.claim == "sub" {
@@ -367,6 +369,22 @@ mod tests {
                 value: "acme/".into()
             }
         );
+    }
+
+    #[test]
+    fn oidc_policy_on_github_issuer_gets_the_owner_pin_rule() {
+        let v = |val: &str| {
+            validate(
+                "k",
+                IssuerKind::Oidc,
+                Some(GITHUB_ISSUER),
+                "a",
+                &[ci("sub", val)],
+            )
+        };
+        assert!(v("repo:acme*").is_err());
+        assert!(v("repo:*").is_err());
+        assert!(v("repo:acme/api:*").is_ok());
     }
 
     #[test]

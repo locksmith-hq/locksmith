@@ -166,6 +166,7 @@ test("workload identities: list, prefix warning, create with presets, delete wit
   await userEvent.click(screen.getByRole("button", { name: "Workload identities" }));
   expect(await screen.findByText("ci-deploy")).toBeInTheDocument();
   expect(screen.getByText("lsw_abc")).toBeInTheDocument();
+  expect(screen.getByText("Last used: never")).toBeInTheDocument();
   expect(screen.getByText(/uses a prefix/)).toBeInTheDocument();
 
   // GitHub preset; a trailing * shows the warning live.

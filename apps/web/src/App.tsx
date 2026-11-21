@@ -322,6 +322,7 @@ function WorkloadIdentities({ client }: { client: Client }) {
             <li key={w.id} aria-label={`Workload identity ${w.name}`}>
               <strong>{w.name}</strong> ({w.issuer_kind}) {w.issuer} aud {w.audience} agent {w.agent_id}
               <div>Handle: <code>{w.handle}</code></div>
+              <div>Last used: {w.last_used_at ?? "never"}</div>
               <ul>
                 {w.conditions.map((c) => (
                   <li key={`${c.claim}=${c.pattern}`}>

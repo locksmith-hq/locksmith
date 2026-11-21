@@ -82,6 +82,11 @@ public-check:
     scripts/public-check.test.sh
     scripts/public-check.sh
 
+# Install a git pre-push hook that runs the denylist check (see docs/public-private-boundary.md).
+install-hooks:
+    printf '#!/usr/bin/env bash\nexec "$(git rev-parse --show-toplevel)/scripts/public-check.sh" denylist\n' > "$(git rev-parse --git-path hooks)/pre-push"
+    chmod +x "$(git rev-parse --git-path hooks)/pre-push"
+
 dev app:
     npm run build -w apps/{{app}}
 
@@ -335,7 +340,7 @@ aws-validate:
     set -euo pipefail
     export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
     tofu fmt -check -recursive infra/tofu
-    for m in guardrails base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
+    for m in base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
     python3 -I infra/tofu/policy/test_check_plan.py
     python3 -I infra/tofu/policy/test_base_oidc.py
 

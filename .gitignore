@@ -24,3 +24,15 @@ __pycache__/
 # `tofu providers lock` can reach the registry for every platform (#479).
 .terraform.lock.hcl
 infra/compose/.workload-smoke/
+
+# Private environment data: never commit (real values live in the private locksmith-cloud repo).
+scripts/public-denylist.local
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+*.tfplan
+backend_override.tf
+override.tf
+*_override.tf
+crash.log

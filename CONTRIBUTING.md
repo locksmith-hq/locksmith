@@ -51,6 +51,7 @@ These rules protect users who trust Locksmith with their credentials. A pull req
 - Secrets live only in `secrecy`/`zeroize` types, with no `Debug`, `Display` or `Clone`.
 - Agents never receive secret values. Use relay, delegation or short-lived scoped credentials.
 - Code that touches secrets is written in Rust.
+- Never commit real cloud identifiers (account IDs, SSO URLs, endpoints) or state files: see [docs/public-private-boundary.md](docs/public-private-boundary.md). Run `just install-hooks` once.
 - Never block unlock or export because of licensing, billing or update failures.
 - Never commit real credentials, even expired ones. Test fixtures use obviously fake values; `gitleaks` runs in CI.
 

@@ -12,7 +12,7 @@ Always-on dev resources: KMS key and alias, S3 (checkpoints with Object Lock gov
 
 ## Notes
 - Aurora: no usable password in code, state, plan or outputs, and no Secrets Manager secret (A0-16; the plan policy rejects `manage_master_user_password`). Write-only/ephemeral passwords (`master_password_wo`) need OpenTofu 1.11+ and the pinned 1.10.7 rejects them; the `random` provider is not in the offline mirror either. AWS still requires a master password at create, so the cluster is created with a public, non-secret bootstrap value, and a create-time `local-exec` provisioner replaces it at once with a random password that is never printed or kept (the applying machine needs the `aws` CLI). Apps and operators use IAM database auth. Break-glass: reset it with `aws rds modify-db-cluster --master-user-password` and discard it after use. Once tofu is 1.11+, switch to `master_password_wo` with an ephemeral random value and drop the provisioner.
-- `aurora_engine_version` defaults to PG18 (`18.1`). If us-east-1 rejects it, set the newest supported major and record the fallback in `openspec/changes/p1-aws-dev-env/progress.md`.
+- `aurora_engine_version` defaults to PG18 (`18.6`; 18.1 does not exist in us-east-1, which offers 18.3, 18.4 and 18.6). If us-east-1 rejects it, set the newest supported major and record the fallback in `openspec/changes/p1-aws-dev-env/progress.md`.
 - Cognito clients are public (PKCE, code flow, no secret). Domain prefix must be unique; override `cognito_domain_prefix` if taken.
 - Checkpoint objects are locked in governance mode for `checkpoint_retention_days` (1 by default), so `tofu destroy` of the bucket needs `s3:BypassGovernanceRetention` or waiting out the window.
 

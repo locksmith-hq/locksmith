@@ -20,6 +20,8 @@ mod responses;
 pub(crate) mod secrets;
 mod session;
 pub(crate) mod versions;
+mod workload_identities;
+mod workload_tokens;
 
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -68,6 +70,15 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(agents::delete_grant))
         .routes(routes!(agents::mint_token))
         .routes(routes!(agents::jwks))
+        .routes(routes!(
+            workload_identities::create,
+            workload_identities::list
+        ))
+        .routes(routes!(
+            workload_identities::get_one,
+            workload_identities::delete
+        ))
+        .routes(routes!(workload_tokens::exchange))
         .routes(routes!(session::sign_in))
         .routes(routes!(session::sign_out))
         .routes(routes!(audit::list_events))

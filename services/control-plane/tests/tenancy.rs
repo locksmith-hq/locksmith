@@ -128,7 +128,8 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             "projects",
             "secret_versions",
             "secrets",
-            "users"
+            "users",
+            "workload_identities"
         ]
     );
     for (name, owner, rls, force) in tables.iter().cloned() {
@@ -141,7 +142,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(policies, 16);
+    assert_eq!(policies, 17);
 
     let value_like: Vec<String> = sql::query_scalar(
         "SELECT table_name || '.' || column_name FROM information_schema.columns

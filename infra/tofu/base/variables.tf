@@ -13,7 +13,7 @@ variable "name" {
 variable "aurora_engine_version" {
   description = "Aurora PostgreSQL engine version. Target is PG18 (A0-1). If us-east-1 does not offer it yet, set the newest supported major (for example 17.5) and record the fallback in progress.md."
   type        = string
-  default     = "18.1"
+  default     = "18.6"
 }
 
 variable "aurora_max_acu" {

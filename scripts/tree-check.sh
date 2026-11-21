@@ -4,7 +4,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 fail=0
-prune=( \( -name target -o -name node_modules -o -name .git \) -prune -o )
+prune=( \( -name target -o -name node_modules -o -name .git -o -path ./.claude/worktrees \) -prune -o )
 
 while IFS= read -r f; do
   case "$f" in
@@ -32,8 +32,8 @@ done)
 if [ -d infra/tofu ]; then
   for d in infra/tofu/*/; do
     case "$(basename "$d")" in
-      guardrails|base|session|policy) ;;
-      *) echo "tree-check: unexpected infra/tofu directory (allowed: guardrails, base, session, policy): $d" >&2; fail=1 ;;
+      base|session|policy) ;;
+      *) echo "tree-check: unexpected infra/tofu directory (allowed: base, session, policy): $d" >&2; fail=1 ;;
     esac
   done
 fi

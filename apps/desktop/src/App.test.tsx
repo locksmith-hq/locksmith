@@ -364,6 +364,56 @@ test("org audit: outcome filter narrows to denied and redaction_failed events", 
   expect(screen.queryByText("relay.denied")).toBeNull();
 });
 
+test("workload identities: list, prefix warning, create, delete with confirm, no secret rendered or requested", async () => {
+  const wl = { id: "w1", name: "ci-deploy", agent_id: "a1", audience: "https://cp.example", issuer_kind: "github", issuer: "https://token.actions.githubusercontent.com",
+    handle: "lsw_abc", conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/release-*" }], last_used_at: null };
+  const client = {
+    listWorkloadIdentities: vi.fn().mockResolvedValue([wl]),
+    createWorkloadIdentity: vi.fn().mockResolvedValue(wl),
+    deleteWorkloadIdentity: vi.fn().mockResolvedValue(undefined),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  const { container } = render(<App />);
+  await nav("Workload identities");
+  expect(await screen.findByText("ci-deploy")).toBeInTheDocument();
+  expect(screen.getByText("lsw_abc")).toBeInTheDocument();
+  expect(screen.getByText(/last used never/)).toBeInTheDocument();
+  expect(screen.getByText(/uses a prefix/)).toBeInTheDocument();
+
+  expect(screen.queryByTestId("prefix-warning")).toBeNull();
+  await userEvent.type(screen.getByLabelText("Policy name"), "n1");
+  await userEvent.type(screen.getByLabelText("Agent id"), "a1");
+  await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");
+  await userEvent.type(screen.getByLabelText("Repository (owner/repo)"), "acme/api");
+  await userEvent.type(screen.getByLabelText("Ref (optional)"), "refs/heads/rel-*");
+  expect(screen.getByTestId("prefix-warning")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Create workload identity" }));
+  const sent = client.createWorkloadIdentity.mock.calls[0]![0];
+  expect(sent).toEqual({ name: "n1", agent_id: "a1", audience: "https://cp.example", issuer_kind: "github",
+    conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/rel-*" }] });
+  expect(JSON.stringify(sent)).not.toMatch(/token|secret|password/i);
+
+  await userEvent.selectOptions(screen.getByLabelText("Issuer preset"), "kubernetes");
+  await userEvent.type(screen.getByLabelText("Policy name"), "k1");
+  await userEvent.type(screen.getByLabelText("Agent id"), "a1");
+  await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");
+  await userEvent.type(screen.getByLabelText("Issuer URL"), "https://k8s.example");
+  await userEvent.type(screen.getByLabelText("Namespace"), "prod");
+  await userEvent.type(screen.getByLabelText("Service account"), "deployer");
+  await userEvent.click(screen.getByRole("button", { name: "Create workload identity" }));
+  expect(client.createWorkloadIdentity.mock.calls[1]![0]).toMatchObject({ issuer_kind: "oidc", issuer: "https://k8s.example",
+    conditions: [{ claim: "sub", pattern: "system:serviceaccount:prod:deployer" }] });
+
+  noPassword(container);
+  expect(screen.queryByLabelText(/token|secret|password/i)).toBeNull();
+  expect(document.body.textContent).not.toMatch(/enrollment secret|Bearer/i);
+
+  await userEvent.click(screen.getByRole("button", { name: "Delete ci-deploy" }));
+  expect(client.deleteWorkloadIdentity).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "Confirm delete ci-deploy" }));
+  expect(client.deleteWorkloadIdentity).toHaveBeenCalledWith("w1");
+});
+
 const mcpTool = (layer: string, tool: string, def: boolean, enabled: boolean) => ({ layer, tool, description: `${tool} desc.`, default_enabled: def, enabled, overridden: def !== enabled });
 const mcpClient = (id: string, name: string, revoked: string | null = null) => ({ id, layer: "hub", client_id: `cid-${id}`, principal: "user-1", client_name: name, first_seen_at: "t", last_seen_at: "2026-01-02T00:00:00Z", revoked_at: revoked });
 

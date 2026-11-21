@@ -8,7 +8,11 @@ use std::net::SocketAddr;
 
 use secrecy::{ExposeSecret, SecretString};
 
+use crate::auth::abuse::{
+    AbuseLimits, DEFAULT_JTI_ENTRIES, DEFAULT_PER_POLICY, DEFAULT_PER_SOURCE,
+};
 use crate::auth::human::HumanAuthConfig;
+use crate::auth::issuers::IssuerAccess;
 use crate::issuer_admin::IssuerAdminConfig;
 
 pub const ENV_DATABASE_URL: &str = "DATABASE_URL";
@@ -36,6 +40,15 @@ pub const ENV_OIDC_ISSUER: &str = "LOCKSMITH_OIDC_ISSUER";
 pub const ENV_OIDC_AUDIENCE: &str = "LOCKSMITH_OIDC_AUDIENCE";
 /// T1: where the issuer publishes its JWKS (an `http` or `https` URL).
 pub const ENV_OIDC_JWKS_URL: &str = "LOCKSMITH_OIDC_JWKS_URL";
+/// D4, local development only: `1` lets workload issuers live on loopback or private addresses
+/// (and plain http), for a stub issuer. Cloud metadata addresses stay refused.
+pub const ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS: &str = "LOCKSMITH_WORKLOAD_ALLOW_PRIVATE_ISSUERS";
+/// D4: workload token exchanges allowed per policy per minute (default 60, `0` disables).
+pub const ENV_WORKLOAD_RATE_PER_POLICY: &str = "LOCKSMITH_WORKLOAD_RATE_PER_POLICY";
+/// D4: workload token exchanges allowed per source address per minute (default 30, `0` disables).
+pub const ENV_WORKLOAD_RATE_PER_SOURCE: &str = "LOCKSMITH_WORKLOAD_RATE_PER_SOURCE";
+/// D4: how many external-token `jti` values the replay cache remembers (default 100000).
+pub const ENV_WORKLOAD_JTI_ENTRIES: &str = "LOCKSMITH_WORKLOAD_JTI_CACHE_ENTRIES";
 
 /// M1 2.1: the canonical public URL of the hub `/mcp` route (RFC 8707 resource). MCP tokens must
 /// carry it as `aud`. Needs the `LOCKSMITH_OIDC_*` issuer settings; unset leaves `/mcp` answering `401`.
@@ -121,6 +134,10 @@ pub struct Config {
     /// The OIDC issuer human tokens are verified against (T1). `None` when
     /// `LOCKSMITH_OIDC_ISSUER` is unset: every bearer token is then refused. Public values only.
     pub human_auth: Option<HumanAuthConfig>,
+    /// How far workload issuer discovery may reach (D4 decision 3). Default: public https only.
+    pub workload_issuers: IssuerAccess,
+    /// Replay cache size and rate limits for the workload token exchange (D4 decision 6).
+    pub workload_limits: AbuseLimits,
     /// The canonical hub MCP resource URL (M1 2.1). `None` when unset. Public value only.
     pub mcp_resource_url: Option<String>,
     /// The issuer admin client for the consent revoke (M1 4.2). `None` when
@@ -254,6 +271,36 @@ impl Config {
 
         let issuer_admin = issuer_admin_from(&get, human_auth.is_some())?;
 
+        let workload_issuers = IssuerAccess {
+            allow_private_hosts: match get(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS).as_deref() {
+                None | Some("") | Some("0") => false,
+                Some("1") => true,
+                Some(_) => return Err(ConfigError::Invalid(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS)),
+            },
+        };
+
+        let number = |var: &'static str| -> Result<Option<u64>, ConfigError> {
+            match get(var).as_deref().map(str::trim) {
+                None | Some("") => Ok(None),
+                Some(v) => v.parse().map(Some).map_err(|_| ConfigError::Invalid(var)),
+            }
+        };
+        let rate = |var: &'static str, default: u32| -> Result<u32, ConfigError> {
+            match number(var)? {
+                None => Ok(default),
+                Some(v) => u32::try_from(v).map_err(|_| ConfigError::Invalid(var)),
+            }
+        };
+        let workload_limits = AbuseLimits {
+            per_policy: rate(ENV_WORKLOAD_RATE_PER_POLICY, DEFAULT_PER_POLICY)?,
+            per_source: rate(ENV_WORKLOAD_RATE_PER_SOURCE, DEFAULT_PER_SOURCE)?,
+            jti_entries: match number(ENV_WORKLOAD_JTI_ENTRIES)? {
+                None => DEFAULT_JTI_ENTRIES,
+                Some(0) => return Err(ConfigError::Invalid(ENV_WORKLOAD_JTI_ENTRIES)),
+                Some(v) => v,
+            },
+        };
+
         Ok(Self {
             database_url,
             database_owner_url,
@@ -265,6 +312,8 @@ impl Config {
             gateway_service_token,
             agent_signing_key,
             human_auth,
+            workload_issuers,
+            workload_limits,
             mcp_resource_url,
             issuer_admin,
         })
@@ -354,6 +403,57 @@ mod tests {
         let mut v = DB.to_vec();
         v.extend_from_slice(extra);
         v
+    }
+
+    #[test]
+    fn workload_private_issuers_are_off_unless_set_to_1() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(!c.workload_issuers.allow_private_hosts);
+        let c = Config::from_lookup(lookup(&with(&[(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS, "1")])))
+            .ok()
+            .unwrap();
+        assert!(c.workload_issuers.allow_private_hosts);
+        let err = Config::from_lookup(lookup(&with(&[(
+            ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS,
+            "yes",
+        )])))
+        .err()
+        .unwrap();
+        assert_eq!(
+            err,
+            ConfigError::Invalid(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS)
+        );
+    }
+
+    #[test]
+    fn workload_limits_default_and_override_from_env() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert_eq!(c.workload_limits, AbuseLimits::default());
+        let c = Config::from_lookup(lookup(&with(&[
+            (ENV_WORKLOAD_RATE_PER_POLICY, "5"),
+            (ENV_WORKLOAD_RATE_PER_SOURCE, "0"),
+            (ENV_WORKLOAD_JTI_ENTRIES, "42"),
+        ])))
+        .ok()
+        .unwrap();
+        assert_eq!(
+            c.workload_limits,
+            AbuseLimits {
+                per_policy: 5,
+                per_source: 0,
+                jti_entries: 42
+            }
+        );
+        for (var, bad) in [
+            (ENV_WORKLOAD_RATE_PER_POLICY, "many"),
+            (ENV_WORKLOAD_RATE_PER_SOURCE, "-1"),
+            (ENV_WORKLOAD_JTI_ENTRIES, "0"),
+        ] {
+            let err = Config::from_lookup(lookup(&with(&[(var, bad)])))
+                .err()
+                .unwrap();
+            assert_eq!(err, ConfigError::Invalid(var));
+        }
     }
 
     #[test]

@@ -62,8 +62,13 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     (12, "mcp", include_str!("../migrations/0012_mcp.sql")),
     (
         13,
+        "workload_identities",
+        include_str!("../migrations/0013_workload_identities.sql"),
+    ),
+    (
+        14,
         "grant delegate",
-        include_str!("../migrations/0013_grant_delegate.sql"),
+        include_str!("../migrations/0014_grant_delegate.sql"),
     ),
 ];
 

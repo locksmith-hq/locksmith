@@ -374,7 +374,6 @@ fn doctor_reports_new_agents_with_protection_labels() {
     assert!(line("hooks.copilot ").contains("protection: prevention (blocking hook)"));
     assert!(line("hooks.copilot.timeout").contains("fail-open"));
     assert!(line("hooks.cline ").contains("skip"));
-
 }
 
 /// `smith init --hub`: Claude Code and Codex get the remote Hub entry (URL and public client id

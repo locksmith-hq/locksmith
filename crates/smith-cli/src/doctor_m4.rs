@@ -202,7 +202,6 @@ fn cline() -> Outcome {
 
 fn windsurf() -> Outcome {
     agent_outcome(Agent::Windsurf, &repo_dir())
-
 }
 
 fn hub_mcp() -> Outcome {

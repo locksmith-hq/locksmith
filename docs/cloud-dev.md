@@ -32,7 +32,7 @@ Create these at claude.ai/code → environment selector → New environment.
 - **Extra allowed domains:** none for now.
 - **Environment variables:** `BASH_MAX_TIMEOUT_MS=600000`, `CARGO_TERM_COLOR=never`. **No secrets here,** with one exception the owner accepted on 2026-11-18: the agent GitHub App keys (see "Agent identities"). Environment variables are readable by the model and by any command it runs.
 - **Setup script:** a short bootstrap (pasted 2026-11-16) that finds the cloned repo and runs [`scripts/cloud-setup.sh`](../scripts/cloud-setup.sh), falling back to a built-in copy if the repo isn't present yet. Changes merged to that file apply without re-pasting. It installs build dependencies, `just`, the pinned toolchain, a prebuilt `cargo-nextest`, `gitleaks` and `cargo-deny` (`scripts/ci-tools.sh`) and `openspec`. It no longer pre-pulls compose images (that blew the 5-minute cache budget and hung the lead run on 2026-11-17); `just up` pulls them on demand.
-- **Starting the stack:** each session starts it with `just up`, which the F0 docs tell the agent to run. A SessionStart hook can automate this once F0 lands. **[test]** Whether Docker in the VM runs the full stack (lgtm needs about 1 to 2 GB RAM).
+- **Starting the stack:** each session starts it with `just up`, which the F0 docs tell the agent to run. A SessionStart hook in `.claude/settings.json` starts dockerd in the background (remote only; it does not pull images), so `just up` finds the daemon ready. **[test]** Whether Docker in the VM runs the full stack (lgtm needs about 1 to 2 GB RAM).
 
 ### 2. `locksmith-research`: used by the weekly review and planning runs
 - **Network:** Limited, with package managers, plus these documentation hosts:

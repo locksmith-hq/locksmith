@@ -20,6 +20,7 @@ mod secrets;
 mod session;
 mod versions;
 mod workload_identities;
+mod workload_tokens;
 
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -76,6 +77,7 @@ pub fn router() -> OpenApiRouter<AppState> {
             workload_identities::get_one,
             workload_identities::delete
         ))
+        .routes(routes!(workload_tokens::exchange))
         .routes(routes!(session::sign_in))
         .routes(routes!(session::sign_out))
         .routes(routes!(audit::list_events))

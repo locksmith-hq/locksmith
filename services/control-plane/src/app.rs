@@ -21,6 +21,7 @@ use utoipa_axum::routes;
 
 use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
+use crate::auth::external::ExternalVerifier;
 use crate::auth::human::HumanAuth;
 use crate::db::Database;
 use crate::kms::DekWrapper;
@@ -47,6 +48,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
         (name = "auth", description = "Sign-in and sign-out markers for the audit ledger; human bearer token only"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
         (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
+        (name = "workload-identities", description = "Workload identity trust policies and the exchange of an external OIDC token for an agent token"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
     )
 )]
@@ -89,6 +91,7 @@ pub struct AppState {
     service_token: Option<Arc<ServiceToken>>,
     agent_signer: Option<Arc<AgentTokenSigner>>,
     human_auth: Option<Arc<HumanAuth>>,
+    workload_verifier: Option<Arc<ExternalVerifier>>,
 }
 
 impl AppState {
@@ -102,6 +105,7 @@ impl AppState {
             service_token: None,
             agent_signer: None,
             human_auth: None,
+            workload_verifier: None,
         }
     }
 
@@ -126,6 +130,18 @@ impl AppState {
     /// The human token verifier, if an issuer is configured.
     pub fn human_auth(&self) -> Option<&HumanAuth> {
         self.human_auth.as_deref()
+    }
+
+    /// Verify external workload tokens with `verifier` (D4). Without one, workload token
+    /// exchanges answer `503` and policy creation skips the issuer host check.
+    pub fn with_workload_verifier(mut self, verifier: ExternalVerifier) -> Self {
+        self.workload_verifier = Some(Arc::new(verifier));
+        self
+    }
+
+    /// The external workload token verifier, if one is configured.
+    pub fn workload_verifier(&self) -> Option<&ExternalVerifier> {
+        self.workload_verifier.as_deref()
     }
 
     /// Accept `token` on the `/internal/v1` routes. Without one they answer `401` (fail closed).

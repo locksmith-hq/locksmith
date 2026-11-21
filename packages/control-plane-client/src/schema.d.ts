@@ -505,6 +505,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workload-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange an external workload token for an agent token
+         * @description Verifies the external OIDC token against the policy's stored issuer and audience, checks the policy's claim conditions, and returns the same 15-minute agent token as `POST /v1/agent-tokens` for the policy's agent. An unknown policy, an invalid or mismatching token and an unreachable issuer are all the same `401`.
+         */
+        post: operations["create_workload_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1066,6 +1086,16 @@ export interface components {
             /** Format: date-time */
             last_used_at?: string | null;
             name: string;
+        };
+        /** @description Request body of a workload token exchange. No `Debug`. */
+        WorkloadTokenRequest: {
+            /** @description The policy handle (`lsw_...`) from the workload identity. Not a secret. */
+            policy: string;
+            /**
+             * Format: password
+             * @description The external OIDC token (GitHub Actions or Kubernetes). Used once, never stored or logged.
+             */
+            token: string;
         };
     };
     responses: never;
@@ -3862,6 +3892,86 @@ export interface operations {
                 };
             };
             /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_workload_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkloadTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description A token */
+            200: {
+                headers: {
+                    /** @description `no-store` */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentToken"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid, unknown or replaced enrollment secret */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable or token signing not configured */
             503: {
                 headers: {
                     [name: string]: unknown;

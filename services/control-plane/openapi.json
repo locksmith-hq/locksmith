@@ -1467,6 +1467,27 @@
           "created_at"
         ],
         "type": "object"
+      },
+      "WorkloadTokenRequest": {
+        "additionalProperties": false,
+        "description": "Request body of a workload token exchange. No `Debug`.",
+        "properties": {
+          "policy": {
+            "description": "The policy handle (`lsw_...`) from the workload identity. Not a secret.",
+            "type": "string"
+          },
+          "token": {
+            "description": "The external OIDC token (GitHub Actions or Kubernetes). Used once, never stored or logged.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "policy",
+          "token"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -5278,6 +5299,106 @@
           "workload-identities"
         ]
       }
+    },
+    "/v1/workload-tokens": {
+      "post": {
+        "description": "Verifies the external OIDC token against the policy's stored issuer and audience, checks the policy's claim conditions, and returns the same 15-minute agent token as `POST /v1/agent-tokens` for the policy's agent. An unknown policy, an invalid or mismatching token and an unreachable issuer are all the same `401`.",
+        "operationId": "create_workload_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkloadTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToken"
+                }
+              }
+            },
+            "description": "A token",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid, unknown or replaced enrollment secret"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable or token signing not configured"
+          }
+        },
+        "summary": "Exchange an external workload token for an agent token",
+        "tags": [
+          "workload-identities"
+        ]
+      }
     }
   },
   "tags": [
@@ -5304,6 +5425,10 @@
     {
       "description": "Agent identities, their relay grants, agent tokens and the token-signing JWKS",
       "name": "agents"
+    },
+    {
+      "description": "Workload identity trust policies and the exchange of an external OIDC token for an agent token",
+      "name": "workload-identities"
     },
     {
       "description": "Service-to-service routes for the gateway; service token only, never exposed to users or agents",

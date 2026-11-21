@@ -160,6 +160,15 @@ pub async fn create(
         &inputs,
     )
     .map_err(|e| ApiError::validation(e.detail()))?;
+    // A private or metadata issuer address is refused at create time (the exchange also refuses
+    // it). Makes no HTTP request.
+    if let Some(verifier) = state.workload_verifier() {
+        verifier
+            .issuers()
+            .check_issuer_host(&policy.issuer)
+            .await
+            .map_err(|_| ApiError::validation("the issuer host is not an allowed address"))?;
+    }
     let stored =
         serde_json::to_string(&policy.conditions).map_err(|_| ApiError::bare(Kind::Internal))?;
     let (name, agent_id, id) = (input.name, input.agent_id, Uuid::now_v7());

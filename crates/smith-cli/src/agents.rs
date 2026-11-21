@@ -136,13 +136,13 @@ pub fn binary_on_path(a: Agent) -> bool {
     a.binaries().iter().any(|b| on_path(b))
 }
 
-/// Agents the repo shows signs of using.
 /// True once `smith hook <agent>` can parse the agent's payload. Windsurf waits for a fixture of
 /// the Devin Desktop hook format (docs/research/agent-plugin-formats.md).
 pub fn hook_handler_ready(a: Agent) -> bool {
     a != Agent::Windsurf
 }
 
+/// Agents the repo shows signs of using.
 pub fn detect(repo: &Path) -> Vec<Agent> {
     ALL.into_iter()
         .filter(|a| match a {
@@ -155,7 +155,9 @@ pub fn detect(repo: &Path) -> Vec<Agent> {
                     || repo.join(".github/hooks").is_dir()
             }
             Agent::Windsurf => {
-                repo.join(".windsurf").is_dir() || repo.join(".windsurfrules").is_file()
+                repo.join(".windsurf").is_dir()
+                    || repo.join(".windsurfrules").is_file()
+                    || repo.join(".devin").is_dir()
             }
             Agent::Cline => repo.join(".clinerules").is_dir() || repo.join(".cline").is_dir(),
         })

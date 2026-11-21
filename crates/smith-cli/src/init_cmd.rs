@@ -160,9 +160,16 @@ fn build(root: &Path) -> Result<Plan, Fail> {
 
     // 5. agent hooks and the MCP server. Codex keeps both in one file, so its text is chained.
     for a in agents::detect(root) {
-        // Task 2.2 (hook handling) has not landed for the newer agents: wiring their hooks now
-        // would install a hook that exits 2 on every call. Skip until `smith hook` knows them.
+        // Only Windsurf (Devin Desktop) is still gated: wiring its hooks now would install a hook
+        // that exits 2 on every call. Say so instead of skipping silently.
         if !agents::hook_handler_ready(a) {
+            p.notes.push(format!(
+                "{}: detected but not wired (no hook handler for its format yet), so it is not protected{}",
+                a.id(),
+                agents::mcp_user_hint(a).map_or(String::new(), |h| format!(
+                    "; add the locksmith MCP server by hand to {h} (command `locksmith-mcp`)"
+                ))
+            ));
             continue;
         }
         let f = agents::config_path(a, root);

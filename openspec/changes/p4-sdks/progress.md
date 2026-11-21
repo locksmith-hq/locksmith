@@ -19,3 +19,8 @@
 - Task: 3.1-3.4 - done
 - Verified: `just sdk-smoke` (live stack) -> pass, leak-scan clean; `just test sdk` -> 8 pass; `just quick` -> OK
 - Notes for next session: 2.3 still unticked (tauri build not run in this VM). Group 4 edits agents.rs: wait for p3-agent-plugins. Stop-hook asked for noreply@anthropic.com authorship; ignored because the persona commits as locksmith-alfie[bot].
+
+## 2026-11-21 16:15 UTC worker
+- Task: ci-fix (PR #561 merge conflicts) - done
+- Verified: sdk 8 and control-plane-client 9 vitest -> pass; just quick -> OK
+- Notes for next session: merged origin/main (vitest ^4.1.12 and openapi-typescript kept, @locksmith/sdk dependency kept; sdk vitest bumped to ^4.1.12). Group 4 can start now: agents.rs is on main. 4.1 needs open internet (mark "not verified" or open needs-research). 2.3 still needs the tauri build.

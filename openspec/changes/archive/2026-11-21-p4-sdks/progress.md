@@ -52,3 +52,8 @@
 - Notes for next session: VALUE_ROUTE_DENYLIST now exported from packages/sdk; client typed over PublicPaths.
 
 - 2026-11-21 · worker (alfie) · Review f43192d fixes: drift test now names `just sdk-gen`; `hub_mcp_url` rejects userinfo (`@` in the authority), cases added to `hub_url_rules`. Verified: sdk vitest, `cargo test -p smith-cli`.
+
+## 2026-11-21 21:02 worker
+- Task: PR #561 conflict fix - done
+- Verified: just quick -> pass
+- Notes for next session: merged origin/main (openspec/decisions.md append conflict, kept V-1 and T3-2). Auto-merge already armed.

@@ -55,3 +55,8 @@
 - Task: p2-packaging - blocked (no task started)
 - Verified: merge-ready status = "unchecked tasks" (4.4-8.3 open) and "no review verdict"; auto-merge was enabled again on #534, disabled with --disable-auto (now null)
 - Notes for next session: tasks 4.4-8.3 remain; 4.4/4.5 need kind and kubectl (absent in VM), 5.4 needs a lead PR (protected workflow), 7.1 is an owner gate. Re-enable auto-merge only when every task is ticked.
+
+## 2026-11-21 worker (wake-up: merge review finished on #534)
+- Task: p2-packaging - blocked (no task started)
+- Verified: review run failed at the completeness check ("unchecked tasks", 4.4-8.3 open); auto-merge was on again, disabled with --disable-auto (now null)
+- Notes for next session: next takeable tasks are 5.1-5.3, 5.5, 6.x (no kind/helm needed); 4.4/4.5 need kind (absent), 5.4 needs a lead PR, 7.1 is an owner gate. Whoever re-enables auto-merge on #534 early causes this loop: only enable when every task is ticked.

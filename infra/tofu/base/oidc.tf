@@ -3,7 +3,7 @@
 # The trust policy accepts exactly one subject: the approval environment of the
 # `aws-base-apply` workflow in this repository (workflow_dispatch only). The role
 # cannot touch Organizations, SCPs, Budgets, Cost Anomaly Detection or IAM
-# (guardrails stay owner-applied in ../guardrails; see policies/*.tftpl).
+# (guardrails stay owner-applied from the management account and live in the private cloud repo; see policies/*.tftpl).
 variable "github_repo" {
   description = "GitHub repository (owner/name) allowed to assume the apply role. Exact match, never a wildcard."
   type        = string

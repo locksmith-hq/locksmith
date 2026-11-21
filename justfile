@@ -310,7 +310,7 @@ aws-validate:
     set -euo pipefail
     export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
     tofu fmt -check -recursive infra/tofu
-    for m in guardrails base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
+    for m in base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
     python3 -I infra/tofu/policy/test_check_plan.py
     python3 -I infra/tofu/policy/test_base_oidc.py
 

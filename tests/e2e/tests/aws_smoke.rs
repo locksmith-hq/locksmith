@@ -1,6 +1,6 @@
 //! d2-aws-sts task 7.1: the real `aws` CLI through `smith aws setup` / `credential_process`.
 //! Requires `just up` (moto), `just api` and built `locksmith-gateway` and `smith`
-//! (`just aws-smoke` builds them).
+//! (`just aws-vend-smoke` builds them).
 //!
 //! An org, an AWS base-credential secret (a moto fake), an agent and a `delegate` grant with a
 //! scope are created through the control plane. A gateway is started with an `[[aws_binding]]`
@@ -90,7 +90,7 @@ async fn start_gateway(c: &Client, bindings: &str, sts: &str) -> Gateway {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .expect("start locksmith-gateway (run `just aws-smoke` to build it)");
+        .expect("start locksmith-gateway (run `just aws-vend-smoke` to build it)");
     let gw = Gateway {
         child,
         base: format!("http://127.0.0.1:{port}"),

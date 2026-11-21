@@ -260,11 +260,11 @@ connector-smoke:
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
 
-# D2 AWS smoke (needs `just up` for moto and `just api`; `pip install awscli`): the real `aws` CLI
+# D2 AWS vend smoke (P1 owns `aws-smoke`, the real-AWS session smoke; this one is local on moto; needs `just up` for moto and `just api`; `pip install awscli`): the real `aws` CLI
 # gets scoped, short-lived STS credentials from the gateway through `smith aws setup` and
 # `credential_process`; asserts the assumed-role identity, expiry and that the agent HOME holds no
 # key. Skips with a note without `aws` or moto unless E2E_REQUIRE_AWS is set. Run `just leak-scan` after.
-aws-smoke:
+aws-vend-smoke:
     cargo build -q -p ls-gateway --bin locksmith-gateway
     cargo build -q -p smith-cli --bin smith
     cargo nextest run -p ls-e2e --test aws_smoke --no-capture

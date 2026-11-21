@@ -1,11 +1,11 @@
 # Tasks: P4 SDKs and remote MCP setup
 
 ## 1. SDK package [sonnet]
-- [ ] 1.1 [haiku] Re-check `openapi-fetch` (latest version, licence, release date) and record it in design.md "OSS used"; pin it exactly.
-- [ ] 1.2 Create `packages/sdk` (`@locksmith/sdk`, Apache-2.0, npm workspace): `npm run gen` writes `src/schema.d.ts` from `services/control-plane/openapi.json`; `createLocksmith({ baseUrl, token })` returns an `openapi-fetch` client with bearer auth.
-- [ ] 1.3 Typed `LocksmithError` (status plus RFC 9457 problem fields) and a cursor-paging helper; Vitest tests for a 403 problem, a network error and two pages, with no console output.
-- [ ] 1.4 Drift test: regenerate to a temp dir and diff against `src/schema.d.ts`; operation-coverage test: every `operationId` in the spec has a typed path; no-value-route test using the console leak-check denylist.
-- [ ] 1.5 Verify: `npm test --workspace packages/sdk`.
+- [x] 1.1 [haiku] Re-check `openapi-fetch` (latest version, licence, release date) and record it in design.md "OSS used"; pin it exactly.
+- [x] 1.2 Create `packages/sdk` (`@locksmith/sdk`, Apache-2.0, npm workspace): `npm run gen` writes `src/schema.d.ts` from `services/control-plane/openapi.json`; `createLocksmith({ baseUrl, token })` returns an `openapi-fetch` client with bearer auth.
+- [x] 1.3 Typed `LocksmithError` (status plus RFC 9457 problem fields) and a cursor-paging helper; Vitest tests for a 403 problem, a network error and two pages, with no console output.
+- [x] 1.4 Drift test: regenerate to a temp dir and diff against `src/schema.d.ts`; operation-coverage test: every `operationId` in the spec has a typed path; no-value-route test using the console leak-check denylist.
+- [x] 1.5 Verify: `npm test --workspace packages/sdk`.
 
 ## 2. One client [sonnet]
 - [ ] 2.1 `packages/control-plane-client` re-exports types from `@locksmith/sdk` and implements its `Client` through the SDK; delete its hand-written `fetch` code and its own `schema.d.ts` and `gen:types` script.

@@ -100,3 +100,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Cause: 5.1 needs T3's routed shell (#489, not on main) and a binding read API that does not exist (bindings live only in the gateway's bindings file). D2-1 already gives the page to d2/d3, not T3, so option (b) "move to t3" was declined.
 - Fix: 5.x stays in d2 and waits for T3's shell; it no longer blocks the rest. Do 7.2 now (read `just aws-smoke` as `just aws-vend-smoke`; `just ci` means the PR's required checks), then finish PR #480 with 5.x still open. When 5.1 is taken, first add a non-secret binding list contract with fixtures to `packages/api-types` for every binding kind (shared with d3 6.1), then the page.
 - Verified: decision only; `just tree-check task-guard` ok on the lead branch.
+
+## 2026-11-21 worker (alfie)
+- Task: 7.2 - done (5.1/5.2 stay open, waiting on T3's shell per D2-1/D2-2)
+- Verified: `just up`; `just api` + `E2E_REQUIRE_AWS=1 just aws-vend-smoke` (real `aws` CLI via credential_process, 1 passed in 2.8s, not skipped); `npm ci && just apps-build` ok; `just ci` is the PR's required checks. `just leak-scan` needs a canary file this VM lacks (`bad canary file`), left to CI.
+- P1 named check: session-policy enforcement on real AWS is P1's `aws-smoke` (real-AWS session smoke); moto here only records the session policy (design.md decision 6), it does not enforce it.
+- Notes for next session: only 5.1/5.2 remain; take them after t3-console-mvp (#489) lands, starting with the binding-list contract in `packages/api-types`.

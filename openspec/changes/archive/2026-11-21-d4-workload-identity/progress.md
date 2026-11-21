@@ -104,3 +104,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-21 worker (C)
 - Task: 7.2 ticked (smoke, apps-build verified in earlier runs; full ci runs on the PR). Change archived in this PR.
+
+## 2026-11-21 worker
+- Task: review-fix on PR #530 - done
+- Verified: cargo test -p ls-control-plane --lib workload -> 28 passed; web and desktop workload vitest -> pass; just quick -> ok
+- Notes for next session: last_used_at shown on web and desktop lists; oidc policies on the GitHub issuer get the owner-pin rule. Await re-review.

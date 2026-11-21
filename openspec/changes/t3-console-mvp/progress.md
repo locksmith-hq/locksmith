@@ -100,3 +100,8 @@
 - Task: 6.4.2 restyle done and ticked: web imports the shared desktop styles, fonts (deps added to apps/web) and new `@locksmith/ui/kit.css` (crumbs, plain, inline-form, panel.form, switch moved out of the mockup CSS); all pages use kit classes (btn, panel, grid, list, state) and `Head`; org menu closes on Escape and outside click (test added).
 - Verified: tsc clean, `npm test --workspace apps/web` (50), web build OK. Evaluator: Sonnet FAIL (dead classes, fixed), then PASS.
 - Notes for next session: not yet seen in a browser; 6.4.3 (needs `just up && just web-e2e`, screenshots) and 6.1 caveats remain, then 6.5-6.6, 7.x.
+
+## 2026-11-21 worker (josie, run 6)
+- Task: 6.4.3 - done (ticked). Live screenshots in `openspec/changes/t3-console-mvp/screenshots/`: `live-overview.png` and `live-projects.png` vs `mockup-overview.png` (the mockup is the Home product-card page; live Overview has the same frame: grouped sidebar, org switcher, user card; the Home card grid is not built).
+- Verified: `npm test --workspace apps/web` (50 passed), `npm run build --workspace apps/web` OK, `just up` + `just api` + `just web-e2e` (1 passed, leak check included).
+- Notes for next session: not independently evaluated this run (verification-only task). Live Overview uses plain bullet lists and default-blue links (Get started, Recent activity), unlike the mockup. Remaining: 6.1 caveats, 6.5-6.6, 7.x.

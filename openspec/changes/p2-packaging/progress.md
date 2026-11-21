@@ -60,3 +60,8 @@
 - Task: p2-packaging - blocked (no task started)
 - Verified: review run failed at the completeness check ("unchecked tasks", 4.4-8.3 open); auto-merge was on again, disabled with --disable-auto (now null)
 - Notes for next session: next takeable tasks are 5.1-5.3, 5.5, 6.x (no kind/helm needed); 4.4/4.5 need kind (absent), 5.4 needs a lead PR, 7.1 is an owner gate. Whoever re-enables auto-merge on #534 early causes this loop: only enable when every task is ticked.
+
+## 2026-11-21 worker (wake-up: merge review finished on #534)
+- Task: p2-packaging 5.1, 5.5 - done; auto-merge on #534 disabled (review failed only on unchecked tasks); evaluator PASS
+- Verified: scripts/make-manifest.test.sh, cargo test -p ls-update, just quick
+- Notes for next session: 5.2 (verify-release.sh), 5.3 (gen-formula.sh), 6.x next; 4.4/4.5 need kind (absent), 5.4 needs a lead PR, 7.1 is an owner gate. release.yml does not pass --sbom/--images yet (task 5.4). Keep auto-merge off until every task is ticked.

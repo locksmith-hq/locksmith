@@ -29,11 +29,11 @@
 - [ ] 4.5 Verify: `just helm-test`.
 
 ## 5. Release pipeline [sonnet]
-- [ ] 5.1 Extend `scripts/make-manifest.sh` and its test: require all four macOS and Linux archives, list names and SHA-256, reject unsafe names; also emit the SBOM and image digest list into the release directory.
+- [x] 5.1 Extend `scripts/make-manifest.sh` and its test: require all four macOS and Linux archives, list names and SHA-256, reject unsafe names; also emit the SBOM and image digest list into the release directory.
 - [ ] 5.2 `scripts/verify-release.sh <dir>`: minisign check against `crates/ls-update/update-pubkey.txt`, SHA-256 of each asset against the manifest, cosign verify with the expected workflow identity, SBOM present and parseable; one result line per asset, non-zero on any failure. Test with a planted tampered byte (`scripts/verify-release.test.sh`, using a locally generated throwaway minisign key and cosign test identity, nothing committed).
 - [ ] 5.3 `scripts/gen-formula.sh <dir>`: Homebrew formula from the manifest (URLs and SHA-256 only) with a test that every entry matches the manifest.
 - [ ] 5.4 Update `.github/workflows/release.yml`: `workflow_dispatch` input `dry_run`, buildx multi-arch image build and push (skipped in dry run), cosign keyless signing with `id-token: write` on the signing job only, build provenance attestation, SBOM, formula artifact, `verify-release.sh` as a final required step, slug `locksmith-hq/locksmith`. The signing key stays the `MINISIGN_SECRET_KEY` secret referenced by name. (Workflow files are protected: this task is a lead PR the owner merges.)
-- [ ] 5.5 Change the release slug in `crates/ls-update` (`DEFAULT_SOURCE`) and its tests; no behaviour change to signature or hash verification.
+- [x] 5.5 Change the release slug in `crates/ls-update` (`DEFAULT_SOURCE`) and its tests; no behaviour change to signature or hash verification.
 - [ ] 5.6 Verify: `bash scripts/verify-release.test.sh`, `cargo nextest run -p ls-update`, `actionlint .github/workflows/release.yml`, then `just release-dry-run` (a documented local run of the same scripts against a one-triple build).
 
 ## 6. smith installers [sonnet]

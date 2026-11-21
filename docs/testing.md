@@ -44,6 +44,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `integrations/claude-code` | agent plugin (files) | `just test claude-code` | no | `tests/adversarial` | Thin plugin (hooks, skills and commands); real integration tests come with P3 |
 | `integrations/codex` | agent plugin (files) | `just test codex` | no | `tests/adversarial` | Thin plugin (config only); real integration tests come with P3 |
 | `integrations/cursor` | agent plugin (files) | `just test cursor` | no | `tests/adversarial` | Thin plugin (hooks and MCP config); real integration tests come with P3 |
+| `integrations/generic-mcp` | agent plugin (files) | `just test generic-mcp` | no | `tests/adversarial` | Docs-only recipe for any MCP client; real integration tests come with P3 |
 | `tests/adversarial` | shell harness | `just test adversarial` | no | self | `run.sh selftest`; agent cases need `--agent`; `just adversarial-gate` runs the gateway cases against `just up` |
 | `tests/e2e` | Rust e2e (package `ls-e2e`) | `just test e2e` | yes | self | Needs `just up` and `just api`; `just relay-smoke`, `just connector-smoke`, `just audit-smoke` |
 | `tests/kit` | shell + python | `just test kit` | no | self | `leak_scan_test.sh` |

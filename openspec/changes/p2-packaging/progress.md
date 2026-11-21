@@ -70,3 +70,8 @@
 - Task: p2-packaging 5.2, 5.3 - done (auto-merge on #534 had been enabled again; disabled, review had failed only on unchecked tasks and CODEOWNERS path crates/ls-update)
 - Verified: `just release-verify` (make-manifest, verify-release with throwaway minisign key and stub cosign incl. tampered asset/manifest/key/identity, gen-formula tests), test-recipes-check
 - Notes for next session: cosign is not in the VM, so the cosign check is tested with a stub; real identity check runs in release.yml (task 5.4, lead PR). Next: 6.1-6.4. PR touches /crates/ls-update/ (CODEOWNERS): the owner's approval is required to merge. Keep auto-merge off until every task is ticked.
+
+## 2026-11-21 worker (wake-up: merge review finished on #494)
+- Task: p2-packaging - blocked (no task started)
+- Verified: auto-merge on #534 had been enabled again with tasks open; disabled with --disable-auto. Red `hygiene` is the gitleaks step (2 fake worker-branch fixtures, lead PR #557 ignores them); tree-check, task guard, public-check pass locally.
+- Notes for next session: next takeable tasks 6.1-6.4. 4.4/4.5 need kind (absent), 5.4 needs a lead PR, 7.1 is an owner gate. Keep auto-merge off until every task is ticked.

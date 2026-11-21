@@ -321,6 +321,18 @@ fn id(r: Reply) -> Uuid {
 /// A policy on the (plain http, loopback) stub issuer, written as the superuser: the create API
 /// requires an https issuer.
 async fn insert_policy(pg: &common::Pg, org: Uuid, agent: Uuid, issuer: &str, name: &str) -> Uuid {
+    insert_policy_ref(pg, org, agent, issuer, name, "refs/heads/main").await
+}
+
+/// [`insert_policy`] pinned to `git_ref`.
+async fn insert_policy_ref(
+    pg: &common::Pg,
+    org: Uuid,
+    agent: Uuid,
+    issuer: &str,
+    name: &str,
+    git_ref: &str,
+) -> Uuid {
     let policy = Uuid::now_v7();
     let mut c = pg.admin().await;
     // The table only stores https issuers; the stub is plain http on loopback (test only).
@@ -342,7 +354,7 @@ async fn insert_policy(pg: &common::Pg, org: Uuid, agent: Uuid, issuer: &str, na
     .bind(
         json!([
             {"claim": "repository", "op": "eq", "value": "acme/api"},
-            {"claim": "ref", "op": "eq", "value": "refs/heads/main"},
+            {"claim": "ref", "op": "eq", "value": git_ref},
         ])
         .to_string(),
     )
@@ -727,14 +739,36 @@ async fn workload_abuse_token_without_jti_is_accepted() {
 #[tokio::test]
 async fn workload_abuse_a_policy_mismatch_does_not_burn_the_jti() {
     let f = Fixture::start().await;
-    let c = claims(&f.issuer.uri(), "refs/heads/feature");
-    let token = f.key.mint(&c);
+    // A second policy on the same issuer that accepts the feature branch.
+    let feature = insert_policy_ref(
+        &f.pg,
+        f.org,
+        f.agent,
+        &f.issuer.uri(),
+        "feat",
+        "refs/heads/feature",
+    )
+    .await;
+    let feature_handle = encode_handle(f.org, feature);
+    let token = f.key.mint(&claims(&f.issuer.uri(), "refs/heads/feature"));
+
+    // The main-only policy refuses it, and the ledger says why (claims, not replay).
     let r = exchange(&f.app, &f.handle(), &token).await;
     assert_eq!(r.status, StatusCode::UNAUTHORIZED);
-    assert_eq!(
-        f.ledger().await.last().unwrap().0,
-        "workload_identity.denied"
+    let last = f.ledger().await.pop().unwrap();
+    assert_eq!(last.0, "workload_identity.denied");
+    assert!(
+        last.3.contains("claims") && !last.3.contains("replay"),
+        "{last:?}"
     );
+
+    // The refusal did not consume the jti: the same token still works on the matching policy.
+    let ok = exchange(&f.app, &feature_handle, &token).await;
+    assert_eq!(ok.status, StatusCode::OK, "{}", ok.raw);
+    // And the success did consume it.
+    let again = exchange(&f.app, &feature_handle, &token).await;
+    assert_eq!(again.status, StatusCode::UNAUTHORIZED);
+    assert!(f.ledger().await.pop().unwrap().3.contains("replay"));
 }
 
 #[tokio::test]
@@ -799,4 +833,357 @@ async fn workload_abuse_per_source_rate_limit_counts_each_address_separately() {
     assert_eq!(ok.status, StatusCode::OK, "{}", ok.raw);
     let ok = exchange(&f.app, &f.handle(), &f.token("refs/heads/main")).await;
     assert_eq!(ok.status, StatusCode::OK, "{}", ok.raw);
+}
+
+// ---- Task 4.2: abuse cases for the exchange ------------------------------------------------
+
+/// Log capture with span open and close events, so the span fields are in it too.
+fn capture_logs() -> (common::Capture, tracing::subscriber::DefaultGuard) {
+    let capture = common::Capture::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(capture.clone())
+        .with_max_level(tracing::Level::TRACE)
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
+        .with_ansi(false)
+        .finish();
+    (capture, tracing::subscriber::set_default(subscriber))
+}
+
+/// When `WORKLOAD_ABUSE_ARTIFACT_DIR` is set (tests/adversarial/cases/D4.sh), write what an
+/// attacker could read after the run (logs, the org ledger, a dump of every table) there, for
+/// the shared leak oracle. Never contains the canary unless the code under test leaks it.
+fn write_artifacts(name: &str, logs: &str, ledger: &str, rows: &str) {
+    let Ok(dir) = std::env::var("WORKLOAD_ABUSE_ARTIFACT_DIR") else {
+        return;
+    };
+    for (suffix, text) in [("logs", logs), ("ledger", ledger), ("rows", rows)] {
+        std::fs::write(
+            std::path::Path::new(&dir).join(format!("{name}.{suffix}")),
+            text,
+        )
+        .unwrap();
+    }
+}
+
+/// An attacker-controlled OpenID issuer that records every request it receives.
+async fn attacker_issuer(key: &TestKey) -> MockServer {
+    stub_issuer(key).await
+}
+
+async fn received(server: &MockServer) -> usize {
+    server.received_requests().await.map_or(0, |r| r.len())
+}
+
+#[tokio::test]
+async fn workload_abuse_forged_iss_at_an_attacker_host_makes_no_outbound_call() {
+    let f = Fixture::start().await;
+    let attacker_key = TestKey::new("k1", 11);
+    let attacker = attacker_issuer(&attacker_key).await;
+    let evil = attacker.uri();
+
+    // The attacker signs with its own key and names itself as the issuer.
+    let forged = attacker_key.mint(&claims(&evil, "refs/heads/main"));
+    let r = exchange(&f.app, &f.handle(), &forged).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED, "{}", r.raw);
+    assert_eq!(
+        received(&attacker).await,
+        0,
+        "the stored issuer is the only one fetched"
+    );
+
+    // Same, claiming the policy's real issuer but pointing discovery-ish claims at the attacker.
+    let mut c = claims(&f.issuer.uri(), "refs/heads/main");
+    c["jwks_uri"] = json!(format!("{evil}/jwks"));
+    c["discovery"] = json!(format!("{evil}/.well-known/openid-configuration"));
+    let r = exchange(&f.app, &f.handle(), &attacker_key.mint(&c)).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED, "{}", r.raw);
+
+    // A policy handle cannot select an issuer either: an unknown policy id never reaches out.
+    let r = exchange(&f.app, &encode_handle(f.org, Uuid::now_v7()), &forged).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(received(&attacker).await, 0);
+
+    // Nothing was minted for any of it.
+    assert!(
+        f.ledger()
+            .await
+            .iter()
+            .all(|e| e.0 != "workload_identity.exchanged")
+    );
+}
+
+#[tokio::test]
+async fn workload_abuse_jku_x5u_and_embedded_jwk_headers_are_ignored() {
+    let f = Fixture::start().await;
+    let attacker_key = TestKey::new("k1", 11);
+    let attacker = attacker_issuer(&attacker_key).await;
+    let evil = attacker.uri();
+
+    // Attacker-signed token whose header offers the attacker's key set: refused.
+    let mut h = Header::new(Algorithm::ES256);
+    h.kid = Some("k1".into());
+    h.jku = Some(format!("{evil}/jwks"));
+    h.x5u = Some(format!("{evil}/cert"));
+    let der = attacker_key.signing.to_pkcs8_der().unwrap();
+    let forged = jsonwebtoken::encode(
+        &h,
+        &claims(&f.issuer.uri(), "refs/heads/main"),
+        &EncodingKey::from_ec_der(der.as_bytes()),
+    )
+    .unwrap();
+    let r = exchange(&f.app, &f.handle(), &forged).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED, "{}", r.raw);
+
+    // Header with an embedded `jwk` of the attacker's key, hand-assembled.
+    let header = json!({
+        "alg": "ES256", "typ": "JWT", "kid": "k1", "jwk": attacker_key.jwk(),
+        "jku": format!("{evil}/jwks"),
+    });
+    let payload = claims(&f.issuer.uri(), "refs/heads/main");
+    let signing_input = format!(
+        "{}.{}",
+        URL_SAFE_NO_PAD.encode(header.to_string()),
+        URL_SAFE_NO_PAD.encode(payload.to_string())
+    );
+    let real = f.key.mint(&payload);
+    let sig = real.rsplit('.').next().unwrap();
+    let r = exchange(&f.app, &f.handle(), &format!("{signing_input}.{sig}")).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED, "{}", r.raw);
+
+    // A genuine token that carries a `jku` header is still judged by the stored issuer's keys.
+    let mut h = Header::new(Algorithm::ES256);
+    h.kid = Some(f.key.kid.clone());
+    h.jku = Some(format!("{evil}/jwks"));
+    let der = f.key.signing.to_pkcs8_der().unwrap();
+    let genuine = jsonwebtoken::encode(
+        &h,
+        &claims(&f.issuer.uri(), "refs/heads/main"),
+        &EncodingKey::from_ec_der(der.as_bytes()),
+    )
+    .unwrap();
+    let r = exchange(&f.app, &f.handle(), &genuine).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+
+    assert_eq!(
+        received(&attacker).await,
+        0,
+        "the jku host was never contacted"
+    );
+}
+
+#[tokio::test]
+async fn workload_abuse_token_for_another_audience_is_refused() {
+    let f = Fixture::start().await;
+    let url = f.issuer.uri();
+    for (name, aud) in [
+        ("other string", json!("https://other.example")),
+        (
+            "array without ours",
+            json!(["https://other.example", "https://third.example"]),
+        ),
+        ("prefix of ours", json!("https://locksmith.exampl")),
+        ("ours with a suffix", json!(format!("{AUD}/"))),
+        ("empty", json!("")),
+        ("number", json!(7)),
+    ] {
+        let mut c = claims(&url, "refs/heads/main");
+        c["aud"] = aud;
+        let r = exchange(&f.app, &f.handle(), &f.key.mint(&c)).await;
+        assert_eq!(r.status, StatusCode::UNAUTHORIZED, "{name}: {}", r.raw);
+    }
+    let mut c = claims(&url, "refs/heads/main");
+    c.as_object_mut().unwrap().remove("aud");
+    let r = exchange(&f.app, &f.handle(), &f.key.mint(&c)).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED, "no aud: {}", r.raw);
+
+    // The right audience (alone, or in an array) works, so the refusals above were about aud.
+    let ok = exchange(&f.app, &f.handle(), &f.token("refs/heads/main")).await;
+    assert_eq!(ok.status, StatusCode::OK, "{}", ok.raw);
+    let mut c = claims(&url, "refs/heads/main");
+    c["aud"] = json!(["https://other.example", AUD]);
+    let ok = exchange(&f.app, &f.handle(), &f.key.mint(&c)).await;
+    assert_eq!(ok.status, StatusCode::OK, "{}", ok.raw);
+}
+
+#[tokio::test]
+async fn workload_abuse_replayed_jti_is_accepted_at_most_once_under_a_race() {
+    let f = Fixture::start().await;
+    let token = f.token("refs/heads/main");
+    let handle = f.handle();
+    let replies = [
+        exchange(&f.app, &handle, &token),
+        exchange(&f.app, &handle, &token),
+        exchange(&f.app, &handle, &token),
+        exchange(&f.app, &handle, &token),
+        exchange(&f.app, &handle, &token),
+    ];
+    let replies = futures_join(replies).await;
+    let ok = replies
+        .iter()
+        .filter(|r| r.status == StatusCode::OK)
+        .count();
+    assert_eq!(ok, 1, "exactly one concurrent use of a jti wins");
+    assert!(
+        replies
+            .iter()
+            .filter(|r| r.status != StatusCode::OK)
+            .all(|r| r.status == StatusCode::UNAUTHORIZED)
+    );
+}
+
+async fn futures_join<const N: usize>(
+    futs: [impl std::future::Future<Output = Reply>; N],
+) -> Vec<Reply> {
+    let mut out = Vec::with_capacity(N);
+    // Polled together on one task so the requests interleave.
+    let mut pinned: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Reply> + '_>>> =
+        futs.into_iter().map(|f| Box::pin(f) as _).collect();
+    let mut done: Vec<Option<Reply>> = (0..N).map(|_| None).collect();
+    std::future::poll_fn(|cx| {
+        let mut pending = false;
+        for (i, p) in pinned.iter_mut().enumerate() {
+            if done[i].is_none() {
+                match p.as_mut().poll(cx) {
+                    std::task::Poll::Ready(r) => done[i] = Some(r),
+                    std::task::Poll::Pending => pending = true,
+                }
+            }
+        }
+        if pending {
+            std::task::Poll::Pending
+        } else {
+            std::task::Poll::Ready(())
+        }
+    })
+    .await;
+    out.extend(done.into_iter().map(Option::unwrap));
+    out
+}
+
+#[tokio::test]
+async fn workload_abuse_policy_handle_of_another_org_is_refused() {
+    let f = Fixture::start().await;
+    let other_org = id(call(&f.app, "POST", "/v1/orgs", None, Some(json!({"name": "b"}))).await);
+    let other_agent = {
+        let r = call(
+            &f.app,
+            "POST",
+            "/v1/agents",
+            Some(other_org),
+            Some(json!({"name": "theirs"})),
+        )
+        .await;
+        r.body["agent"]["id"]
+            .as_str()
+            .unwrap()
+            .parse::<Uuid>()
+            .unwrap()
+    };
+    let theirs = insert_policy(&f.pg, other_org, other_agent, &f.issuer.uri(), "theirs").await;
+
+    // Org A's policy id under org B's handle, and the reverse: a valid token for either policy
+    // must not mint across the org boundary.
+    let token_a = f.token("refs/heads/main");
+    let crossed_a = exchange(&f.app, &encode_handle(other_org, f.policy), &token_a).await;
+    let token_b = f.token("refs/heads/main");
+    let crossed_b = exchange(&f.app, &encode_handle(f.org, theirs), &token_b).await;
+    let bogus = exchange(&f.app, "lsw_nope", &f.token("refs/heads/main")).await;
+    for r in [&crossed_a, &crossed_b] {
+        assert_eq!(r.status, StatusCode::UNAUTHORIZED, "{}", r.raw);
+        assert_eq!(r.raw, bogus.raw, "indistinguishable from any other failure");
+    }
+    // Neither refusal burned a jti: both tokens still work on their own org's policy.
+    let a = exchange(&f.app, &f.handle(), &token_a).await;
+    assert_eq!(a.status, StatusCode::OK, "{}", a.raw);
+    let b = exchange(&f.app, &encode_handle(other_org, theirs), &token_b).await;
+    assert_eq!(b.status, StatusCode::OK, "{}", b.raw);
+    // The minted token names the agent of the handle's own org only.
+    for (r, agent) in [(&a, f.agent), (&b, other_agent)] {
+        let minted = r.body["access_token"].as_str().unwrap();
+        assert_eq!(payload(minted)["sub"].as_str().unwrap(), agent.to_string());
+    }
+}
+
+#[tokio::test]
+async fn workload_abuse_canary_external_token_is_in_no_log_span_or_ledger() {
+    let (capture, _guard) = capture_logs();
+    let f = Fixture::start().await;
+    let canary = std::env::var("ADVERSARIAL_CANARY_FILE")
+        .ok()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map_or_else(
+            || format!("canary-{}", Uuid::new_v4().simple()),
+            |s| s.trim().to_owned(),
+        );
+
+    // The canary rides in an unnamed claim and in the `kid`-less signature path of every token.
+    let mut tokens = Vec::new();
+    let mut ok_claims = claims(&f.issuer.uri(), "refs/heads/main");
+    ok_claims["actor"] = json!(canary);
+    tokens.push(f.key.mint(&ok_claims));
+    let mut bad_ref = claims(&f.issuer.uri(), "refs/heads/feature");
+    bad_ref["actor"] = json!(canary);
+    tokens.push(f.key.mint(&bad_ref));
+    let mut bad_aud = claims(&f.issuer.uri(), "refs/heads/main");
+    bad_aud["actor"] = json!(canary);
+    bad_aud["aud"] = json!("https://other.example");
+    tokens.push(f.key.mint(&bad_aud));
+    let mut forged = claims("https://attacker.example", "refs/heads/main");
+    forged["actor"] = json!(canary);
+    tokens.push(TestKey::new("k1", 9).mint(&forged));
+    tokens.push(tokens[0].clone()); // replay
+    // The canary as the bare token, as a handle and inside a malformed body.
+    tokens.push(canary.clone());
+
+    let mut minted = Vec::new();
+    for t in &tokens {
+        let r = exchange(&f.app, &f.handle(), t).await;
+        if r.status == StatusCode::OK {
+            minted.push(r.body["access_token"].as_str().unwrap().to_owned());
+        }
+        assert!(!r.raw.contains(&canary));
+    }
+    let r = exchange(&f.app, &canary, &tokens[0]).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    assert!(!r.raw.contains(&canary));
+    assert_eq!(
+        minted.len(),
+        1,
+        "only the first, well-formed token was exchanged"
+    );
+
+    let logs = capture.contents();
+    let ledger = format!("{:?}", f.ledger().await);
+    let rows = f.dump_text().await;
+    assert!(
+        logs.contains("exchange_workload_token"),
+        "the span is in the capture"
+    );
+    for t in &tokens {
+        let parts: Vec<&str> = t.split('.').collect();
+        // The whole token, and each of its segments, must be absent.
+        for needle in
+            std::iter::once(t.as_str()).chain(parts.iter().copied().filter(|p| p.len() > 16))
+        {
+            for (where_, hay) in [("logs", &logs), ("ledger", &ledger), ("rows", &rows)] {
+                assert!(!hay.contains(needle), "token material in {where_}");
+            }
+        }
+    }
+    for (where_, hay) in [("logs", &logs), ("ledger", &ledger), ("rows", &rows)] {
+        assert!(!hay.contains(&canary), "canary in {where_}");
+    }
+    // The minted agent token is Locksmith's own and does not embed the external one.
+    for m in &minted {
+        for t in &tokens {
+            assert!(!m.contains(t.as_str()));
+        }
+        assert!(
+            !URL_SAFE_NO_PAD
+                .decode(m.split('.').nth(1).unwrap())
+                .map(|b| String::from_utf8_lossy(&b).contains(&canary))
+                .unwrap_or(false)
+        );
+    }
+    write_artifacts("canary", &logs, &ledger, &rows);
 }

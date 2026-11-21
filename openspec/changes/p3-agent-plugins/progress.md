@@ -18,3 +18,8 @@
 - Task: 3.1-3.4 - done; evaluator PASS (independent sonnet)
 - Verified: `cargo nextest run -p smith-cli init doctor` 31 passed; `cargo test -p smith-cli --test init` 11 passed; `just quick` OK
 - Notes for next session: Gemini trust file format (`~/.gemini/trustedFolders.json`) and Copilot timeout fail-open are doc/memory-derived, unconfirmed. Windsurf stays gated (config_path still `.windsurf/hooks.json`, real format `.devin/hooks.v1.json`). Next: task 4 (generate integrations/gemini-cli, copilot). 2.1 still open. Also checked d2/d3: only UI tasks blocked on t3 bindings page.
+
+## 2026-11-21 23:59 worker (harriet, third run)
+- Task: 4.1-4.5 - done; merged origin/main (4 conflicts in smith-cli: hub MCP kept alongside new-agent wiring, mcp_path is Option); evaluator PASS (independent sonnet)
+- Verified: `cargo test -p smith-cli` all pass; `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents`; `just test gemini-cli` and `just test copilot` 166 passed; locksmith-mcp --test integrations passed; `just quick` OK
+- Notes for next session: next is task 5 (windsurf, cline; windsurf still gated by hook_handler_ready) then 6 and 7. No live-CLI variant exists: the smoke test only prints "skip live" when the CLI is absent. 2.1 still open (doc-derived fixtures). d2-aws-sts and d3-db-relay remain parked on the t3 bindings page (#489).

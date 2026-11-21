@@ -19,11 +19,11 @@
 - [x] 3.4 Verify: `cargo nextest run -p smith-cli init doctor`.
 
 ## 4. Gemini CLI and Copilot integrations [sonnet]
-- [ ] 4.1 Generate `integrations/gemini-cli` files and add them to `integrations_match_generated`; hand-write its README (install, what is blocked, protection label).
-- [ ] 4.2 Same for `integrations/copilot` (VS Code agent mode and CLI).
-- [ ] 4.3 [haiku] Smoke test per integration: replay recorded hook fixtures and the `locksmith-mcp` stdio handshake (`initialize`, `tools/list`); run the live variant only if the agent CLI is on `PATH`, otherwise print `skip live` for that variant only.
-- [ ] 4.4 [haiku] Add `docs/testing.md` rows for `integrations/gemini-cli` and `integrations/copilot`.
-- [ ] 4.5 Verify: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` then `just test gemini-cli && just test copilot`.
+- [x] 4.1 Generate `integrations/gemini-cli` files and add them to `integrations_match_generated`; hand-write its README (install, what is blocked, protection label).
+- [x] 4.2 Same for `integrations/copilot` (VS Code agent mode and CLI).
+- [x] 4.3 [haiku] Smoke test per integration: replay recorded hook fixtures and the `locksmith-mcp` stdio handshake (`initialize`, `tools/list`); run the live variant only if the agent CLI is on `PATH`, otherwise print `skip live` for that variant only.
+- [x] 4.4 [haiku] Add `docs/testing.md` rows for `integrations/gemini-cli` and `integrations/copilot`.
+- [x] 4.5 Verify: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` then `just test gemini-cli && just test copilot`.
 
 ## 5. Windsurf and Cline integrations [sonnet]
 - [ ] 5.1 Generate `integrations/windsurf` files and extend the drift test; README with the protection label.

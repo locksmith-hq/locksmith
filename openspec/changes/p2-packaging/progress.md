@@ -65,3 +65,8 @@
 - Task: p2-packaging 5.1, 5.5 - done; auto-merge on #534 disabled (review failed only on unchecked tasks); evaluator PASS
 - Verified: scripts/make-manifest.test.sh, cargo test -p ls-update, just quick
 - Notes for next session: 5.2 (verify-release.sh), 5.3 (gen-formula.sh), 6.x next; 4.4/4.5 need kind (absent), 5.4 needs a lead PR, 7.1 is an owner gate. release.yml does not pass --sbom/--images yet (task 5.4). Keep auto-merge off until every task is ticked.
+
+## 2026-11-21 worker (wake-up: merge review finished on #534)
+- Task: p2-packaging 5.2, 5.3 - done (auto-merge on #534 had been enabled again; disabled, review had failed only on unchecked tasks and CODEOWNERS path crates/ls-update)
+- Verified: `just release-verify` (make-manifest, verify-release with throwaway minisign key and stub cosign incl. tampered asset/manifest/key/identity, gen-formula tests), test-recipes-check
+- Notes for next session: cosign is not in the VM, so the cosign check is tested with a stub; real identity check runs in release.yml (task 5.4, lead PR). Next: 6.1-6.4. PR touches /crates/ls-update/ (CODEOWNERS): the owner's approval is required to merge. Keep auto-merge off until every task is ticked.

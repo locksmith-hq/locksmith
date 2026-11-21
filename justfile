@@ -323,3 +323,9 @@ selfhost-smoke:
 # Helm chart (P2): values schema tests, helm lint, template + kubeconform, then a kind install smoke. Stages whose tools are missing are skipped and the run says INCOMPLETE, never PASS.
 helm-test:
     bash scripts/helm-test.sh
+
+# Release scripts (P2): manifest, verify-release (minisign, sha256, cosign identity, SBOM) and Homebrew formula tests with throwaway keys. Needs minisign and jq; says SKIP, never PASS, when they are missing.
+release-verify:
+    bash scripts/make-manifest.test.sh
+    bash scripts/verify-release.test.sh
+    bash scripts/gen-formula.test.sh

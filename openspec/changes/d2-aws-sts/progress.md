@@ -74,3 +74,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: CI fix (hygiene and web red on 377446cf: `just` recipe `aws-smoke` defined twice once main's P1 recipe (`aws-smoke`, real-AWS session smoke) merged) - done
 - Verified: `just --list` parses with both recipes; `just quick` -> see push
 - Notes for next session: D2's local moto smoke is now `just aws-vend-smoke` (P1 owns `just aws-smoke`). tasks.md 7.1/7.2 text still says `just aws-smoke` and cannot be edited; read it as `aws-vend-smoke`.
+
+## 2026-11-21 worker (alfie)
+- Task: none - resolved PR #480 conflicts (merged origin/main: D4 workload identities took migration 0013, so this change's migration is now `0014_grant_delegate.sql`; kept both justfile recipes and both e2e dev-dependency sets; Cargo.lock regenerated from main's).
+- Verified: `cargo check --workspace --tests`, `just quick`, `cargo test -p ls-control-plane --lib`.
+- Notes for next session: 19 tasks still unticked; take them in order. Also took no action on #489 (another worker holds t3-console-mvp).

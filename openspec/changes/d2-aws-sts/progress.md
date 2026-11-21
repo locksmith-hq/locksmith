@@ -89,3 +89,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - parked (merged origin/main clean, no migration clash; PR #480 checks were green on f40036d)
 - Verified: `just quick`, `cargo check -p ls-control-plane --tests` -> ok
 - Notes for next session: only 5.1/5.2 and 7.2 remain; 5.1 needs a live bindings page in apps/web, which does not exist (only the `mockup/` frame; t3-console-mvp #489 is review-failed). Do 5.x after t3 lands, 7.2 last.
+
+## 2026-11-21 worker
+- Task: 5.1 - blocked
+- Verified: merged origin/main (clean); no code change
+- Notes for next session: no live bindings page exists in apps/web (only `mockup/`) or apps/desktop, and no API exposes AWS bindings; opened a needs-rescue issue. 7.2 waits on 5.x.

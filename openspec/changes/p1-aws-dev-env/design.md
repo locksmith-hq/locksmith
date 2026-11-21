@@ -20,6 +20,7 @@
 | 6 | **Guardrails split by who may change them:** Budget and SCPs live in a separate `guardrails` root applied only by the owner from the management account. The CI role cannot touch them. | Putting them in `base` (CI could weaken its own limits). | A0-17, A0-18. |
 | 7 | **Policy check with `tofu validate` plus a small rule file run by an OSS policy engine** that rejects banned resource types in the plan JSON. | Hand-rolled grep (fragile). | A0-16 ban list. The engine is chosen at apply by comparing `conftest` (Apache-2.0) and `tflint` rules and recording the result. |
 | 8 | **AWS MCP server read-only** via a read-only IAM role assumed from the owner's machine, not from the cloud VM. Mutations go through the brief template and owner approval. | Giving Claude keys (A0-18 forbids). | A0-18. **[verify the current official AWS MCP server name and auth at apply]** |
+| 9 | **Offline provider install (lead rescue #479):** `scripts/tofu-setup.sh` installs pinned OpenTofu 1.10.7 from its GitHub release (SHA256SUMS checked) and puts `hashicorp/aws` 6.73.0 from releases.hashicorp.com (SHA256SUMS signed by HashiCorp key `C874 011F 0AB4 0511 0D02 1055 3436 5D94 72D7 468F`, verified) into a filesystem mirror; `just aws-validate` uses it via `TF_CLI_CONFIG_FILE`. Lock files stay uncommitted until `tofu providers lock` can reach the registry for all platforms. | Allowing registry.opentofu.org in the VM (owner setting, not needed); vendoring the 200 MB provider in git. | VM probe 2026-11-19: registry.opentofu.org 000, releases.hashicorp.com 200, GitHub release zips 302→200. The provider binary is MPL-2.0 and identical across registries. |
 
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
@@ -53,3 +54,6 @@ Built in-house: only the HCL, the `just aws-*` recipes and the smoke scripts. Se
 - Online (owner machine only): AWS MCP server read-only (CloudWatch logs, describe calls), `just aws-status`, `just aws-smoke`, `just aws-drift`.
 - Logs: CloudWatch groups with one-day retention; the control plane's OpenTelemetry traces go to the same collector as locally.
 - DB: connect through the session task or a temporary `psql` task; never open the cluster publicly.
+
+## Deviation recorded (worker, 2026-11-19): OIDC trust subject
+Decision 5 says "dispatched workflow ref". The apply role trusts `sub = repo:locksmith-hq/locksmith:environment:aws-base-apply` (exact, `StringEquals`, aud `sts.amazonaws.com`), because a job in an approval environment gets an environment-based `sub`. Branch limits therefore live in the GitHub environment (required reviewers, deployment branch main), which is owner-configured and not in git. Task 4.3's workflow must declare `environment: aws-base-apply` and provide the `aws` CLI.

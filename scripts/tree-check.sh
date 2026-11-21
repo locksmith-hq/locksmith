@@ -28,6 +28,16 @@ done < <(for w in .github/workflows/*.yml; do
     j && /^    timeout-minutes:/{t=1} END{if (job && !t) print f": "job}' "$w"
 done)
 
+# infra/tofu holds only the three root modules and the plan policy.
+if [ -d infra/tofu ]; then
+  for d in infra/tofu/*/; do
+    case "$(basename "$d")" in
+      guardrails|base|session|policy) ;;
+      *) echo "tree-check: unexpected infra/tofu directory (allowed: guardrails, base, session, policy): $d" >&2; fail=1 ;;
+    esac
+  done
+fi
+
 # docs/testing.md must have a row per component directory.
 bash scripts/test-recipes-check.sh || fail=1
 

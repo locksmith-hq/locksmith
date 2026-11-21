@@ -1,32 +1,29 @@
 name: owner-alert
 
-# Scheduled agents act as the owner's GitHub account, and GitHub never notifies you about your
-# own activity. When an issue gets the needs-owner label, github-actions[bot] @mentions the owner
-# so GitHub sends an email (and a GitHub mobile notification). Costs seconds of Actions time.
+# An agent's own GitHub App writes the @mention in the issue it opens, and GitHub notifies the owner.
+# Fallback only: a needs-owner issue authored by a human account (an agent that ran as the owner, and
+# GitHub never notifies you about your own activity) gets github-actions[bot] to edit the body to
+# start with the @mention, so there is still one message. A re-label (the owner must act again) removes and re-adds the mention to re-alert.
 on:
   issues:
     types: [labeled]
 
 permissions:
   issues: write
-  contents: read  # checkout of scripts/owner-alert-body.sh (private repo)
 
 jobs:
   mention:
-    if: github.event.label.name == 'needs-owner'
+    if: github.event.label.name == 'needs-owner' && github.event.issue.user.type != 'Bot'
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: scripts/owner-alert-body.sh
-          sparse-checkout-cone-mode: false
       - env:
           GH_TOKEN: ${{ github.token }}
           OWNER: ${{ vars.OWNER_LOGIN || github.repository_owner }}
           NUMBER: ${{ github.event.issue.number }}
-          TITLE: ${{ github.event.issue.title }}
           BODY: ${{ github.event.issue.body }}
         run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${NUMBER}/comments" \
-            -f body="$(scripts/owner-alert-body.sh)"
+          url="repos/${GITHUB_REPOSITORY}/issues/${NUMBER}"
+          plain="${BODY#"@${OWNER} "}"
+          if [ "$plain" != "$BODY" ]; then gh api -X PATCH "$url" -f body="$plain"; fi
+          gh api -X PATCH "$url" -f body="@${OWNER} ${plain}"

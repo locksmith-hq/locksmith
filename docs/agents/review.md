@@ -30,7 +30,7 @@
    - Untick anything that fails.
    - Append a `review` progress entry.
 4. **Plan ahead.** Do this only if `bash scripts/change-status.sh --ready` lists fewer than three changes.
-   - Take the first id from `bash scripts/change-status.sh --plannable`, and lock its id (`run-lock.sh acquire review-<session> <id>`; if busy, take the next; release at end).
+   - Lock one: `run-lock.sh claim review-<session> $(bash scripts/change-status.sh --plannable)` (release at end).
    - Branch `claude/planning-<id>` from origin/main; set `x-depends_on: [..]` in `.openspec.yaml`.
    - Write the next change using the openspec-propose workflow, including an empty `progress.md`.
    - Research first (haiku searches): maintained, free, licence-compatible OSS and MCP servers.

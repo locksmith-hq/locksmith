@@ -11,6 +11,7 @@ use ls_control_plane::readiness::Readiness;
 
 use crate::git;
 use crate::grants;
+use crate::mcp_endpoint::{self, McpEndpoint};
 use crate::relay::{self, Relay};
 
 /// Shared, cheaply cloneable state.
@@ -18,6 +19,7 @@ use crate::relay::{self, Relay};
 pub struct AppState {
     readiness: Arc<dyn Readiness>,
     relay: Option<Arc<Relay>>,
+    mcp: Option<Arc<McpEndpoint>>,
 }
 
 impl AppState {
@@ -25,6 +27,7 @@ impl AppState {
         Self {
             readiness,
             relay: None,
+            mcp: None,
         }
     }
 
@@ -32,6 +35,16 @@ impl AppState {
     pub fn with_relay(mut self, relay: Arc<Relay>) -> Self {
         self.relay = Some(relay);
         self
+    }
+
+    /// Serve `/mcp` (without it the route answers `401`, fail closed).
+    pub fn with_mcp(mut self, mcp: McpEndpoint) -> Self {
+        self.mcp = Some(Arc::new(mcp));
+        self
+    }
+
+    pub fn mcp(&self) -> Option<Arc<McpEndpoint>> {
+        self.mcp.clone()
     }
 
     pub fn relay(&self) -> Option<Arc<Relay>> {
@@ -45,6 +58,7 @@ pub fn build(state: AppState) -> Router {
         .relay
         .as_ref()
         .map_or(64 * 1024, |r| r.options().max_request_body * 2 + 64 * 1024);
+    let mcp = mcp_endpoint::router(&state);
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
@@ -60,6 +74,7 @@ pub fn build(state: AppState) -> Router {
                 .post(git::route)
                 .layer(DefaultBodyLimit::disable()),
         )
+        .merge(mcp)
         .with_state(state)
 }
 

@@ -5,6 +5,7 @@
 #   scripts/request-work.sh [role] [reason]   (role defaults to AGENT_PERSONA's role in routing.json)
 set -uo pipefail
 repo=locksmith-hq/locksmith
+AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
 role=${1:-$(jq -r --arg l "locksmith-${AGENT_PERSONA:-}[bot]" '[.roles|to_entries[]|select(.value.logins|index($l))|.key][0] // empty' \
   "$(dirname "$0")/../docs/agents/routing.json")}
 [ -n "$role" ] || { echo "usage: request-work.sh <role> [reason] (or set AGENT_PERSONA)"; exit 2; }

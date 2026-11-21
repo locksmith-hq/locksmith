@@ -161,6 +161,36 @@ async fn main() -> ExitCode {
             config::ENV_OIDC_ISSUER
         ),
     }
+    if let (Some(human), Some(resource)) = (&config.human_auth, &config.mcp_resource_url) {
+        match ls_control_plane::mcp_endpoint::McpEndpoint::new(human, resource) {
+            Ok(endpoint) => {
+                tracing::info!("hub MCP endpoint configured at /mcp");
+                state = state.with_mcp(endpoint);
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "invalid hub MCP configuration ({})", config::ENV_MCP_RESOURCE_URL);
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    match (&config.issuer_admin, &config.human_auth) {
+        (Some(admin), Some(human)) => {
+            match ls_control_plane::issuer_admin::IssuerAdmin::new(admin, &human.issuer) {
+                Ok(client) => {
+                    tracing::info!("issuer consent revoke configured (admin client)");
+                    state = state.with_issuer_admin(client);
+                }
+                Err(e) => {
+                    tracing::error!(reason = e.reason(), "invalid issuer admin configuration");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        _ => tracing::info!(
+            "{} is not set: revoking an MCP client does not revoke consent at the issuer",
+            config::ENV_ISSUER_ADMIN_URL
+        ),
+    }
     let router = app::build(state);
 
     let listener = match tokio::net::TcpListener::bind(config.bind).await {

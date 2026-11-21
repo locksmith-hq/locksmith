@@ -222,12 +222,16 @@ api:
     set -euo pipefail
     root={{quote(justfile_directory())}}
     set -a; . "$root/infra/compose/.env.example"; set +a
-    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 LOCKSMITH_MCP_RESOURCE_URL=http://127.0.0.1:8080/mcp OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
 
 # T1 sign-up, verify, sign-in (auth code + PKCE), reset and API calls against Keycloak (needs `just up` and `just api`).
 auth-e2e:
     python3 -I scripts/auth-e2e.py
+
+# M1 hub MCP sign-in: a scripted MCP client signs in on Keycloak (consent, PKCE, resource) and lists tools (needs `just up` and `just api`).
+mcp-e2e:
+    python3 -I scripts/mcp-e2e.py
 
 # Run locksmith-gateway against `just up` and `just api`. Needs LOCKSMITH_GATEWAY_BINDINGS (a TOML
 # file naming the org and bindings; see tests/e2e/tests/relay.rs for the shape). The gateway connects
@@ -333,3 +337,33 @@ release-verify:
 # Installer (P2): scripts/install.sh against a local release directory with a throwaway minisign key (good install, bad signature, bad hash, missing verifier, unsupported platform, no credential reads). Needs minisign, jq and curl; says SKIP, never PASS, when missing.
 installer-test:
     bash scripts/install.test.sh
+
+# OpenTofu offline checks: fmt, validate (no backend) for each root, plan-policy tests. scripts/tofu-setup.sh installs tofu and a verified hashicorp/aws mirror.
+aws-validate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
+    tofu fmt -check -recursive infra/tofu
+    for m in guardrails base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
+    python3 -I infra/tofu/policy/test_check_plan.py
+    python3 -I infra/tofu/policy/test_base_oidc.py
+
+# Opt-in (not in `just ci`): apply the base S3 and KMS pieces to a local moto server and assert Object Lock and the KMS alias. Installs moto into a cached venv.
+aws-moto-smoke:
+    bash infra/tofu/base/tests/moto-smoke.sh
+
+# AWS dev session (owner machine, needs AWS credentials; refuses to run without them). Set LOCKSMITH_ALLOWED_CIDR and LOCKSMITH_IMAGE_TAG for aws-up.
+aws-up:
+    bash scripts/aws-session.sh up
+
+aws-down:
+    bash scripts/aws-session.sh down
+
+aws-status:
+    bash scripts/aws-session.sh status
+
+aws-drift:
+    bash scripts/aws-session.sh drift
+
+aws-smoke:
+    bash scripts/aws-session.sh smoke

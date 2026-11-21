@@ -6,6 +6,7 @@
 #   scripts/run-lock.sh acquire <holder> <change-id>   exit 0 = you hold it; exit 1 = busy
 #   scripts/run-lock.sh release <holder> <change-id>
 #   scripts/run-lock.sh holder  <any> <change-id>      prints the current holder, if any
+#   scripts/run-lock.sh claim   <holder> <id>...       acquires the first free id, prints it, stops; exit 1 = none free
 set -uo pipefail
 repo=locksmith-hq/locksmith
 ttl="${RUN_LOCK_TTL:-5400}"  # 90 min: a worker run (about 40 min of tasks plus just ci and evaluation) must not outlive its lock
@@ -14,8 +15,14 @@ cmd="${1:-}"; me="${2:-}"; change="${3:-}"
 # second session "already held" and it worked on another session's change). Add the real session id.
 sid=$(env | grep -E '^CLAUDE_CODE_[A-Z_]*SESSION[A-Z_]*_ID=' | head -1 | cut -d= -f2- || true)
 [ -n "$me" ] && [ -n "$sid" ] && [ "$cmd" != holder ] && me="${me%%@*}@$sid"
-[ -n "$cmd" ] && [ -n "$me" ] && [ -n "$change" ] || { echo "usage: run-lock.sh acquire|release|holder <holder> <change-id>" >&2; exit 2; }
+[ -n "$cmd" ] && [ -n "$me" ] && [ -n "$change" ] || { echo "usage: run-lock.sh acquire|release|holder|claim <holder> <change-id>..." >&2; exit 2; }
 
+# Hand-written claim loops took every free lock (11 runs, 2026-11-19..21), so other workers skipped ready changes.
+if [ "$cmd" = claim ]; then
+  shift 2
+  for id in "$@"; do bash "$0" acquire "$me" "$id" >/dev/null && { echo "$id"; exit 0; }; done
+  exit 1
+fi
 if [ "$cmd" = acquire ]; then issue=$(bash "$(dirname "$0")/change-issue.sh" "$change") || exit 1
 else issue=$(bash "$(dirname "$0")/change-issue.sh" "$change" --find) || exit 0; fi
 
@@ -46,5 +53,5 @@ case "$cmd" in
     if [ "${cur:-}" = "$me" ]; then gh api "repos/$repo/issues/$issue/comments" -f body="UNLOCK $me" -q .id >/dev/null; echo "run-lock: released"; fi
     ;;
   holder) read -r cur _ < <(holder); [ -n "${cur:-}" ] && echo "$cur" ;;
-  *) echo "usage: run-lock.sh acquire|release|holder <holder> <change-id>" >&2; exit 2 ;;
+  *) echo "usage: run-lock.sh acquire|release|holder|claim <holder> <change-id>..." >&2; exit 2 ;;
 esac

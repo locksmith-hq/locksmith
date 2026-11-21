@@ -826,6 +826,19 @@ mod tests {
             merge_mcp(Agent::ClaudeCode, None).unwrap(),
         );
         check("cursor/mcp.json", merge_mcp(Agent::Cursor, None).unwrap());
+        check(
+            "gemini-cli/settings.json",
+            merge_mcp(
+                Agent::GeminiCli,
+                Some(&merge_hooks(Agent::GeminiCli, None).unwrap()),
+            )
+            .unwrap(),
+        );
+        check(
+            "copilot/hooks/locksmith.json",
+            merge_hooks(Agent::Copilot, None).unwrap(),
+        );
+        check("copilot/mcp.json", merge_mcp(Agent::Copilot, None).unwrap());
         let hub = "https://hub.example/mcp";
         check(
             "claude-code/.mcp.hub.json",

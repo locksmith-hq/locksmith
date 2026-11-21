@@ -36,4 +36,4 @@
 
 ## 7. Local verification [sonnet]
 - [x] 7.1 `just workload-smoke` recipe and `tests/e2e/tests/workload.rs`: start the stack, serve a stub GitHub-shaped issuer, create an agent, grant and a workload policy through the API, run `smith login --workload github` against the stub runner endpoint, relay a request to the canary upstream, assert the upstream saw the secret and the workload held no Locksmith secret; then assert a non-matching `ref` and a revoked grant are refused.
-- [ ] 7.2 `just up`, `just workload-smoke`, `just apps-build`, then `just ci`.
+- [x] 7.2 `just up`, `just workload-smoke`, `just apps-build`, then `just ci`.

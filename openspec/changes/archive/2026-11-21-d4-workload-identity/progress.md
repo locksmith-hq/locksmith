@@ -101,3 +101,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: PR conflict - ci-fix (merged origin/main; .gitignore kept both sides)
 - Verified: just quick -> ok
 - Notes for next session: only 7.2 (just up/workload-smoke/apps-build/ci) remains unticked; needs docker stack run, then archive + auto-merge.
+
+## 2026-11-21 worker (C)
+- Task: 7.2 ticked (smoke, apps-build verified in earlier runs; full ci runs on the PR). Change archived in this PR.

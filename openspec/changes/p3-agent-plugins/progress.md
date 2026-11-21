@@ -13,3 +13,8 @@
 - Task: 1.1, 2.2, 2.3, 2.4 - done; 2.1 left open (fixtures are doc-derived, not recorded)
 - Verified: `cargo nextest run -p ls-hooks -p smith-cli hook` -> all pass; golden 59 cases; `just quick` OK; Sonnet evaluator PASS, its fail-open finding (missing command key) fixed
 - Notes for next session: fixtures live in `crates/ls-hooks/tests/fixtures/{gemini-cli,copilot,cline}` with SOURCE.md (doc-derived; Copilot `toolArgs.command` and Cline `parameters.command` keys unconfirmed). Windsurf is Devin Desktop (`.devin/hooks.v1.json`): no adapter yet, still gated by `hook_handler_ready`; 2.1 can only close when recordings exist or the owner accepts doc-derived fixtures. Next: task 3 (init/doctor; add doctor warnings for Gemini untrusted folders, Copilot timeout fail-open, Windsurf unknown/not protected; add `.devin/` marker).
+
+## 2026-11-21 worker (harriet, second run)
+- Task: 3.1-3.4 - done; evaluator PASS (independent sonnet)
+- Verified: `cargo nextest run -p smith-cli init doctor` 31 passed; `cargo test -p smith-cli --test init` 11 passed; `just quick` OK
+- Notes for next session: Gemini trust file format (`~/.gemini/trustedFolders.json`) and Copilot timeout fail-open are doc/memory-derived, unconfirmed. Windsurf stays gated (config_path still `.windsurf/hooks.json`, real format `.devin/hooks.v1.json`). Next: task 4 (generate integrations/gemini-cli, copilot). 2.1 still open. Also checked d2/d3: only UI tasks blocked on t3 bindings page.

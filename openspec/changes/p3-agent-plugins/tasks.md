@@ -13,10 +13,10 @@
 - [x] 2.4 Verify: `cargo nextest run -p smith-cli hook`.
 
 ## 3. Init and doctor [sonnet]
-- [ ] 3.1 `smith init`: detect, merge hooks and MCP for the new agents; print the manual step where a config lives outside the repo.
-- [ ] 3.2 `smith doctor`: per-agent check for the new agents including the protection label and a clear line for hookless agents.
-- [ ] 3.3 Tests: second `smith init` changes nothing, invalid config untouched, doctor output for hooked and hookless agents.
-- [ ] 3.4 Verify: `cargo nextest run -p smith-cli init doctor`.
+- [x] 3.1 `smith init`: detect, merge hooks and MCP for the new agents; print the manual step where a config lives outside the repo.
+- [x] 3.2 `smith doctor`: per-agent check for the new agents including the protection label and a clear line for hookless agents.
+- [x] 3.3 Tests: second `smith init` changes nothing, invalid config untouched, doctor output for hooked and hookless agents.
+- [x] 3.4 Verify: `cargo nextest run -p smith-cli init doctor`.
 
 ## 4. Gemini CLI and Copilot integrations [sonnet]
 - [ ] 4.1 Generate `integrations/gemini-cli` files and add them to `integrations_match_generated`; hand-write its README (install, what is blocked, protection label).

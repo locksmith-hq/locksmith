@@ -110,3 +110,8 @@
 - Task: 6.1, 6.5, 6.6 - done (ticked). The e2e now asserts the Audit table shows this run's `grant.created` and `grant.revoked` rows; `just web-e2e` starts `just up` and the API itself when `/healthz` is down and passes extra args through; `apps/web/e2e/screenshots.spec.ts` locks Linux baselines for Overview, Projects and Activity (data regions hidden by `shot.css` so runs are deterministic; update with `just web-e2e --update-snapshots`).
 - Verified: `just up` + `just api` + `just web-e2e` (2 passed, three consecutive runs stable, leak check included).
 - Notes for next session: remaining 7.1 (`just up`, `just web-e2e`, `just apps-build`, then CI) and 7.2 (manual `ci-platforms` run if last of its phase). Baselines are `-linux` only; macOS CI does not run web-e2e.
+
+## 2026-11-21 worker (harriet, run 2)
+- Task: t3 PR #489 conflicts with main - done (merged origin/main; kept both sides: Projects/Secrets tabs plus workload identities; main's inline web Console dropped, workload identities ported to `apps/web/src/pages/WorkloadIdentities.tsx` and routed in Shell).
+- Verified: npm test control-plane-client (9), apps/web (51), apps/desktop (37); web build OK; `just quick` OK.
+- Notes for next session: remaining 7.1 (`just up`, `just web-e2e`, `just apps-build`) and 7.2. Web-e2e snapshots were not rerun after this merge; rerun before ticking 7.1.

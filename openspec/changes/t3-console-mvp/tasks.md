@@ -1,10 +1,10 @@
 # Tasks: T3 web console MVP
 
 ## 1. Contract and foundations [sonnet]
-- [ ] 1.1 Add `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
-- [ ] 1.2 Extend `createClient` in `packages/control-plane-client` with orgs, projects, environments, secrets and versions methods (web and desktop both get them), with unit tests in that package; `apps/web` maps `401` to sign-out in its wrapper; Vitest with a mocked fetch.
-- [ ] 1.3 Fixture data (MSW or in-memory handlers) for every route the console calls, in `apps/web/src/api/fixtures.ts`.
-- [ ] 1.4 Verify: `npm test --workspace apps/web`.
+- [x] 1.1 Add `@tanstack/react-query` and `react-router` (and `msw` if 1.3 uses it), pinned; re-check licence and release date and record them in design.md "OSS used"; run `npm i` in `apps/web`.
+- [x] 1.2 Extend `createClient` in `packages/control-plane-client` with orgs, projects, environments, secrets and versions methods (web and desktop both get them), with unit tests in that package; `apps/web` maps `401` to sign-out in its wrapper; Vitest with a mocked fetch.
+- [x] 1.3 Fixture data (MSW or in-memory handlers) for every route the console calls, in `apps/web/src/api/fixtures.ts`.
+- [x] 1.4 Verify: `npm test --workspace apps/web`.
 
 ## 2. Tokens and shell [sonnet]
 - [ ] 2.1 Move design tokens and kit components from `mockup/kit.tsx` and the CSS into `packages/ui`; the mockup imports them; no visual change.
@@ -34,7 +34,7 @@
 - [ ] 6.1 Playwright setup, `just web-e2e` recipe (starts `just up` with the auth profile): sign in as a test user, create a project and environment, register an agent, create and revoke a grant, see activity.
 - [ ] 6.2 Add a leak check: the e2e records all requests and fails on any value or material route.
 - [ ] 6.3 Verify: `just up && just web-e2e`.
-- [ ] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
+- [x] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
 - [ ] 6.4.1 Shell in the mockup frame (owner option B, #510): product-grouped sidebar (Home; Secret Management: Projects, Environments, Secrets; Agent Gateway: Agents, Grants; Activity), org switcher top right, user card with sign-out at the bottom; Environments opens the selected project's environments; Shell and route tests updated.
 - [ ] 6.4.2 Restyle Overview, Projects, Environments, Secrets, Agents, Grants and Activity with the `packages/ui` kit components and tokens (cards, tables, buttons, dialogs, `QueryState`); no new styling source; existing tests stay green.
 - [ ] 6.4.3 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web && just web-e2e` (leak check included); add live-vs-mockup screenshots of Overview and Projects to progress.md.

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { StatusView } from "@locksmith/api-types";
 import * as api from "./api";
-import { Icon, Logo, Wordmark, type IconName } from "./brand";
-import { Agents, Audit, Keys, McpClients, McpTools, OrgAudit, Overview, Relays, Sessions, Tokens, clock, errCode, msg, plural, type ScreenProps } from "./screens";
+import { Icon, Logo, Wordmark, type IconName } from "@locksmith/ui";
+import { Agents, Audit, Keys, McpClients, McpTools, OrgAudit, Overview, Projects, Relays, Secrets, Sessions, Tokens, clock, errCode, msg, plural, type ScreenProps } from "./screens";
 
-const TABS = { Overview, Sessions, Keys, Tokens, Agents, Relays, Audit, "Org audit": OrgAudit, "MCP tools": McpTools, "MCP clients": McpClients } as const;
+const TABS = { Overview, Sessions, Keys, Tokens, Agents, Projects, Secrets, Relays, Audit, "Org audit": OrgAudit, "MCP tools": McpTools, "MCP clients": McpClients } as const;
 export type Tab = keyof typeof TABS;
-const TAB_ICON: Record<Tab, IconName> = { Overview: "grid", Sessions: "sessions", Keys: "key", Tokens: "token", Agents: "sessions", Relays: "relay", Audit: "doc", "Org audit": "doc", "MCP tools": "key", "MCP clients": "sessions" };
+const TAB_ICON: Record<Tab, IconName> = { Overview: "grid", Sessions: "sessions", Keys: "key", Tokens: "token", Agents: "sessions", Projects: "grid", Secrets: "key", Relays: "relay", Audit: "doc", "Org audit": "doc", "MCP tools": "key", "MCP clients": "sessions" };
 const POLL_MS = 5000;
 
 type Appearance = "system" | "light" | "dark";

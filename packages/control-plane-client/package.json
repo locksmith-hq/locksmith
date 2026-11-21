@@ -10,11 +10,13 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "gen:types": "openapi-typescript ../../services/control-plane/openapi.json -o src/schema.d.ts",
-    "test": "vitest run"
+    "lint": "tsc --noEmit -p .",
+    "test": "vitest run",
+    "gen:types": "openapi-typescript ../../services/control-plane/openapi.json -o src/schema.d.ts"
   },
   "devDependencies": {
     "openapi-typescript": "^7.13.0",
+    "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }
 }

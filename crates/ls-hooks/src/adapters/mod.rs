@@ -107,7 +107,7 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
     let Ok(json) = serde_json::from_str::<Value>(input) else {
         return Some(bad_in());
     };
-    if !json.is_object() || (agent == "copilot" && copilot::unreadable(event, &json)) {
+    if !json.is_object() || unreadable(agent, event, &json) {
         return Some(bad_in());
     }
     Some(match parse(event, &json) {
@@ -125,4 +125,14 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
             }
         }
     })
+}
+
+/// Payloads of the newer adapters that look like a tool call but cannot be read: deny them.
+fn unreadable(agent: &str, event: &str, v: &Value) -> bool {
+    match agent {
+        "gemini-cli" => gemini_cli::unreadable(event, v),
+        "copilot" => copilot::unreadable(event, v),
+        "cline" => cline::unreadable(event, v),
+        _ => false,
+    }
 }

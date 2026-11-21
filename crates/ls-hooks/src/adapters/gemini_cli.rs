@@ -6,6 +6,16 @@ use crate::{Decision, Event};
 use serde_json::Value;
 use std::path::PathBuf;
 
+/// A tool event whose shell command or tool input cannot be read must deny, not pass as unknown.
+pub fn unreadable(event: &str, v: &Value) -> bool {
+    event == "BeforeTool"
+        && (v.get("tool_input").is_none()
+            || (field(v, "tool_name") == Some("run_shell_command")
+                && v.get("tool_input")
+                    .and_then(|t| field(t, "command"))
+                    .is_none()))
+}
+
 pub fn parse(event: &str, v: &Value) -> Option<Event> {
     let cwd = cwd_of(v);
     match event {

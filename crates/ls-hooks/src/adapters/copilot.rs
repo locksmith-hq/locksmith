@@ -13,9 +13,16 @@ pub fn unreadable(event: &str, v: &Value) -> bool {
         && v.get("toolName").is_some()
         && match v.get("toolArgs") {
             None | Some(Value::Null) => true,
-            Some(Value::String(s)) => serde_json::from_str::<Value>(s).is_err(),
-            Some(_) => false,
+            Some(Value::String(s)) => match serde_json::from_str::<Value>(s) {
+                Ok(a) => shell_without_command(v, &a),
+                Err(_) => true,
+            },
+            Some(a) => shell_without_command(v, a),
         }
+}
+
+fn shell_without_command(v: &Value, args: &Value) -> bool {
+    matches!(field(v, "toolName"), Some("bash" | "powershell")) && field(args, "command").is_none()
 }
 
 pub fn parse(event: &str, v: &Value) -> Option<Event> {

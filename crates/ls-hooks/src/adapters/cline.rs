@@ -17,6 +17,25 @@ fn cwd(v: &Value) -> PathBuf {
         .map_or(c, Into::into)
 }
 
+/// PreToolUse without a readable tool call, or a shell tool without its command, must cancel.
+pub fn unreadable(event: &str, v: &Value) -> bool {
+    if event != "PreToolUse" {
+        return false;
+    }
+    let (name, args) = match (v.get("preToolUse"), v.get("tool_call")) {
+        (Some(p), _) => (field(p, "toolName"), p.get("parameters")),
+        (None, Some(c)) => (field(c, "name"), c.get("input")),
+        (None, None) => return true,
+    };
+    let (Some(name), Some(args)) = (name, args) else {
+        return true;
+    };
+    matches!(name, "execute_command") && field(args, "command").is_none()
+        || name == "run_commands"
+            && args.get("commands").is_none()
+            && field(args, "command").is_none()
+}
+
 pub fn parse(event: &str, v: &Value) -> Option<Event> {
     if event != "PreToolUse" {
         return None;

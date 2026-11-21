@@ -70,5 +70,5 @@ fn golden() {
         }
     }
     let _ = std::fs::remove_dir_all(&cwd);
-    assert!(n >= 55, "only {n} golden cases ran");
+    assert!(n >= 59, "only {n} golden cases ran");
 }

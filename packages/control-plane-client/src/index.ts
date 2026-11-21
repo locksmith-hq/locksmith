@@ -108,6 +108,7 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
         method: r.method,
         headers: Object.fromEntries(r.headers),
         body,
+        signal: r.signal,
         cache: "no-store",
       });
     },

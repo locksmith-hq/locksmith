@@ -15,7 +15,7 @@ The TypeScript SDK `@locksmith/sdk` SHALL derive every request and response type
 
 #### Scenario: Every operation is callable
 - **WHEN** the SDK test enumerates the spec's `operationId`s
-- **THEN** each one has a typed call path through the SDK client
+- **THEN** each public (non-`/internal/`) one has a typed call path through the SDK client
 
 ### Requirement: SDK auth and errors
 The SDK SHALL send the caller's bearer token on every request, SHALL surface non-2xx responses as a typed error carrying the HTTP status and the RFC 9457 problem fields, and SHALL never log, cache or persist a response body.
@@ -36,7 +36,7 @@ The SDK SHALL NOT expose any call to a secret value or key-material route.
 - **THEN** no exported method targets a path matching the value or key-material route denylist that `packages/sdk` defines from the OpenAPI spec and exports as `VALUE_ROUTE_DENYLIST` (the console leak check, `t3-console-mvp` task 6.2, does not exist yet and can reuse it)
 
 ### Requirement: Single client package
-`packages/control-plane-client` SHALL use the SDK for its types and requests and SHALL contain no hand-written `fetch` call.
+`packages/control-plane-client` SHALL use the SDK for its types and requests and SHALL contain no hand-written `fetch` call other than the transport adapter that hands the SDK's request to `globalThis.fetch`.
 
 #### Scenario: Apps keep working
 - **WHEN** `npm test --workspace apps/web`, `npm test --workspace apps/desktop` and `just apps-build` run after the switch

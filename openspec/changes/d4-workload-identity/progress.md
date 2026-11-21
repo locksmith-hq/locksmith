@@ -87,3 +87,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Tasks: 6.1-6.3 done (Workload identities page in web and desktop, shared-client methods and request builder, no secret field). Sonnet implementer, Sonnet evaluator PASS. Verified: web vitest 20 passed, desktop 26 passed, tsc clean, just quick ok, `just apps-build` ok.
 - Remaining: 4.3 (needs `just up` for `just leak-scan`) and 7.x (workload-smoke e2e); auto-merge not enabled yet.
 - Evaluator notes: Kubernetes create test keeps form values from the first create (cosmetic); rendered-text secret check is narrow, the request-body check is the strong one.
+
+## 2026-11-21 worker (C)
+- Task: d4 - ci-fix (PR #530 had conflicts with main)
+- Verified: merged origin/main; renumbered migration to 0013 (main took 0012 mcp); tenancy counts updated (13 migrations, 17 policies); `just quick` ok; `cargo test -p ls-control-plane --no-fail-fast` all green except log-capture tests (agents enrollment, human_auth span, workload_exchange canary) that flake under parallel runs; agents one also fails on main.
+- Notes for next session: remaining 4.3, 7.1, 7.2 (need `just up`); auto-merge not enabled yet.

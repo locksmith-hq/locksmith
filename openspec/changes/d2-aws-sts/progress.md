@@ -94,3 +94,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.1 - blocked
 - Verified: merged origin/main (clean); no code change
 - Notes for next session: no live bindings page exists in apps/web (only `mockup/`) or apps/desktop, and no API exposes AWS bindings; opened a needs-rescue issue. 7.2 waits on 5.x.
+
+## 2026-11-21 rescue (lead, #585)
+- Task: 5.1 - decided, not built (decision D2-2 in `openspec/decisions.md`, PR from `claude/lead-2026-11-21-d2-bindings`)
+- Cause: 5.1 needs T3's routed shell (#489, not on main) and a binding read API that does not exist (bindings live only in the gateway's bindings file). D2-1 already gives the page to d2/d3, not T3, so option (b) "move to t3" was declined.
+- Fix: 5.x stays in d2 and waits for T3's shell; it no longer blocks the rest. Do 7.2 now (read `just aws-smoke` as `just aws-vend-smoke`; `just ci` means the PR's required checks), then finish PR #480 with 5.x still open. When 5.1 is taken, first add a non-secret binding list contract with fixtures to `packages/api-types` for every binding kind (shared with d3 6.1), then the page.
+- Verified: decision only; `just tree-check task-guard` ok on the lead branch.

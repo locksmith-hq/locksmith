@@ -2803,10 +2803,16 @@ dependencies = [
 name = "ls-e2e"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "base64 0.22.1",
+ "jsonwebtoken",
+ "p256",
  "reqwest",
+ "rustls",
+ "rustls-pki-types",
  "serde_json",
  "tokio",
  "tokio-postgres",
+ "tokio-rustls",
 ]
 
 [[package]]

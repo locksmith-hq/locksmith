@@ -148,9 +148,93 @@
         "email",
         "roles"
       ]
+    },
+    {
+      "clientId": "locksmith-control-plane",
+      "name": "Locksmith control plane (issuer admin: revokes MCP client consent; service account, manage-users only)",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "locksmith-control-plane-dev-only",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "defaultClientScopes": [
+        "basic"
+      ]
+    },
+    {
+      "clientId": "locksmith-mcp",
+      "name": "Locksmith Hub MCP (pre-registered public client, loopback redirect, consent required)",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "locksmith-mcp-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://127.0.0.1:8080/mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+      "defaultClientScopes": [
+        "basic",
+        "web-origins",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "consentRequired": true
     }
   ],
+  "clientScopeMappings": {
+    "realm-management": [
+      {
+        "client": "locksmith-control-plane",
+        "roles": [
+          "manage-users"
+        ]
+      }
+    ]
+  },
   "users": [
+    {
+      "username": "service-account-locksmith-control-plane",
+      "enabled": true,
+      "serviceAccountClientId": "locksmith-control-plane",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users"
+        ]
+      }
+    },
     {
       "username": "alice@locksmith.test",
       "email": "alice@locksmith.test",

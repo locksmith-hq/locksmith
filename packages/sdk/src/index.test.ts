@@ -68,7 +68,7 @@ describe("generated schema", () => {
     let tool = root;
     try { readFileSync(bin); tool = bin; } catch { /* hoisted to the root */ }
     execFileSync(tool, [spec, "-o", out], { stdio: "ignore" });
-    expect(readFileSync(out, "utf8")).toBe(readFileSync(new URL("./schema.d.ts", import.meta.url), "utf8"));
+    expect(readFileSync(out, "utf8"), "schema.d.ts is stale: run `just sdk-gen`").toBe(readFileSync(new URL("./schema.d.ts", import.meta.url), "utf8"));
   });
 
   it("types every operationId in the spec", () => {

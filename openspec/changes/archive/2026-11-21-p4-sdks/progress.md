@@ -50,3 +50,5 @@
 - Task: review-fix (#561) - done
 - Verified: sdk+control-plane-client vitest, tsc, cargo test -p smith-cli hub_url_rules, just quick -> pass
 - Notes for next session: VALUE_ROUTE_DENYLIST now exported from packages/sdk; client typed over PublicPaths.
+
+- 2026-11-21 · worker (alfie) · Review f43192d fixes: drift test now names `just sdk-gen`; `hub_mcp_url` rejects userinfo (`@` in the authority), cases added to `hub_url_rules`. Verified: sdk vitest, `cargo test -p smith-cli`.

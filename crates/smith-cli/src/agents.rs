@@ -261,7 +261,12 @@ pub fn hub_mcp_url(hub: &str) -> Result<String, String> {
             })
         })
         .ok_or("--hub must be an https:// URL (http:// only for localhost)")?;
-    if rest.is_empty() || rest.contains(['?', '#']) || rest.chars().any(char::is_whitespace) {
+    let authority = rest.split('/').next().unwrap_or("");
+    if rest.is_empty()
+        || authority.contains('@')
+        || rest.contains(['?', '#'])
+        || rest.chars().any(char::is_whitespace)
+    {
         return Err("--hub must be a plain base URL like https://hub.example".into());
     }
     Ok(format!("{base}/mcp"))
@@ -395,6 +400,8 @@ mod tests {
             "hub.example",
             "https://",
             "https://h/x?t=1",
+            "https://user:token@hub.example",
+            "https://user@hub.example/x",
             "ftp://h",
         ] {
             assert!(hub_mcp_url(bad).is_err(), "{bad}");

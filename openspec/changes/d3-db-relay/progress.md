@@ -66,3 +66,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none (groups 1-5 already ticked; merged origin/main into the branch, no conflicts)
 - Verified: nothing new run; no code changed
 - Notes for next session: 6.1 is blocked because no bindings page exists yet in `apps/web` or `apps/desktop` (t3 console pages); 7.1/7.2 need `just up` plus psql. Take 7.1 first (it does not need the UI), then 6.x once t3 lands.
+
+## 2026-11-21 worker (alfie, second entry)
+- Task: 7.1 - done (`just db-smoke` and `tests/e2e/tests/db_relay.rs`); evaluator PASS (independent sonnet review)
+- Verified: `just db-smoke` 1 passed against compose Postgres (twice); `just quick` exit 0
+- Notes for next session: 6.1/6.2 still need the t3 bindings page; 7.2 needs `just apps-build` after 6.x, then CI results. `just leak-scan` not run.

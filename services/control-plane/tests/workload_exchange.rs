@@ -449,6 +449,15 @@ async fn workload_exchange_mints_a_gateway_verifiable_agent_token() {
     assert_eq!(events[0].1, "ok");
     assert_eq!(events[0].2, format!("agent:{}", f.agent));
     assert!(events[0].3.contains(&f.agent.to_string()));
+    // The claims the policy names are on the event; the unnamed `actor` claim is not.
+    for e in &events {
+        let attrs: Value = serde_json::from_str(&e.3).unwrap();
+        assert_eq!(
+            attrs["claims"],
+            json!({"text": "repository=acme/api ref=refs/heads/main"}),
+            "{attrs}"
+        );
+    }
 
     // The external token is in no log line and no stored row; the claims logged are the ones
     // the policy names.
@@ -562,6 +571,13 @@ async fn workload_exchange_every_failure_is_the_same_401() {
         assert!(e.3.contains("reason"));
     }
     assert!(denied.iter().any(|e| e.3.contains("claims")));
+    // Only a refusal after the token verified carries claim values (`claims` and `replay`);
+    // refusals before verification record none.
+    for e in &denied {
+        let attrs: Value = serde_json::from_str(&e.3).unwrap();
+        let after_verify = matches!(attrs["reason"]["code"].as_str(), Some("claims" | "replay"));
+        assert_eq!(attrs.get("claims").is_some(), after_verify, "{attrs}");
+    }
 
     // No external token text anywhere.
     let logs = capture.contents();
@@ -676,7 +692,13 @@ async fn workload_exchange_unconfigured_is_503_and_private_issuers_are_refused_a
             })),
         )
         .await;
-        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{issuer}: {}", r.raw);
+        assert_eq!(
+            r.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{issuer}: {}",
+            r.raw
+        );
+        assert_eq!(r.body["type"], "urn:locksmith:problem:unprocessable");
     }
 }
 
@@ -760,6 +782,12 @@ async fn workload_abuse_a_policy_mismatch_does_not_burn_the_jti() {
     assert!(
         last.3.contains("claims") && !last.3.contains("replay"),
         "{last:?}"
+    );
+    let attrs: Value = serde_json::from_str(&last.3).unwrap();
+    assert_eq!(
+        attrs["claims"],
+        json!({"text": "repository=acme/api ref=refs/heads/feature"}),
+        "{attrs}"
     );
 
     // The refusal did not consume the jti: the same token still works on the matching policy.

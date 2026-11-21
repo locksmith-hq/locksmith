@@ -22,7 +22,7 @@ use crate::app::AppState;
 use crate::audit::{self, DEV_AUTH_ACTOR};
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
-use crate::problem::{ApiError, Kind};
+use crate::problem::{ApiError, Kind, Problem};
 use crate::workload::{self, Condition, ConditionInput, IssuerKind, Op};
 
 /// One claim test as shown to callers: `pattern` ends in `*` for a prefix match.
@@ -132,6 +132,8 @@ fn name_conflict(e: sql::Error) -> ApiError {
     responses(
         (status = 201, description = "Created", body = WorkloadIdentity,
             headers(("Location" = String, description = "URL of the new policy"))),
+        (status = 422, description = "Policy refused: no subject pin, a bare `*`, or an issuer at a private address",
+            body = Problem, content_type = "application/problem+json"),
         CreateErrors,
     ),
     security(("dev_org" = []))
@@ -159,7 +161,7 @@ pub async fn create(
         &input.audience,
         &inputs,
     )
-    .map_err(|e| ApiError::validation(e.detail()))?;
+    .map_err(|e| ApiError::unprocessable(e.detail()))?;
     // A private or metadata issuer address is refused at create time (the exchange also refuses
     // it). Makes no HTTP request.
     if let Some(verifier) = state.workload_verifier() {
@@ -167,7 +169,7 @@ pub async fn create(
             .issuers()
             .check_issuer_host(&policy.issuer)
             .await
-            .map_err(|_| ApiError::validation("the issuer host is not an allowed address"))?;
+            .map_err(|_| ApiError::unprocessable("the issuer host is not an allowed address"))?;
     }
     let stored =
         serde_json::to_string(&policy.conditions).map_err(|_| ApiError::bare(Kind::Internal))?;

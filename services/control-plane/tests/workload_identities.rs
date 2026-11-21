@@ -188,7 +188,7 @@ async fn workload_policy_refuses_loose_or_cross_org() {
             Some(policy(agent_a, "p", conds)),
         )
         .await;
-        assert_eq!(s, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     }
 
     // Org B cannot point a policy at org A's agent.

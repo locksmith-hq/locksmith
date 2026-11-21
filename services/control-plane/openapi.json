@@ -6232,6 +6232,16 @@
             },
             "description": "Conflict"
           },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Policy refused: no subject pin, a bare `*`, or an issuer at a private address"
+          },
           "503": {
             "content": {
               "application/problem+json": {

@@ -4630,6 +4630,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Policy refused: no subject pin, a bare `*`, or an issuer at a private address */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Service unavailable */
             503: {
                 headers: {

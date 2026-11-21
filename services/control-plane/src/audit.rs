@@ -165,13 +165,49 @@ pub fn workload_identity_deleted(actor: Actor, policy_id: Uuid, agent_id: Uuid) 
     )
 }
 
+/// `name=value` pairs joined by single spaces, for the ledger's bounded text attribute. A pair is
+/// kept only when its name is `[A-Za-z0-9_.:-]+` and its value is non-empty printable ASCII
+/// without spaces (so the encoding is unambiguous); pairs that do not fit in
+/// [`ls_audit::Text::MAX_LEN`] are dropped whole, never cut. `None` when nothing is left.
+fn claims_text(claims: &[(String, String)]) -> Option<ls_audit::Text> {
+    let mut out = String::new();
+    for (name, value) in claims {
+        let name_ok = !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'-'));
+        let value_ok = !value.is_empty() && value.bytes().all(|b| (0x21..=0x7e).contains(&b));
+        if !(name_ok && value_ok) {
+            continue;
+        }
+        let pair = format!("{name}={value}");
+        let extra = pair.len() + usize::from(!out.is_empty());
+        if out.len() + extra > ls_audit::Text::MAX_LEN {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&pair);
+    }
+    ls_audit::Text::parse(&out).ok()
+}
+
 /// `workload_identity.exchanged`: an external token matched the policy and an agent token was
-/// minted. Actor is the agent the policy maps to; only ids and the issuer host are recorded (the
-/// ledger has no field for claim text).
-pub fn workload_identity_exchanged(policy_id: Uuid, agent_id: Uuid, issuer: &str) -> Event {
+/// minted. Actor is the agent the policy maps to; ids, the issuer host and the verified values
+/// of the claims the policy names (`claims`, see [`claims_text`]) are recorded.
+pub fn workload_identity_exchanged(
+    policy_id: Uuid,
+    agent_id: Uuid,
+    issuer: &str,
+    claims: &[(String, String)],
+) -> Event {
     let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
     if let Some(h) = issuer_host(issuer) {
         attrs = attrs.host(attr::ISSUER, h);
+    }
+    if let Some(t) = claims_text(claims) {
+        attrs = attrs.text(attr::CLAIMS, t);
     }
     Event {
         kind: kind::WORKLOAD_IDENTITY_EXCHANGED,
@@ -184,18 +220,22 @@ pub fn workload_identity_exchanged(policy_id: Uuid, agent_id: Uuid, issuer: &str
 
 /// `workload_identity.denied`: an exchange for this policy was refused. `reason` is a static
 /// code (the verifier's refusal label or `claims`). The agent is not authenticated, so the
-/// actor is the control plane.
+/// actor is the control plane. `claims` is empty unless the token had already verified.
 pub fn workload_identity_denied(
     policy_id: Uuid,
     agent_id: Uuid,
     issuer: &str,
     reason: Code,
+    claims: &[(String, String)],
 ) -> Event {
     let mut attrs = Attrs::new()
         .id(attr::AGENT_ID, agent_id)
         .code(attr::REASON, reason);
     if let Some(h) = issuer_host(issuer) {
         attrs = attrs.host(attr::ISSUER, h);
+    }
+    if let Some(t) = claims_text(claims) {
+        attrs = attrs.text(attr::CLAIMS, t);
     }
     Event {
         kind: kind::WORKLOAD_IDENTITY_DENIED,

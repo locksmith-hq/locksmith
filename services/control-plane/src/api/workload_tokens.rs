@@ -217,13 +217,17 @@ async fn run(
         )
         .await;
     drop(input);
+    // The values of the claims the policy names, from the verified token only; empty when the
+    // token did not verify (nothing from an unverified token is recorded).
+    let mut recorded: Vec<(String, String)> = Vec::new();
     let outcome = match verified {
         Err(refused) => Err(Denial::Token(refused.0)),
         Ok(claims) if workload::matches(&policy.conditions, &claims.as_value()) => {
+            recorded = named_claim_pairs(&policy.conditions, &claims.0);
             // Only the claims the policy names are ever recorded.
             tracing::info!(
                 parent: &span,
-                claims = %named_claims(&policy.conditions, &claims.0),
+                claims = %named_claims(&recorded),
                 "external token matched the policy"
             );
             if is_replay(abuse, &policy.issuer, &claims.0) {
@@ -234,16 +238,27 @@ async fn run(
                     .map_err(|_| Denial::Internal)
             }
         }
-        Ok(_) => Err(Denial::Claims),
+        Ok(claims) => {
+            recorded = named_claim_pairs(&policy.conditions, &claims.0);
+            Err(Denial::Claims)
+        }
     };
     match outcome {
         Ok(minted) => {
             // The token is only returned once the exchange is on the ledger (fail closed).
-            record_exchanged(state, org_id, policy_id, &policy).await?;
+            record_exchanged(state, org_id, policy_id, &policy, &recorded).await?;
             Ok(minted)
         }
         Err(denial) => {
-            record_denied(state, org_id, policy_id, &policy, denial.reason()).await;
+            record_denied(
+                state,
+                org_id,
+                policy_id,
+                &policy,
+                denial.reason(),
+                &recorded,
+            )
+            .await;
             Err(denial)
         }
     }
@@ -284,8 +299,10 @@ async fn record_exchanged(
     org_id: Uuid,
     policy_id: Uuid,
     policy: &Policy,
+    claims: &[(String, String)],
 ) -> Result<(), Denial> {
-    let event = audit::workload_identity_exchanged(policy_id, policy.agent_id, &policy.issuer);
+    let event =
+        audit::workload_identity_exchanged(policy_id, policy.agent_id, &policy.issuer, claims);
     state
         .db()
         .with_org(org_id, move |c| {
@@ -315,9 +332,11 @@ async fn record_denied(
     policy_id: Uuid,
     policy: &Policy,
     reason: &'static str,
+    claims: &[(String, String)],
 ) {
     let code = ls_audit::Code::try_new(reason).unwrap_or(ls_audit::Code::new("refused"));
-    let event = audit::workload_identity_denied(policy_id, policy.agent_id, &policy.issuer, code);
+    let event =
+        audit::workload_identity_denied(policy_id, policy.agent_id, &policy.issuer, code, claims);
     let result = state
         .db()
         .with_org(org_id, move |c| {
@@ -357,16 +376,28 @@ fn is_replay(
     !abuse.first_use(issuer, jti, ttl)
 }
 
-/// `claim=value` pairs for the claims the policy names, nothing else from the token.
-fn named_claims(
+/// `(claim, value)` for the string claims the policy names, nothing else from the token.
+fn named_claim_pairs(
     conditions: &[Condition],
     claims: &serde_json::Map<String, serde_json::Value>,
-) -> String {
-    let mut out = Vec::new();
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
     for c in conditions {
+        if out.iter().any(|(n, _)| *n == c.claim) {
+            continue;
+        }
         if let Some(v) = claims.get(&c.claim).and_then(|v| v.as_str()) {
-            out.push(format!("{}={v}", c.claim));
+            out.push((c.claim.clone(), v.to_owned()));
         }
     }
-    out.join(" ")
+    out
+}
+
+/// `claim=value` pairs for the claims the policy names, nothing else from the token.
+fn named_claims(pairs: &[(String, String)]) -> String {
+    pairs
+        .iter()
+        .map(|(n, v)| format!("{n}={v}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }

@@ -77,3 +77,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: d4 - blocked (CI red on 4218db4, hygiene/gitleaks step only)
 - Verified: gitleaks git (HEAD, origin/main, refs/pull/530/merge) -> no leaks; tree-check and task guard OK
 - Notes for next session: cannot reproduce; job log blob blocked by proxy and rerun needs Actions write (403). The next real push reruns CI; do not push an empty commit.
+
+## 2026-11-21 09:45 worker
+- Task: CI fix (hygiene/gitleaks) - ci-fix
+- Verified: gitleaks detect -> no leaks; just quick -> ok
+- Notes for next session: gitleaks failed on a removed test-fixture string in git history (e009ecf); added fingerprint to .gitleaksignore. Tasks 4.3, 6.x, 7.x remain; auto-merge not enabled yet.

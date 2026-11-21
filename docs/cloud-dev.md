@@ -175,7 +175,7 @@ To extend: add a role (logins, trigger, secret) or a channel to `routing.json`, 
 ## How the owner is alerted
 Agents act as the owner's GitHub account, and GitHub never notifies anyone about their own activity. So:
 - **Claude app push:** the agent calls `PushNotification`. Whether that reaches the phone from a cloud run is still being tested on the first run.
-- **Email:** `.github/workflows/owner-alert.yml` runs when an issue gets the `needs-owner` label. `github-actions[bot]` then @mentions `vars.OWNER_LOGIN` (currently `tomer555`), and GitHub sends an email and a GitHub mobile notification. This needs "@mentions → Email" turned on in GitHub settings → Notifications (it is on by default).
+- **Email:** `.github/workflows/owner-alert.yml` runs when an issue gets the `needs-owner` label. `github-actions[bot]` then edits the issue body to start with an @mention of `vars.OWNER_LOGIN` (currently `tomer555`), and GitHub sends an email and a GitHub mobile notification. This needs "@mentions → Email" turned on in GitHub settings → Notifications (it is on by default).
 
 ## Agent instructions and run metadata
 The instructions for each routine live in `docs/agents/` (`common.md` plus one file per role). Each routine prompt only says to read those files from origin/main and follow them, so instruction changes are PRs the owner reviews. `scripts/check-task-edits.sh` fails any `claude/*` branch that touches them.

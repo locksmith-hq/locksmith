@@ -8,3 +8,8 @@
 - Task: none - blocked (task 1.1 / 2.1 need verified vendor formats; this VM cannot reach the vendor docs)
 - Verified: merged origin/main clean, tree clean; opened needs-research #580 with one question covering every UNVERIFIED item
 - Notes for next session: when #580 is answered, update `docs/research/agent-plugin-formats.md`, tick 1.1, then do task 2 (fixtures first). Also checked d2-aws-sts and d3-db-relay: only the t3-console-mvp bindings page (#489, review-failed, another worker's) blocks their remaining tasks.
+
+## 2026-11-21 worker (harriet, woken by research answer on #580)
+- Task: 1.1, 2.2, 2.3, 2.4 - done; 2.1 left open (fixtures are doc-derived, not recorded)
+- Verified: `cargo nextest run -p ls-hooks -p smith-cli hook` -> all pass; golden 59 cases; `just quick` OK; Sonnet evaluator PASS, its fail-open finding (missing command key) fixed
+- Notes for next session: fixtures live in `crates/ls-hooks/tests/fixtures/{gemini-cli,copilot,cline}` with SOURCE.md (doc-derived; Copilot `toolArgs.command` and Cline `parameters.command` keys unconfirmed). Windsurf is Devin Desktop (`.devin/hooks.v1.json`): no adapter yet, still gated by `hook_handler_ready`; 2.1 can only close when recordings exist or the owner accepts doc-derived fixtures. Next: task 3 (init/doctor; add doctor warnings for Gemini untrusted folders, Copilot timeout fail-open, Windsurf unknown/not protected; add `.devin/` marker).

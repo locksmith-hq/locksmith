@@ -64,3 +64,8 @@
 - Task: merge main into the change branch (conflict resolution) - done
 - Verified: `npm test` in packages/control-plane-client, apps/web, apps/desktop + `tsc --noEmit` -> pass (9, 45, 36 tests)
 - Notes for next session: conflicts came from m1 MCP Tools/Clients pages landing in the old single-file web App. They now live in `apps/web/src/pages/McpTools.tsx`, `McpClients.tsx` (routes `tools`, `clients` in Shell). Desktop and control-plane-client keep both sides. Tasks 6.4.1-6.4.3 restored from main as unticked; 6.4.1 code is on the branch but not yet verified (`just web-e2e`), so left unticked.
+
+## 2026-11-21 worker (alfie)
+- Task: group 1 (1.1-1.4) verified and ticked; design.md "OSS used" now records the pinned versions (react-query 5.108.1, react-router 8.5.2; msw not used, in-memory fixtures).
+- Verified: `npm test` in packages/control-plane-client (9), apps/web (45), apps/desktop (36) pass; `npm run build --workspace apps/web` OK.
+- Notes for next session: groups 2-5 have code and tests on this branch but are not yet audited against each task line, so they are unticked. 6.4.1-6.4.3 and group 6 need `just up && just web-e2e` (docker, Keycloak); not run this session.

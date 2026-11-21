@@ -16,9 +16,9 @@
 ## OSS used
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| @tanstack/react-query | MIT | 5.x (pin on add) | 2026, maintained | Server-state cache, retry, invalidation | permissive, fine |
-| react-router | MIT | 7.x (pin on add) | 2026, maintained | Routing | permissive, fine |
-| msw (if used for fixtures) | MIT | 2.x (pin on add) | 2026, maintained | API mocks in tests | permissive, fine |
+| @tanstack/react-query | MIT | 5.108.1 (pinned) | 2026, maintained | Server-state cache, retry, invalidation | permissive, fine |
+| react-router | MIT | 8.5.2 (pinned) | 2026, maintained | Routing | permissive, fine |
+| msw (not used; in-memory fixtures in `apps/web/src/api/fixtures.ts`) | MIT | n/a | n/a | API mocks in tests | permissive, fine |
 | @playwright/test | Apache-2.0 | match installed Playwright | 2026 | e2e | permissive, fine |
 Versions and dates are re-checked when added (task 1.1) and recorded here.
 

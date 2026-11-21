@@ -258,3 +258,81 @@ fn claude_code_plugin_package_is_consistent() {
     }
     assert!(names.len() >= 7);
 }
+
+fn raw(h: &Home, agent: &str, event: &str, stdin: &[u8]) -> Output {
+    let mut c = h.cmd(&["hook", agent, event]).spawn().unwrap();
+    let _ = c.stdin.take().unwrap().write_all(stdin);
+    c.wait_with_output().unwrap()
+}
+
+#[test]
+fn gemini_cli_blocks_with_exit_2_and_allows_silently() {
+    let h = Home::new();
+    let w = work(&h);
+    let deny = hook(
+        &h,
+        "gemini-cli",
+        "BeforeTool",
+        &json!({"cwd": w, "hook_event_name": "BeforeTool", "tool_name": "run_shell_command",
+        "tool_input": {"command": "cat .env", "is_background": false}}),
+    );
+    assert_eq!(deny.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&deny.stderr).starts_with("Blocked by Locksmith"));
+    let ok = hook(
+        &h,
+        "gemini-cli",
+        "BeforeTool",
+        &json!({"cwd": w, "tool_name": "run_shell_command", "tool_input": {"command": "ls"}}),
+    );
+    assert!(ok.status.success() && ok.stdout.is_empty());
+    let bad = raw(&h, "gemini-cli", "BeforeTool", b"not json");
+    assert_eq!(bad.status.code(), Some(2));
+}
+
+#[test]
+fn copilot_denies_with_decision_json_and_malformed_exits_2() {
+    let h = Home::new();
+    let w = work(&h);
+    let o = hook(
+        &h,
+        "copilot",
+        "preToolUse",
+        &json!({"cwd": w, "toolName": "bash", "toolArgs": "{\"command\":\"cat .env\"}"}),
+    );
+    assert_eq!(o.status.code(), Some(0));
+    let v = out_json(&o);
+    assert_eq!(v["permissionDecision"], "deny");
+    assert!(
+        v["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .starts_with("Blocked by Locksmith")
+    );
+    let bad = raw(&h, "copilot", "preToolUse", b"not json");
+    assert_eq!(bad.status.code(), Some(2));
+}
+
+#[test]
+fn cline_cancels_and_malformed_cancels() {
+    let h = Home::new();
+    let w = work(&h);
+    let o = hook(
+        &h,
+        "cline",
+        "PreToolUse",
+        &json!({"workspaceRoots": [w], "preToolUse": {"toolName": "execute_command",
+        "parameters": {"command": "cat .env"}}}),
+    );
+    assert_eq!(o.status.code(), Some(0));
+    let v = out_json(&o);
+    assert_eq!(v["cancel"], true);
+    assert!(
+        v["errorMessage"]
+            .as_str()
+            .unwrap()
+            .starts_with("Blocked by Locksmith")
+    );
+    let bad = raw(&h, "cline", "PreToolUse", b"not json");
+    assert_eq!(bad.status.code(), Some(0));
+    assert_eq!(out_json(&bad)["cancel"], true);
+}

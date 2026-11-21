@@ -137,9 +137,10 @@ pub fn binary_on_path(a: Agent) -> bool {
 }
 
 /// Agents the repo shows signs of using.
-/// True once `smith hook <agent>` can parse the agent's payload (p3 task 2.2). Remove with 2.2.
+/// True once `smith hook <agent>` can parse the agent's payload. Windsurf waits for a fixture of
+/// the Devin Desktop hook format (docs/research/agent-plugin-formats.md).
 pub fn hook_handler_ready(a: Agent) -> bool {
-    matches!(a, Agent::ClaudeCode | Agent::Cursor | Agent::Codex)
+    a != Agent::Windsurf
 }
 
 pub fn detect(repo: &Path) -> Vec<Agent> {

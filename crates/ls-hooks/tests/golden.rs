@@ -16,7 +16,14 @@ fn golden() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let update = std::env::var_os("UPDATE_GOLDEN").is_some();
     let mut n = 0;
-    for agent in ["claude-code", "cursor", "codex"] {
+    for agent in [
+        "claude-code",
+        "cursor",
+        "codex",
+        "gemini-cli",
+        "copilot",
+        "cline",
+    ] {
         let mut files: Vec<_> = std::fs::read_dir(root.join(agent))
             .unwrap()
             .flatten()
@@ -32,7 +39,15 @@ fn golden() {
             let event = serde_json::from_str::<Value>(&input)
                 .ok()
                 .and_then(|v| v["hook_event_name"].as_str().map(String::from))
-                .unwrap_or_else(|| "PreToolUse".into());
+                // Copilot's camelCase payload carries no event name; its hook file does.
+                .unwrap_or_else(|| {
+                    if agent == "copilot" {
+                        "preToolUse"
+                    } else {
+                        "PreToolUse"
+                    }
+                    .into()
+                });
             let h = handle(agent, &event, &input, &NoVault).unwrap();
             let stdout = if h.out.stdout.is_empty() {
                 Value::Null
@@ -55,5 +70,5 @@ fn golden() {
         }
     }
     let _ = std::fs::remove_dir_all(&cwd);
-    assert!(n >= 25, "only {n} golden cases ran");
+    assert!(n >= 55, "only {n} golden cases ran");
 }

@@ -3,8 +3,11 @@
 //! `tests/fixtures/README.md`. The engine (`decide`) never sees JSON.
 
 pub mod claude_code;
+pub mod cline;
 pub mod codex;
+pub mod copilot;
 pub mod cursor;
+pub mod gemini_cli;
 
 use crate::{Decision, Event, Vault, decide};
 use serde_json::Value;
@@ -87,6 +90,9 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
         ),
         "cursor" => (cursor::parse, cursor::render, cursor::malformed),
         "codex" => (codex::parse, codex::render, codex::malformed),
+        "gemini-cli" => (gemini_cli::parse, gemini_cli::render, gemini_cli::malformed),
+        "copilot" => (copilot::parse, copilot::render, copilot::malformed),
+        "cline" => (cline::parse, cline::render, cline::malformed),
         _ => return None,
     };
     let bad_in = || Handled {
@@ -101,7 +107,7 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
     let Ok(json) = serde_json::from_str::<Value>(input) else {
         return Some(bad_in());
     };
-    if !json.is_object() {
+    if !json.is_object() || (agent == "copilot" && copilot::unreadable(event, &json)) {
         return Some(bad_in());
     }
     Some(match parse(event, &json) {

@@ -1,0 +1,5 @@
+{
+  "code": 2,
+  "stderr": "Locksmith hook could not read the event; run `smith doctor`",
+  "stdout": null
+}

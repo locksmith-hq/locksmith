@@ -7,10 +7,10 @@
 - [x] 1.4 Verify: `cargo nextest run -p ls-gateway -E 'test(ttl) | test(grants) | test(mcp)'` and `rg -n 'MAX_(GRANT|REVOKED|SETTINGS)_TTL' services` prints nothing.
 
 ## 2. Control-plane store [sonnet]
-- [ ] 2.1 Add `services/control-plane/src/mcp_store.rs` with `upsert_client` (name capped at 200 chars, `RETURNING revoked_at`, `revoked_at` never written), `layer_settings` and `all_settings` (design decision 2). Register it in `lib.rs`. Test (against the test database used by `tests/mcp.rs`): record twice per layer, one row, latest name, 200-char cap, `revoked_at` untouched.
-- [ ] 2.2 Switch `record_client` and `overrides_for` in `mcp_tools.rs` to the store.
-- [ ] 2.3 Switch `upsert_agent_mcp_client` and `agent_tool_settings` in `api/internal.rs`, and `list_tools` in `api/mcp.rs`, to the store; keep the agent read's `ORDER BY tool` and the response shapes.
-- [ ] 2.4 Verify: `cargo nextest run -p ls-control-plane -E 'binary(mcp) | binary(mcp_tools) | binary(tenancy) | binary(tenant_lint) | binary(audit) | binary(openapi)'` and `rg -n 'INSERT INTO mcp_clients|FROM mcp_tool_settings' services/control-plane/src` lists only `mcp_store.rs`.
+- [x] 2.1 Add `services/control-plane/src/mcp_store.rs` with `upsert_client` (name capped at 200 chars, `RETURNING revoked_at`, `revoked_at` never written), `layer_settings` and `all_settings` (design decision 2). Register it in `lib.rs`. Test (against the test database used by `tests/mcp.rs`): record twice per layer, one row, latest name, 200-char cap, `revoked_at` untouched.
+- [x] 2.2 Switch `record_client` and `overrides_for` in `mcp_tools.rs` to the store.
+- [x] 2.3 Switch `upsert_agent_mcp_client` and `agent_tool_settings` in `api/internal.rs`, and `list_tools` in `api/mcp.rs`, to the store; keep the agent read's `ORDER BY tool` and the response shapes.
+- [x] 2.4 Verify: `cargo nextest run -p ls-control-plane -E 'binary(mcp) | binary(mcp_tools) | binary(tenancy) | binary(tenant_lint) | binary(audit) | binary(openapi)'` and `rg -n 'INSERT INTO mcp_clients|FROM mcp_tool_settings' services/control-plane/src` lists only `mcp_store.rs`.
 
 ## 3. Shared tool helpers in ls-mcp-server [sonnet]
 - [x] 3.1 Add `rmcp` (`=3.11.0`, features `server`, `transport-streamable-http-server`, same as the services) to `crates/ls-mcp-server/Cargo.toml`; add `tool_from_def(&ToolDef) -> Tool` and `error_status(&CallToolResult) -> Option<u64>` with unit tests (output schema present and absent, status 401, 501, missing, not an error result). Check `Cargo.lock` has no new package.
@@ -23,5 +23,5 @@
 - [x] 4.3 Verify: `cargo nextest run -p ls-gateway -E 'test(audit) | test(mcp)'` and `cargo nextest run -p ls-control-plane -E 'test(bearer) | binary(mcp_auth)'`.
 
 ## 5. Local verification [haiku]
-- [ ] 5.1 `git diff origin/main --stat -- ':!openspec'` touches only the files named in the proposal's Impact; `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane` passes with no assertion edited in `services/gateway/src/relay/tests/mcp*.rs` or `services/control-plane/tests/mcp*.rs` (`git diff` on those paths shows no changed `assert`).
+- [x] 5.1 `git diff origin/main --stat -- ':!openspec'` touches only the files named in the proposal's Impact; `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane` passes with no assertion edited in `services/gateway/src/relay/tests/mcp*.rs` or `services/control-plane/tests/mcp*.rs` (`git diff` on those paths shows no changed `assert`).
 - [ ] 5.2 `just up`, then the MCP smoke test (call `/mcp` on the hub and the gateway without a token and with a bad one; compare the `WWW-Authenticate` headers with `origin/main`), `just apps-build`, then `just quick`.

@@ -33,6 +33,7 @@ use crate::audit as ledger;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
 use crate::mcp_endpoint::McpPrincipal;
+use crate::mcp_store;
 use crate::problem::{ApiError, Kind};
 use crate::users::{self, ResolvedUser};
 use ls_audit::{Actor, Code, outcome};
@@ -422,18 +423,12 @@ pub async fn overrides_for(
         .db()
         .with_org(org_id, move |c| {
             Box::pin(async move {
-                let rows =
-                    sql::query("SELECT tool, enabled FROM mcp_tool_settings WHERE layer = 'hub'")
-                        .fetch_all(c)
-                        .await?;
-                rows.iter()
-                    .map(|r| {
-                        Ok((
-                            r.try_get::<String, _>("tool")?,
-                            r.try_get::<bool, _>("enabled")?,
-                        ))
-                    })
-                    .collect::<sql::Result<HashMap<_, _>>>()
+                Ok::<_, ApiError>(
+                    mcp_store::layer_settings(c, org_id, "hub")
+                        .await?
+                        .into_iter()
+                        .collect::<HashMap<_, _>>(),
+                )
             })
         })
         .await?;
@@ -454,23 +449,12 @@ pub async fn record_client(
     };
     let org = org_of(state, principal).await?;
     let who = format!("{}|{}", principal.0.issuer, principal.0.subject);
-    let name: String = client_name.chars().take(200).collect();
+    let name = client_name.to_owned();
     state
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
-                sql::query(
-                    "INSERT INTO mcp_clients (org_id, layer, client_id, principal, client_name) \
-                     VALUES ($1, 'hub', $2, $3, $4) \
-                     ON CONFLICT (org_id, layer, client_id, principal) \
-                     DO UPDATE SET client_name = EXCLUDED.client_name, last_seen_at = now()",
-                )
-                .bind(org.org_id)
-                .bind(client_id)
-                .bind(who)
-                .bind(name)
-                .execute(c)
-                .await?;
+                mcp_store::upsert_client(c, org.org_id, "hub", &client_id, &who, &name).await?;
                 Ok::<_, ApiError>(())
             })
         })

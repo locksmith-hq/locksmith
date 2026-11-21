@@ -105,3 +105,8 @@
 - Task: 6.4.3 - done (ticked). Live screenshots in `openspec/changes/t3-console-mvp/screenshots/`: `live-overview.png` and `live-projects.png` vs `mockup-overview.png` (the mockup is the Home product-card page; live Overview has the same frame: grouped sidebar, org switcher, user card; the Home card grid is not built).
 - Verified: `npm test --workspace apps/web` (50 passed), `npm run build --workspace apps/web` OK, `just up` + `just api` + `just web-e2e` (1 passed, leak check included).
 - Notes for next session: independent Sonnet evaluator PASS (re-ran tests, build, e2e). Live Overview uses plain bullet lists and default-blue links (Get started, Recent activity), unlike the mockup. Remaining: 6.1 caveats, 6.5-6.6, 7.x.
+
+## 2026-11-21 worker (harriet)
+- Task: 6.1, 6.5, 6.6 - done (ticked). The e2e now asserts the Audit table shows this run's `grant.created` and `grant.revoked` rows; `just web-e2e` starts `just up` and the API itself when `/healthz` is down and passes extra args through; `apps/web/e2e/screenshots.spec.ts` locks Linux baselines for Overview, Projects and Activity (data regions hidden by `shot.css` so runs are deterministic; update with `just web-e2e --update-snapshots`).
+- Verified: `just up` + `just api` + `just web-e2e` (2 passed, three consecutive runs stable, leak check included).
+- Notes for next session: remaining 7.1 (`just up`, `just web-e2e`, `just apps-build`, then CI) and 7.2 (manual `ci-platforms` run if last of its phase). Baselines are `-linux` only; macOS CI does not run web-e2e.

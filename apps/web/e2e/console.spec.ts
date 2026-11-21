@@ -75,7 +75,12 @@ test("sign in, project, environment, agent, grant, activity; no value or materia
 
   // Activity.
   await page.getByRole("link", { name: "Activity" }).click();
-  await expect(page.getByRole("region", { name: "Audit" })).toBeVisible();
+  const audit = page.getByRole("region", { name: "Audit" });
+  await expect(audit).toBeVisible();
+  await expect(audit.getByText("Reading the ledger…")).toHaveCount(0);
+  // The ledger shows this run's grant create and revoke.
+  await expect(audit.getByRole("row", { name: /grant\.created/ }).first()).toBeVisible();
+  await expect(audit.getByRole("row", { name: /grant\.revoked/ }).first()).toBeVisible();
 
   // Leak check: no request may target secret value or material routes.
   const bad = calls.filter((c) => /\/material|\/value|\/reveal|\/plaintext/.test(c));

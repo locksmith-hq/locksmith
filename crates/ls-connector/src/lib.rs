@@ -25,6 +25,9 @@ use serde_json::{Value, json};
 use url::Url;
 use zeroize::{Zeroize, Zeroizing};
 
+mod workload;
+pub use workload::*;
+
 /// Environment variable holding the enrollment secret (alternative to stdin).
 pub const ENROLLMENT_ENV: &str = "LOCKSMITH_ENROLLMENT_SECRET";
 /// Control plane base URL.

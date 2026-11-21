@@ -32,7 +32,7 @@ pub mod verifier;
 pub use checkpoint::{CHECKPOINT_DOMAIN, CheckpointBody, SignedCheckpoint};
 pub use event::{
     Actor, AttrTag, AttrValue, Attrs, Code, Event, Host, InvalidIdentifier, Record, StoredAttrs,
-    Target, attr, kind, outcome,
+    Target, Text, attr, kind, outcome,
 };
 
 /// Domain tag of the server ledger (`audit_events` in Postgres).

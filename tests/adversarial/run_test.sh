@@ -160,6 +160,46 @@ check keep "ADVERSARIAL_KEEP=1 keeps the artifacts" \
 gw nokeep -- gateway G3-listed
 check nokeep "without ADVERSARIAL_KEEP nothing is kept" bash -c "! grep -q '^kept:' '$t/nokeep.out'"
 
+# The remote-MCP cases (G9, G10) share gateway/mcp_check.py: its value-like rule must match
+# `ls_mcp_server::FORBIDDEN_LAST_WORDS`, and its scans must fail on planted tool lists and results.
+chk="$here/gateway/mcp_check.py"
+rust_words="$(sed -n '/FORBIDDEN_LAST_WORDS: \[&str; [0-9]*\] = \[/,/^\];/p' "$here/../../crates/ls-mcp-server/src/lib.rs" |
+  sed -n 's/^ *"\([a-z]*\)",$/\1/p' | tr '\n' ' ')"
+if [[ -n "$rust_words" && "$(python3 -I "$chk" words | tr -d '\n')" == "${rust_words% }" ]]; then
+  ok "mcp_check.py forbidden words match ls-mcp-server"
+else
+  bad "mcp_check.py forbidden words differ from crates/ls-mcp-server (rust: $rust_words)"
+fi
+mcp_tools() { # mcp_tools <file> <input-props-json> <output-props-json-or-null> [extra output schema keys]
+  python3 -I - "$@" <<'PY'
+import json, sys
+f, inp, out = sys.argv[1:4]
+tool = {"name": "t", "inputSchema": {"type": "object", "properties": json.loads(inp), "additionalProperties": False}}
+if out != "null":
+    tool["outputSchema"] = {"type": "object", "properties": json.loads(out), "additionalProperties": False}
+open(f, "w").write(json.dumps({"jsonrpc": "2.0", "id": "list", "result": {"tools": [tool]}}) + "\n")
+PY
+}
+mcp_scan() { python3 -I "$chk" scan-tools "$@" >"$t/mcp-scan.out" 2>&1; }
+mcp_tools "$t/mcp-clean.json" '{"secret_id":{"type":"string"},"token_expires_at":{"type":"string"}}' '{"status":{"type":"integer"},"body":{"type":"string"}}'
+if mcp_scan "$t/mcp-clean.json" --present t --absent other; then ok "mcp_check scan-tools accepts a clean tool list (secret_id, token_expires_at)"; else bad "mcp_check rejected a clean tool list"; fi
+for field in apiKey client-secret accessToken PRIVATE_PEM db.password; do
+  mcp_tools "$t/mcp-bad.json" "{\"$field\":{\"type\":\"string\"}}" '{"ok":{"type":"boolean"}}'
+  if mcp_scan "$t/mcp-bad.json"; then bad "mcp_check missed the value-like input field $field"; else ok "mcp_check flags the value-like input field $field"; fi
+done
+mcp_tools "$t/mcp-bad.json" '{"id":{"type":"string"}}' '{"nested":{"type":"object","properties":{"value":{"type":"string"}},"additionalProperties":false}}'
+if mcp_scan "$t/mcp-bad.json"; then bad "mcp_check missed a nested value-like output field"; else ok "mcp_check flags a nested value-like output field"; fi
+mcp_tools "$t/mcp-bad.json" '{"id":{"type":"string"}}' null
+if mcp_scan "$t/mcp-bad.json"; then bad "mcp_check accepted a tool with no output schema"; else ok "mcp_check flags a tool with no output schema"; fi
+printf '%s\n' '{"jsonrpc":"2.0","id":"list","result":{"tools":[{"name":"t","inputSchema":{"type":"object","patternProperties":{"^.*$":{"type":"string"}},"additionalProperties":false},"outputSchema":{"type":"object","properties":{},"additionalProperties":false}}]}}' >"$t/mcp-bad.json"
+if mcp_scan "$t/mcp-bad.json"; then bad "mcp_check missed an open map"; else ok "mcp_check flags an open map"; fi
+if mcp_scan "$t/mcp-clean.json" --absent t; then bad "mcp_check missed a listed tool that must be off"; else ok "mcp_check flags a listed tool that must be off"; fi
+if mcp_scan "$t/mcp-clean.json" --present nothere; then bad "mcp_check missed a missing tool"; else ok "mcp_check flags a missing tool"; fi
+printf '%s\n' '{"jsonrpc":"2.0","id":"a","result":{"structuredContent":{"items":[{"secret_id":"x","accessToken":"y"}]}}}' >"$t/mcp-keys.json"
+if python3 -I "$chk" scan-keys "$t/mcp-keys.json" >/dev/null 2>&1; then bad "mcp_check scan-keys missed a value-like result key"; else ok "mcp_check scan-keys flags a value-like result key"; fi
+printf '%s\n' '{"jsonrpc":"2.0","id":"a","result":{"structuredContent":{"items":[{"secret_id":"x","token_expires_at":"y"}]}}}' >"$t/mcp-keys.json"
+if python3 -I "$chk" scan-keys "$t/mcp-keys.json" >/dev/null 2>&1; then ok "mcp_check scan-keys accepts metadata keys"; else bad "mcp_check scan-keys rejected metadata keys"; fi
+
 # Nothing run.sh printed holds a canary in any encoding the oracle knows.
 cat "$t/spy"/*.canary >"$t/all.canaries"
 cat "$t"/*.out >"$t/printed.txt"

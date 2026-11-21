@@ -139,6 +139,10 @@ async fn project_tree_create_read_patch_delete() {
     let org_get = api.get(&format!("/v1/orgs/{org}"), org).await;
     assert_eq!(org_get.status, StatusCode::OK);
     assert_eq!(org_get.body["name"], "acme");
+    // A caller that does not know its org id learns it from `current`.
+    let current = api.get("/v1/orgs/current", org).await;
+    assert_eq!(current.status, StatusCode::OK);
+    assert_eq!(current.body, org_get.body);
 
     let p = api
         .post(
@@ -312,6 +316,10 @@ async fn other_orgs_resources_do_not_exist() {
         &api.get(&format!("/v1/orgs/{b}"), a).await,
         StatusCode::NOT_FOUND,
         "not-found",
+    );
+    assert_eq!(
+        api.get("/v1/orgs/current", a).await.body["id"],
+        a.to_string()
     );
 
     // Lists show only the caller's own rows, and B's data is untouched.

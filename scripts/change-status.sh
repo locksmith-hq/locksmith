@@ -68,6 +68,7 @@ blockers=""
 # One line per open blocker issue: "<number> <kind> <title and body on one line>"; kind is owner (escalated
 # rescue: both labels), rescue, or gate (needs-owner only).
 # shellcheck disable=SC2016 # jq variables
+AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
 me=${AGENT_PERSONA:+locksmith-$AGENT_PERSONA[bot]}
 pr_authors=""; [ "${OFFLINE:-0}" = 1 ] || pr_authors=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[]|[.head.ref, .user.login]|@tsv' 2>/dev/null)
 [ "${OFFLINE:-0}" = 1 ] || blockers=$(gh api "repos/$repo/issues?state=open&per_page=100" \

@@ -136,6 +136,116 @@ pub fn agent_deleted(actor: Actor, agent_id: Uuid, grants_revoked: i64) -> Event
     )
 }
 
+/// `workload_identity.created`: the policy, the agent it maps to and the issuer host.
+pub fn workload_identity_created(
+    actor: Actor,
+    policy_id: Uuid,
+    agent_id: Uuid,
+    issuer: &str,
+) -> Event {
+    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    admin(
+        kind::WORKLOAD_IDENTITY_CREATED,
+        actor,
+        Target::WorkloadIdentity(policy_id),
+        attrs,
+    )
+}
+
+/// `workload_identity.deleted`.
+pub fn workload_identity_deleted(actor: Actor, policy_id: Uuid, agent_id: Uuid) -> Event {
+    admin(
+        kind::WORKLOAD_IDENTITY_DELETED,
+        actor,
+        Target::WorkloadIdentity(policy_id),
+        Attrs::new().id(attr::AGENT_ID, agent_id),
+    )
+}
+
+/// `name=value` pairs joined by single spaces, for the ledger's bounded text attribute. A pair is
+/// kept only when its name is `[A-Za-z0-9_.:-]+` and its value is non-empty printable ASCII
+/// without spaces (so the encoding is unambiguous); pairs that do not fit in
+/// [`ls_audit::Text::MAX_LEN`] are dropped whole, never cut. `None` when nothing is left.
+fn claims_text(claims: &[(String, String)]) -> Option<ls_audit::Text> {
+    let mut out = String::new();
+    for (name, value) in claims {
+        let name_ok = !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'-'));
+        let value_ok = !value.is_empty() && value.bytes().all(|b| (0x21..=0x7e).contains(&b));
+        if !(name_ok && value_ok) {
+            continue;
+        }
+        let pair = format!("{name}={value}");
+        let extra = pair.len() + usize::from(!out.is_empty());
+        if out.len() + extra > ls_audit::Text::MAX_LEN {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&pair);
+    }
+    ls_audit::Text::parse(&out).ok()
+}
+
+/// `workload_identity.exchanged`: an external token matched the policy and an agent token was
+/// minted. Actor is the agent the policy maps to; ids, the issuer host and the verified values
+/// of the claims the policy names (`claims`, see [`claims_text`]) are recorded.
+pub fn workload_identity_exchanged(
+    policy_id: Uuid,
+    agent_id: Uuid,
+    issuer: &str,
+    claims: &[(String, String)],
+) -> Event {
+    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    if let Some(t) = claims_text(claims) {
+        attrs = attrs.text(attr::CLAIMS, t);
+    }
+    Event {
+        kind: kind::WORKLOAD_IDENTITY_EXCHANGED,
+        actor: Actor::Agent(agent_id),
+        target: Some(Target::WorkloadIdentity(policy_id)),
+        outcome: outcome::OK,
+        attrs,
+    }
+}
+
+/// `workload_identity.denied`: an exchange for this policy was refused. `reason` is a static
+/// code (the verifier's refusal label or `claims`). The agent is not authenticated, so the
+/// actor is the control plane. `claims` is empty unless the token had already verified.
+pub fn workload_identity_denied(
+    policy_id: Uuid,
+    agent_id: Uuid,
+    issuer: &str,
+    reason: Code,
+    claims: &[(String, String)],
+) -> Event {
+    let mut attrs = Attrs::new()
+        .id(attr::AGENT_ID, agent_id)
+        .code(attr::REASON, reason);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    if let Some(t) = claims_text(claims) {
+        attrs = attrs.text(attr::CLAIMS, t);
+    }
+    Event {
+        kind: kind::WORKLOAD_IDENTITY_DENIED,
+        actor: Actor::Service(Code::new("control_plane")),
+        target: Some(Target::WorkloadIdentity(policy_id)),
+        outcome: outcome::DENIED,
+        attrs,
+    }
+}
+
 /// `grant.created`: the agent, the secret, the mode and the expiry (Unix seconds), if any.
 pub fn grant_created(
     actor: Actor,
@@ -163,6 +273,47 @@ pub fn grant_revoked(actor: Actor, grant_id: Uuid, agent_id: Uuid) -> Event {
         Target::Grant(grant_id),
         Attrs::new().id(attr::AGENT_ID, agent_id),
     )
+}
+
+/// `mcp.call`: one remote MCP tool call by `user` in `org_id`. Only the layer, the tool name
+/// (a registry name, or `unknown`), the outcome and a static `reason` are recorded: never the
+/// call's arguments or result.
+pub fn mcp_call(
+    user: Uuid,
+    org_id: Uuid,
+    layer: Code,
+    tool: Code,
+    outcome: Code,
+    reason: Option<Code>,
+) -> Event {
+    let mut attrs = Attrs::new().code(attr::LAYER, layer).code(attr::TOOL, tool);
+    if let Some(r) = reason {
+        attrs = attrs.code(attr::REASON, r);
+    }
+    Event {
+        kind: kind::MCP_CALL,
+        actor: Actor::User(user),
+        target: Some(Target::Org(org_id)),
+        outcome,
+        attrs,
+    }
+}
+
+/// `mcp.issuer_revoke`: the issuer-side consent revoke that follows a hub MCP client revoke
+/// (task 4.2). `outcome` is `ok` or `error`; a failure carries a static `reason` and nothing
+/// the issuer said.
+pub fn mcp_issuer_revoke(actor: Actor, org_id: Uuid, outcome: Code, reason: Option<Code>) -> Event {
+    let mut attrs = Attrs::new().code(attr::LAYER, Code::new("hub"));
+    if let Some(r) = reason {
+        attrs = attrs.code(attr::REASON, r);
+    }
+    Event {
+        kind: kind::MCP_ISSUER_REVOKE,
+        actor,
+        target: Some(Target::Org(org_id)),
+        outcome,
+        attrs,
+    }
 }
 
 /// Host name of an OIDC issuer URL, if it is one the ledger accepts. The issuer is the only

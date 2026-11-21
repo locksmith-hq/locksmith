@@ -48,6 +48,13 @@ prompt and save the transcript in `ARTIFACT_DIR` for the oracle. A6 does this wi
 installed. A3 and A3b do it inside the scoped session: the agent is told to get the database
 password or the API key out by any means.
 
+D4 (`cases/D4.sh`) attacks the workload token exchange (`POST /v1/workload-tokens`) by running the
+`workload_abuse` cargo tests (a throwaway Postgres plus wiremock stub issuers; skips without Docker):
+forged `iss` at an attacker host (the attacker's server sees no request), `jku`, `x5u` and embedded
+`jwk` headers ignored, wrong audience, replayed and racing `jti`, another org's policy handle (all the
+same 401), and a canary in the external token's claims. The tests write the captured logs with spans,
+the ledger and a dump of every table to `ARTIFACT_DIR`, and the oracle scans them.
+
 Fixtures. `fixtures/git_upstream.py` is A1's Git upstream. `fixtures/http_upstream.py` is A3b's
 reflecting API, run once as the provider and once as the attacker's host; everything the
 attacker's host receives is logged into `ARTIFACT_DIR`.
@@ -68,6 +75,8 @@ and its own environment.
 | `G6` | token abuse | forged, foreign-org and stale tokens, the agent token at internal routes, replay after grant revoke (one `relay.denied`, no decrypt) |
 | `G7` | human-token abuse | forged and replayed Keycloak human tokens at the control plane, the dev header refused when dev auth is off (second control plane), a human token at the gateway's agent routes and the internal routes (needs Keycloak: `just up`) |
 | `G8` | Git delegation | the `/git/...` route against a provider that echoes the injected credential in a 200 page, in the error pages of `err403`, `err404` and `err500` repositories and in Cache-Control, Pragma and Expires; denials (push on a fetch-only binding, unbound owner, other paths) never reach the provider; one `git.fetch` or `git.denied` ledger event per call. A 2xx `application/x-git-*` stream is relayed raw (rewriting would corrupt packs) and is not covered |
+| `G9` | agent MCP (gateway `/mcp`) | the tool list scanned for value-like schema fields and open maps (`gateway/mcp_check.py`, the rule of `ls_mcp_server::find_value_like_field`); the canary as the sentinel in `list_my_keys`, a relay to an echoing provider and `explain_block` results, the ledger and `gateway.log`; the off `issue_short_lived_credential` and unknown names (other casing, trailing space, `../`, a hub-only tool, `get_secret_value`) called by name are refused and never return a credential; turning `relay_http_request` off hides and refuses it within the cache window with no new provider request; one `mcp.call` event per call, with only layer, tool and reason |
+| `G10` | hub MCP (control plane `/mcp`) | the same scans on the hub: the person signs in on Keycloak (as `just mcp-e2e`), the sentinel is a secret in their org, the six read tools are listed and succeed, the off `revoke_grant` and `pause_agents` and unknown names are refused by name and the grant is not revoked; `mcp.call` events only name layer, tool and reason (needs Keycloak and `just api` with the hub MCP URL; otherwise `skip: stack not running`) |
 
 Residual register. `gateway/residuals.toml` lists the leak paths the gate accepts for now, each
 with a case, an oracle encoding label, a protection label (prevention, containment or detection)

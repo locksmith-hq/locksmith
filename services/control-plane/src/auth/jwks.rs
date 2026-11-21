@@ -74,9 +74,25 @@ pub struct JwksCache {
 
 impl JwksCache {
     pub fn new(url: String, min_refresh: Duration, max_age: Duration) -> Result<Self, JwksError> {
-        Ok(Self {
+        Ok(Self::with_client(
             url,
-            client: default_client()?,
+            default_client()?,
+            min_refresh,
+            max_age,
+        ))
+    }
+
+    /// As [`Self::new`] with a caller-built client, e.g. one whose resolver refuses private
+    /// addresses (workload issuers, D4 decision 3). The client should carry its own timeouts.
+    pub fn with_client(
+        url: String,
+        client: reqwest::Client,
+        min_refresh: Duration,
+        max_age: Duration,
+    ) -> Self {
+        Self {
+            url,
+            client,
             min_refresh,
             max_age,
             snapshot: RwLock::new(Snapshot {
@@ -85,7 +101,7 @@ impl JwksCache {
             }),
             last_attempt: Mutex::new(None),
             gate: tokio::sync::Mutex::new(()),
-        })
+        }
     }
 
     /// The key published under `kid`, refreshing the set first when it is empty, stale, or does

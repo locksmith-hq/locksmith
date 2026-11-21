@@ -60,3 +60,10 @@ Append-only session log. Read the last entries and `git log` before starting.
 ## 2026-11-21 worker (C), eighth run (cont.)
 - Root cause of the red adversarial D4: CI has no nextest, so `cargo test` runs the tests as threads of one process; the `exchange_workload_token` span callsite was first hit by a test with no subscriber and cached as disabled, so the capture test saw no span. Reproduced locally with `cargo test`; nextest (one process per test) hid it.
 - Fix: `capture_logs` rebuilds the callsite interest cache, and `D4.sh` runs `cargo test ... -- --test-threads=1`. Verified 2x `cargo test -p ls-control-plane --test workload_exchange workload_abuse -- --test-threads=1`: 11 passed. The `::error::` annotation helper stays.
+
+## 2026-11-21 worker (C), ninth run
+- Tasks: 5.1-5.4 done (`smith login --workload`, doctor `workload.login`, github-action, tests). Sonnet implementer, Sonnet evaluator PASS. Verified: `cargo nextest run -p smith-cli workload` 9 passed, tree-check OK, just quick ok.
+- 4.3 still open: workload_abuse (14 passed) and `run.sh D4` pass, but `just leak-scan` needs the compose stack (`just up`); do it with 7.2.
+- Last CI: only `macos` red on b484d4d (nextest exit 100, log blob blocked by the proxy, annotations show no test name; all portable tests pass on Linux, 323/323). Rerun needs Actions write; the new push reruns it.
+- Evaluator notes: action checks sha256 only (not minisign), install.sh repo slug differs from action's; cosmetic spaces in GitHub error text.
+- Remaining: 4.3, 6.x (web/desktop page), 7.x.

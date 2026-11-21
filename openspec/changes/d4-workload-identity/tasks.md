@@ -24,10 +24,10 @@
 - [ ] 4.3 Verify: `cargo nextest run -p ls-control-plane workload_abuse`, `bash tests/adversarial/run.sh`, `just leak-scan`.
 
 ## 5. CLI and GitHub Action [sonnet]
-- [ ] 5.1 `smith login --workload github|kubernetes` with `--policy` / `LOCKSMITH_WORKLOAD_POLICY`: fetch the external token (runner request variables with `audience`; projected token file), exchange, write only the agent token via the existing `agent.json` path; token in `secrecy` types, never in argv, output or disk.
-- [ ] 5.2 `smith doctor` check `workload` (policy handle present, issuer reachable, agent token expiry); help text.
-- [ ] 5.3 `integrations/github-action/action.yml`: composite action that installs `smith` and runs `smith login --workload github`; README with the required `permissions: id-token: write` and a pinned-policy example; `scripts/tree-check.sh` stays green.
-- [ ] 5.4 Verify: `cargo nextest run -p smith-cli workload` (stub runner endpoint and token file; asserts no file other than `agent.json` is written and the external token appears in no output).
+- [x] 5.1 `smith login --workload github|kubernetes` with `--policy` / `LOCKSMITH_WORKLOAD_POLICY`: fetch the external token (runner request variables with `audience`; projected token file), exchange, write only the agent token via the existing `agent.json` path; token in `secrecy` types, never in argv, output or disk.
+- [x] 5.2 `smith doctor` check `workload` (policy handle present, issuer reachable, agent token expiry); help text.
+- [x] 5.3 `integrations/github-action/action.yml`: composite action that installs `smith` and runs `smith login --workload github`; README with the required `permissions: id-token: write` and a pinned-policy example; `scripts/tree-check.sh` stays green.
+- [x] 5.4 Verify: `cargo nextest run -p smith-cli workload` (stub runner endpoint and token file; asserts no file other than `agent.json` is written and the external token appears in no output).
 
 ## 6. Console and desktop [sonnet]
 - [ ] 6.1 Workload identities page in `apps/web` (list, create form with issuer presets for GitHub and Kubernetes, delete with confirm, warning on prefix conditions); no token or secret field anywhere.

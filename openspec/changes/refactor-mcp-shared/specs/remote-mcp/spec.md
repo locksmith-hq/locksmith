@@ -24,5 +24,5 @@ The cache bound on revocation-relevant reads, the `mcp_clients` upsert and `mcp_
 - **THEN** it is answered `401` with the same `WWW-Authenticate` value as before
 
 #### Scenario: Existing tests pass unchanged
-- **WHEN** the gateway MCP tests (`services/gateway/src/relay/tests/mcp_*.rs`) and the control-plane MCP tests (`tests/mcp.rs`, `tests/mcp_auth.rs`, `tests/mcp_tools.rs`) run after the change
+- **WHEN** the gateway MCP tests (`services/gateway/src/relay/tests/mcp*.rs`) and the control-plane MCP tests (`tests/mcp.rs`, `tests/mcp_auth.rs`, `tests/mcp_tools.rs`) run after the change
 - **THEN** they pass with no assertion edited

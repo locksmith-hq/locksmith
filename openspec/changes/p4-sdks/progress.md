@@ -12,3 +12,4 @@
 - Task: ci-fix (hygiene red on PR #554) - ci-fix
 - Verified: scripts/public-check.sh -> OK; vitest control-plane-client -> 9 passed; just quick -> OK
 - Notes for next session: gitleaks flagged the enrollment-secret test fixture (generic-api-key); now built from low-entropy words. 12 tasks still unticked, so no auto-merge yet.
+- 2026-11-21 · worker (alfie): groups 1 and 2 re-landed on `claude/change-p4-sdks-v2`: PR #554 was stacked on the already-merged m1 branch, so its commits never reached main and were reverted there (fa0c5ca). This branch reverts that revert from main. Verified: sdk 8, control-plane-client 9 tests, tree-check. Next: group 3.

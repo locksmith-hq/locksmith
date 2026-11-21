@@ -16,7 +16,7 @@ Verification levels: **verified** (read in the primary doc by fetch), **search-o
 
 | Agent | Blocking pre-tool hook | Project hook file | Project MCP file | Repo markers used |
 |---|---|---|---|---|
-| Gemini CLI | yes (`BeforeTool`, `BeforeAgent`), verified | `.gemini/settings.json` | `.gemini/settings.json` (`mcpServers`) | `.gemini/`, `GEMINI.md` (marker: UNVERIFIED) |
+| Gemini CLI | yes (`BeforeTool`, `BeforeAgent`), verified | `.gemini/settings.json` | `.gemini/settings.json` (`mcpServers`) | `.gemini/`, `GEMINI.md` |
 | Copilot (VS Code, CLI, cloud agent) | yes (`preToolUse`), search-only | `.github/hooks/*.json` | VS Code `.vscode/mcp.json` (UNVERIFIED); CLI `.mcp.json` or `.github/mcp.json` (verified) | `.github/copilot-instructions.md`, `.github/hooks/` (UNVERIFIED) |
 | Windsurf | yes (`pre_*` hooks, exit 2), search-only | workspace `hooks.json` path UNVERIFIED | user-level only (UNVERIFIED) | `.windsurf/`, `.windsurfrules` (UNVERIFIED) |
 | Cline | yes (`PreToolUse` script), search-only | `.clinerules/hooks/` | user-level only (UNVERIFIED) | `.clinerules/`, `.cline/` (UNVERIFIED) |
@@ -157,6 +157,96 @@ global storage). That it is user-level only, and its schema (`command`, `args`, 
 `disabled`, `alwaysAllow`), are **UNVERIFIED**. `smith init` prints the manual step.
 
 Detection: `.clinerules/` (directory) and `.cline/` are **UNVERIFIED** markers.
+
+## Verification pass, 2026-11-21 (Ada, issue #580)
+
+Source: https://github.com/locksmith-hq/locksmith/issues/580 (comment 7069109339). Ada has open
+internet; her answer resolves the UNVERIFIED items above except those listed under "Still open".
+This section supersedes the per-agent text above where they differ. WebFetch output is a model
+summary, so quotes are near-verbatim. Nothing was run against a real agent.
+
+### Gemini CLI (v0.70.0, 2026-11-19), verified from source and docs
+- An omitted matcher matches every tool (`packages/core/src/hooks/hookPlanner.ts` `matchesContext`);
+  `""` and `"*"` do too. The generator's no-matcher choice is correct.
+- Tool names: shell `run_shell_command` with `{command, is_background, description?}`; `write_file`
+  `{file_path, content}`, `replace` `{file_path, old_string, new_string, ...}`, `read_file`
+  `{file_path}`, plus `read_many_files`, `glob`, `grep_search`, `list_directory`, `web_fetch`,
+  `google_web_search`. MCP tools are `mcp_<server>_<tool>` (single underscores).
+- Reply: exit 0 parses stdout JSON (`decision` allow|deny, `block` alias, `reason`); exit 2 blocks
+  with stderr as the reason; any other exit code only warns and the tool runs.
+- Project hooks run only in a **trusted** folder; a changed project hook is treated as new and
+  untrusted. `smith doctor` should warn about this.
+- Markers `GEMINI.md` and `.gemini/settings.json` are confirmed.
+
+### GitHub Copilot, verified from vendor docs
+- Hook files: CLI reads `.github/hooks/*.json`, `~/.copilot/hooks/*.json`, inline `hooks` in
+  `.github/copilot/settings.json`; the cloud agent reads only `.github/hooks/*.json`; VS Code agent
+  mode reads `.github/hooks/*.json` (and `.claude/settings.json` with `chat.useClaudeHooks`). One
+  `.github/hooks/locksmith.json` serves all three.
+- Schema `{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"...","powershell":"...",
+  "cwd":"...","env":{},"timeoutSec":30,"matcher":"regex"}]}}`; the generator's entry is valid.
+- Payload depends on the event name casing: `preToolUse` gives `{sessionId, timestamp(ms), cwd,
+  toolName, toolArgs}` (tools `bash`, `powershell`, `edit`, `create`, `view`, `glob`, `grep`,
+  `web_fetch`, `task`, `ask_user`); `PreToolUse` gives `{hook_event_name, session_id, timestamp,
+  cwd, tool_name, tool_input}` with Claude-style names. `toolArgs` may be a JSON string or an
+  object: parse both.
+- Reply `{"permissionDecision":"allow|deny|ask","permissionDecisionReason":"..."}`; reason required
+  on deny; cloud agent treats `ask` as deny. Exit 2 denies; any other non-zero exit denies.
+  **A timeout fails open**: keep `timeoutSec` generous (default 30); doctor should mention it.
+- MCP: VS Code `.vscode/mcp.json` (`servers`, `{type:"stdio",command,args,env}`) is verified but
+  deprecated (docs say Feb 2027) for a portable `.mcp.json` with `mcpServers`. CLI: `.mcp.json`
+  beats `.github/mcp.json`; user file `~/.copilot/mcp-config.json`; entries `type: local|http`.
+- Markers: `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`; binary
+  `copilot`, npm `@github/copilot`.
+- Sources: docs.github.com/en/copilot/reference/hooks-reference,
+  code.visualstudio.com/docs/copilot/customization/hooks,
+  code.visualstudio.com/docs/agents/reference/mcp-configuration,
+  docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers,
+  docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions.
+
+### Windsurf is now Devin Desktop, partly verified
+- `docs.windsurf.com` redirects to `docs.devin.ai`. Current hooks file: `.devin/hooks.v1.json`
+  (project or user), Claude-style `PreToolUse` with `matcher` and `type: "command"`. Hooks do not
+  load in Restricted Mode (https://docs.devin.ai/desktop/cascade/hooks).
+- The linked CLI hooks page (https://docs.devin.ai/cli/extensibility/hooks/overview.md; not
+  confirmed to apply to Desktop): omitted or empty matcher matches all; payload `{hook_event_name,
+  tool_name, tool_input, session_id, prompt_id}`; shell tool `exec` with `tool_input.command`;
+  reply `{"decision":"block","reason":...}`; exit 2 blocks; any other exit, a timeout or unreadable
+  output **fails open**.
+- Legacy Windsurf (third-party and search results only, medium-low confidence): workspace
+  `.windsurf/hooks.json`, user `~/.codeium/windsurf/hooks.json`; schema
+  `{"hooks":{"<event>":[{"command":"...","show_output":bool}]}}`; payload `agent_action_name` and
+  `tool_info.{command_line,file_path}`; pre-hooks block on exit 2.
+- MCP (https://docs.devin.ai/desktop/cascade/mcp): project `.devin/mcp_config.json`, local
+  `.devin/mcp_config.local.json`, user `~/.config/devin/mcp_config.json`. Schema not shown.
+- Markers: `.devin/rules/` plus legacy `.windsurf/rules/*.md`, `.windsurf/global_rules.md`,
+  `.windsurfrules`; `AGENTS.md` is read. Add `.devin/` as a marker.
+- **Decision:** treat Windsurf as Devin Desktop; detect `.devin/` and `.windsurf/`; until a fixture
+  confirms `.devin/hooks.v1.json`, `smith doctor` reports Windsurf as "unknown, not protected".
+
+### Cline (v4.1.27, 2026-11-21), verified from source and docs
+- Hook file: executable named exactly after the event, no extension, with a shebang:
+  `.clinerules/hooks/PreToolUse` (https://raw.githubusercontent.com/cline/cline/main/.clinerules/hooks/README.md).
+  Hook dirs: `.cline/hooks/` (new), `.clinerules/hooks/` (legacy, still read), `~/.cline/hooks/`,
+  `~/Documents/Cline/Hooks/`, `CLINE_HOOKS_DIR` (the launch post's `Rules/Hooks` path is stale).
+- Hooks are not supported on Windows in the VS Code extension, and need "Enable Hooks" on.
+- Payload `{clineVersion, hookName, timestamp, taskId, workspaceRoots, userId,
+  preToolUse:{toolName, parameters}}`. `parameters` values are **strings** (`toStringRecord`).
+  Shell tool `execute_command`; file tools use `path`. The SDK/CLI runner uses another shape
+  (`tool_call:{id,name,input}`, shell tool `run_commands`): parse both.
+- Reply `{"cancel":bool,"contextModification":"...","errorMessage":"..."}`; `cancel` required;
+  timeout 30 s (extension) or 120 s (CLI). Exit-code semantics undocumented: always exit 0 with JSON.
+- MCP: `cline_mcp_settings.json`, user-level only; CLI path `~/.cline/data/settings/cline_mcp_settings.json`
+  or `CLINE_MCP_SETTINGS_PATH`; keys `mcpServers.{command,args,env,disabled,autoApprove,type,url,headers}`
+  (https://docs.cline.bot/mcp/configuring-mcp-servers).
+- Markers `.clinerules/` and `.cline/` are confirmed.
+
+### Still open
+- Command key inside Copilot's `toolArgs` (likely `command`).
+- Cline exit codes and the `command` parameter key (likely `command`).
+- Legacy Windsurf shell behaviour and stderr handling; Devin Desktop's hook and MCP schemas.
+- No real agent was run: task 2.1 fixtures derived from these docs must be marked as such in
+  `SOURCE.md` and replaced by recordings when an agent is available.
 
 ## Library check
 

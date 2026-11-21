@@ -1,7 +1,7 @@
 # Tasks: P3 agent plugins
 
 ## 1. Formats and generator [sonnet]
-- [ ] 1.1 [haiku] Research spike: for Gemini CLI, Copilot (VS Code agent mode and CLI), Windsurf and Cline record in `docs/research/agent-plugin-formats.md` (with source URLs and date) the project and user config paths, MCP server schema, whether a blocking pre-tool or pre-prompt hook exists, its payload and reply shape, and the repo markers for detection.
+- [x] 1.1 [haiku] Research spike: for Gemini CLI, Copilot (VS Code agent mode and CLI), Windsurf and Cline record in `docs/research/agent-plugin-formats.md` (with source URLs and date) the project and user config paths, MCP server schema, whether a blocking pre-tool or pre-prompt hook exists, its payload and reply shape, and the repo markers for detection.
 - [x] 1.2 Add the four `Agent` variants to `agents.rs` (id, events, binaries, detect, `config_path`, `mcp_path`), extending `ALL`; agents without a hook get an empty events list and a `protection()` label (prevention, detection or none).
 - [x] 1.3 Extend `wrapper`, `json_entry`, `hooks_json`, `merge_hooks` and `merge_mcp` for the new formats, fail-closed in each agent's denial shape; unit tests for idempotence, preserving other settings and invalid input, as for the existing agents.
 - [x] 1.4 Verify: `cargo test -p smith-cli --bin smith agents`.

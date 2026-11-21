@@ -19,7 +19,7 @@
 - [x] 3.3 Verify: `cargo nextest run -p ls-control-plane workload_exchange`: minted token verifies with the gateway verifier, carries only the agent claims, policy delete and grant revoke cut access, every failure body is identical.
 
 ## 4. Abuse limits and adversarial cases [sonnet]
-- [ ] 4.1 `jti` replay cache (decision 6; resolve the `[verify]` OSS item first) and per-policy plus per-source rate limits with config defaults.
+- [x] 4.1 `jti` replay cache (decision 6; resolve the `[verify]` OSS item first) and per-policy plus per-source rate limits with config defaults.
 - [ ] 4.2 Add cases to `tests/adversarial/`: forged `iss` pointing at an attacker host (no outbound call), `jku` header ignored, token for another audience, replayed `jti`, policy handle for another org, canary external token absent from logs, traces and ledger.
 - [ ] 4.3 Verify: `cargo nextest run -p ls-control-plane workload_abuse`, `bash tests/adversarial/run.sh`, `just leak-scan`.
 

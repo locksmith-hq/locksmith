@@ -31,3 +31,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 3.1, 3.2, 3.3 - done (`api/workload_tokens.rs` POST /v1/workload-tokens with `ExternalToken` SecretString, `exchange_workload_token` span, `workload_identity.exchanged`/`.denied` audit events, 300s throttled `last_used_at`; verifier wired into AppState and main; create-time private-issuer refusal; OpenAPI and client types regenerated; `tests/workload_exchange.rs`)
 - Verified: `cargo nextest run -p ls-control-plane workload` 45 passed; `just quick` ok; Sonnet evaluator PASS
 - Notes for next session: ledger attrs allow only ids/codes/hosts, so policy-named claim values are on the tracing event, not the ledger; create-time private issuer is 400 not 422; Authorization-header form of the exchange not implemented. Next: 4.1 jti replay cache and rate limits (resolve the `[verify]` OSS item first), then 4.2.
+
+## 2026-11-21 worker (C), fifth run
+- Task: 4.1 - done (`auth/abuse.rs`: moka-backed jti replay cache keyed by sha256(issuer,jti), fixed-window per-policy (60/min) and per-source (30/min) limits, env-configurable; replay and rate limits return the same single 401; replay writes `workload_identity.denied` code `replay`; `[verify]` resolved in design.md: moka 0.12.16)
+- Verified: `cargo nextest run -p ls-control-plane workload` 54 passed; clippy and fmt clean; `just quick` ok; Sonnet evaluator PASS
+- Notes for next session: source limit uses the peer address (behind a proxy all callers share a bucket; forwarded headers not trusted); rate-limit refusals are not ledgered by design. Test `workload_abuse_a_policy_mismatch_does_not_burn_the_jti` never retries the jti: strengthen in 4.2/4.3. Next: 4.2 adversarial cases, 4.3, then 5.x.

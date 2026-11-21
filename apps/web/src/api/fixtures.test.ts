@@ -17,6 +17,25 @@ describe("fixtures", () => {
     expect(fx.requests.some((r) => /material|value/.test(r))).toBe(false);
   });
 
+  it("serve agent, grant, MCP and org routes", async () => {
+    installFixtureFetch();
+    const c = createClient("o");
+    const { agent } = await c.createAgent({ name: "bot" });
+    expect((await c.listAgents()).length).toBe(1);
+    await c.rotateEnrollment(agent.id);
+    const g = await c.createGrant(agent.id, { mode: "relay" } as never);
+    expect((await c.listGrants(agent.id)).length).toBe(1);
+    await c.revokeGrant(agent.id, g.id);
+    expect((await c.listGrants(agent.id)).length).toBe(0);
+    await c.deleteAgent(agent.id);
+    expect(await c.listAgents()).toEqual([]);
+    const [t] = await c.listMcpTools();
+    expect((await c.setMcpTool(t!.layer, t!.tool, false)).enabled).toBe(false);
+    const [mc] = await c.listMcpClients();
+    expect((await c.revokeMcpClient(mc!.id)).revoked_at).toBeTruthy();
+    expect((await c.getOrg("o")).id).toBe("o");
+  });
+
   it("can return 409, 403 and empty lists", async () => {
     installFixtureFetch({ fail: { "POST /v1/projects": 409, "GET /v1/agents": 403 } });
     const c = createClient("o");

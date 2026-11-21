@@ -17,6 +17,10 @@ export function createFixtures(opts: FixtureOptions = {}) {
   const secrets = opts.empty
     ? []
     : [{ id: id(20), project_id: id(1), environment_id: id(10), name: "STRIPE_KEY", description: "", version_count: 2, created_at: now, updated_at: now }];
+  const agents: { id: string; name: string; created_at: string }[] = [];
+  const grants: ({ id: string; agent_id: string; created_at: string } & Record<string, unknown>)[] = [];
+  const mcpTools = opts.empty ? [] : [{ layer: "hub", tool: "list_secrets", default_enabled: true, enabled: true }];
+  const mcpClients: { id: string; client_id: string; name: string; revoked_at: string | null }[] = opts.empty ? [] : [{ id: id(30), client_id: "fixture-client", name: "Fixture MCP client", revoked_at: null }];
   const requests: string[] = [];
   let seq = 100;
 
@@ -71,7 +75,43 @@ export function createFixtures(opts: FixtureOptions = {}) {
       if (!s) return problem(404);
       return reply({ items: Array.from({ length: s.version_count }, (_, n) => ({ secret_id: s.id, version: n + 1, key_id: "gateway:v1", created_at: now })) });
     }
-    if (path === "/v1/agents" || /^\/v1\/agents\/[^/]+\/grants$/.test(path)) return page([]);
+    if (path === "/v1/agents") {
+      if (method === "GET") return page(agents);
+      const a = { id: id(seq++), name: body.name ?? "agent", created_at: now };
+      agents.push(a);
+      return reply({ agent: a, enrollment_secret: "fixture-enrollment-secret" }, 201);
+    }
+    if ((m = path.match(/^\/v1\/agents\/([^/]+)$/))) {
+      const i = agents.findIndex((x) => x.id === m![1]);
+      if (i < 0 || method !== "DELETE") return problem(404);
+      return agents.splice(i, 1), reply(null, 204);
+    }
+    if ((m = path.match(/^\/v1\/agents\/([^/]+)\/enrollment-secret$/))) {
+      return agents.some((x) => x.id === m![1]) ? reply({ agent: agents.find((x) => x.id === m![1]), enrollment_secret: "fixture-enrollment-secret" }, 201) : problem(404);
+    }
+    if ((m = path.match(/^\/v1\/agents\/([^/]+)\/grants$/))) {
+      if (method === "GET") return page(grants.filter((g) => g.agent_id === m![1]));
+      const g = { id: id(seq++), agent_id: m[1]!, ...body, created_at: now };
+      grants.push(g);
+      return reply(g, 201);
+    }
+    if ((m = path.match(/^\/v1\/agents\/([^/]+)\/grants\/([^/]+)$/))) {
+      const i = grants.findIndex((x) => x.id === m![2]);
+      if (i < 0) return problem(404);
+      return grants.splice(i, 1), reply(null, 204);
+    }
+    if (path === "/v1/mcp/tools") return reply({ items: mcpTools });
+    if ((m = path.match(/^\/v1\/mcp\/tools\/([^/]+)\/([^/]+)$/))) {
+      const t = mcpTools.find((x) => x.layer === m![1] && x.tool === decodeURIComponent(m![2]!));
+      if (!t) return problem(404);
+      return Object.assign(t, { enabled: (body as unknown as { enabled: boolean }).enabled }), reply(t);
+    }
+    if (path === "/v1/mcp/clients") return reply({ items: mcpClients });
+    if ((m = path.match(/^\/v1\/mcp\/clients\/([^/]+)\/revoke$/))) {
+      const c = mcpClients.find((x) => x.id === decodeURIComponent(m![1]!));
+      return c ? (Object.assign(c, { revoked_at: now }), reply(c)) : problem(404);
+    }
+    if ((m = path.match(/^\/v1\/orgs\/([^/]+)$/))) return reply({ id: decodeURIComponent(m[1]!), name: "Fixture org", created_at: now });
     if (path === "/v1/audit/events") return page([]);
     if (path === "/v1/audit/status") return reply({ status: "ok" });
     return problem(404);

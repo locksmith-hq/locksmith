@@ -2,7 +2,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Logo } from "@locksmith/ui";
 import type { Client } from "@locksmith/control-plane-client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agents } from "./pages/Agents";
 import { GrantsPage } from "./pages/Grants";
@@ -32,12 +32,23 @@ function EnvironmentsRedirect({ client, selected }: { client: Client; selected?:
   return <Navigate to={first ? `/projects/${first.id}` : "/projects"} replace />;
 }
 
+/** Org switcher (top right). Single org until a workspace API lists the user's orgs (T3 progress.md). */
+function OrgSwitcher({ name }: { name: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="shell-org" aria-label="Organization">
+      <button aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{name} ▾</button>
+      {open && <ul role="menu"><li role="menuitem" aria-current="true">{name}</li></ul>}
+    </div>
+  );
+}
+
 /** Signed-in frame: sidebar, org header and sign-out around the routed pages. */
 export function Shell({ client, user, onSignOut }: { client: Client; user?: string; onSignOut?: () => void }) {
   const [selected, setSelected] = useState<string | undefined>();
   const { pathname } = useLocation();
   const m = /^\/projects\/([^/]+)/.exec(pathname);
-  if (m && m[1] !== selected) setSelected(m[1]);
+  useEffect(() => { if (m) setSelected(m[1]); }, [m?.[1]]);
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   return (
     <QueryClientProvider client={queryClient}>
@@ -58,7 +69,7 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
         </div>
       </aside>
       <main className="shell-main">
-        <header className="shell-top"><div className="shell-org" aria-label="Organization">Locksmith</div></header>
+        <header className="shell-top"><OrgSwitcher name="Locksmith" /></header>
         <Routes>
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<Overview client={client} />} />

@@ -77,3 +77,15 @@ test("frame: org switcher in the top bar, user card holds sign-out, Environments
   expect(await screen.findByRole("heading", { name: "Environments" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "All projects" })).toBeInTheDocument();
 });
+
+test("Environments keeps the project being viewed, and the org switcher opens a menu", async () => {
+  installFixtureFetch();
+  window.history.pushState({}, "", "/projects/00000000-0000-4000-8000-000000000001");
+  render(<App auth={fakeAuth(signedIn)} />);
+  expect(await screen.findByText("dev")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("link", { name: "Environments" }));
+  expect(await screen.findByText("dev")).toBeInTheDocument();
+  expect(window.location.pathname).toBe("/projects/00000000-0000-4000-8000-000000000001");
+  await userEvent.click(screen.getByRole("button", { name: /Locksmith/ }));
+  expect(screen.getByRole("menuitem", { name: "Locksmith" })).toBeInTheDocument();
+});

@@ -8,7 +8,12 @@ use std::net::SocketAddr;
 
 use secrecy::{ExposeSecret, SecretString};
 
+use crate::auth::abuse::{
+    AbuseLimits, DEFAULT_JTI_ENTRIES, DEFAULT_PER_POLICY, DEFAULT_PER_SOURCE,
+};
 use crate::auth::human::HumanAuthConfig;
+use crate::auth::issuers::IssuerAccess;
+use crate::issuer_admin::IssuerAdminConfig;
 
 pub const ENV_DATABASE_URL: &str = "DATABASE_URL";
 pub const ENV_DATABASE_OWNER_URL: &str = "DATABASE_OWNER_URL";
@@ -35,6 +40,30 @@ pub const ENV_OIDC_ISSUER: &str = "LOCKSMITH_OIDC_ISSUER";
 pub const ENV_OIDC_AUDIENCE: &str = "LOCKSMITH_OIDC_AUDIENCE";
 /// T1: where the issuer publishes its JWKS (an `http` or `https` URL).
 pub const ENV_OIDC_JWKS_URL: &str = "LOCKSMITH_OIDC_JWKS_URL";
+/// D4, local development only: `1` lets workload issuers live on loopback or private addresses
+/// (and plain http), for a stub issuer. Cloud metadata addresses stay refused.
+pub const ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS: &str = "LOCKSMITH_WORKLOAD_ALLOW_PRIVATE_ISSUERS";
+/// D4: workload token exchanges allowed per policy per minute (default 60, `0` disables).
+pub const ENV_WORKLOAD_RATE_PER_POLICY: &str = "LOCKSMITH_WORKLOAD_RATE_PER_POLICY";
+/// D4: workload token exchanges allowed per source address per minute (default 30, `0` disables).
+pub const ENV_WORKLOAD_RATE_PER_SOURCE: &str = "LOCKSMITH_WORKLOAD_RATE_PER_SOURCE";
+/// D4: how many external-token `jti` values the replay cache remembers (default 100000).
+pub const ENV_WORKLOAD_JTI_ENTRIES: &str = "LOCKSMITH_WORKLOAD_JTI_CACHE_ENTRIES";
+
+/// M1 2.1: the canonical public URL of the hub `/mcp` route (RFC 8707 resource). MCP tokens must
+/// carry it as `aud`. Needs the `LOCKSMITH_OIDC_*` issuer settings; unset leaves `/mcp` answering `401`.
+pub const ENV_MCP_RESOURCE_URL: &str = "LOCKSMITH_MCP_RESOURCE_URL";
+
+/// M1 4.2: the server base URL of the issuer's admin API, e.g. `http://localhost:8180` for
+/// Keycloak. It is used to revoke a person's consent for an MCP client after the database
+/// revoke. This and the three variables below go together; unset skips the step.
+pub const ENV_ISSUER_ADMIN_URL: &str = "LOCKSMITH_ISSUER_ADMIN_URL";
+/// The realm whose users and clients the admin client manages.
+pub const ENV_ISSUER_ADMIN_REALM: &str = "LOCKSMITH_ISSUER_ADMIN_REALM";
+/// The confidential client the control plane authenticates as (service account).
+pub const ENV_ISSUER_ADMIN_CLIENT_ID: &str = "LOCKSMITH_ISSUER_ADMIN_CLIENT_ID";
+/// That client's secret. Secret value: never logged.
+pub const ENV_ISSUER_ADMIN_CLIENT_SECRET: &str = "LOCKSMITH_ISSUER_ADMIN_CLIENT_SECRET";
 
 /// Shortest accepted gateway service token, in bytes (a 256-bit random token in hex or base64
 /// is longer). Shorter values are rejected rather than accepted as a guessable credential.
@@ -105,6 +134,15 @@ pub struct Config {
     /// The OIDC issuer human tokens are verified against (T1). `None` when
     /// `LOCKSMITH_OIDC_ISSUER` is unset: every bearer token is then refused. Public values only.
     pub human_auth: Option<HumanAuthConfig>,
+    /// How far workload issuer discovery may reach (D4 decision 3). Default: public https only.
+    pub workload_issuers: IssuerAccess,
+    /// Replay cache size and rate limits for the workload token exchange (D4 decision 6).
+    pub workload_limits: AbuseLimits,
+    /// The canonical hub MCP resource URL (M1 2.1). `None` when unset. Public value only.
+    pub mcp_resource_url: Option<String>,
+    /// The issuer admin client for the consent revoke (M1 4.2). `None` when
+    /// `LOCKSMITH_ISSUER_ADMIN_URL` is unset: the issuer step is then skipped.
+    pub issuer_admin: Option<IssuerAdminConfig>,
 }
 
 /// OpenBao transit settings for wrapping DEKs. No `Debug`/`Clone`: it holds the control
@@ -220,6 +258,48 @@ impl Config {
         };
 
         let human_auth = human_auth_from(&get)?;
+        let mcp_resource_url = match get(ENV_MCP_RESOURCE_URL)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+        {
+            None => None,
+            // The issuer settings verify the token, so the resource URL is useless without them.
+            Some(_) if human_auth.is_none() => return Err(ConfigError::Missing(ENV_OIDC_ISSUER)),
+            Some(v) if !is_http_url(&v) => return Err(ConfigError::Invalid(ENV_MCP_RESOURCE_URL)),
+            Some(v) => Some(v),
+        };
+
+        let issuer_admin = issuer_admin_from(&get, human_auth.is_some())?;
+
+        let workload_issuers = IssuerAccess {
+            allow_private_hosts: match get(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS).as_deref() {
+                None | Some("") | Some("0") => false,
+                Some("1") => true,
+                Some(_) => return Err(ConfigError::Invalid(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS)),
+            },
+        };
+
+        let number = |var: &'static str| -> Result<Option<u64>, ConfigError> {
+            match get(var).as_deref().map(str::trim) {
+                None | Some("") => Ok(None),
+                Some(v) => v.parse().map(Some).map_err(|_| ConfigError::Invalid(var)),
+            }
+        };
+        let rate = |var: &'static str, default: u32| -> Result<u32, ConfigError> {
+            match number(var)? {
+                None => Ok(default),
+                Some(v) => u32::try_from(v).map_err(|_| ConfigError::Invalid(var)),
+            }
+        };
+        let workload_limits = AbuseLimits {
+            per_policy: rate(ENV_WORKLOAD_RATE_PER_POLICY, DEFAULT_PER_POLICY)?,
+            per_source: rate(ENV_WORKLOAD_RATE_PER_SOURCE, DEFAULT_PER_SOURCE)?,
+            jti_entries: match number(ENV_WORKLOAD_JTI_ENTRIES)? {
+                None => DEFAULT_JTI_ENTRIES,
+                Some(0) => return Err(ConfigError::Invalid(ENV_WORKLOAD_JTI_ENTRIES)),
+                Some(v) => v,
+            },
+        };
 
         Ok(Self {
             database_url,
@@ -232,6 +312,10 @@ impl Config {
             gateway_service_token,
             agent_signing_key,
             human_auth,
+            workload_issuers,
+            workload_limits,
+            mcp_resource_url,
+            issuer_admin,
         })
     }
 }
@@ -257,6 +341,38 @@ fn human_auth_from(
         issuer,
         audience,
         jwks_url,
+    }))
+}
+
+/// All four `LOCKSMITH_ISSUER_ADMIN_*` variables or none (an unset or empty URL means none). The
+/// admin client acts on the OIDC issuer, so it needs the `LOCKSMITH_OIDC_*` settings too.
+fn issuer_admin_from(
+    get: &impl Fn(&str) -> Option<String>,
+    has_oidc: bool,
+) -> Result<Option<IssuerAdminConfig>, ConfigError> {
+    let value = |var: &'static str| {
+        get(var)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    let Some(url) = value(ENV_ISSUER_ADMIN_URL) else {
+        return Ok(None);
+    };
+    if !has_oidc {
+        return Err(ConfigError::Missing(ENV_OIDC_ISSUER));
+    }
+    if !is_http_url(&url) {
+        return Err(ConfigError::Invalid(ENV_ISSUER_ADMIN_URL));
+    }
+    Ok(Some(IssuerAdminConfig {
+        url,
+        realm: value(ENV_ISSUER_ADMIN_REALM).ok_or(ConfigError::Missing(ENV_ISSUER_ADMIN_REALM))?,
+        client_id: value(ENV_ISSUER_ADMIN_CLIENT_ID)
+            .ok_or(ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_ID))?,
+        client_secret: SecretString::from(
+            value(ENV_ISSUER_ADMIN_CLIENT_SECRET)
+                .ok_or(ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_SECRET))?,
+        ),
     }))
 }
 
@@ -290,6 +406,57 @@ mod tests {
     }
 
     #[test]
+    fn workload_private_issuers_are_off_unless_set_to_1() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert!(!c.workload_issuers.allow_private_hosts);
+        let c = Config::from_lookup(lookup(&with(&[(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS, "1")])))
+            .ok()
+            .unwrap();
+        assert!(c.workload_issuers.allow_private_hosts);
+        let err = Config::from_lookup(lookup(&with(&[(
+            ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS,
+            "yes",
+        )])))
+        .err()
+        .unwrap();
+        assert_eq!(
+            err,
+            ConfigError::Invalid(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS)
+        );
+    }
+
+    #[test]
+    fn workload_limits_default_and_override_from_env() {
+        let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
+        assert_eq!(c.workload_limits, AbuseLimits::default());
+        let c = Config::from_lookup(lookup(&with(&[
+            (ENV_WORKLOAD_RATE_PER_POLICY, "5"),
+            (ENV_WORKLOAD_RATE_PER_SOURCE, "0"),
+            (ENV_WORKLOAD_JTI_ENTRIES, "42"),
+        ])))
+        .ok()
+        .unwrap();
+        assert_eq!(
+            c.workload_limits,
+            AbuseLimits {
+                per_policy: 5,
+                per_source: 0,
+                jti_entries: 42
+            }
+        );
+        for (var, bad) in [
+            (ENV_WORKLOAD_RATE_PER_POLICY, "many"),
+            (ENV_WORKLOAD_RATE_PER_SOURCE, "-1"),
+            (ENV_WORKLOAD_JTI_ENTRIES, "0"),
+        ] {
+            let err = Config::from_lookup(lookup(&with(&[(var, bad)])))
+                .err()
+                .unwrap();
+            assert_eq!(err, ConfigError::Invalid(var));
+        }
+    }
+
+    #[test]
     fn defaults_to_loopback_without_dev_auth() {
         let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
         assert!(c.bind.ip().is_loopback());
@@ -310,6 +477,71 @@ mod tests {
     fn oidc_is_off_unless_an_issuer_is_set() {
         let c = Config::from_lookup(lookup(&DB)).ok().unwrap();
         assert!(c.human_auth.is_none());
+    }
+
+    #[test]
+    fn mcp_resource_url_needs_the_oidc_issuer_and_a_url() {
+        let url = (ENV_MCP_RESOURCE_URL, "https://hub.example/mcp");
+        let err = Config::from_lookup(lookup(&with(&[url]))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OIDC_ISSUER));
+        let oidc = [
+            (ENV_OIDC_ISSUER, "https://idp.example/realms/x"),
+            (ENV_OIDC_AUDIENCE, "api"),
+            (ENV_OIDC_JWKS_URL, "http://localhost:8081/certs"),
+        ];
+        let mut bad = oidc.to_vec();
+        bad.push((ENV_MCP_RESOURCE_URL, "not a url"));
+        let err = Config::from_lookup(lookup(&with(&bad))).err().unwrap();
+        assert_eq!(err, ConfigError::Invalid(ENV_MCP_RESOURCE_URL));
+        let mut ok = oidc.to_vec();
+        ok.push(url);
+        let c = Config::from_lookup(lookup(&with(&ok))).ok().unwrap();
+        assert_eq!(
+            c.mcp_resource_url.as_deref(),
+            Some("https://hub.example/mcp")
+        );
+    }
+
+    #[test]
+    fn issuer_admin_is_all_or_nothing_and_needs_oidc() {
+        // Unset: skipped.
+        assert!(
+            Config::from_lookup(lookup(&DB))
+                .ok()
+                .unwrap()
+                .issuer_admin
+                .is_none()
+        );
+        let oidc = [
+            (ENV_OIDC_ISSUER, "https://idp.example/realms/x"),
+            (ENV_OIDC_AUDIENCE, "api"),
+            (ENV_OIDC_JWKS_URL, "http://localhost:8081/certs"),
+        ];
+        let url = (ENV_ISSUER_ADMIN_URL, "http://localhost:8180");
+        let err = Config::from_lookup(lookup(&with(&[url]))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_OIDC_ISSUER));
+        let mut v = oidc.to_vec();
+        v.push(url);
+        let err = Config::from_lookup(lookup(&with(&v))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_ISSUER_ADMIN_REALM));
+        v.push((ENV_ISSUER_ADMIN_REALM, "locksmith"));
+        let err = Config::from_lookup(lookup(&with(&v))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_ID));
+        v.push((ENV_ISSUER_ADMIN_CLIENT_ID, "locksmith-control-plane"));
+        let err = Config::from_lookup(lookup(&with(&v))).err().unwrap();
+        assert_eq!(err, ConfigError::Missing(ENV_ISSUER_ADMIN_CLIENT_SECRET));
+        // The error names the variable, never a value.
+        assert!(!err.to_string().contains("localhost:8180"));
+        v.push((ENV_ISSUER_ADMIN_CLIENT_SECRET, "s3cret-value"));
+        let c = Config::from_lookup(lookup(&with(&v))).ok().unwrap();
+        let admin = c.issuer_admin.unwrap();
+        assert_eq!(admin.realm, "locksmith");
+        assert_eq!(admin.url, "http://localhost:8180");
+        // A bad URL is refused.
+        let mut bad = oidc.to_vec();
+        bad.push((ENV_ISSUER_ADMIN_URL, "not a url"));
+        let err = Config::from_lookup(lookup(&with(&bad))).err().unwrap();
+        assert_eq!(err, ConfigError::Invalid(ENV_ISSUER_ADMIN_URL));
     }
 
     #[test]

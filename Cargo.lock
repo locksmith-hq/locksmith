@@ -1082,6 +1082,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-channel"
+version = "0.5.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2722,14 +2731,18 @@ dependencies = [
  "ls-crypto",
  "ls-envelope",
  "ls-http",
+ "ls-mcp-server",
  "ls-pg-test",
+ "ls-proxy",
  "ls-tenant-lint",
+ "moka",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "p256",
  "reqwest",
+ "rmcp",
  "rustls",
  "secrecy",
  "serde",
@@ -2790,10 +2803,16 @@ dependencies = [
 name = "ls-e2e"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "base64 0.22.1",
+ "jsonwebtoken",
+ "p256",
  "reqwest",
+ "rustls",
+ "rustls-pki-types",
  "serde_json",
  "tokio",
  "tokio-postgres",
+ "tokio-rustls",
 ]
 
 [[package]]
@@ -2824,19 +2843,23 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bytes",
+ "getrandom 0.2.17",
  "http-body-util",
  "jsonwebtoken",
  "ls-audit",
  "ls-control-plane",
  "ls-envelope",
  "ls-http",
+ "ls-mcp-server",
  "ls-pg-test",
  "ls-proxy",
  "ls-redact",
  "reqwest",
+ "rmcp",
  "secrecy",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "time",
  "tokio",
  "toml",
@@ -2887,6 +2910,13 @@ dependencies = [
 [[package]]
 name = "ls-license"
 version = "0.0.1-alpha.4"
+
+[[package]]
+name = "ls-mcp-server"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "ls-pg-test"
@@ -3095,6 +3125,23 @@ dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "moka"
+version = "0.12.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4293f18e7567a1caf3c584855554377025c65e0aa445344d04171f5ad63d19b9"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-epoch",
+ "crossbeam-utils",
+ "equivalent",
+ "parking_lot",
+ "portable-atomic",
+ "smallvec",
+ "tagptr",
+ "uuid",
 ]
 
 [[package]]
@@ -4171,6 +4218,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "rmcp"
+version = "3.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "391f153431ab68664d946513ea0cb3edbca78eaf99c5a983036cacab6220d85b"
+dependencies = [
+ "async-trait",
+ "base64 0.23.1",
+ "bytes",
+ "chrono",
+ "futures",
+ "http",
+ "http-body",
+ "http-body-util",
+ "indexmap 2.14.2",
+ "libc",
+ "pastey",
+ "percent-encoding",
+ "pin-project-lite",
+ "rand 0.10.3",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sse-stream",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower-service",
+ "tracing",
+ "unicode-general-category",
+ "unicode-normalization",
+ "uuid",
+]
+
+[[package]]
 name = "rpassword"
 version = "7.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4425,10 +4508,24 @@ version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab508826f74a77ca9d5aba6ff19b522583ee3eaf28a19384ff3d0e5835fadf6e"
 dependencies = [
+ "chrono",
  "dyn-clone",
  "ref-cast",
+ "schemars_derive",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1c3a92094fa7d61aa124645844facb6b554dfc797136d0f5fd1f890e2bffc69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn 3.0.10",
 ]
 
 [[package]]
@@ -4556,6 +4653,17 @@ name = "serde_derive"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f852137cce035d6a4df67ccce505ff6b3e9fd3a10e3e52b24dc71e650bb1a9bd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4855,6 +4963,7 @@ dependencies = [
  "signal-hook",
  "tokio",
  "toml",
+ "url",
  "wiremock",
  "zeroize",
 ]
@@ -4963,6 +5072,19 @@ dependencies = [
  "tracing",
  "uuid",
  "whoami",
+]
+
+[[package]]
+name = "sse-stream"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c25ac7aff0abd1dbc474536e40416e1102c7dd9bfba0b9861c6d357f835dcfb4"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http-body",
+ "http-body-util",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -5081,6 +5203,12 @@ dependencies = [
  "quote",
  "syn 3.0.10",
 ]
+
+[[package]]
+name = "tagptr"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
 name = "target-tuple"
@@ -5679,6 +5807,12 @@ name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
+
+[[package]]
+name = "unicode-general-category"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b993bddc193ae5bd0d623b49ec06ac3e9312875fdae725a975c51db1cc1677f"
 
 [[package]]
 name = "unicode-ident"

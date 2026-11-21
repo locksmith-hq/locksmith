@@ -32,5 +32,5 @@ Page components and the shared kit, because the mockup defines the look; searche
 `just up` starts the stack with the Keycloak profile; `just dev web` runs vite; control-plane logs via the Grafana/Loki MCP and `docker compose logs control-plane`; traces for each API call in Tempo; DB tables `projects`, `environments`, `secrets`, `agent_grants`, `audit_events` through the postgres MCP (read-only); Playwright traces with `--trace on` on failure.
 
 ## Open questions
-- Does the owner want the mockup's sidebar layout unchanged for the live console? Assumed yes (mockup is the approved direction under T1-1); a `Gate:` task near the end (6.4) confirms before the e2e snapshot baseline is locked.
+- Resolved 2026-11-20 ([#510](https://github.com/locksmith-hq/locksmith/issues/510), `openspec/decisions.md` T3-1): the owner approved option B, the mockup frame on the live pages: product-grouped sidebar (Home; Secret Management: Projects, Environments, Secrets; Agent Gateway: Agents, Grants; Activity), org switcher top right, user card at the bottom, pages built from the `packages/ui` kit. Tasks 6.4.1–6.4.3 apply it before the screenshot baselines are locked (6.5).
 - API gaps (for example org-wide activity filters) are logged, not patched here.

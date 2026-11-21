@@ -17,6 +17,7 @@ pub const PROBLEM_JSON: &str = "application/problem+json";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Validation,
+    Unprocessable,
     Unauthenticated,
     EmailVerificationRequired,
     NotFound,
@@ -31,6 +32,7 @@ impl Kind {
     pub fn status(self) -> StatusCode {
         match self {
             Kind::Validation => StatusCode::BAD_REQUEST,
+            Kind::Unprocessable => StatusCode::UNPROCESSABLE_ENTITY,
             Kind::Unauthenticated => StatusCode::UNAUTHORIZED,
             Kind::EmailVerificationRequired => StatusCode::FORBIDDEN,
             Kind::NotFound => StatusCode::NOT_FOUND,
@@ -46,6 +48,7 @@ impl Kind {
     pub fn slug(self) -> &'static str {
         match self {
             Kind::Validation => "validation",
+            Kind::Unprocessable => "unprocessable",
             Kind::Unauthenticated => "unauthenticated",
             Kind::EmailVerificationRequired => "email-verification-required",
             Kind::NotFound => "not-found",
@@ -60,6 +63,7 @@ impl Kind {
     pub fn title(self) -> &'static str {
         match self {
             Kind::Validation => "Invalid request",
+            Kind::Unprocessable => "Request refused",
             Kind::Unauthenticated => "Authentication required",
             Kind::EmailVerificationRequired => "Email verification required",
             Kind::NotFound => "Resource not found",
@@ -110,6 +114,12 @@ impl ApiError {
 
     pub fn validation(detail: impl Into<String>) -> Self {
         Self::new(Kind::Validation, detail)
+    }
+
+    /// `422`: the request is well formed but refused on its content (an unpinned workload
+    /// policy, a private issuer address).
+    pub fn unprocessable(detail: impl Into<String>) -> Self {
+        Self::new(Kind::Unprocessable, detail)
     }
 
     pub fn not_found() -> Self {

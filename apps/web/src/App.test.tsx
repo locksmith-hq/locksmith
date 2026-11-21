@@ -148,3 +148,63 @@ test("audit outcome filter narrows to denied and redaction_failed events", async
   await userEvent.selectOptions(sel, "all");
   expect(screen.getByText("agent.created")).toBeInTheDocument();
 });
+
+const wl = { id: "w1", name: "ci-deploy", agent_id: ID, audience: "https://cp.example", issuer_kind: "github", issuer: "https://token.actions.githubusercontent.com",
+  handle: "lsw_abc", conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/release-*" }], created_at: "2026-01-01T00:00:00Z", last_used_at: null };
+
+test("workload identities: list, prefix warning, create with presets, delete with confirm, no secret", async () => {
+  let list: unknown[] = [wl];
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    const m = init?.method ?? "GET";
+    if (url === "/v1/agents") return json({ items: [] });
+    if (m === "GET" && url === "/v1/workload-identities") return json({ items: list });
+    if (m === "POST" && url === "/v1/workload-identities") return json(wl, 201);
+    if (m === "DELETE" && url === "/v1/workload-identities/w1") { list = []; return new Response(null, { status: 204 }); }
+    return json({ title: "nope" }, 404);
+  });
+  const { container } = mk();
+  await userEvent.click(screen.getByRole("button", { name: "Workload identities" }));
+  expect(await screen.findByText("ci-deploy")).toBeInTheDocument();
+  expect(screen.getByText("lsw_abc")).toBeInTheDocument();
+  expect(screen.getByText("Last used: never")).toBeInTheDocument();
+  expect(screen.getByText(/uses a prefix/)).toBeInTheDocument();
+
+  // GitHub preset; a trailing * shows the warning live.
+  expect(screen.queryByTestId("prefix-warning")).toBeNull();
+  await userEvent.type(screen.getByLabelText("Policy name"), "n1");
+  await userEvent.type(screen.getByLabelText("Agent id"), ID);
+  await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");
+  await userEvent.type(screen.getByLabelText("Repository (owner/repo)"), "acme/api");
+  await userEvent.type(screen.getByLabelText("Ref (optional)"), "refs/heads/rel-*");
+  expect(screen.getByTestId("prefix-warning")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Create workload identity" }));
+  const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST" && c[0] === "/v1/workload-identities")!;
+  const sent = JSON.parse(post[1].body);
+  expect(sent).toEqual({ name: "n1", agent_id: ID, audience: "https://cp.example", issuer_kind: "github",
+    conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/rel-*" }] });
+  expect(JSON.stringify(sent)).not.toMatch(/token|secret|password/i);
+
+  // Kubernetes preset compiles namespace and service account to `sub`.
+  await userEvent.selectOptions(screen.getByLabelText("Issuer preset"), "kubernetes");
+  await userEvent.type(screen.getByLabelText("Policy name"), "k1");
+  await userEvent.type(screen.getByLabelText("Agent id"), ID);
+  await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");
+  await userEvent.type(screen.getByLabelText("Issuer URL"), "https://k8s.example");
+  await userEvent.type(screen.getByLabelText("Namespace"), "prod");
+  await userEvent.type(screen.getByLabelText("Service account"), "deployer");
+  await userEvent.click(screen.getByRole("button", { name: "Create workload identity" }));
+  const posts = fetchMock.mock.calls.filter((c) => c[1]?.method === "POST" && c[0] === "/v1/workload-identities");
+  expect(JSON.parse(posts[1]![1].body)).toMatchObject({ issuer_kind: "oidc", issuer: "https://k8s.example",
+    conditions: [{ claim: "sub", pattern: "system:serviceaccount:prod:deployer" }] });
+
+  // No secret input or text anywhere on the page.
+  expect(container.querySelector("input[type=password]")).toBeNull();
+  expect(screen.queryByLabelText(/token|secret|password/i)).toBeNull();
+  expect(document.body.textContent).not.toMatch(/enrollment secret|Bearer/i);
+
+  // Delete needs a confirm.
+  await userEvent.click(screen.getByRole("button", { name: "Delete ci-deploy" }));
+  expect(fetchMock.mock.calls.some((c) => c[1]?.method === "DELETE")).toBe(false);
+  await userEvent.click(screen.getByRole("button", { name: "Confirm delete ci-deploy" }));
+  expect(await screen.findByText("No workload identities yet.")).toBeInTheDocument();
+});

@@ -73,7 +73,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 | T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. | t6-org-members:contract | ☐ |
 | T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. | t2-policy-engine:contract, t3-console-mvp | ☐ |
 | N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). | t3-console-mvp | ☐ |
-| M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). | t1-human-auth:contract | ◐ |
+| M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). | t1-human-auth:contract | ☑ |
 | T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. | n1-notifications:contract | ☐ |
 
 ## Phase 3: Delegation beyond HTTP
@@ -81,16 +81,16 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
 | D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - | ☑ |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. | - | ◐ |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. | t3-console-mvp | ◐ |
 | D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - | ◐ |
-| D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract | ☐ |
+| D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract | ☑ |
 
 ## Phase 4: Deployable
 
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
-| P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ☐ |
-| P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - | ☐ |
+| P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ◐ |
+| P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - | ◐ |
 | P4 | `p4-sdks` | SDKs generated from OpenAPI, and the plugins switched to the remote Agent MCP where it helps. | m1-remote-mcp:contract | ☐ |
 
 ## Phase 5: Parity and beyond (ordered later, by demand)

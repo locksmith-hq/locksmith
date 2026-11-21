@@ -21,9 +21,13 @@ use utoipa_axum::routes;
 
 use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
+use crate::auth::abuse::{AbuseGuard, AbuseLimits};
+use crate::auth::external::ExternalVerifier;
 use crate::auth::human::HumanAuth;
 use crate::db::Database;
+use crate::issuer_admin::IssuerAdmin;
 use crate::kms::DekWrapper;
+use crate::mcp_endpoint::{self, McpEndpoint};
 use crate::problem::ApiError;
 use crate::readiness::Readiness;
 
@@ -47,6 +51,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
         (name = "auth", description = "Sign-in and sign-out markers for the audit ledger; human bearer token only"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
         (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
+        (name = "workload-identities", description = "Workload identity trust policies and the exchange of an external OIDC token for an agent token"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
     )
 )]
@@ -89,6 +94,10 @@ pub struct AppState {
     service_token: Option<Arc<ServiceToken>>,
     agent_signer: Option<Arc<AgentTokenSigner>>,
     human_auth: Option<Arc<HumanAuth>>,
+    workload_verifier: Option<Arc<ExternalVerifier>>,
+    workload_abuse: Arc<AbuseGuard>,
+    mcp: Option<Arc<McpEndpoint>>,
+    issuer_admin: Option<Arc<IssuerAdmin>>,
 }
 
 impl AppState {
@@ -102,7 +111,23 @@ impl AppState {
             service_token: None,
             agent_signer: None,
             human_auth: None,
+            workload_verifier: None,
+            workload_abuse: Arc::new(AbuseGuard::default()),
+            mcp: None,
+            issuer_admin: None,
         }
+    }
+
+    /// Revoke the person's consent at the issuer after a hub MCP client revoke (M1 task 4.2).
+    /// Without one that step is skipped.
+    pub fn with_issuer_admin(mut self, admin: IssuerAdmin) -> Self {
+        self.issuer_admin = Some(Arc::new(admin));
+        self
+    }
+
+    /// The issuer admin client, if one is configured.
+    pub fn issuer_admin(&self) -> Option<&IssuerAdmin> {
+        self.issuer_admin.as_deref()
     }
 
     /// Mint agent tokens with `signer` and publish its public key in the JWKS (S4). Without
@@ -126,6 +151,40 @@ impl AppState {
     /// The human token verifier, if an issuer is configured.
     pub fn human_auth(&self) -> Option<&HumanAuth> {
         self.human_auth.as_deref()
+    }
+
+    /// Verify external workload tokens with `verifier` (D4). Without one, workload token
+    /// exchanges answer `503` and policy creation skips the issuer host check.
+    pub fn with_workload_verifier(mut self, verifier: ExternalVerifier) -> Self {
+        self.workload_verifier = Some(Arc::new(verifier));
+        self
+    }
+
+    /// Replace the default workload exchange limits (`jti` replay cache, rate limits).
+    pub fn with_workload_limits(mut self, limits: AbuseLimits) -> Self {
+        self.workload_abuse = Arc::new(AbuseGuard::new(limits));
+        self
+    }
+
+    /// The workload exchange replay cache and rate limiters.
+    pub fn workload_abuse(&self) -> &AbuseGuard {
+        &self.workload_abuse
+    }
+
+    /// The external workload token verifier, if one is configured.
+    pub fn workload_verifier(&self) -> Option<&ExternalVerifier> {
+        self.workload_verifier.as_deref()
+    }
+
+    /// Serve the hub `/mcp` route with `endpoint` (M1 task 2.1). Without one `/mcp` answers `401`.
+    pub fn with_mcp(mut self, endpoint: McpEndpoint) -> Self {
+        self.mcp = Some(Arc::new(endpoint));
+        self
+    }
+
+    /// The hub MCP endpoint, if one is configured.
+    pub fn mcp(&self) -> Option<&Arc<McpEndpoint>> {
+        self.mcp.as_ref()
     }
 
     /// Accept `token` on the `/internal/v1` routes. Without one they answer `401` (fail closed).
@@ -202,6 +261,7 @@ fn desktop_cors() -> CorsLayer {
 /// Apply the standard layer stack and state to a router.
 pub fn with_layers(router: Router<AppState>, state: AppState) -> Router {
     let id_header = HeaderName::from_static(REQUEST_ID_HEADER);
+    let router = router.merge(mcp_endpoint::router(&state));
     router.with_state(state).layer(
         ServiceBuilder::new()
             .layer(SetRequestIdLayer::new(id_header.clone(), MakeRequestUuid))

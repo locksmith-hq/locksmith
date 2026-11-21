@@ -2,6 +2,30 @@ set positional-arguments
 
 ci: fmt lint test-rust test-web tree-check task-guard public-check
 
+# Fast local check: fmt + lint only for files committed on this branch since `base`.
+# The full `just ci` runs in GitHub Actions on every PR.
+quick base="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    files=$(git diff --name-only --diff-filter=ACMR "$1"...HEAD)
+    [ -n "$files" ] || { echo "quick: no committed changes vs $1"; exit 0; }
+    rs=$(grep '\.rs$' <<<"$files" || true)
+    if [ -n "$rs" ]; then
+      rustfmt --check $rs
+      # Clippy only the crates that own a changed file (nearest Cargo.toml), in one run so deps build once.
+      dirs=$(for f in $rs; do d=$(dirname "$f"); until [ -f "$d/Cargo.toml" ] || [ "$d" = . ]; do d=$(dirname "$d"); done; echo "$d"; done | sort -u)
+      pkgs=""
+      for d in $dirs; do
+        case "$d" in
+          apps/desktop/*) cargo clippy --manifest-path "$d/Cargo.toml" --all-targets -- -D warnings ;; # not in the workspace
+          .) pkgs="--workspace" ;;
+          *) pkgs="$pkgs -p $(sed -n 's/^name *= *"\(.*\)"/\1/p' "$d/Cargo.toml" | head -1)" ;;
+        esac
+      done
+      if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
+    fi
+    if grep -q '^apps/web/' <<<"$files"; then npm run lint -w apps/web; fi
+
 fmt:
     cargo fmt --all --check
 
@@ -57,6 +81,11 @@ task-guard:
 public-check:
     scripts/public-check.test.sh
     scripts/public-check.sh
+
+# Install a git pre-push hook that runs the denylist check (see docs/public-private-boundary.md).
+install-hooks:
+    printf '#!/usr/bin/env bash\nexec "$(git rev-parse --show-toplevel)/scripts/public-check.sh" denylist\n' > "$(git rev-parse --git-path hooks)/pre-push"
+    chmod +x "$(git rev-parse --git-path hooks)/pre-push"
 
 dev app:
     npm run build -w apps/{{app}}
@@ -198,12 +227,16 @@ api:
     set -euo pipefail
     root={{quote(justfile_directory())}}
     set -a; . "$root/infra/compose/.env.example"; set +a
-    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 LOCKSMITH_MCP_RESOURCE_URL=http://127.0.0.1:8080/mcp OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
 
 # T1 sign-up, verify, sign-in (auth code + PKCE), reset and API calls against Keycloak (needs `just up` and `just api`).
 auth-e2e:
     python3 -I scripts/auth-e2e.py
+
+# M1 hub MCP sign-in: a scripted MCP client signs in on Keycloak (consent, PKCE, resource) and lists tools (needs `just up` and `just api`).
+mcp-e2e:
+    python3 -I scripts/mcp-e2e.py
 
 # Run locksmith-gateway against `just up` and `just api`. Needs LOCKSMITH_GATEWAY_BINDINGS (a TOML
 # file naming the org and bindings; see tests/e2e/tests/relay.rs for the shape). The gateway connects
@@ -231,6 +264,31 @@ connector-smoke:
     cargo build -q -p smith-cli --bin smith
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
+
+# D4 workload-identity smoke (needs `just up` and `just workload-smoke-api`): an in-process
+# GitHub-shaped OIDC stub issuer (TLS on loopback) and runner endpoint; `smith login --workload
+# github` exchanges its token, relays to the WireMock upstream and holds no secret; a non-matching
+# `ref` and a revoked grant are refused. Run `just leak-scan` after.
+workload-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    cd "$root"
+    bash scripts/workload-smoke-cert.sh >/dev/null
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test workload
+
+# `just api` for `just workload-smoke`: trusts the stub issuer's self-signed certificate and allows
+# a loopback issuer (local development only; the default `just api` does neither).
+workload-smoke-api:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    cd "$root"
+    export SSL_CERT_FILE="$(bash scripts/workload-smoke-cert.sh)"
+    export LOCKSMITH_WORKLOAD_ALLOW_PRIVATE_ISSUERS=1
+    exec just api
 
 # S6 stack adversarial gate (needs `just up` and `just api`; fails fast without them): every
 # gateway case with skips as failures, then `leak-scan` over the stack, the audit export and the
@@ -275,3 +333,33 @@ test name:
           elif grep -q 'just test-web' <<<"$cov"; then run just test-web; fi
         fi ;;
     esac
+
+# OpenTofu offline checks: fmt, validate (no backend) for each root, plan-policy tests. scripts/tofu-setup.sh installs tofu and a verified hashicorp/aws mirror.
+aws-validate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
+    tofu fmt -check -recursive infra/tofu
+    for m in base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
+    python3 -I infra/tofu/policy/test_check_plan.py
+    python3 -I infra/tofu/policy/test_base_oidc.py
+
+# Opt-in (not in `just ci`): apply the base S3 and KMS pieces to a local moto server and assert Object Lock and the KMS alias. Installs moto into a cached venv.
+aws-moto-smoke:
+    bash infra/tofu/base/tests/moto-smoke.sh
+
+# AWS dev session (owner machine, needs AWS credentials; refuses to run without them). Set LOCKSMITH_ALLOWED_CIDR and LOCKSMITH_IMAGE_TAG for aws-up.
+aws-up:
+    bash scripts/aws-session.sh up
+
+aws-down:
+    bash scripts/aws-session.sh down
+
+aws-status:
+    bash scripts/aws-session.sh status
+
+aws-drift:
+    bash scripts/aws-session.sh drift
+
+aws-smoke:
+    bash scripts/aws-session.sh smoke

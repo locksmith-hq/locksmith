@@ -15,7 +15,7 @@ You need Rust (the version in `rust-toolchain.toml`), Node 22, [`just`](https://
 ```sh
 git clone https://github.com/<you>/locksmith && cd locksmith
 npm ci
-just ci      # fmt, lint, Rust and web tests, layout check, task guard
+just quick   # fmt and lint of your branch's committed changes
 just up      # optional: local stack (Postgres, telemetry, mocks)
 ```
 
@@ -27,7 +27,7 @@ just up      # optional: local stack (Postgres, telemetry, mocks)
 1. Fork the repository and create a branch from `main`.
 2. Keep the change small and focused: one fix or feature per pull request. Larger features start as an OpenSpec change in `openspec/changes/<id>/` (proposal, design, tasks); open an issue first to agree the plan.
 3. Add or update tests for any behaviour change.
-4. Run `just ci`. It must pass locally; CI runs only lint and hygiene checks, so reviewers rely on your local run.
+4. Run `just quick` and the tests you touched (`cargo test -p <crate>`). The full `just ci` runs as required checks on every pull request; no need to run it locally.
 5. Write clear commit messages: a short imperative subject line (`ls-proxy: reject unsigned S3 requests`), then the why in the body.
 6. Open the pull request, fill in the template, and link the issue (`Fixes #123`).
 
@@ -51,6 +51,7 @@ These rules protect users who trust Locksmith with their credentials. A pull req
 - Secrets live only in `secrecy`/`zeroize` types, with no `Debug`, `Display` or `Clone`.
 - Agents never receive secret values. Use relay, delegation or short-lived scoped credentials.
 - Code that touches secrets is written in Rust.
+- Never commit real cloud identifiers (account IDs, SSO URLs, endpoints) or state files: see [docs/public-private-boundary.md](docs/public-private-boundary.md). Run `just install-hooks` once.
 - Never block unlock or export because of licensing, billing or update failures.
 - Never commit real credentials, even expired ones. Test fixtures use obviously fake values; `gitleaks` runs in CI.
 

@@ -17,6 +17,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-envelope` | Rust lib | `just test ls-envelope` | no | `just test-rust` | Envelope crypto |
 | `crates/ls-http` | Rust lib | `just test ls-http` | no | `just test-rust` | Shared outbound TLS client policy |
 | `crates/ls-hooks` | Rust lib | `just test ls-hooks` | no | `just test-rust` |  |
+| `crates/ls-mcp-server` | Rust lib | `just test ls-mcp-server` | no | `just test-rust` | Shared Hub and Agent MCP tool registry, switch check and no-value schema test |
 | `crates/ls-ipc` | Rust lib | `just test ls-ipc` | no | `just test-rust` | `just api-types` regenerates `packages/api-types` from it |
 | `crates/ls-license` | Rust lib | `just test ls-license` | no | `just test-rust` |  |
 | `crates/ls-platform` | Rust lib | `just test ls-platform` | no | `just test-rust` |  |
@@ -42,6 +43,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `integrations/claude-code` | agent plugin (files) | `just test claude-code` | no | `tests/adversarial` | Thin plugin (hooks, skills and commands); real integration tests come with P3 |
 | `integrations/codex` | agent plugin (files) | `just test codex` | no | `tests/adversarial` | Thin plugin (config only); real integration tests come with P3 |
 | `integrations/cursor` | agent plugin (files) | `just test cursor` | no | `tests/adversarial` | Thin plugin (hooks and MCP config); real integration tests come with P3 |
+| `integrations/github-action` | CI action (composite, files) | `just test github-action` | no | `crates/smith-cli` | Thin composite action around `smith login --workload github`; login behaviour is tested by `cargo nextest run -p smith-cli workload` |
 | `tests/adversarial` | shell harness | `just test adversarial` | no | self | `run.sh selftest`; agent cases need `--agent`; `just adversarial-gate` runs the gateway cases against `just up` |
 | `tests/e2e` | Rust e2e (package `ls-e2e`) | `just test e2e` | yes | self | Needs `just up` and `just api`; `just relay-smoke`, `just connector-smoke`, `just audit-smoke` |
 | `tests/kit` | shell + python | `just test kit` | no | self | `leak_scan_test.sh` |
@@ -59,4 +61,4 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just audit-export`, `just audit-verify` and `just audit-tamper-test` export, verify and tamper-test the audit ledger.
 - `just leak-scan` checks for leaked canary secrets after a run.
 - `just adversarial-gate [--agent claude]` (needs `just up` and `just api`) runs the S6 gateway attack cases with skips counted as failures, then `just leak-scan` over the stack, the audit export and the artifacts; `--agent claude` adds the live prompts. See [tests/adversarial/README.md](../tests/adversarial/README.md).
-- `just ci` is the full pre-push check (no stack needed).
+- `just ci` is the full suite; the PR's required checks run it. Locally, run `just quick` before pushing.

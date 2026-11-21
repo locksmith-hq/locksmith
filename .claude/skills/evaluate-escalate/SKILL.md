@@ -18,14 +18,14 @@ Cloud subagents always run async ("Async agent launched"): end the turn with one
 1. **Implement.** Give the implementer:
    - the exact task text, the design excerpt, the files and the verification command;
    - the rules: reuse OSS from `docs/research/oss-building-blocks.md`, use real versions from crates.io or GitHub, and never print secrets.
-2. **Verify it yourself.** Run the task's verification command and `just ci`. Use the `long-commands` skill if either is slow.
+2. **Verify it yourself.** Run the task's verification command and `just quick` (never the full `just ci`; CI runs it). Use the `long-commands` skill if either is slow.
 3. **Evaluate.** A separate subagent, never the implementer, runs on `sonnet`, or on `opus` for `[opus]` tasks. Give it the task, the spec excerpt, `git diff`, the verification output and the AGENTS.md security rules. It answers PASS or FAIL with reasons, checking:
    - the task is really done, not stubbed;
    - the tests exercise real behaviour;
    - no secret can leak;
    - no reinvented OSS;
    - the package versions are real.
-4. Tick only after verification and the evaluator pass, recorded with `bash scripts/run-meta.sh eval PASS` (pre-push refuses ticks without it). Never mark ready with `evaluator: n/a`.
+4. Tick only after verification and the evaluator pass, recorded with `bash scripts/run-meta.sh eval PASS` (pre-push refuses ticks without it). Never enable auto-merge with `evaluator: n/a`.
 5. Otherwise, make attempt 2 one tier up (haiku → sonnet → opus). Give the new implementer the evaluator's reasons, failing output and attempt-1 diff; repeat steps 2–4.
 6. If attempt 2 also fails:
    - commit with a `WIP:` message if the code builds, otherwise `git stash`;

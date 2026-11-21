@@ -59,6 +59,12 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         include_str!("../migrations/0010_audit_checkpoint_jobs.sql"),
     ),
     (11, "users", include_str!("../migrations/0011_users.sql")),
+    (12, "mcp", include_str!("../migrations/0012_mcp.sql")),
+    (
+        13,
+        "workload_identities",
+        include_str!("../migrations/0013_workload_identities.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

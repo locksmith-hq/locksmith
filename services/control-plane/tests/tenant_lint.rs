@@ -55,3 +55,17 @@ fn migrations_enable_force_and_police_every_table() {
         "the lint must see the users table"
     );
 }
+
+/// M1 task 1.4: the MCP tables are org-scoped and policed, and the lint sees them.
+#[test]
+fn mcp_tables_are_seen_by_the_migration_lint() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let mcp = std::fs::read_to_string(dir.join("0012_mcp.sql")).expect("0012_mcp.sql");
+    for table in ["mcp_tool_settings", "mcp_clients"] {
+        assert!(mcp.contains(&format!("CREATE TABLE {table}")), "{table}");
+        assert!(
+            mcp.contains(&format!("ALTER TABLE {table} FORCE ROW LEVEL SECURITY")),
+            "{table}"
+        );
+    }
+}

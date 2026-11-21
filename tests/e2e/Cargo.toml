@@ -10,7 +10,14 @@ publish.workspace = true
 workspace = true
 
 [dev-dependencies]
-tokio = { version = "1.54", features = ["rt", "macros"] }
+tokio = { version = "1.54", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "sync"] }
 tokio-postgres = "0.7.18"
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
 serde_json = "1"
+# D4 workload-smoke: a TLS stub OIDC issuer and ES256-signed external tokens.
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+rustls-pki-types = "1.16"
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
+p256 = "0.14"
+base64 = "0.22"

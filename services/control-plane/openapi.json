@@ -148,6 +148,19 @@
         ],
         "type": "object"
       },
+      "AgentMcpClientState": {
+        "description": "The agent-layer `mcp_clients` row after the upsert.",
+        "properties": {
+          "revoked": {
+            "description": "Whether an admin has revoked this agent's MCP access.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "type": "object"
+      },
       "AgentToken": {
         "description": "A minted agent token (RFC 6749 section 5.1 shape). No `Debug`: the token is a bearer\ncredential for the gateway only.",
         "properties": {
@@ -192,6 +205,38 @@
         },
         "required": [
           "enrollment_secret"
+        ],
+        "type": "object"
+      },
+      "AgentToolSetting": {
+        "description": "One per-org override of an agent-layer MCP tool's default (an `mcp_tool_settings` row).",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "tool": {
+            "description": "A registry tool name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "AgentToolSettingSet": {
+        "description": "The org's agent-layer tool overrides. A tool with no row is at its registry default.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolSetting"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -427,6 +472,23 @@
         ],
         "type": "object"
       },
+      "ConditionView": {
+        "description": "One claim test as shown to callers: `pattern` ends in `*` for a prefix match.",
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Exact value, or a prefix ending in one `*`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "pattern"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "created_at": {
@@ -522,6 +584,147 @@
         ],
         "type": "object"
       },
+      "McpCallOutcome": {
+        "description": "The outcome of an agent MCP call.",
+        "enum": [
+          "ok",
+          "denied",
+          "error"
+        ],
+        "type": "string"
+      },
+      "McpCallReason": {
+        "description": "Static reason codes for a refused or failed agent MCP call.",
+        "enum": [
+          "tool_off",
+          "invalid_arguments",
+          "tool_error",
+          "settings_unavailable"
+        ],
+        "type": "string"
+      },
+      "McpClient": {
+        "description": "A client that signed in to an MCP server. Never carries a token.",
+        "properties": {
+          "client_id": {
+            "description": "The OAuth client id (hub) or the agent id (agent layer).",
+            "type": "string"
+          },
+          "client_name": {
+            "description": "Display name from registration; may be empty.",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/McpLayer"
+          },
+          "principal": {
+            "description": "The signed-in person (hub) or the agent id (agent layer).",
+            "type": "string"
+          },
+          "revoked_at": {
+            "description": "Set when the client was revoked; absent while active.",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "layer",
+          "client_id",
+          "principal",
+          "client_name",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "type": "object"
+      },
+      "McpLayer": {
+        "description": "Which MCP server a tool or client belongs to.",
+        "enum": [
+          "hub",
+          "agent"
+        ],
+        "type": "string"
+      },
+      "McpToolSetting": {
+        "description": "One tool and whether it is on for this org.",
+        "properties": {
+          "default_enabled": {
+            "description": "What the tool does when the org has not changed it.",
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "description": "The effective switch: the org's override, else the default.",
+            "type": "boolean"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/McpLayer"
+          },
+          "overridden": {
+            "description": "Whether the org has changed the switch from the default.",
+            "type": "boolean"
+          },
+          "tool": {
+            "description": "The tool's name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "tool",
+          "description",
+          "default_enabled",
+          "enabled",
+          "overridden"
+        ],
+        "type": "object"
+      },
+      "McpToolSettingList": {
+        "description": "Every tool of both layers.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/McpToolSetting"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "McpToolSettingUpdate": {
+        "additionalProperties": false,
+        "description": "Body of `PUT /v1/mcp/tools/{layer}/{tool}`.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
       "NewAgent": {
         "additionalProperties": false,
         "properties": {
@@ -563,6 +766,27 @@
         ],
         "type": "object"
       },
+      "NewAgentMcpClient": {
+        "additionalProperties": false,
+        "description": "Body of `POST /internal/v1/mcp/agent-clients`: the agent that just initialized an MCP session.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent whose verified token opened the session; also the row's `client_id` and\n`principal` (an agent token has no OAuth client id).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "client_name": {
+            "description": "The client's display name from `initialize`; stored capped at 200 characters.",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "client_name"
+        ],
+        "type": "object"
+      },
       "NewEnvironment": {
         "additionalProperties": false,
         "properties": {
@@ -575,6 +799,42 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "NewMcpAgentCall": {
+        "additionalProperties": false,
+        "description": "One agent MCP call, as the gateway records it: who, which tool, and how it ended. There is no\nfield for arguments or a result.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent whose verified token made the call (the event's actor).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/McpCallOutcome"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/McpCallReason",
+                "description": "Why a call was `denied` or `error`: a closed set of static codes."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tool": {
+            "description": "The tool name as the client sent it; recorded only when it is a registry tool, else\n`unknown`.",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "tool",
+          "outcome"
         ],
         "type": "object"
       },
@@ -619,6 +879,22 @@
             "format": "uuid",
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "credential_id": {
+            "description": "The id of the short-lived credential (`credential.issued` only; never the credential).",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "description": "When the short-lived credential expires, Unix seconds (`credential.issued` only).",
+            "format": "int64",
+            "type": [
+              "integer",
               "null"
             ]
           },
@@ -714,6 +990,49 @@
         },
         "required": [
           "value"
+        ],
+        "type": "object"
+      },
+      "NewWorkloadIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "description": "The existing agent whose token the workload receives (same org).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "audience": {
+            "description": "The `aud` the external token must carry.",
+            "type": "string"
+          },
+          "conditions": {
+            "description": "ANDed. A value is exact, or ends in one `*` for a prefix. At least one condition must\npin the subject: `repository` or `sub` for `github`, `sub` for `oidc`.",
+            "items": {
+              "$ref": "#/components/schemas/ConditionView"
+            },
+            "type": "array"
+          },
+          "issuer": {
+            "description": "Required for `oidc`; for `github` omit it or give the GitHub Actions issuer.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuer_kind": {
+            "description": "`github` (the GitHub Actions issuer) or `oidc` (an explicit https issuer, e.g. a\nKubernetes cluster).",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "issuer_kind",
+          "audience",
+          "agent_id",
+          "conditions"
         ],
         "type": "object"
       },
@@ -910,6 +1229,74 @@
         ],
         "type": "object"
       },
+      "Paged_McpClient": {
+        "description": "One page of a list. `next` is absent on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "description": "A client that signed in to an MCP server. Never carries a token.",
+              "properties": {
+                "client_id": {
+                  "description": "The OAuth client id (hub) or the agent id (agent layer).",
+                  "type": "string"
+                },
+                "client_name": {
+                  "description": "Display name from registration; may be empty.",
+                  "type": "string"
+                },
+                "first_seen_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "last_seen_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "layer": {
+                  "$ref": "#/components/schemas/McpLayer"
+                },
+                "principal": {
+                  "description": "The signed-in person (hub) or the agent id (agent layer).",
+                  "type": "string"
+                },
+                "revoked_at": {
+                  "description": "Set when the client was revoked; absent while active.",
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "layer",
+                "client_id",
+                "principal",
+                "client_name",
+                "first_seen_at",
+                "last_seen_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "Paged_Project": {
         "description": "One page of a list. `next` is absent on the last page.",
         "properties": {
@@ -1023,6 +1410,83 @@
         ],
         "type": "object"
       },
+      "Paged_WorkloadIdentity": {
+        "description": "One page of a list. `next` is absent on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "description": "A trust policy. The `handle` is the non-secret routing value a workload sends to the\nexchange route.",
+              "properties": {
+                "agent_id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConditionView"
+                  },
+                  "type": "array"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "handle": {
+                  "description": "`lsw_...`: names the org and this policy. Not a secret.",
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "issuer": {
+                  "type": "string"
+                },
+                "issuer_kind": {
+                  "description": "`github` or `oidc`.",
+                  "type": "string"
+                },
+                "last_used_at": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "issuer_kind",
+                "issuer",
+                "audience",
+                "agent_id",
+                "conditions",
+                "handle",
+                "created_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "Patch": {
         "additionalProperties": false,
         "description": "`PATCH` body for projects, environments and secrets: name and description only.",
@@ -1108,7 +1572,8 @@
           "relay.denied",
           "git.fetch",
           "git.push",
-          "git.denied"
+          "git.denied",
+          "credential.issued"
         ],
         "type": "string"
       },
@@ -1143,6 +1608,34 @@
           "redaction_failed"
         ],
         "type": "string"
+      },
+      "RevokedAgentClient": {
+        "description": "One agent whose MCP access was revoked.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id"
+        ],
+        "type": "object"
+      },
+      "RevokedAgentClientSet": {
+        "description": "The org's agents with revoked MCP access.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RevokedAgentClient"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
       },
       "Secret": {
         "properties": {
@@ -1269,6 +1762,86 @@
           "key_id",
           "ciphertext",
           "wrapped_dek"
+        ],
+        "type": "object"
+      },
+      "WorkloadIdentity": {
+        "description": "A trust policy. The `handle` is the non-secret routing value a workload sends to the\nexchange route.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/ConditionView"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "handle": {
+            "description": "`lsw_...`: names the org and this policy. Not a secret.",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "issuer_kind": {
+            "description": "`github` or `oidc`.",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "issuer_kind",
+          "issuer",
+          "audience",
+          "agent_id",
+          "conditions",
+          "handle",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "WorkloadTokenRequest": {
+        "additionalProperties": false,
+        "description": "Request body of a workload token exchange. No `Debug`.",
+        "properties": {
+          "policy": {
+            "description": "The policy handle (`lsw_...`) from the workload identity. Not a secret.",
+            "type": "string"
+          },
+          "token": {
+            "description": "The external OIDC token (GitHub Actions or Kubernetes). Used once, never stored or logged.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "policy",
+          "token"
         ],
         "type": "object"
       }
@@ -1432,7 +2005,7 @@
     },
     "/internal/v1/audit/events": {
       "post": {
-        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, and `relay.denied` for a refused call. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
+        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
         "operationId": "append_audit_event",
         "parameters": [
           {
@@ -1554,6 +2127,392 @@
           }
         ],
         "summary": "Append a relay event to the org's audit ledger (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/agent-calls": {
+      "post": {
+        "description": "The gateway records every `/mcp` tool call: the agent, the tool (a registry name, else `unknown`), the outcome and a static reason; never arguments or results. Unknown fields are a `400`.",
+        "operationId": "append_agent_mcp_call",
+        "parameters": [
+          {
+            "description": "The org the event belongs to (the agent token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMcpAgentCall"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendedEvent"
+                }
+              }
+            },
+            "description": "Appended"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Append an `mcp.call` event for an agent MCP call (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/agent-clients": {
+      "post": {
+        "description": "Upserts the agent-layer `mcp_clients` row for the agent (`client_id` and `principal` are the agent id): inserted on first sight, name and last-seen time refreshed afterwards. A revoked row stays revoked. The answer says whether it is revoked. An agent that does not exist in the org is a `404`. Ids and a display name only; never a token.",
+        "operationId": "upsert_agent_mcp_client",
+        "parameters": [
+          {
+            "description": "The agent's org (the token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAgentMcpClient"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentMcpClientState"
+                }
+              }
+            },
+            "description": "Recorded"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The agent does not exist in the org"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Record an agent MCP client on initialize (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/agent-tool-settings": {
+      "get": {
+        "description": "The gateway reads this (cached for seconds) to decide which agent tools it lists and runs. Only overrides are returned; the defaults live in the tool registry. Tool names and booleans only.",
+        "operationId": "get_internal_agent_tool_settings",
+        "parameters": [
+          {
+            "description": "The org the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToolSettingSet"
+                }
+              }
+            },
+            "description": "The org's overrides"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found (including another org's secret)"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "List the org's agent-layer MCP tool overrides (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/revoked-agent-clients": {
+      "get": {
+        "description": "The gateway reads this (cached for seconds, failing closed when unreadable) and refuses `/mcp` to every agent listed, on calls and on a fresh `initialize`. Agent ids only.",
+        "operationId": "get_internal_revoked_agent_clients",
+        "parameters": [
+          {
+            "description": "The org the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokedAgentClientSet"
+                }
+              }
+            },
+            "description": "Agents with a revoked agent-layer client row"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found (including another org's secret)"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "List the agents whose MCP access is revoked (gateway only)",
         "tags": [
           "internal"
         ]
@@ -2799,6 +3758,376 @@
         "summary": "Record a sign-out in the audit ledger",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/v1/mcp/clients": {
+      "get": {
+        "operationId": "list_mcp_clients",
+        "parameters": [
+          {
+            "description": "Page size, 1 to 100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: the `next` value of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paged_McpClient"
+                }
+              }
+            },
+            "description": "A page of clients"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List MCP clients that signed in, including revoked ones",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/clients/{client_row_id}/revoke": {
+      "post": {
+        "description": "Marks the client revoked. Its next call, and a fresh initialize, are refused. Revoking again keeps the first revoke time.",
+        "operationId": "revoke_mcp_client",
+        "parameters": [
+          {
+            "description": "Client row id from the list",
+            "in": "path",
+            "name": "client_row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpClient"
+                }
+              }
+            },
+            "description": "The revoked client"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Revoke an MCP client",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/tools": {
+      "get": {
+        "operationId": "list_mcp_tool_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpToolSettingList"
+                }
+              }
+            },
+            "description": "Every tool of the hub and agent servers"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List MCP tools with their default and current switch",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/v1/mcp/tools/{layer}/{tool}": {
+      "put": {
+        "description": "Enforced by the server: a client cannot list or call a tool that is off.",
+        "operationId": "update_mcp_tool_setting",
+        "parameters": [
+          {
+            "description": "`hub` or `agent`",
+            "in": "path",
+            "name": "layer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/McpLayer"
+            }
+          },
+          {
+            "description": "Tool name",
+            "in": "path",
+            "name": "tool",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolSettingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpToolSetting"
+                }
+              }
+            },
+            "description": "The tool with its new switch"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Turn one MCP tool on or off for the org",
+        "tags": [
+          "mcp"
         ]
       }
     },
@@ -4733,6 +6062,465 @@
           "secrets"
         ]
       }
+    },
+    "/v1/workload-identities": {
+      "get": {
+        "operationId": "list_workload_identities",
+        "parameters": [
+          {
+            "description": "Page size, 1 to 100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: the `next` value of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paged_WorkloadIdentity"
+                }
+              }
+            },
+            "description": "A page of policies"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List workload identity trust policies",
+        "tags": [
+          "workload-identities"
+        ]
+      },
+      "post": {
+        "description": "Maps an issuer and claim conditions to an existing agent. A policy with no subject pin, or a bare `*`, is refused.",
+        "operationId": "create_workload_identity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewWorkloadIdentity"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIdentity"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Location": {
+                "description": "URL of the new policy",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Policy refused: no subject pin, a bare `*`, or an issuer at a private address"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Create a workload identity trust policy",
+        "tags": [
+          "workload-identities"
+        ]
+      }
+    },
+    "/v1/workload-identities/{id}": {
+      "delete": {
+        "description": "Exchanges for this policy fail from now on. Agent tokens already minted stay valid until they expire (at most 15 minutes).",
+        "operationId": "delete_workload_identity",
+        "parameters": [
+          {
+            "description": "Policy id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Delete a workload identity trust policy",
+        "tags": [
+          "workload-identities"
+        ]
+      },
+      "get": {
+        "operationId": "get_workload_identity",
+        "parameters": [
+          {
+            "description": "Policy id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIdentity"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Get a workload identity trust policy",
+        "tags": [
+          "workload-identities"
+        ]
+      }
+    },
+    "/v1/workload-tokens": {
+      "post": {
+        "description": "Verifies the external OIDC token against the policy's stored issuer and audience, checks the policy's claim conditions, and returns the same 15-minute agent token as `POST /v1/agent-tokens` for the policy's agent. An unknown policy, an invalid or mismatching token and an unreachable issuer are all the same `401`.",
+        "operationId": "create_workload_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkloadTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToken"
+                }
+              }
+            },
+            "description": "A token",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid, unknown or replaced enrollment secret"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable or token signing not configured"
+          }
+        },
+        "summary": "Exchange an external workload token for an agent token",
+        "tags": [
+          "workload-identities"
+        ]
+      }
     }
   },
   "tags": [
@@ -4759,6 +6547,10 @@
     {
       "description": "Agent identities, their relay grants, agent tokens and the token-signing JWKS",
       "name": "agents"
+    },
+    {
+      "description": "Workload identity trust policies and the exchange of an external OIDC token for an agent token",
+      "name": "workload-identities"
     },
     {
       "description": "Service-to-service routes for the gateway; service token only, never exposed to users or agents",

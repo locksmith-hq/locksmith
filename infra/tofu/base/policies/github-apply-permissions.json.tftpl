@@ -1,0 +1,92 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageBaseStack",
+      "Effect": "Allow",
+      "Action": [
+        "kms:*",
+        "s3:*",
+        "ecr:*",
+        "ec2:*",
+        "rds:*",
+        "cognito-idp:*",
+        "logs:*",
+        "tag:*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "${region}"
+        }
+      }
+    },
+    {
+      "Sid": "ServiceLinkedRolesForBaseServices",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "rds.amazonaws.com",
+            "ecs.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ReadOwnIdentityAndState",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity",
+        "iam:GetRole",
+        "iam:GetOpenIDConnectProvider",
+        "iam:ListRolePolicies",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRoleTags",
+        "iam:ListOpenIDConnectProviderTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyGuardrailsAndAccountControl",
+      "Effect": "Deny",
+      "Action": [
+        "organizations:*",
+        "budgets:*",
+        "ce:*",
+        "account:*",
+        "billing:*",
+        "payments:*",
+        "aws-portal:*",
+        "sso:*",
+        "sso-directory:*",
+        "identitystore:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyChangingOwnTrustAndPermissions",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:CreateOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:RemoveClientIDFromOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

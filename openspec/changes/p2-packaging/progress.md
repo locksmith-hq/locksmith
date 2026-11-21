@@ -75,3 +75,8 @@
 - Task: p2-packaging 6.1-6.4 - done, evaluator PASS (sonnet); auto-merge on #534 stays off (tasks 4.4, 4.5, 5.4, 5.6, 7.x, 8.x open)
 - Verified: `just installer-test` (good, --version, bad signature, bad hash, missing minisign, unsupported platform, canary credentials never printed), test-recipes-check, just quick
 - Notes for next session: 7.1 is an owner gate; 4.4/4.5 need kind, 5.4 needs a lead PR, 5.6 needs cosign/actionlint. #534 hygiene check failed once on the PR (log blocked by proxy); tree-check, task-guard, public-check and gitleaks pass locally on HEAD, so rerun/likely transient. #534 touches /crates/ls-update/ (CODEOWNERS): owner approval needed.
+
+## 2026-11-21 worker (wake-up: merge review finished on #494)
+- Task: p2-packaging - blocked (no task started)
+- Verified: auto-merge on #534 had been enabled again with tasks open; disabled with --disable-auto. Red `hygiene` is the gitleaks step (2 fake worker-branch fixtures, lead PR #557 ignores them); tree-check, task guard, public-check pass locally.
+- Notes for next session: next takeable tasks 6.1-6.4. 4.4/4.5 need kind (absent), 5.4 needs a lead PR, 7.1 is an owner gate. Keep auto-merge off until every task is ticked.

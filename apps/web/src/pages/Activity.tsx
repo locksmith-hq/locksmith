@@ -19,6 +19,7 @@ export function Activity({ client }: { client: Client }) {
   const inflight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<AuditFilter>("all");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true; // a response for an earlier client (org) is ignored
@@ -29,7 +30,7 @@ export function Activity({ client }: { client: Client }) {
       (e) => live && setError(errMsg(e)),
     );
     return () => { live = false; };
-  }, [client]);
+  }, [client, attempt]);
 
   const more = () => {
     if (inflight.current || !next) return;
@@ -44,7 +45,12 @@ export function Activity({ client }: { client: Client }) {
   return (
     <section aria-label="Audit">
       <Head title="Activity" />
-      {error && <p role="alert" className="state">{error}</p>}
+      {error && (
+        <div role="alert" className="state">
+          <p>{error}</p>
+          {!events && <button className="btn sm" onClick={() => setAttempt((n) => n + 1)}>Retry</button>}
+        </div>
+      )}
       {status && (
         <div aria-label="Chain status" className="panel">
           <p>Head seq: {status.head_seq}</p>

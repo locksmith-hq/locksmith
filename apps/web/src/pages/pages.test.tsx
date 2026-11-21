@@ -77,3 +77,34 @@ test("secrets: list and detail with versions never request a value or material r
   expect(fx.requests.length).toBeGreaterThan(0);
   expect(fx.requests.filter((r) => /value|material|reveal/i.test(r))).toEqual([]);
 });
+
+test("agents: a 5xx list shows an error with retry, not the empty message", async () => {
+  open("/agents", { fail: { "GET /v1/agents": 503 } });
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByText("Retry")).toBeInTheDocument();
+  expect(screen.queryByText("No agents yet.")).toBeNull();
+});
+
+test("grants: a 5xx grants list shows an error with retry, not the empty message", async () => {
+  installFixtureFetch();
+  const base = fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>;
+  const agent = { id: "a1", name: "bot", description: "", created_at: "2026-11-20T00:00:00Z", updated_at: "2026-11-20T00:00:00Z" };
+  vi.stubGlobal("fetch", vi.fn(async (u: string, i?: RequestInit) => {
+    const path = new URL(String(u), "http://x").pathname;
+    if (path === "/v1/agents") return new Response(JSON.stringify({ items: [agent], next: null }), { status: 200, headers: { "content-type": "application/json" } });
+    if (path === "/v1/agents/a1/grants") return new Response(JSON.stringify({ title: "Bad", detail: "down", status: 503 }), { status: 503, headers: { "content-type": "application/json" } });
+    return base(u, i);
+  }));
+  render(<App client={createClient("o")} initialPath="/grants" />);
+  expect(await screen.findByText("down")).toBeInTheDocument();
+  expect(screen.getByText("Retry")).toBeInTheDocument();
+  expect(screen.queryByText("No grants yet.")).toBeNull();
+});
+
+test("activity: a 5xx ledger read shows an error with retry and no empty message", async () => {
+  open("/activity", { fail: { "GET /v1/audit/events": 503 } });
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByText("Retry")).toBeInTheDocument();
+  expect(screen.queryByText("No audit events yet.")).toBeNull();
+  expect(screen.queryByText("Reading the ledger…")).toBeNull();
+});

@@ -125,3 +125,8 @@
 - Task: 7.2 - not applicable: T3 is not the last change of phase 2 (T4, T6, T7, T8, N1 still open), so ci-platforms was not run manually; the PR runs it anyway.
 - Verified: all required checks green on the branch head; main CI green.
 - Notes: change archived in this PR.
+
+## 2026-11-21 worker
+- Task: review findings on #489 - done
+- Verified: npm test --workspace apps/web -> 55 passed; tsc clean
+- Notes for next session: Agents and Grants now use useQuery + QueryState, Activity has Retry, with a 5xx test per page; Copy button on the enrollment secret. API gap logged for the lead: no endpoint returns the caller's org id (no /v1/me, and the token is not assumed to carry it), so the Overview and org switcher cannot show the personal org name; the spec scenario was amended to match. Follow-up: add `/v1/me` (or an org claim) and call `client.getOrg`.

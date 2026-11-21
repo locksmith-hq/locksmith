@@ -1,22 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Agent, Client } from "@locksmith/control-plane-client";
 import { Head } from "@locksmith/ui";
 import { Grants } from "./Grants";
+import { QueryState } from "../QueryState";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
 export function Agents({ client }: { client: Client }) {
-  const [agents, setAgents] = useState<Agent[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Held in React state only; cleared on dismiss. Never written to storage or logged.
   const [secret, setSecret] = useState<{ agent: string; value: string } | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
-  const refresh = useCallback(() => {
-    client.listAgents().then(setAgents, (e) => setError(errMsg(e)));
-  }, [client]);
-  useEffect(refresh, [refresh]);
+  const q = useQuery({ queryKey: ["agents"], queryFn: () => client.listAgents() });
+  const refresh = () => void q.refetch();
 
   const run = async (f: () => Promise<void>) => {
     setError(null);
@@ -50,19 +49,21 @@ export function Agents({ client }: { client: Client }) {
         <input aria-label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
         <button type="submit" className="btn primary">Create agent</button>
       </form>
-      {agents.length === 0 ? <p className="state">No agents yet.</p> : (
-        <ul className="list">
-          {agents.map((a) => (
-            <li key={a.id} className="row">
-              <strong>{a.name}</strong> {a.description}
-              <button className="btn sm quiet danger-text" onClick={() => void run(async () => { await client.deleteAgent(a.id); refresh(); })}>
-                Delete {a.name}
-              </button>
-              <Grants client={client} agent={a} onError={setError} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <QueryState query={q} empty="No agents yet.">
+        {(agents: Agent[]) => (
+          <ul className="list">
+            {agents.map((a) => (
+              <li key={a.id} className="row">
+                <strong>{a.name}</strong> {a.description}
+                <button className="btn sm quiet danger-text" onClick={() => void run(async () => { await client.deleteAgent(a.id); refresh(); })}>
+                  Delete {a.name}
+                </button>
+                <Grants client={client} agent={a} onError={setError} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryState>
     </>
   );
 }

@@ -152,7 +152,7 @@ pub fn validate(
     }
     let pinned = conditions
         .iter()
-        .any(|c| kind.subject_claims().contains(&c.claim.as_str()));
+        .any(|c| kind.subject_claims().contains(&c.claim.as_str()) && pins_subject(kind, c));
     if !pinned {
         return Err(PolicyError::NoSubjectPin);
     }
@@ -162,6 +162,24 @@ pub fn validate(
         audience: audience.trim().to_owned(),
         conditions,
     })
+}
+
+/// A subject pin must narrow the caller to one owner. An exact value always does. A prefix
+/// on a shared issuer (GitHub) must fix the owner: `repo:*`, `a*` or `acme*` would let any
+/// outside workflow match, so the owner segment must be closed by a `/`.
+fn pins_subject(kind: IssuerKind, c: &Condition) -> bool {
+    if c.op == Op::Eq || kind != IssuerKind::Github {
+        return true;
+    }
+    let owner_and_rest = if c.claim == "sub" {
+        match c.value.strip_prefix("repo:") {
+            Some(r) => r,
+            None => return false,
+        }
+    } else {
+        c.value.as_str()
+    };
+    matches!(owner_and_rest.split_once('/'), Some((owner, _)) if !owner.is_empty())
 }
 
 fn normalise_issuer(raw: &str) -> Result<String, PolicyError> {
@@ -290,6 +308,32 @@ mod tests {
             PolicyError::NoSubjectPin
         );
         assert_eq!(gh(&[]).unwrap_err(), PolicyError::NoConditions);
+    }
+
+    #[test]
+    fn github_prefix_pins_must_fix_the_owner() {
+        for (claim, value) in [
+            ("sub", "repo:*"),
+            ("sub", "repo:acme*"),
+            ("sub", "repo:/*"),
+            ("sub", "*"),
+            ("repository", "a*"),
+            ("repository", "acme*"),
+            ("repository", "/x*"),
+        ] {
+            assert_eq!(
+                gh(&[ci(claim, value)]).unwrap_err(),
+                if value == "*" {
+                    PolicyError::BareWildcard
+                } else {
+                    PolicyError::NoSubjectPin
+                },
+                "{claim}={value}"
+            );
+        }
+        assert!(gh(&[ci("repository", "acme/*")]).is_ok());
+        assert!(gh(&[ci("sub", "repo:acme/app:*")]).is_ok());
+        assert!(gh(&[ci("sub", "repo:acme/*")]).is_ok());
     }
 
     #[test]

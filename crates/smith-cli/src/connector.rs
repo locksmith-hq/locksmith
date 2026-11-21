@@ -212,7 +212,7 @@ fn workload_login(
         Workload::Github => {
             let url = std::env::var(ls_connector::GITHUB_REQUEST_URL_ENV).map_err(|_| {
                 fail(
-                    "not running in GitHub Actions with OIDC: add `permissions: id-token: write`                      to the job",
+                    "not running in GitHub Actions with OIDC: add `permissions: id-token: write` to the job",
                 )
             })?;
             let tok = Zeroizing::new(

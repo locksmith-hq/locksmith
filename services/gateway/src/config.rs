@@ -21,6 +21,9 @@ pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_GATEWAY_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
 pub const ENV_BINDINGS: &str = "LOCKSMITH_GATEWAY_BINDINGS";
+/// Comma-separated public host names (`host` or `host:port`) `/mcp` accepts in the `Host`
+/// header, on top of loopback (DNS rebinding protection). Optional.
+pub const ENV_MCP_ALLOWED_HOSTS: &str = "LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS";
 
 /// Shortest accepted bearer token, in bytes. Shorter values are rejected, not accepted as a
 /// guessable credential.
@@ -75,6 +78,8 @@ pub struct Config {
     pub service_token: SecretString,
     pub openbao: OpenBaoConfig,
     pub bindings: Bindings,
+    /// Extra `Host` values `/mcp` accepts ([`ENV_MCP_ALLOWED_HOSTS`]).
+    pub mcp_allowed_hosts: Vec<String>,
 }
 
 /// OpenBao transit settings for unwrapping DEKs: the gateway's decrypt-capable token.
@@ -235,6 +240,16 @@ impl Config {
         let text = read_file(&path).ok_or(ConfigError::BindingsUnreadable)?;
         let bindings = Bindings::parse(&text)?;
 
+        let mcp_allowed_hosts = get(ENV_MCP_ALLOWED_HOSTS)
+            .map(|v| {
+                v.split(',')
+                    .map(str::trim)
+                    .filter(|h| !h.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(Self {
             bind,
             database_url,
@@ -243,6 +258,7 @@ impl Config {
             service_token,
             openbao,
             bindings,
+            mcp_allowed_hosts,
         })
     }
 }

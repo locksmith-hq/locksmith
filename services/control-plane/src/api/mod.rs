@@ -8,17 +8,18 @@
 //! credential a response carries is an agent's enrollment secret (shown once, at registration or
 //! rotation) and the short-lived agent token from `POST /v1/agent-tokens` (`agents.rs`).
 
-mod agents;
-mod audit;
-mod environments;
-mod extract;
+pub(crate) mod agents;
+pub(crate) mod audit;
+pub(crate) mod environments;
+pub(crate) mod extract;
 mod internal;
+mod mcp;
 mod orgs;
-mod projects;
+pub(crate) mod projects;
 mod responses;
-mod secrets;
+pub(crate) mod secrets;
 mod session;
-mod versions;
+pub(crate) mod versions;
 
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -71,8 +72,16 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(session::sign_out))
         .routes(routes!(audit::list_events))
         .routes(routes!(audit::status))
+        .routes(routes!(mcp::list_tools))
+        .routes(routes!(mcp::update_tool))
+        .routes(routes!(mcp::list_clients))
+        .routes(routes!(mcp::revoke_client))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
+        .routes(routes!(internal::agent_tool_settings))
+        .routes(routes!(internal::append_agent_mcp_call))
+        .routes(routes!(internal::upsert_agent_mcp_client))
+        .routes(routes!(internal::revoked_agent_clients))
         .routes(routes!(internal::append_event))
 }
 

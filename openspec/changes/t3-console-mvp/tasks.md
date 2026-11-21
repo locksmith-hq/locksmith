@@ -42,5 +42,5 @@
 - [x] 6.6 Verify: `just web-e2e` passes against the locked baselines.
 
 ## 7. Local verification [sonnet]
-- [ ] 7.1 `just up`, `just web-e2e`, `just apps-build`, then `just ci`.
+- [x] 7.1 `just up`, `just web-e2e`, `just apps-build`, then `just ci`.
 - [ ] 7.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.

@@ -115,3 +115,8 @@
 - Task: t3 PR #489 conflicts with main - done (merged origin/main; kept both sides: Projects/Secrets tabs plus workload identities; main's inline web Console dropped, workload identities ported to `apps/web/src/pages/WorkloadIdentities.tsx` and routed in Shell).
 - Verified: npm test control-plane-client (9), apps/web (51), apps/desktop (37); web build OK; `just quick` OK.
 - Notes for next session: remaining 7.1 (`just up`, `just web-e2e`, `just apps-build`) and 7.2. Web-e2e snapshots were not rerun after this merge; rerun before ticking 7.1.
+
+## 2026-11-21 worker (alfie, run 2)
+- Task: 7.1 - done (ticked). After merging main in: `just up` + `just web-e2e` (2 passed, snapshots unchanged) and `just apps-build` OK; the full `just ci` is left to the PR's required checks.
+- Verified: `PW_CHROMIUM=/opt/pw-browsers/chromium just web-e2e && just apps-build` -> exit 0.
+- Notes for next session: only 7.2 remains (manual `ci-platforms` run; record the result), then archive the change (`archive-change`) in this PR.

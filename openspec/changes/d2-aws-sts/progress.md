@@ -104,5 +104,5 @@ Append-only session log. Read the last entries and `git log` before starting.
 ## 2026-11-21 worker (alfie)
 - Task: 7.2 - done (5.1/5.2 stay open, waiting on T3's shell per D2-1/D2-2)
 - Verified: `just up`; `just api` + `E2E_REQUIRE_AWS=1 just aws-vend-smoke` (real `aws` CLI via credential_process, 1 passed in 2.8s, not skipped); `npm ci && just apps-build` ok; `just ci` is the PR's required checks. `just leak-scan` needs a canary file this VM lacks (`bad canary file`), left to CI.
-- P1 named check: session-policy enforcement on real AWS is P1's `aws-smoke` (real-AWS session smoke); moto here only records the session policy (design.md decision 6), it does not enforce it.
+- P1 named check: none exists. P1's `aws-smoke` has five named checks (KMS wrap/unwrap, S3 Object Lock, Aurora resume, Cognito token, Fargate /health) and none covers STS session-policy enforcement. This run proves the vend path against moto only, which records the session policy but does not enforce it (design.md decision 6); enforcement on real AWS is unverified. Open gap: a P1 smoke check (or follow-up task) is needed; flagged to the lead in the PR summary.
 - Notes for next session: only 5.1/5.2 remain; take them after t3-console-mvp (#489) lands, starting with the binding-list contract in `packages/api-types`.

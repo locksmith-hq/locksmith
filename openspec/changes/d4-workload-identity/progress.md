@@ -26,3 +26,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 2.1, 2.2, 2.3, 2.4 - done (`auth/issuers.rs` per-issuer registry with address-guarded resolver; `auth/external.rs` `verify_external`; matcher tests; `tests/workload_verify.rs` 20 wiremock cases; `JwksCache::with_client` added so the guarded client is injected)
 - Verified: `cargo nextest run -p ls-control-plane workload` 41 passed; `just quick` ok; Opus evaluator PASS (after adding resolver rebinding tests)
 - Notes for next session: registry/verifier/config not yet in `AppState` - wire in 3.1; create-time private-issuer 422 should call `IssuerRegistry::check_issuer_host`. Dev flag `LOCKSMITH_WORKLOAD_ALLOW_PRIVATE_ISSUERS` also allows http. Nits: `address_allowed` duplicates gateway egress.rs; `ls-proxy` dep is heavy. Tasks 3.x onward open.
+
+## 2026-11-21 worker (C), fourth run
+- Task: 3.1, 3.2, 3.3 - done (`api/workload_tokens.rs` POST /v1/workload-tokens with `ExternalToken` SecretString, `exchange_workload_token` span, `workload_identity.exchanged`/`.denied` audit events, 300s throttled `last_used_at`; verifier wired into AppState and main; create-time private-issuer refusal; OpenAPI and client types regenerated; `tests/workload_exchange.rs`)
+- Verified: `cargo nextest run -p ls-control-plane workload` 45 passed; `just quick` ok; Sonnet evaluator PASS
+- Notes for next session: ledger attrs allow only ids/codes/hosts, so policy-named claim values are on the tracing event, not the ledger; create-time private issuer is 400 not 422; Authorization-header form of the exchange not implemented. Next: 4.1 jti replay cache and rate limits (resolve the `[verify]` OSS item first), then 4.2.

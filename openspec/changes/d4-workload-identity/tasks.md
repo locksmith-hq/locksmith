@@ -14,9 +14,9 @@
 - [x] 2.4 Verify: `cargo nextest run -p ls-control-plane workload_verify` against a wiremock stub issuer: valid, expired, wrong aud, wrong iss, alg none, HS256 confusion, unknown kid, rotated key, issuer down, issuer at a private address.
 
 ## 3. Token exchange endpoint [sonnet]
-- [ ] 3.1 `POST /v1/workload-tokens`: parse `{policy, token}` with the token read into a `SecretString` newtype (no Debug, Display, Clone, Serialize), load the policy under RLS, verify, match, then mint via the existing `AgentTokenSigner::mint`; `Cache-Control: no-store`; a single `401` for every failure with the reason only on the span.
-- [ ] 3.2 Spans and audit: `exchange_workload_token` span (policy, agent, outcome), `workload_identity.exchanged` and `.denied` events with only policy-named claims; throttled `last_used_at` update.
-- [ ] 3.3 Verify: `cargo nextest run -p ls-control-plane workload_exchange`: minted token verifies with the gateway verifier, carries only the agent claims, policy delete and grant revoke cut access, every failure body is identical.
+- [x] 3.1 `POST /v1/workload-tokens`: parse `{policy, token}` with the token read into a `SecretString` newtype (no Debug, Display, Clone, Serialize), load the policy under RLS, verify, match, then mint via the existing `AgentTokenSigner::mint`; `Cache-Control: no-store`; a single `401` for every failure with the reason only on the span.
+- [x] 3.2 Spans and audit: `exchange_workload_token` span (policy, agent, outcome), `workload_identity.exchanged` and `.denied` events with only policy-named claims; throttled `last_used_at` update.
+- [x] 3.3 Verify: `cargo nextest run -p ls-control-plane workload_exchange`: minted token verifies with the gateway verifier, carries only the agent claims, policy delete and grant revoke cut access, every failure body is identical.
 
 ## 4. Abuse limits and adversarial cases [sonnet]
 - [ ] 4.1 `jti` replay cache (decision 6; resolve the `[verify]` OSS item first) and per-policy plus per-source rate limits with config defaults.

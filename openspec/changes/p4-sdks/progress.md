@@ -7,3 +7,8 @@
 - 2026-11-21 · worker (alfie): group 1 done: `packages/sdk` with openapi-fetch 0.17.0 (re-checked, MIT), `createLocksmith`, `LocksmithError`, `paginate`, drift, coverage and no-value-route tests (8 pass). Stacked on claude/change-m1-remote-mcp. Next: group 2 (control-plane-client on the SDK).
 - 2026-11-21 · worker (alfie): group 2 done: control-plane-client now runs on @locksmith/sdk (own fetch code, schema.d.ts and gen:types removed; ApiError extends LocksmithError; relative base URL kept via placeholder origin; enrollment-secret test added). Verified: control-plane-client 9, web 26, desktop 28 tests, tsc, npm run build (tauri build not run). Next: group 3 (just sdk-gen/sdk-smoke, README).
 - 2026-11-21 · worker (alfie): 2.3 left unticked: the `tauri build` half of `just apps-build` was not run in this VM.
+
+## 2026-11-21 09:25 UTC worker
+- Task: ci-fix (hygiene red on PR #554) - ci-fix
+- Verified: scripts/public-check.sh -> OK; vitest control-plane-client -> 9 passed; just quick -> OK
+- Notes for next session: gitleaks flagged the enrollment-secret test fixture (generic-api-key); now built from low-entropy words. 12 tasks still unticked, so no auto-merge yet.

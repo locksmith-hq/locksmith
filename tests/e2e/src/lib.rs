@@ -19,6 +19,11 @@ pub fn wiremock() -> String {
     env::var("E2E_WIREMOCK_URL").unwrap_or_else(|_| "http://127.0.0.1:8089".into())
 }
 
+/// moto (local AWS STS/IAM stand-in) base URL (`E2E_MOTO_URL`).
+pub fn moto() -> String {
+    env::var("E2E_MOTO_URL").unwrap_or_else(|_| "http://127.0.0.1:5000".into())
+}
+
 /// `prefix` plus a nanosecond timestamp, for names that must not collide between runs.
 pub fn uniq(prefix: &str) -> String {
     let t = std::time::SystemTime::now()

@@ -2792,10 +2792,14 @@ dependencies = [
 name = "ls-e2e"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "ls-proxy",
  "reqwest",
  "serde_json",
+ "time",
  "tokio",
  "tokio-postgres",
+ "ureq 3.5.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -2837,6 +2841,7 @@ dependencies = [
  "ls-pg-test",
  "ls-proxy",
  "ls-redact",
+ "proptest",
  "reqwest",
  "rmcp",
  "secrecy",

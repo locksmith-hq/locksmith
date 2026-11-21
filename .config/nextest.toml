@@ -23,3 +23,16 @@ not (
   | (package(ls-gateway) & test(/^relay::tests::(relay_events_land_in_the_ledger|outcome_resend_is_idempotent|mcp_short_lived::mcp_short_lived_issue_lands_in_the_ledger_without_value_or_credential)$/))
 )
 """
+
+# moto's IAM enforcement mode (`POST /moto-api/reset-auth`) is server-global, so tests that talk
+# to moto run one at a time across processes. Add later moto test binaries to these filters.
+[test-groups]
+moto = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "package(ls-e2e) & binary(aws_sts_moto)"
+test-group = "moto"
+
+[[profile.default.overrides]]
+filter = "package(ls-gateway) & test(/^aws::tests::aws_moto_/)"
+test-group = "moto"

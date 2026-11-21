@@ -14,3 +14,9 @@ tokio = { version = "1.54", features = ["rt", "macros"] }
 tokio-postgres = "0.7.18"
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
 serde_json = "1"
+# d2-aws-sts spike (tests/aws_sts_moto.rs): the in-tree STS client and SigV4 signer, sync HTTP.
+ls-proxy = { path = "../../crates/ls-proxy" }
+ureq = "3"
+zeroize = "1"
+# d2-aws-sts smoke (tests/aws_smoke.rs): parse the credential expiry.
+time = { version = "0.3.55", features = ["parsing"] }

@@ -35,6 +35,9 @@ pub struct Grant {
     pub secret_id: Uuid,
     pub secret_name: String,
     pub mode: String,
+    /// The allow-list of a `delegate` grant (D2); `None` for `relay`.
+    #[serde(default)]
+    pub scope: Option<crate::aws_policy::AwsGrantScope>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
 }
@@ -48,6 +51,16 @@ impl Grant {
 
 /// The only mode `/v1/relay` serves.
 pub const MODE_RELAY: &str = "relay";
+/// The only mode `/v1/aws/credentials` serves (D2).
+pub const MODE_DELEGATE: &str = "delegate";
+
+/// The unexpired `delegate` grant for `secret_id` at `now`, if any (the first, in the control
+/// plane's order).
+pub fn delegate_grant(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) -> Option<&Grant> {
+    grants
+        .iter()
+        .find(|g| g.secret_id == secret_id && g.mode == MODE_DELEGATE && g.active_at(now))
+}
 
 /// Whether `grants` hold an unexpired relay grant for `secret_id` at `now`.
 pub fn allows_relay(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) -> bool {
@@ -437,6 +450,7 @@ mod tests {
             secret_id,
             secret_name: "S".to_owned(),
             mode: mode.to_owned(),
+            scope: None,
             expires_at,
         }
     }

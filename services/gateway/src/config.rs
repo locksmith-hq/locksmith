@@ -21,6 +21,9 @@ pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_GATEWAY_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
 pub const ENV_BINDINGS: &str = "LOCKSMITH_GATEWAY_BINDINGS";
+/// STS endpoint override for `/v1/aws/credentials` (D2): local and test use only (moto). Unset in
+/// production, where the regional `https://sts.<region>.amazonaws.com/` is called.
+pub const ENV_AWS_STS_ENDPOINT: &str = "LOCKSMITH_GATEWAY_AWS_STS_ENDPOINT";
 /// Comma-separated public host names (`host` or `host:port`) `/mcp` accepts in the `Host`
 /// header, on top of loopback (DNS rebinding protection). Optional.
 pub const ENV_MCP_ALLOWED_HOSTS: &str = "LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS";
@@ -78,6 +81,8 @@ pub struct Config {
     pub service_token: SecretString,
     pub openbao: OpenBaoConfig,
     pub bindings: Bindings,
+    /// [`ENV_AWS_STS_ENDPOINT`]: tests and the local moto smoke only.
+    pub aws_sts_endpoint: Option<String>,
     /// Extra `Host` values `/mcp` accepts ([`ENV_MCP_ALLOWED_HOSTS`]).
     pub mcp_allowed_hosts: Vec<String>,
 }
@@ -112,6 +117,9 @@ pub struct Bindings {
     pub org_id: Uuid,
     #[serde(default, rename = "binding")]
     pub bindings: Vec<Binding>,
+    /// AWS credential-vending bindings (D2); none by default.
+    #[serde(default, rename = "aws_binding")]
+    pub aws_bindings: Vec<crate::aws_policy::AwsBinding>,
     /// Git repositories a secret may be used for through `/git/...` (D1).
     #[serde(default, rename = "git_binding")]
     pub git_bindings: Vec<crate::git::GitBinding>,
@@ -128,6 +136,17 @@ impl Bindings {
     fn validate(&self) -> Result<(), ConfigError> {
         let mut seen = HashSet::new();
         let mut git_seen = HashSet::new();
+        let mut aws_seen = HashSet::new();
+        for (index, a) in self.aws_bindings.iter().enumerate() {
+            a.validate()
+                .map_err(|field| ConfigError::Binding { index, field })?;
+            if !aws_seen.insert(a.secret_id) {
+                return Err(ConfigError::Binding {
+                    index,
+                    field: "aws_binding.secret_id",
+                });
+            }
+        }
         for (index, g) in self.git_bindings.iter().enumerate() {
             g.validate()
                 .map_err(|field| ConfigError::Binding { index, field })?;
@@ -164,6 +183,11 @@ impl Bindings {
             }
         }
         Ok(())
+    }
+
+    /// The AWS binding for `secret_id`, if any.
+    pub fn aws_for_secret(&self, secret_id: Uuid) -> Option<&crate::aws_policy::AwsBinding> {
+        self.aws_bindings.iter().find(|b| b.secret_id == secret_id)
     }
 
     /// The Git binding for `secret_id`, if any.
@@ -240,6 +264,21 @@ impl Config {
         let text = read_file(&path).ok_or(ConfigError::BindingsUnreadable)?;
         let bindings = Bindings::parse(&text)?;
 
+        let aws_sts_endpoint = match get(ENV_AWS_STS_ENDPOINT).filter(|v| !v.trim().is_empty()) {
+            None => None,
+            Some(v) => Some(
+                Url::parse(&v)
+                    .ok()
+                    .filter(|u| {
+                        matches!(u.scheme(), "http" | "https")
+                            && u.host_str().is_some()
+                            && u.username().is_empty()
+                            && u.password().is_none()
+                    })
+                    .map(|_| v)
+                    .ok_or(ConfigError::Invalid(ENV_AWS_STS_ENDPOINT))?,
+            ),
+        };
         let mcp_allowed_hosts = get(ENV_MCP_ALLOWED_HOSTS)
             .map(|v| {
                 v.split(',')
@@ -258,6 +297,7 @@ impl Config {
             service_token,
             openbao,
             bindings,
+            aws_sts_endpoint,
             mcp_allowed_hosts,
         })
     }

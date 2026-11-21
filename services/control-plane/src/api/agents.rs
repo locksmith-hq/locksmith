@@ -72,19 +72,60 @@ pub struct AgentEnrollment {
     pub enrollment_secret: EnrollmentSecret,
 }
 
-/// How a grant lets the agent use the secret. S4 has relay only.
+/// How a grant lets the agent use the secret.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum GrantMode {
     /// The gateway injects the secret into an upstream request; the agent never sees it.
     #[default]
     Relay,
+    /// The gateway vends short-lived credentials limited by the grant's `scope`. Off unless the
+    /// gateway binding also allows it.
+    Delegate,
+}
+
+/// The allow-list a `delegate` grant carries: what the vended credentials may do.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GrantScope {
+    /// IAM actions, for example `s3:GetObject`.
+    #[serde(default)]
+    pub actions: Vec<String>,
+    /// Resource ARNs the actions apply to.
+    #[serde(default)]
+    pub resources: Vec<String>,
+    /// Upper bound on a credential's lifetime in seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_duration_secs: Option<u32>,
+}
+
+impl GrantScope {
+    /// A scope must name at least one action and one resource, and stay within sane bounds.
+    pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        const MAX_ITEMS: usize = 64;
+        const MAX_LEN: usize = 512;
+        if self.actions.is_empty() || self.resources.is_empty() {
+            return Err("scope needs at least one action and one resource");
+        }
+        if self.actions.len() > MAX_ITEMS || self.resources.len() > MAX_ITEMS {
+            return Err("scope has too many entries");
+        }
+        let bad = |v: &String| v.is_empty() || v.len() > MAX_LEN || v.chars().any(char::is_control);
+        if self.actions.iter().any(bad) || self.resources.iter().any(bad) {
+            return Err("scope entries must be non-empty printable strings");
+        }
+        if matches!(self.max_duration_secs, Some(0)) {
+            return Err("max_duration_secs must be positive");
+        }
+        Ok(())
+    }
 }
 
 impl GrantMode {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             GrantMode::Relay => "relay",
+            GrantMode::Delegate => "delegate",
         }
     }
 
@@ -92,12 +133,14 @@ impl GrantMode {
     pub(crate) fn audit_code(self) -> ls_audit::Code {
         match self {
             GrantMode::Relay => ls_audit::Code::new("relay"),
+            GrantMode::Delegate => ls_audit::Code::new("delegate"),
         }
     }
 
     pub(crate) fn parse(s: &str) -> sql::Result<Self> {
         match s {
             "relay" => Ok(GrantMode::Relay),
+            "delegate" => Ok(GrantMode::Delegate),
             other => Err(sql::Error::Decode(
                 format!("unknown grant mode {other:?}").into(),
             )),
@@ -113,6 +156,9 @@ pub struct NewAgentGrant {
     /// Defaults to `relay`.
     #[serde(default)]
     pub mode: GrantMode,
+    /// Required for `delegate` (the allow-list), and refused for `relay`.
+    #[serde(default)]
+    pub scope: Option<GrantScope>,
     /// Optional expiry (RFC 3339, in the future). Omit for no expiry.
     #[serde(default, with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
@@ -128,6 +174,8 @@ pub struct AgentGrant {
     pub secret_id: Uuid,
     pub secret_name: String,
     pub mode: GrantMode,
+    /// The allow-list of a `delegate` grant; `null` for `relay`.
+    pub scope: Option<GrantScope>,
     #[serde(with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
     pub expires_at: Option<OffsetDateTime>,
@@ -170,7 +218,7 @@ macro_rules! agent_cols {
 /// Grant columns, from `agent_grants g` joined with `secrets s`.
 macro_rules! grant_cols {
     () => {
-        "g.id, g.agent_id, g.secret_id, s.name AS secret_name, g.mode, g.expires_at, g.created_at"
+        "g.id, g.agent_id, g.secret_id, s.name AS secret_name, g.mode, g.scope::text AS scope, g.expires_at, g.created_at"
     };
 }
 pub(crate) use grant_cols;
@@ -191,6 +239,13 @@ pub(crate) fn optional_utc(row: &sql::PgRow, column: &str) -> sql::Result<Option
         .map(|t| t.to_offset(time::UtcOffset::UTC)))
 }
 
+/// The `scope` column as a [`GrantScope`], `None` for a relay grant.
+pub(crate) fn scope_from_row(r: &sql::PgRow) -> sql::Result<Option<GrantScope>> {
+    let v: Option<String> = r.try_get("scope")?;
+    v.map(|t| serde_json::from_str(&t).map_err(|e| sql::Error::Decode(Box::new(e))))
+        .transpose()
+}
+
 fn grant_from_row(r: &sql::PgRow) -> sql::Result<AgentGrant> {
     Ok(AgentGrant {
         id: r.try_get("id")?,
@@ -198,6 +253,7 @@ fn grant_from_row(r: &sql::PgRow) -> sql::Result<AgentGrant> {
         secret_id: r.try_get("secret_id")?,
         secret_name: r.try_get("secret_name")?,
         mode: GrantMode::parse(r.try_get::<&str, _>("mode")?)?,
+        scope: scope_from_row(r)?,
         expires_at: optional_utc(r, "expires_at")?,
         created_at: utc(r, "created_at")?,
     })
@@ -493,6 +549,24 @@ pub async fn create_grant(
     {
         return Err(ApiError::validation("`expires_at` must be in the future"));
     }
+    let scope_json = match (input.mode, input.scope.as_ref()) {
+        (GrantMode::Relay, None) => None,
+        (GrantMode::Relay, Some(_)) => {
+            return Err(ApiError::validation(
+                "`scope` is only for `delegate` grants",
+            ));
+        }
+        (GrantMode::Delegate, None) => {
+            return Err(ApiError::validation("a `delegate` grant needs a `scope`"));
+        }
+        (GrantMode::Delegate, Some(scope)) => {
+            scope.validate().map_err(ApiError::validation)?;
+            Some(
+                serde_json::to_string(scope)
+                    .map_err(|_| ApiError::validation("invalid `scope`"))?,
+            )
+        }
+    };
     let grant = state
         .db()
         .with_org(org.org_id, move |c| {
@@ -508,8 +582,8 @@ pub async fn create_grant(
                 )
                 .await?;
                 let row = sql::query(concat!(
-                    "WITH g AS (INSERT INTO agent_grants (org_id, agent_id, secret_id, mode, expires_at) \
-                     VALUES ($1, $2, $3, $4, $5) RETURNING *) \
+                    "WITH g AS (INSERT INTO agent_grants (org_id, agent_id, secret_id, mode, scope, expires_at) \
+                     VALUES ($1, $2, $3, $4, $5::text::jsonb, $6) RETURNING *) \
                      SELECT ",
                     grant_cols!(),
                     " FROM g JOIN secrets s ON s.org_id = g.org_id AND s.id = g.secret_id"
@@ -518,6 +592,7 @@ pub async fn create_grant(
                 .bind(agent_id)
                 .bind(input.secret_id)
                 .bind(input.mode.as_str())
+                .bind(scope_json)
                 .bind(input.expires_at)
                 .fetch_one(&mut *c)
                 .await

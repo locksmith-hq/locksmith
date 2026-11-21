@@ -1,4 +1,5 @@
-import { NavLink, Navigate, Route, Routes } from "react-router";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Logo } from "@locksmith/ui";
 import type { Client } from "@locksmith/control-plane-client";
 import { useState } from "react";
@@ -22,15 +23,27 @@ const NAV: ReadonlyArray<{ heading?: string; items: ReadonlyArray<readonly [path
   { items: [["activity", "Activity"]] },
 ];
 
+/** Environments live inside a project: open the project being viewed, else the first one. */
+function EnvironmentsRedirect({ client, selected }: { client: Client; selected?: string }) {
+  const q = useQuery({ queryKey: ["projects"], queryFn: () => client.listProjects() });
+  if (selected) return <Navigate to={`/projects/${selected}`} replace />;
+  if (q.isPending) return <EmptyPage title="Environments" note="Loading…" />;
+  const first = q.data?.[0];
+  return <Navigate to={first ? `/projects/${first.id}` : "/projects"} replace />;
+}
+
 /** Signed-in frame: sidebar, org header and sign-out around the routed pages. */
 export function Shell({ client, user, onSignOut }: { client: Client; user?: string; onSignOut?: () => void }) {
+  const [selected, setSelected] = useState<string | undefined>();
+  const { pathname } = useLocation();
+  const m = /^\/projects\/([^/]+)/.exec(pathname);
+  if (m && m[1] !== selected) setSelected(m[1]);
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   return (
     <QueryClientProvider client={queryClient}>
     <div className="shell">
       <aside className="shell-side">
         <div className="shell-brand"><Logo size={28} /> Locksmith</div>
-        <div className="shell-org" aria-label="Organization">Locksmith</div>
         <nav aria-label="Pages">
           {NAV.map((g, i) => (
             <div key={i} className="shell-group">
@@ -41,16 +54,17 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
         </nav>
         <div className="shell-user">
           {user ? <span data-testid="signed-in-as">{user}</span> : <span>Signed in</span>}
+          {onSignOut && <button className="shell-signout" onClick={onSignOut}>Sign out</button>}
         </div>
-        {onSignOut && <button className="shell-signout" onClick={onSignOut}>Sign out</button>}
       </aside>
       <main className="shell-main">
+        <header className="shell-top"><div className="shell-org" aria-label="Organization">Locksmith</div></header>
         <Routes>
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<Overview client={client} />} />
           <Route path="projects/*" element={<Projects client={client} />} />
           <Route path="secrets/*" element={<Secrets client={client} />} />
-          <Route path="environments" element={<EmptyPage title="Environments" note="Environments belong to a project: open a project to manage its environments." />} />
+          <Route path="environments" element={<EnvironmentsRedirect client={client} selected={selected} />} />
           <Route path="agents" element={<Agents client={client} />} />
           <Route path="grants" element={<GrantsPage client={client} />} />
           <Route path="tools" element={<McpTools client={client} />} />

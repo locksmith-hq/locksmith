@@ -66,3 +66,14 @@ test("sign-out button signs out", async () => {
   await userEvent.click(await screen.findByText("Sign out"));
   await waitFor(() => expect(auth.signOut).toHaveBeenCalled());
 });
+
+test("frame: org switcher in the top bar, user card holds sign-out, Environments opens a project's environments", async () => {
+  installFixtureFetch();
+  window.history.pushState({}, "", "/overview");
+  render(<App auth={fakeAuth(signedIn)} />);
+  expect(await screen.findByLabelText("Organization")).toBeInTheDocument();
+  expect(screen.getByTestId("signed-in-as").parentElement).toContainElement(screen.getByText("Sign out"));
+  await userEvent.click(screen.getByRole("link", { name: "Environments" }));
+  expect(await screen.findByRole("heading", { name: "Environments" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "All projects" })).toBeInTheDocument();
+});

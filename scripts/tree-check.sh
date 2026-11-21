@@ -4,7 +4,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 fail=0
-prune=( \( -name target -o -name node_modules -o -name .git \) -prune -o )
+prune=( \( -name target -o -name node_modules -o -name .git -o -path ./.claude/worktrees \) -prune -o )
 
 while IFS= read -r f; do
   case "$f" in

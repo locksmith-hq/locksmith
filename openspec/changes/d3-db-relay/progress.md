@@ -71,3 +71,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 7.1 - done (`just db-smoke` and `tests/e2e/tests/db_relay.rs`); evaluator PASS (independent sonnet review)
 - Verified: `just db-smoke` 1 passed against compose Postgres (twice); `just quick` exit 0
 - Notes for next session: 6.1/6.2 still need the t3 bindings page; 7.2 needs `just apps-build` after 6.x, then CI results. `just leak-scan` not run.
+
+## 2026-11-21 worker (josie)
+- Task: none - parked (merged origin/main clean)
+- Verified: merge clean, no code changed
+- Notes for next session: 6.1 still needs a live bindings page (t3-console-mvp #489); 7.2 last.

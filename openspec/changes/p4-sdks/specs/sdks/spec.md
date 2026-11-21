@@ -32,7 +32,7 @@ The SDK SHALL NOT expose any call to a secret value or key-material route.
 
 #### Scenario: Value routes absent
 - **WHEN** the SDK test scans the generated client surface
-- **THEN** no exported method targets a path matching the value or material route denylist used by the console leak check
+- **THEN** no exported method targets a path matching the value or key-material route denylist that `packages/sdk` defines from the OpenAPI spec and exports as `VALUE_ROUTE_DENYLIST` (the console leak check, `t3-console-mvp` task 6.2, does not exist yet and can reuse it)
 
 ### Requirement: Single client package
 `packages/control-plane-client` SHALL use the SDK for its types and requests and SHALL contain no hand-written `fetch` call.

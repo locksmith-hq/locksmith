@@ -41,6 +41,7 @@ export function Agents({ client }: { client: Client }) {
         <section aria-label="Enrollment secret" className="panel">
           <p>Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.</p>
           <code data-testid="enrollment-secret">{secret.value}</code>
+          <button className="btn sm" onClick={() => void navigator.clipboard?.writeText(secret.value).catch(() => setError("Could not copy to the clipboard"))}>Copy</button>
           <button className="btn sm" onClick={() => setSecret(null)}>Dismiss</button>
         </section>
       )}

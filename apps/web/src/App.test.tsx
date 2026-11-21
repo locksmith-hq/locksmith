@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
@@ -67,6 +67,18 @@ test("create shows the enrollment secret once and never persists it", async () =
   expect(JSON.stringify(setItem.mock.calls)).not.toContain("SUPERSECRET");
   expect(JSON.stringify(Object.entries(localStorage))).not.toContain("SUPERSECRET");
   expect(JSON.stringify(log.mock.calls)).not.toContain("SUPERSECRET");
+});
+
+test("the enrollment secret can be copied with a Copy button", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  mk();
+  await screen.findByText("bot");
+  await userEvent.type(screen.getByLabelText("Agent name"), "bot");
+  await userEvent.click(screen.getByText("Create agent"));
+  await screen.findByTestId("enrollment-secret");
+  fireEvent.click(screen.getByText("Copy"));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith("lse_SUPERSECRET"));
 });
 
 test("the enrollment secret never enters the query cache", async () => {

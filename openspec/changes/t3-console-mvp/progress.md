@@ -69,3 +69,4 @@
 - Task: group 1 (1.1-1.4) verified and ticked; design.md "OSS used" now records the pinned versions (react-query 5.108.1, react-router 8.5.2; msw not used, in-memory fixtures).
 - Verified: `npm test` in packages/control-plane-client (9), apps/web (45), apps/desktop (36) pass; `npm run build --workspace apps/web` OK.
 - Notes for next session: groups 2-5 have code and tests on this branch but are not yet audited against each task line, so they are unticked. 6.4.1-6.4.3 and group 6 need `just up && just web-e2e` (docker, Keycloak); not run this session.
+- 2026-11-21 · evaluator first failed 1.3 (fixtures lacked agent/grant writes, MCP and org routes); fixed in `apps/web/src/api/fixtures.ts` with a test, re-evaluated PASS (apps/web 46 tests). Unexercised handlers: updateProject/deleteProject/environment writes/audit events.

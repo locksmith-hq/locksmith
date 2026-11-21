@@ -19,11 +19,11 @@
 - [x] 3.4 Verify: `just up && just sdk-smoke && just test sdk && just tree-check`.
 
 ## 4. Remote Hub MCP setup [sonnet]
-- [ ] 4.1 [haiku] For each agent in `agents.rs`, record with a source URL whether it supports a remote Streamable HTTP MCP server with OAuth, and its config shape, in `docs/research/remote-mcp-auth.md` (append a section; mark "not verified" when no source is reachable).
-- [ ] 4.2 `agents.rs`: an optional remote-MCP entry per supported agent (URL `<hub>/mcp` and the public client id only); regenerate `integrations/*` with `UPDATE_INTEGRATIONS=1`; the drift test passes.
-- [ ] 4.3 `smith init --hub <url>` writes the entries idempotently (`--dry-run` prints them), and `smith doctor` adds `hub.mcp` (ok / missing / unsupported per agent); tests include a second-run no-op and a scan for no token, client secret or canary in the written files.
-- [ ] 4.4 `integrations/generic-mcp/README.md` (create it if P3 has not yet): remote Hub MCP URL, discovery via `WWW-Authenticate`, and the pre-registered public client for any other MCP client.
-- [ ] 4.5 Verify: `cargo nextest run -p smith-cli init doctor agents && just test smith-cli`.
+- [x] 4.1 [haiku] For each agent in `agents.rs`, record with a source URL whether it supports a remote Streamable HTTP MCP server with OAuth, and its config shape, in `docs/research/remote-mcp-auth.md` (append a section; mark "not verified" when no source is reachable).
+- [x] 4.2 `agents.rs`: an optional remote-MCP entry per supported agent (URL `<hub>/mcp` and the public client id only); regenerate `integrations/*` with `UPDATE_INTEGRATIONS=1`; the drift test passes.
+- [x] 4.3 `smith init --hub <url>` writes the entries idempotently (`--dry-run` prints them), and `smith doctor` adds `hub.mcp` (ok / missing / unsupported per agent); tests include a second-run no-op and a scan for no token, client secret or canary in the written files.
+- [x] 4.4 `integrations/generic-mcp/README.md` (create it if P3 has not yet): remote Hub MCP URL, discovery via `WWW-Authenticate`, and the pre-registered public client for any other MCP client.
+- [x] 4.5 Verify: `cargo nextest run -p smith-cli init doctor agents && just test smith-cli`.
 
 ## 5. Local verification [sonnet]
 - [ ] 5.1 `just up`, `just sdk-smoke`, `just apps-build`, then `just ci`.

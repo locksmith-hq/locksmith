@@ -24,3 +24,8 @@
 - Task: ci-fix (PR #561 merge conflicts) - done
 - Verified: sdk 8 and control-plane-client 9 vitest -> pass; just quick -> OK
 - Notes for next session: merged origin/main (vitest ^4.1.12 and openapi-typescript kept, @locksmith/sdk dependency kept; sdk vitest bumped to ^4.1.12). Group 4 can start now: agents.rs is on main. 4.1 needs open internet (mark "not verified" or open needs-research). 2.3 still needs the tauri build.
+
+## 2026-11-21 worker (alfie)
+- Task: group 4 (4.1-4.5) - done
+- Verified: `cargo nextest run -p smith-cli init doctor agents` 30 pass; `just test smith-cli` 136 pass; `just quick` OK; drift test regenerated `integrations/claude-code/.mcp.hub.json`, `integrations/codex/config.hub.toml`.
+- Notes: Claude Code and Codex verified from sources (remote-mcp-auth.md section 6); Cursor stays unsupported (docs host unreachable). Left: 2.3 (tauri build not run in this VM), 5.1 (just up + sdk-smoke + apps-build + ci; `just ci` is banned locally, PR checks run it), 5.2 (manual ci-platforms, last of phase only). Not finishing the PR: tasks remain.

@@ -61,3 +61,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.1-5.3 - evaluator PASS (independent sonnet review); `just ci` -> exit 0 (441s)
 - Verified: `cargo nextest run -p smith-cli db` 12 passed; `just ci` exit 0
 - Notes for next session: minor evaluator findings, non-blocking: (1) doctor_d3_db.rs pgpass check reads the whole file into an unzeroized String - read line by line and drop after the host field; (2) weak `all(..)` assertion near :197, use assert_eq on the vec; (3) doctor ignores `--ca-cert` (only PGSSLROOTCERT); (4) pgpass match ignores port/db. Remaining: 6.x (needs t3 bindings page), 7.x.
+
+## 2026-11-21 worker (alfie)
+- Task: none (groups 1-5 already ticked; merged origin/main into the branch, no conflicts)
+- Verified: nothing new run; no code changed
+- Notes for next session: 6.1 is blocked because no bindings page exists yet in `apps/web` or `apps/desktop` (t3 console pages); 7.1/7.2 need `just up` plus psql. Take 7.1 first (it does not need the UI), then 6.x once t3 lands.

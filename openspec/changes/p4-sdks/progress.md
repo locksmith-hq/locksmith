@@ -29,3 +29,8 @@
 - Task: group 4 (4.1-4.5) - done
 - Verified: `cargo nextest run -p smith-cli init doctor agents` 30 pass; `just test smith-cli` 136 pass; `just quick` OK; drift test regenerated `integrations/claude-code/.mcp.hub.json`, `integrations/codex/config.hub.toml`.
 - Notes: Claude Code and Codex verified from sources (remote-mcp-auth.md section 6); Cursor stays unsupported (docs host unreachable). Left: 2.3 (tauri build not run in this VM), 5.1 (just up + sdk-smoke + apps-build + ci; `just ci` is banned locally, PR checks run it), 5.2 (manual ci-platforms, last of phase only). Not finishing the PR: tasks remain.
+
+## 2026-11-21 worker
+- Task: p4-sdks - ci-fix (conflicts on #561 resolved: SDK-based client kept, main's workload-identity helpers/methods added; docs/testing.md kept both rows)
+- Verified: vitest control-plane-client (9 pass), just quick -> pass
+- Notes for next session: all tasks ticked; auto-merge enabled on #561, waits for checks and merge-review.

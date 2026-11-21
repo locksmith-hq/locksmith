@@ -7,23 +7,23 @@
 - [x] 1.4 Verify: `npm test --workspace apps/web`.
 
 ## 2. Tokens and shell [sonnet]
-- [ ] 2.1 Move design tokens and kit components from `mockup/kit.tsx` and the CSS into `packages/ui`; the mockup imports them; no visual change.
-- [ ] 2.2 Keep the existing `AuthGate`; add `Shell` (sidebar, org header, sign-out) and routes with empty pages; signed-out and expired-session tests.
-- [ ] 2.3 Shared `QueryState` component: loading, empty, error with retry; tests.
-- [ ] 2.4 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web`.
+- [x] 2.1 Move design tokens and kit components from `mockup/kit.tsx` and the CSS into `packages/ui`; the mockup imports them; no visual change.
+- [x] 2.2 Keep the existing `AuthGate`; add `Shell` (sidebar, org header, sign-out) and routes with empty pages; signed-out and expired-session tests.
+- [x] 2.3 Shared `QueryState` component: loading, empty, error with retry; tests.
+- [x] 2.4 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web`.
 
 ## 3. Overview, projects and environments [sonnet]
-- [ ] 3.1 Overview page with counts, recent activity and the dismissible "Get started" checklist.
-- [ ] 3.2 Projects list, create, rename, delete with confirm dialog; API errors shown.
-- [ ] 3.3 Environments list and manage inside a project.
-- [ ] 3.4 Verify: `npm test --workspace apps/web` (fixtures cover `403`, `409`, empty, error).
+- [x] 3.1 Overview page with counts, recent activity and the dismissible "Get started" checklist.
+- [x] 3.2 Projects list, create, rename, delete with confirm dialog; API errors shown.
+- [x] 3.3 Environments list and manage inside a project.
+- [x] 3.4 Verify: `npm test --workspace apps/web` (fixtures cover `403`, `409`, empty, error).
 
 ## 4. Secrets, agents, grants and activity [sonnet]
-- [ ] 4.1 Secrets list and detail with versions; a test asserts no request to a value or material route.
-- [ ] 4.2 Move the existing Agents section to its routed page (keep its tests); the enrollment secret is shown once, kept out of the query cache, storage and logs, and cleared on close, with a test for each.
-- [ ] 4.3 Move the existing Grants section to its routed page (keep its tests) with mode, target, expiry.
-- [ ] 4.4 Move the existing Audit section to the Activity page (keep paging, outcome filter and ledger status tests).
-- [ ] 4.5 Verify: `npm test --workspace apps/web`.
+- [x] 4.1 Secrets list and detail with versions; a test asserts no request to a value or material route.
+- [x] 4.2 Move the existing Agents section to its routed page (keep its tests); the enrollment secret is shown once, kept out of the query cache, storage and logs, and cleared on close, with a test for each.
+- [x] 4.3 Move the existing Grants section to its routed page (keep its tests) with mode, target, expiry.
+- [x] 4.4 Move the existing Audit section to the Activity page (keep paging, outcome filter and ledger status tests).
+- [x] 4.5 Verify: `npm test --workspace apps/web`.
 
 ## 5. Desktop surface [sonnet]
 - [ ] 5.1 Desktop Projects and Environments views in `apps/desktop/src` using the shared client methods from 1.2; Vitest tests including `403`, `409` and empty states.

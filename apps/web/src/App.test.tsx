@@ -2,6 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
+import { Agents } from "./pages/Agents";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createClient } from "@locksmith/control-plane-client";
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -65,6 +67,17 @@ test("create shows the enrollment secret once and never persists it", async () =
   expect(JSON.stringify(setItem.mock.calls)).not.toContain("SUPERSECRET");
   expect(JSON.stringify(Object.entries(localStorage))).not.toContain("SUPERSECRET");
   expect(JSON.stringify(log.mock.calls)).not.toContain("SUPERSECRET");
+});
+
+test("the enrollment secret never enters the query cache", async () => {
+  const qc = new QueryClient();
+  render(<QueryClientProvider client={qc}><Agents client={createClient("org1")} /></QueryClientProvider>);
+  await screen.findByText("bot");
+  await userEvent.type(screen.getByLabelText("Agent name"), "bot");
+  await userEvent.click(screen.getByText("Create agent"));
+  expect(await screen.findByTestId("enrollment-secret")).toHaveTextContent("lse_SUPERSECRET");
+  expect(JSON.stringify(qc.getQueryCache().getAll().map((q) => q.state.data))).not.toContain("SUPERSECRET");
+  expect(JSON.stringify(qc.getMutationCache().getAll().map((m) => m.state.data))).not.toContain("SUPERSECRET");
 });
 
 test("delete agent calls DELETE and refreshes", async () => {

@@ -70,3 +70,8 @@
 - Verified: `npm test` in packages/control-plane-client (9), apps/web (45), apps/desktop (36) pass; `npm run build --workspace apps/web` OK.
 - Notes for next session: groups 2-5 have code and tests on this branch but are not yet audited against each task line, so they are unticked. 6.4.1-6.4.3 and group 6 need `just up && just web-e2e` (docker, Keycloak); not run this session.
 - 2026-11-21 · evaluator first failed 1.3 (fixtures lacked agent/grant writes, MCP and org routes); fixed in `apps/web/src/api/fixtures.ts` with a test, re-evaluated PASS (apps/web 46 tests). Unexercised handlers: updateProject/deleteProject/environment writes/audit events.
+
+## 2026-11-21 worker (josie)
+- Task: groups 2, 3, 4 (2.1-4.5) audited against their task lines by an independent Sonnet evaluator and ticked; the only FAIL (4.2: no test that the enrollment secret stays out of the query cache) was fixed with a new test in `apps/web/src/App.test.tsx`.
+- Verified: `npm test --workspace apps/web` (47 passed), `npm run build --workspace apps/web` OK, main merged in (`.gitignore` kept both sides).
+- Notes for next session: group 5 (desktop) and 6.4.1+ remain. 6.4.1 code is on the branch but needs `just up && just web-e2e` to verify; Activity page heading still says "Audit"; Agents page does not use `QueryState`; grant mode is hardcoded "relay" in `Grants.tsx:36`; `/grants` route has no dedicated test.

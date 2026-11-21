@@ -1,10 +1,10 @@
 # Tasks: refactor-mcp-shared
 
 ## 1. Gateway TTL cell [sonnet]
-- [ ] 1.1 Add `services/gateway/src/ttl.rs` with `MAX_CACHE_TTL` (10 s) and `TtlCell<T: Clone>` (`new` clamps, `get`, `get_or_fetch` stamping at fetch start, store only on `Ok` and non-zero TTL). Register the module in `lib.rs`. Unit tests: clamp, expiry at the TTL, error not cached, zero TTL stores nothing, stamp at fetch start (design decision 1).
-- [ ] 1.2 Rebuild `ClientsCache` (`mcp_clients.rs`) and `SettingsCache` (`mcp_settings.rs`) on `TtlCell`, keeping their `new`, trait impls and behaviour.
-- [ ] 1.3 [haiku] Replace `MAX_GRANT_TTL`, `MAX_REVOKED_TTL` and `MAX_SETTINGS_TTL` with `MAX_CACHE_TTL` in `grants.rs`, `relay.rs`, `main.rs` and the in-file tests that name them; move the doc text to the one constant. No assertion value changes.
-- [ ] 1.4 Verify: `cargo nextest run -p ls-gateway -E 'test(ttl) | test(grants) | test(mcp)'` and `rg -n 'MAX_(GRANT|REVOKED|SETTINGS)_TTL' services` prints nothing.
+- [x] 1.1 Add `services/gateway/src/ttl.rs` with `MAX_CACHE_TTL` (10 s) and `TtlCell<T: Clone>` (`new` clamps, `get`, `get_or_fetch` stamping at fetch start, store only on `Ok` and non-zero TTL). Register the module in `lib.rs`. Unit tests: clamp, expiry at the TTL, error not cached, zero TTL stores nothing, stamp at fetch start (design decision 1).
+- [x] 1.2 Rebuild `ClientsCache` (`mcp_clients.rs`) and `SettingsCache` (`mcp_settings.rs`) on `TtlCell`, keeping their `new`, trait impls and behaviour.
+- [x] 1.3 [haiku] Replace `MAX_GRANT_TTL`, `MAX_REVOKED_TTL` and `MAX_SETTINGS_TTL` with `MAX_CACHE_TTL` in `grants.rs`, `relay.rs`, `main.rs` and the in-file tests that name them; move the doc text to the one constant. No assertion value changes.
+- [x] 1.4 Verify: `cargo nextest run -p ls-gateway -E 'test(ttl) | test(grants) | test(mcp)'` and `rg -n 'MAX_(GRANT|REVOKED|SETTINGS)_TTL' services` prints nothing.
 
 ## 2. Control-plane store [sonnet]
 - [ ] 2.1 Add `services/control-plane/src/mcp_store.rs` with `upsert_client` (name capped at 200 chars, `RETURNING revoked_at`, `revoked_at` never written), `layer_settings` and `all_settings` (design decision 2). Register it in `lib.rs`. Test (against the test database used by `tests/mcp.rs`): record twice per layer, one row, latest name, 200-char cap, `revoked_at` untouched.

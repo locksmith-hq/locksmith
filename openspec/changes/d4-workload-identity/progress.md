@@ -51,3 +51,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (adversarial D4 still red on PR #530) - diagnostics only
 - Change: `D4.sh` now prints the last 80 lines of cargo-test.log to stderr when cargo fails, so the next CI log shows the real failure. Not reproducible locally; job logs not downloadable from the VM.
 - Notes for next session: read the adversarial job log after this push; 4.3 and 5.x still open.
+
+## 2026-11-21 worker (C), eighth run
+- Task: ci-fix (adversarial D4 still red on PR #530) - diagnostics only
+- Change: `D4.sh` also emits the cargo log tail as a `::error::` annotation on failure; the job log blob host is blocked by the VM proxy but annotations are readable via `check-runs/<id>/annotations`.
+- Notes for next session: after this push, read the annotation of the adversarial check run to see the real D4 failure. 4.3 and 5.x still open.

@@ -84,3 +84,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: CI fix (rust red on 42ddd897: `tenancy.rs` still expected 13 migrations after d2's migration was renumbered to 0014 behind d4's 0013) - done
 - Verified: `cargo nextest run -p ls-control-plane --test tenancy --test tenant_lint` -> 13 passed (needs dockerd: start it by hand on a fresh VM); `just quick`
 - Notes for next session: any new main migration shifts d2's number again; bump the two counts in `services/control-plane/tests/tenancy.rs` (lines 91, 101). Lead's follow-up still open: wrap `0014_grant_delegate.sql` DDL in `SET LOCAL ROLE locksmith_owner`.
+
+## 2026-11-21 worker (josie)
+- Task: none - parked (merged origin/main clean, no migration clash; PR #480 checks were green on f40036d)
+- Verified: `just quick`, `cargo check -p ls-control-plane --tests` -> ok
+- Notes for next session: only 5.1/5.2 and 7.2 remain; 5.1 needs a live bindings page in apps/web, which does not exist (only the `mockup/` frame; t3-console-mvp #489 is review-failed). Do 5.x after t3 lands, 7.2 last.

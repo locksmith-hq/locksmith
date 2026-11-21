@@ -90,3 +90,8 @@
 - Task: 6.2 and 6.3 audited by an independent Sonnet evaluator (PASS) and ticked; 6.1 left unticked.
 - Verified: `just up` + `just api` + `just web-e2e` (1 test passed, with `PW_CHROMIUM=/opt/pw-browsers/chromium`); main merged in.
 - Notes for next session: 6.1 caveats: the "see activity" step only asserts the Audit region is visible (should assert a grant create/revoke row), and the `web-e2e` recipe does not start `just up` itself (task text says it does). Remaining: 6.1, 6.4.1-6.4.3, 6.5-6.6, 7.x. Docker image pull for `just up` takes ~10 min cold; cargo build of `just api` ~5 min.
+
+## 2026-11-21 worker (alfie)
+- Task: 6.4.1 shell frame done and ticked: org switcher (button + menu, top right), user card holds sign-out, Environments opens the viewed project (else first, else /projects), with tests.
+- Verified: `npm test --workspace apps/web` (49 passed), tsc clean. Evaluator: Sonnet FAIL and Opus FAIL on earlier attempts (static switcher; selected-project test could not fail), fixed; third review (Opus) PASS, plus a mutation check that the test fails when `selected` is ignored.
+- Notes for next session: org switcher is single-org (no API lists orgs yet); `selected` is not cleared if its project is deleted; org menu has no Escape/outside-click close (do in 6.4.2). Remaining: 6.1, 6.4.2, 6.4.3 (needs `just up && just web-e2e`), 6.5-6.6, 7.x.

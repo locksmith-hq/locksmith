@@ -35,7 +35,7 @@
 - [x] 6.2 Add a leak check: the e2e records all requests and fails on any value or material route.
 - [x] 6.3 Verify: `just up && just web-e2e`.
 - [x] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
-- [ ] 6.4.1 Shell in the mockup frame (owner option B, #510): product-grouped sidebar (Home; Secret Management: Projects, Environments, Secrets; Agent Gateway: Agents, Grants; Activity), org switcher top right, user card with sign-out at the bottom; Environments opens the selected project's environments; Shell and route tests updated.
+- [x] 6.4.1 Shell in the mockup frame (owner option B, #510): product-grouped sidebar (Home; Secret Management: Projects, Environments, Secrets; Agent Gateway: Agents, Grants; Activity), org switcher top right, user card with sign-out at the bottom; Environments opens the selected project's environments; Shell and route tests updated.
 - [ ] 6.4.2 Restyle Overview, Projects, Environments, Secrets, Agents, Grants and Activity with the `packages/ui` kit components and tokens (cards, tables, buttons, dialogs, `QueryState`); no new styling source; existing tests stay green.
 - [ ] 6.4.3 Verify: `npm test --workspace apps/web && npm run build --workspace apps/web && just web-e2e` (leak check included); add live-vs-mockup screenshots of Overview and Projects to progress.md.
 - [ ] 6.5 Lock the Playwright screenshot baselines for Overview, Projects and Activity.

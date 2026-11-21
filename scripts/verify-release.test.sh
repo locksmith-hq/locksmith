@@ -50,6 +50,11 @@ if run "$tmp/good" --pubkey "$tmp/pubkey2.txt" --identity-regexp '^want$' >/dev/
 # wrong cosign identity
 if run "$tmp/good" --pubkey "$tmp/pubkey.txt" --identity-regexp '^other$' >/dev/null; then fail "wrong identity accepted"; fi
 
+# manifest with no targets (re-signed so only the empty list is wrong)
+mk "$tmp/t5"; echo '{"version":"1.2.3","targets":{}}' > "$tmp/t5/manifest.json"
+minisign -S -s "$tmp/sec" -m "$tmp/t5/manifest.json" -x "$tmp/t5/manifest.json.minisig" </dev/null >/dev/null 2>&1
+if run "$tmp/t5" --pubkey "$tmp/pubkey.txt" --identity-regexp '^want$' >/dev/null; then fail "empty manifest accepted"; fi
+
 # missing SBOM, missing asset
 mk "$tmp/t3"; rm "$tmp/t3/sbom.cdx.json"
 if run "$tmp/t3" --pubkey "$tmp/pubkey.txt" --identity-regexp '^want$' >/dev/null; then fail "missing SBOM accepted"; fi

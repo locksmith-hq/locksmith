@@ -47,13 +47,17 @@ else
 fi
 
 # 2. every asset against the manifest (also reject listed names that are unsafe).
+checked=0
 while IFS=$'\t' read -r name want; do
   [ -n "$name" ] || continue
   if ! [[ "$name" =~ ^[A-Za-z0-9._+-]+$ ]]; then bad "$name unsafe asset name"; continue; fi
   if [ ! -f "$DIR/$name" ]; then bad "$name missing"; continue; fi
+  checked=$((checked + 1))
   got="$(sha256 "$DIR/$name")"
   if [ "$got" = "$want" ]; then ok "$name sha256"; else bad "$name sha256 mismatch"; fi
 done < <(jq -r '.targets | to_entries[] | [.value.name, .value.sha256] | @tsv' "$MANIFEST")
+
+[ "$checked" -gt 0 ] || bad "manifest lists no verifiable assets"
 
 # 3. cosign keyless bundle over the manifest, expected workflow identity.
 if [ "$SKIP_COSIGN" -eq 1 ]; then

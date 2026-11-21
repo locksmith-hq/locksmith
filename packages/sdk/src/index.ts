@@ -57,6 +57,10 @@ export class LocksmithError extends Error {
 
 /** Unwrap an openapi-fetch result: return data, or throw a `LocksmithError`. */
 export function unwrap<T>(r: { data?: T; error?: unknown; response: Response }): T {
+  if (r.error === undefined && r.data === undefined && r.response.ok) {
+    // A successful empty response (204): nothing to return.
+    return undefined as T;
+  }
   if (r.error !== undefined || r.data === undefined) {
     const p = r.error && typeof r.error === "object" ? (r.error as ProblemFields) : {};
     throw new LocksmithError(r.response.status, p);

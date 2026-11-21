@@ -19,6 +19,12 @@ describe("client", () => {
     expect(f.mock.calls[0]![0].headers.get("authorization")).toBe("Bearer tok");
   });
 
+  it("returns undefined for a successful 204 instead of throwing", async () => {
+    const f = async () => new Response(null, { status: 204 });
+    const c = createLocksmith({ baseUrl: "http://cp", token: "t", fetch: f as unknown as typeof fetch });
+    expect(unwrap(await c.DELETE("/v1/agents/{agent_id}", { params: { path: { agent_id: "a1" } } }))).toBeUndefined();
+  });
+
   it("throws a LocksmithError carrying the problem fields on 403", async () => {
     const f = async () => json(403, { title: "Forbidden", detail: "no access", type: "about:blank" });
     const c = createLocksmith({ baseUrl: "http://cp", token: "t", fetch: f as unknown as typeof fetch });

@@ -18,6 +18,7 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use ls_control_plane::agent_token::{AUDIENCE, AgentTokenSigner, JwkSet, verify};
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::auth::ServiceToken;
+use ls_control_plane::auth::abuse::AbuseLimits;
 use ls_control_plane::auth::external::{DEFAULT_MAX_LIFETIME, ExternalVerifier};
 use ls_control_plane::auth::issuers::{IssuerAccess, IssuerRegistry};
 use ls_control_plane::db::{PoolSettings, sql};
@@ -102,7 +103,7 @@ fn claims(issuer: &str, git_ref: &str) -> Value {
     json!({
         "iss": issuer, "aud": AUD, "sub": format!("repo:acme/api:ref:{git_ref}"),
         "repository": "acme/api", "ref": git_ref, "actor": "canary-actor-name",
-        "jti": format!("jti-{t}"), "iat": t, "nbf": t, "exp": t + 600,
+        "jti": format!("jti-{}", Uuid::new_v4()), "iat": t, "nbf": t, "exp": t + 600,
     })
 }
 
@@ -161,8 +162,13 @@ fn signer() -> AgentTokenSigner {
     AgentTokenSigner::from_seed(Zeroizing::new([0x5a; 32])).unwrap()
 }
 
-fn state(db: ls_control_plane::db::Database, access: IssuerAccess) -> AppState {
+fn state(
+    db: ls_control_plane::db::Database,
+    access: IssuerAccess,
+    limits: AbuseLimits,
+) -> AppState {
     AppState::new(true, Arc::new(ReadyFlag::new(true)), db)
+        .with_workload_limits(limits)
         .with_service_token(ServiceToken::new(SecretString::from(SERVICE_TOKEN)))
         .with_agent_signer(signer())
         .with_workload_verifier(ExternalVerifier::new(
@@ -184,8 +190,12 @@ struct Fixture {
 
 impl Fixture {
     async fn start() -> Self {
+        Self::start_with(AbuseLimits::default()).await
+    }
+
+    async fn start_with(limits: AbuseLimits) -> Self {
         let pg = common::Pg::migrated().await;
-        let app = app::build(state(pg.app_db(PoolSettings::default()), DEV));
+        let app = app::build(state(pg.app_db(PoolSettings::default()), DEV, limits));
         let org = id(call(&app, "POST", "/v1/orgs", None, Some(json!({"name": "a"}))).await);
         let p = id(call(
             &app,
@@ -622,6 +632,7 @@ async fn workload_exchange_unconfigured_is_503_and_private_issuers_are_refused_a
     let app = app::build(state(
         pg.app_db(PoolSettings::default()),
         IssuerAccess::default(),
+        AbuseLimits::default(),
     ));
     let org = id(call(&app, "POST", "/v1/orgs", None, Some(json!({"name": "a"}))).await);
     let agent = {
@@ -655,4 +666,137 @@ async fn workload_exchange_unconfigured_is_503_and_private_issuers_are_refused_a
         .await;
         assert_eq!(r.status, StatusCode::BAD_REQUEST, "{issuer}: {}", r.raw);
     }
+}
+
+/// An exchange request as if it came from `ip` (what `axum::serve` with connect info adds).
+async fn exchange_from(app: &Router, ip: &str, policy: &str, token: &str) -> Reply {
+    let mut req = Request::builder()
+        .method("POST")
+        .uri("/v1/workload-tokens")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({ "policy": policy, "token": token }).to_string(),
+        ))
+        .unwrap();
+    let addr: std::net::SocketAddr = format!("{ip}:40000").parse().unwrap();
+    req.extensions_mut()
+        .insert(axum::extract::ConnectInfo(addr));
+    send(app, req).await
+}
+
+#[tokio::test]
+async fn workload_abuse_replayed_jti_is_refused_with_the_same_401() {
+    let f = Fixture::start().await;
+    let token = f.token("refs/heads/main");
+    let first = exchange(&f.app, &f.handle(), &token).await;
+    assert_eq!(first.status, StatusCode::OK, "{}", first.raw);
+    let replay = exchange(&f.app, &f.handle(), &token).await;
+    assert_eq!(replay.status, StatusCode::UNAUTHORIZED);
+    // Identical to any other credential failure.
+    let other = exchange(&f.app, &f.handle(), "not-a-jwt").await;
+    assert_eq!(replay.raw, other.raw);
+    assert!(!replay.raw.contains("jti") && !replay.raw.contains("replay"));
+    // A fresh token (new jti) still works.
+    let fresh = exchange(&f.app, &f.handle(), &f.token("refs/heads/main")).await;
+    assert_eq!(fresh.status, StatusCode::OK, "{}", fresh.raw);
+    // The denial is on the ledger with a reason code and no token content.
+    let ledger = f.ledger().await;
+    let denied: Vec<_> = ledger
+        .iter()
+        .filter(|(k, ..)| k == "workload_identity.denied")
+        .collect();
+    assert!(
+        denied.iter().any(|(.., attrs)| attrs.contains("replay")),
+        "{denied:?}"
+    );
+    assert!(!f.dump_text().await.contains(&token));
+}
+
+#[tokio::test]
+async fn workload_abuse_token_without_jti_is_accepted() {
+    let f = Fixture::start().await;
+    let mut c = claims(&f.issuer.uri(), "refs/heads/main");
+    c.as_object_mut().unwrap().remove("jti");
+    let token = f.key.mint(&c);
+    for _ in 0..2 {
+        let r = exchange(&f.app, &f.handle(), &token).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    }
+}
+
+#[tokio::test]
+async fn workload_abuse_a_policy_mismatch_does_not_burn_the_jti() {
+    let f = Fixture::start().await;
+    let c = claims(&f.issuer.uri(), "refs/heads/feature");
+    let token = f.key.mint(&c);
+    let r = exchange(&f.app, &f.handle(), &token).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        f.ledger().await.last().unwrap().0,
+        "workload_identity.denied"
+    );
+}
+
+#[tokio::test]
+async fn workload_abuse_per_policy_rate_limit_is_the_same_401() {
+    let f = Fixture::start_with(AbuseLimits {
+        per_policy: 3,
+        per_source: 0,
+        jti_entries: 1000,
+    })
+    .await;
+    for _ in 0..3 {
+        let r = exchange(&f.app, &f.handle(), &f.token("refs/heads/main")).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    }
+    let over = exchange(&f.app, &f.handle(), &f.token("refs/heads/main")).await;
+    assert_eq!(over.status, StatusCode::UNAUTHORIZED);
+    let other = exchange(&f.app, &f.handle(), "not-a-jwt").await;
+    // `not-a-jwt` is also over the limit; compare against another policy's failure instead.
+    assert_eq!(over.raw, other.raw);
+    let down = insert_policy(&f.pg, f.org, f.agent, "http://127.0.0.1:9", "down").await;
+    let unrelated = exchange(&f.app, &encode_handle(f.org, down), "not-a-jwt").await;
+    assert_eq!(unrelated.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(over.raw, unrelated.raw);
+}
+
+#[tokio::test]
+async fn workload_abuse_per_source_rate_limit_counts_each_address_separately() {
+    let f = Fixture::start_with(AbuseLimits {
+        per_policy: 0,
+        per_source: 2,
+        jti_entries: 1000,
+    })
+    .await;
+    for _ in 0..2 {
+        let r = exchange_from(
+            &f.app,
+            "192.0.2.7",
+            &f.handle(),
+            &f.token("refs/heads/main"),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    }
+    let over = exchange_from(
+        &f.app,
+        "192.0.2.7",
+        &f.handle(),
+        &f.token("refs/heads/main"),
+    )
+    .await;
+    assert_eq!(over.status, StatusCode::UNAUTHORIZED);
+    let bad = exchange(&f.app, &f.handle(), "not-a-jwt").await;
+    assert_eq!(over.raw, bad.raw);
+    // Another source is unaffected, and so is a request with no known peer.
+    let ok = exchange_from(
+        &f.app,
+        "192.0.2.8",
+        &f.handle(),
+        &f.token("refs/heads/main"),
+    )
+    .await;
+    assert_eq!(ok.status, StatusCode::OK, "{}", ok.raw);
+    let ok = exchange(&f.app, &f.handle(), &f.token("refs/heads/main")).await;
+    assert_eq!(ok.status, StatusCode::OK, "{}", ok.raw);
 }

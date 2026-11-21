@@ -14,9 +14,12 @@
 //! is held in [`ExternalToken`] (no `Debug`, `Display`, `Clone` or `Serialize`).
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{ConnectInfo, FromRequestParts, State};
+use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
+use std::net::{IpAddr, SocketAddr};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
 use tracing::Instrument;
 use utoipa::ToSchema;
@@ -35,6 +38,24 @@ use crate::workload::{self, Condition};
 
 /// A `last_used_at` write is skipped when the stored value is newer than this many seconds.
 const LAST_USED_THROTTLE_SECS: i64 = 300;
+
+/// The peer address of the connection, when the server provides it (`main` serves with connect
+/// info; in-process test requests have none, and then no per-source limit applies). Behind a
+/// reverse proxy this is the proxy's address; forwarded headers are deliberately not trusted.
+pub struct Peer(Option<IpAddr>);
+
+impl<S: Send + Sync> FromRequestParts<S> for Peer {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        Ok(Self(
+            parts
+                .extensions
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|ConnectInfo(a)| a.ip().to_canonical()),
+        ))
+    }
+}
 
 /// Request body of a workload token exchange. No `Debug`.
 #[derive(Deserialize, ToSchema)]
@@ -63,6 +84,7 @@ pub struct WorkloadTokenRequest {
 )]
 pub async fn exchange(
     State(state): State<AppState>,
+    Peer(peer): Peer,
     SecretJson(input): SecretJson<WorkloadTokenRequest>,
 ) -> Result<Response, ApiError> {
     let span = tracing::info_span!(
@@ -73,7 +95,7 @@ pub async fn exchange(
         outcome = tracing::field::Empty,
         reason = tracing::field::Empty,
     );
-    let minted = run(&state, input)
+    let minted = run(&state, peer, input)
         .instrument(span.clone())
         .await
         .inspect_err(|d| {
@@ -107,6 +129,10 @@ enum Denial {
     Token(&'static str),
     /// The token verified but the policy's conditions did not hold.
     Claims,
+    /// A rate limit was exceeded (`rate_limit_source` or `rate_limit_policy`).
+    RateLimited(&'static str),
+    /// The token's `jti` was already used.
+    Replay,
     Database(Kind),
     Internal,
 }
@@ -119,6 +145,8 @@ impl Denial {
             Self::UnknownPolicy => "unknown_policy",
             Self::Token(label) => label,
             Self::Claims => "claims",
+            Self::RateLimited(label) => label,
+            Self::Replay => "replay",
             Self::Database(_) => "database_error",
             Self::Internal => "internal_error",
         }
@@ -130,9 +158,12 @@ impl Denial {
                 Kind::Unavailable,
                 "workload token exchange is not configured",
             ),
-            Self::Malformed | Self::UnknownPolicy | Self::Token(_) | Self::Claims => {
-                ApiError::unauthenticated()
-            }
+            Self::Malformed
+            | Self::UnknownPolicy
+            | Self::Token(_)
+            | Self::Claims
+            | Self::RateLimited(_)
+            | Self::Replay => ApiError::unauthenticated(),
             Self::Database(kind) => ApiError::bare(kind),
             Self::Internal => ApiError::bare(Kind::Internal),
         }
@@ -151,11 +182,24 @@ fn db_denial(e: sql::Error) -> Denial {
     Denial::Database(ApiError::from(e).kind)
 }
 
-async fn run(state: &AppState, input: WorkloadTokenRequest) -> Result<MintedToken, Denial> {
+async fn run(
+    state: &AppState,
+    source: Option<IpAddr>,
+    input: WorkloadTokenRequest,
+) -> Result<MintedToken, Denial> {
     let (Some(signer), Some(verifier)) = (state.agent_signer(), state.workload_verifier()) else {
         return Err(Denial::NotConfigured);
     };
+    let abuse = state.workload_abuse();
+    // Limits run before any database or issuer work. A refusal is not written to the ledger: a
+    // flood must not turn into ledger writes. The span and a warn-free info event carry it.
+    if source.is_some_and(|ip| !abuse.allow_source(ip)) {
+        return Err(Denial::RateLimited("rate_limit_source"));
+    }
     let (org_id, policy_id) = workload::parse_handle(&input.policy).ok_or(Denial::Malformed)?;
+    if !abuse.allow_policy(policy_id) {
+        return Err(Denial::RateLimited("rate_limit_policy"));
+    }
     let span = tracing::Span::current();
     span.record("policy.id", tracing::field::display(policy_id));
     span.record("org.id", tracing::field::display(org_id));
@@ -182,9 +226,13 @@ async fn run(state: &AppState, input: WorkloadTokenRequest) -> Result<MintedToke
                 claims = %named_claims(&policy.conditions, &claims.0),
                 "external token matched the policy"
             );
-            signer
-                .mint(policy.agent_id, org_id, OffsetDateTime::now_utc())
-                .map_err(|_| Denial::Internal)
+            if is_replay(abuse, &policy.issuer, &claims.0) {
+                Err(Denial::Replay)
+            } else {
+                signer
+                    .mint(policy.agent_id, org_id, OffsetDateTime::now_utc())
+                    .map_err(|_| Denial::Internal)
+            }
         }
         Ok(_) => Err(Denial::Claims),
     };
@@ -282,6 +330,31 @@ async fn record_denied(
     if result.is_err() {
         tracing::warn!("workload_identity.denied event could not be recorded");
     }
+}
+
+/// Records the token's `jti` and reports whether it was already used. Without a `jti` there is
+/// nothing to remember (best effort, design decision 6). The entry lives as long as the token
+/// would still verify (`exp` plus the verifier's leeway).
+fn is_replay(
+    abuse: &crate::auth::abuse::AbuseGuard,
+    issuer: &str,
+    claims: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let Some(jti) = claims.get("jti").and_then(|v| v.as_str()) else {
+        return false;
+    };
+    let exp = claims
+        .get("exp")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let ttl = Duration::from_secs(
+        exp.saturating_add(crate::auth::external::LEEWAY_SECS)
+            .saturating_sub(now),
+    );
+    !abuse.first_use(issuer, jti, ttl)
 }
 
 /// `claim=value` pairs for the claims the policy names, nothing else from the token.

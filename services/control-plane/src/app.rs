@@ -21,6 +21,7 @@ use utoipa_axum::routes;
 
 use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
+use crate::auth::abuse::{AbuseGuard, AbuseLimits};
 use crate::auth::external::ExternalVerifier;
 use crate::auth::human::HumanAuth;
 use crate::db::Database;
@@ -92,6 +93,7 @@ pub struct AppState {
     agent_signer: Option<Arc<AgentTokenSigner>>,
     human_auth: Option<Arc<HumanAuth>>,
     workload_verifier: Option<Arc<ExternalVerifier>>,
+    workload_abuse: Arc<AbuseGuard>,
 }
 
 impl AppState {
@@ -106,6 +108,7 @@ impl AppState {
             agent_signer: None,
             human_auth: None,
             workload_verifier: None,
+            workload_abuse: Arc::new(AbuseGuard::default()),
         }
     }
 
@@ -137,6 +140,17 @@ impl AppState {
     pub fn with_workload_verifier(mut self, verifier: ExternalVerifier) -> Self {
         self.workload_verifier = Some(Arc::new(verifier));
         self
+    }
+
+    /// Replace the default workload exchange limits (`jti` replay cache, rate limits).
+    pub fn with_workload_limits(mut self, limits: AbuseLimits) -> Self {
+        self.workload_abuse = Arc::new(AbuseGuard::new(limits));
+        self
+    }
+
+    /// The workload exchange replay cache and rate limiters.
+    pub fn workload_abuse(&self) -> &AbuseGuard {
+        &self.workload_abuse
     }
 
     /// The external workload token verifier, if one is configured.

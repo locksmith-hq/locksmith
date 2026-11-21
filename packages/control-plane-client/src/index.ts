@@ -11,12 +11,49 @@ export type NewAgentGrant = components["schemas"]["NewAgentGrant"];
 export type AuditEvent = components["schemas"]["AuditEvent"];
 export type AuditEventPage = components["schemas"]["AuditEventPage"];
 export type AuditStatus = components["schemas"]["AuditStatus"];
+export type WorkloadIdentity = components["schemas"]["WorkloadIdentity"];
+export type NewWorkloadIdentity = components["schemas"]["NewWorkloadIdentity"];
+export type WorkloadCondition = components["schemas"]["ConditionView"];
 export type Problem = components["schemas"]["Problem"];
 
 /** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
 export type AuditOutcomeFilter = "all" | "denied" | "redaction_failed";
 export const auditOutcomeMatches = (e: AuditEvent, f: AuditOutcomeFilter): boolean =>
   f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
+
+/** True when a condition value is a trailing-`*` prefix match (broader than an exact match). */
+export const isPrefixPattern = (c: WorkloadCondition): boolean => c.pattern.endsWith("*");
+export const hasPrefixCondition = (conditions: readonly WorkloadCondition[]): boolean => conditions.some(isPrefixPattern);
+
+export type WorkloadPreset = "github" | "kubernetes";
+export interface WorkloadForm {
+  name: string;
+  agentId: string;
+  audience: string;
+  preset: WorkloadPreset;
+  /** Kubernetes only: the cluster's https issuer URL. */
+  issuer?: string;
+  /** GitHub: owner/repo (pinned subject). */
+  repository?: string;
+  ref?: string;
+  environment?: string;
+  /** Kubernetes: compiled to `sub` = `system:serviceaccount:<namespace>:<serviceaccount>`. */
+  namespace?: string;
+  serviceaccount?: string;
+}
+
+/** Builds the create request from a preset form. Carries no token or secret field by construction. */
+export function buildWorkloadIdentity(f: WorkloadForm): NewWorkloadIdentity {
+  const conditions: WorkloadCondition[] = [];
+  const add = (claim: string, pattern?: string) => { const v = pattern?.trim(); if (v) conditions.push({ claim, pattern: v }); };
+  if (f.preset === "github") {
+    add("repository", f.repository); add("ref", f.ref); add("environment", f.environment);
+    return { name: f.name.trim(), agent_id: f.agentId, audience: f.audience.trim(), issuer_kind: "github", conditions };
+  }
+  const ns = f.namespace?.trim(), sa = f.serviceaccount?.trim();
+  if (ns && sa) add("sub", `system:serviceaccount:${ns}:${sa}`);
+  return { name: f.name.trim(), agent_id: f.agentId, audience: f.audience.trim(), issuer_kind: "oidc", issuer: f.issuer?.trim(), conditions };
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -35,6 +72,9 @@ export interface Client {
   /** One page of audit events, newest first. Pass the previous page's `next` as `cursor`. */
   listAuditEvents(opts?: { cursor?: string | null; limit?: number }): Promise<AuditEventPage>;
   auditStatus(): Promise<AuditStatus>;
+  listWorkloadIdentities(): Promise<WorkloadIdentity[]>;
+  createWorkloadIdentity(body: NewWorkloadIdentity): Promise<WorkloadIdentity>;
+  deleteWorkloadIdentity(id: string): Promise<void>;
 }
 
 /**
@@ -91,6 +131,9 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
       return req("GET", `/v1/audit/events${qs ? `?${qs}` : ""}`);
     },
     auditStatus: () => req("GET", "/v1/audit/status"),
+    listWorkloadIdentities: () => all<WorkloadIdentity>("/v1/workload-identities"),
+    createWorkloadIdentity: (b) => req("POST", "/v1/workload-identities", b),
+    deleteWorkloadIdentity: (id) => req("DELETE", `/v1/workload-identities/${encodeURIComponent(id)}`),
     revokeGrant: (id, g) => req("DELETE", `${a(id)}/grants/${encodeURIComponent(g)}`),
   };
 }

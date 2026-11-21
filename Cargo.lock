@@ -4883,6 +4883,7 @@ dependencies = [
  "signal-hook",
  "tokio",
  "toml",
+ "url",
  "wiremock",
  "zeroize",
 ]

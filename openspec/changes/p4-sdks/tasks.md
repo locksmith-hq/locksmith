@@ -13,10 +13,10 @@
 - [ ] 2.3 Verify: `npm test --workspace packages/control-plane-client && npm test --workspace apps/web && npm test --workspace apps/desktop && just apps-build`.
 
 ## 3. Recipes and smoke [sonnet]
-- [ ] 3.1 `just sdk-gen` (regenerate) and `just test sdk`; add the `packages/sdk` row to `docs/testing.md`, which tree-check requires.
-- [ ] 3.2 `just sdk-smoke` plus a script under `tests/e2e`: against `just up`, sign in as the Keycloak test user, then create, list and delete an agent through the SDK, and run `just leak-scan` on its output.
-- [ ] 3.3 `packages/sdk/README.md`: install from the workspace, auth, errors, paging, and one CI example (create a grant).
-- [ ] 3.4 Verify: `just up && just sdk-smoke && just test sdk && just tree-check`.
+- [x] 3.1 `just sdk-gen` (regenerate) and `just test sdk`; add the `packages/sdk` row to `docs/testing.md`, which tree-check requires.
+- [x] 3.2 `just sdk-smoke` plus a script under `tests/e2e`: against `just up`, sign in as the Keycloak test user, then create, list and delete an agent through the SDK, and run `just leak-scan` on its output.
+- [x] 3.3 `packages/sdk/README.md`: install from the workspace, auth, errors, paging, and one CI example (create a grant).
+- [x] 3.4 Verify: `just up && just sdk-smoke && just test sdk && just tree-check`.
 
 ## 4. Remote Hub MCP setup [sonnet]
 - [ ] 4.1 [haiku] For each agent in `agents.rs`, record with a source URL whether it supports a remote Streamable HTTP MCP server with OAuth, and its config shape, in `docs/research/remote-mcp-auth.md` (append a section; mark "not verified" when no source is reachable).

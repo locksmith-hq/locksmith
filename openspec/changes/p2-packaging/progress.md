@@ -50,3 +50,8 @@
 - Verified: scripts/helm-schema.test.sh (python jsonschema; helm lint and kubeconform also clean when built via go install), test-recipes-check, tree-check, just quick. Not verified: kind install stage (kind/kubectl absent), so 4.4 and 4.5 stay unticked; the relay smoke request is not implemented (only /readyz).
 - Deviations: OIDC issuer/audience/JWKS are plain values (public), not existingSecret; migration hook Job defaults off because the control plane migrates in-process and has no migrate-only mode (good-values uses a placeholder `--migrate-only`).
 - Notes for next session: sections 4.4-4.5, 5-8 remain; keep auto-merge off until all ticked. Task 5.4 needs a lead PR (protected workflow).
+
+## 2026-11-21 worker (wake-up: merge review finished on #534)
+- Task: p2-packaging - blocked (no task started)
+- Verified: merge-ready status = "unchecked tasks" (4.4-8.3 open) and "no review verdict"; auto-merge was enabled again on #534, disabled with --disable-auto (now null)
+- Notes for next session: tasks 4.4-8.3 remain; 4.4/4.5 need kind and kubectl (absent in VM), 5.4 needs a lead PR (protected workflow), 7.1 is an owner gate. Re-enable auto-merge only when every task is ticked.

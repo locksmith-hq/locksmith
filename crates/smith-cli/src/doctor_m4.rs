@@ -119,6 +119,43 @@ fn copilot_timeout_outcome(repo: &Path) -> Outcome {
     }
 }
 
+/// `hub.mcp`: the remote Hub MCP entry per detected agent: ok, missing or unsupported. Nothing
+/// is flagged until some agent has an entry (the Hub is optional), then a supported agent
+/// without one is a warning.
+fn hub_mcp_outcome(repo: &Path) -> Outcome {
+    let found = agents::detect(repo);
+    if found.is_empty() {
+        return Outcome::skip("no agent detected in this project");
+    }
+    let has = |a: Agent| {
+        agents::mcp_path(a, repo)
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .is_some_and(|t| agents::has_hub_entry(a, &t))
+    };
+    let mut parts = Vec::new();
+    let (mut any, mut missing) = (false, false);
+    for a in found {
+        let state = if !a.remote_mcp() {
+            "unsupported"
+        } else if has(a) {
+            any = true;
+            "ok"
+        } else {
+            missing = true;
+            "missing"
+        };
+        parts.push(format!("{}: {state}", a.id()));
+    }
+    let summary = format!("hub.mcp {}", parts.join(", "));
+    if !any && missing {
+        Outcome::skip(format!("{summary} (no Hub MCP entry yet)"))
+    } else if missing {
+        Outcome::warn(summary, "smith init --hub <url>")
+    } else {
+        Outcome::ok(summary)
+    }
+}
+
 fn precommit_outcome(repo: &Path) -> Outcome {
     if !is_git_repo(repo) {
         return Outcome::skip("not a git repository");
@@ -165,6 +202,11 @@ fn cline() -> Outcome {
 
 fn windsurf() -> Outcome {
     agent_outcome(Agent::Windsurf, &repo_dir())
+
+}
+
+fn hub_mcp() -> Outcome {
+    hub_mcp_outcome(&repo_dir())
 }
 
 fn repo_precommit() -> Outcome {
@@ -180,6 +222,7 @@ inventory::submit! { Check { id: "hooks.copilot", run: copilot } }
 inventory::submit! { Check { id: "hooks.copilot.timeout", run: copilot_timeout } }
 inventory::submit! { Check { id: "hooks.cline", run: cline } }
 inventory::submit! { Check { id: "hooks.windsurf", run: windsurf } }
+inventory::submit! { Check { id: "hub.mcp", run: hub_mcp } }
 inventory::submit! { Check { id: "repo.precommit", run: repo_precommit } }
 
 #[cfg(test)]
@@ -209,6 +252,33 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn hub_mcp_branches() {
+        let t = Tmp::new("hub");
+        let repo = t.0.as_path();
+        assert_eq!(hub_mcp_outcome(repo).status, Status::Skip);
+        std::fs::create_dir_all(repo.join(".claude")).unwrap();
+        std::fs::create_dir_all(repo.join(".cursor")).unwrap();
+        let o = hub_mcp_outcome(repo);
+        assert_eq!(o.status, Status::Skip);
+        assert!(o.summary.contains("cursor: unsupported"), "{}", o.summary);
+        let url = "https://hub.example/mcp";
+        let f = agents::mcp_path(Agent::ClaudeCode, repo).unwrap();
+        std::fs::write(
+            &f,
+            agents::merge_hub_mcp(Agent::ClaudeCode, None, url).unwrap(),
+        )
+        .unwrap();
+        let o = hub_mcp_outcome(repo);
+        assert_eq!(o.status, Status::Ok);
+        assert!(o.summary.contains("claude-code: ok"));
+        std::fs::create_dir_all(repo.join(".codex")).unwrap();
+        let o = hub_mcp_outcome(repo);
+        assert_eq!(o.status, Status::Warn);
+        assert!(o.summary.contains("codex: missing"));
+        assert_eq!(o.remediation.as_deref(), Some("smith init --hub <url>"));
     }
 
     const NOT_USED: &str = "not used in this project";

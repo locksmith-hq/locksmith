@@ -375,6 +375,114 @@ fn merge_cline(existing: Option<&str>) -> Result<String, String> {
     }
 }
 
+/// Server name of the remote Hub MCP entry (the stdio entry is `locksmith`).
+pub const HUB_SERVER: &str = "locksmith-hub";
+/// The Hub's documented pre-registered public OAuth client (PKCE, no secret).
+pub const HUB_CLIENT_ID: &str = "locksmith-mcp";
+
+impl Agent {
+    /// Whether the agent supports a remote Streamable HTTP MCP server with OAuth and a
+    /// pre-registered client id (`docs/research/remote-mcp-auth.md` section 6). Cursor is not
+    /// verified, so it gets no entry.
+    pub fn remote_mcp(self) -> bool {
+        matches!(self, Agent::ClaudeCode | Agent::Codex)
+    }
+}
+
+/// `<hub>/mcp` for a Hub base URL: https, or http only on a loopback host (local stack).
+pub fn hub_mcp_url(hub: &str) -> Result<String, String> {
+    let base = hub.trim().trim_end_matches('/');
+    let rest = base
+        .strip_prefix("https://")
+        .or_else(|| {
+            base.strip_prefix("http://").filter(|r| {
+                let host = match r.strip_prefix('[') {
+                    Some(v6) => r.get(..v6.find(']').map_or(0, |i| i + 2)).unwrap_or(""),
+                    None => r.split(['/', ':']).next().unwrap_or(""),
+                };
+                matches!(host, "localhost" | "127.0.0.1" | "[::1]")
+            })
+        })
+        .ok_or("--hub must be an https:// URL (http:// only for localhost)")?;
+    let authority = rest.split('/').next().unwrap_or("");
+    if rest.is_empty()
+        || authority.contains('@')
+        || rest.contains(['?', '#'])
+        || rest.chars().any(char::is_whitespace)
+    {
+        return Err("--hub must be a plain base URL like https://hub.example".into());
+    }
+    Ok(format!("{base}/mcp"))
+}
+
+/// Whether the config text already has a `locksmith-hub` server.
+pub fn has_hub_entry(a: Agent, text: &str) -> bool {
+    if a == Agent::Codex {
+        return toml::from_str::<toml::Table>(text)
+            .ok()
+            .and_then(|t| t.get("mcp_servers")?.get(HUB_SERVER).cloned())
+            .is_some();
+    }
+    serde_json::from_str::<Value>(text)
+        .ok()
+        .is_some_and(|v| v["mcpServers"].get(HUB_SERVER).is_some())
+}
+
+/// Idempotent merge of the remote Hub MCP entry: the URL and the public client id only, never a
+/// token or secret. Agents without remote-MCP support get the text back unchanged. An existing
+/// `locksmith-hub` entry is left as the user wrote it.
+pub fn merge_hub_mcp(a: Agent, existing: Option<&str>, mcp_url: &str) -> Result<String, String> {
+    let keep = existing.unwrap_or("").to_string();
+    if !a.remote_mcp() {
+        return Ok(keep);
+    }
+    if a == Agent::Codex {
+        let table: toml::Table =
+            toml::from_str(&keep).map_err(|e| format!("existing config is not valid TOML: {e}"))?;
+        if table
+            .get("mcp_servers")
+            .and_then(|v| v.get(HUB_SERVER))
+            .is_some()
+        {
+            return Ok(keep);
+        }
+        let sep = if keep.is_empty() || keep.ends_with("\n\n") {
+            ""
+        } else if keep.ends_with('\n') {
+            "\n"
+        } else {
+            "\n\n"
+        };
+        let url = toml::Value::String(mcp_url.into());
+        let out = format!(
+            "{keep}{sep}[mcp_servers.{HUB_SERVER}]\nurl = {url}\noauth_resource = {url}\n\n[mcp_servers.{HUB_SERVER}.oauth]\nclient_id = \"{HUB_CLIENT_ID}\"\n"
+        );
+        return toml::from_str::<toml::Table>(&out)
+            .map(|_| out)
+            .map_err(|e| format!("cannot add the Hub MCP server to this config: {e}"));
+    }
+    let mut root: Value = match existing.filter(|t| !t.trim().is_empty()) {
+        None => json!({}),
+        Some(t) => serde_json::from_str(t)
+            .map_err(|e| format!("existing config is not valid JSON: {e}"))?,
+    };
+    let servers = root
+        .as_object_mut()
+        .ok_or("existing config is not a JSON object")?
+        .entry("mcpServers")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .ok_or("`mcpServers` is not an object")?;
+    if servers.contains_key(HUB_SERVER) {
+        return Ok(keep);
+    }
+    servers.insert(
+        HUB_SERVER.into(),
+        json!({"type": "http", "url": mcp_url, "oauth": {"clientId": HUB_CLIENT_ID}}),
+    );
+    Ok(serde_json::to_string_pretty(&root).map_err(|e| e.to_string())? + "\n")
+}
+
 fn merge_toml(existing: &str) -> Result<String, String> {
     toml::from_str::<toml::Table>(existing)
         .map_err(|e| format!("existing config is not valid TOML: {e}"))?;
@@ -414,6 +522,60 @@ mod tests {
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    #[test]
+    fn hub_url_rules() {
+        assert_eq!(
+            hub_mcp_url("https://hub.example/").unwrap(),
+            "https://hub.example/mcp"
+        );
+        assert_eq!(
+            hub_mcp_url("http://127.0.0.1:8080").unwrap(),
+            "http://127.0.0.1:8080/mcp"
+        );
+        assert_eq!(
+            hub_mcp_url("http://[::1]:8080").unwrap(),
+            "http://[::1]:8080/mcp"
+        );
+        for bad in [
+            "http://hub.example",
+            "hub.example",
+            "https://",
+            "https://h/x?t=1",
+            "https://user:token@hub.example",
+            "https://user@hub.example/x",
+            "ftp://h",
+        ] {
+            assert!(hub_mcp_url(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn hub_entry_is_idempotent_secret_free_and_agent_gated() {
+        let url = "https://hub.example/mcp";
+        for a in [Agent::ClaudeCode, Agent::Codex] {
+            let base = merge_mcp(a, None).unwrap();
+            let once = merge_hub_mcp(a, Some(&base), url).unwrap();
+            assert!(has_hub_entry(a, &once));
+            assert!(once.contains(url) && once.contains(HUB_CLIENT_ID));
+            assert!(once.contains("locksmith-mcp") && !once.to_lowercase().contains("secret"));
+            assert_eq!(
+                merge_hub_mcp(a, Some(&once), url).unwrap(),
+                once,
+                "second run"
+            );
+            // the stdio entry survives
+            assert!(once.contains(MCP_COMMAND));
+        }
+        assert_eq!(merge_hub_mcp(Agent::Cursor, None, url).unwrap(), "");
+        assert!(merge_hub_mcp(Agent::ClaudeCode, Some("{oops"), url).is_err());
+        // a hand-written entry is kept
+        let mine = r#"{"mcpServers":{"locksmith-hub":{"url":"x"}}}"#;
+        assert_eq!(
+            merge_hub_mcp(Agent::ClaudeCode, Some(mine), url).unwrap(),
+            mine
+        );
     }
 
     #[test]
@@ -664,5 +826,14 @@ mod tests {
             merge_mcp(Agent::ClaudeCode, None).unwrap(),
         );
         check("cursor/mcp.json", merge_mcp(Agent::Cursor, None).unwrap());
+        let hub = "https://hub.example/mcp";
+        check(
+            "claude-code/.mcp.hub.json",
+            merge_hub_mcp(Agent::ClaudeCode, None, hub).unwrap(),
+        );
+        check(
+            "codex/config.hub.toml",
+            merge_hub_mcp(Agent::Codex, None, hub).unwrap(),
+        );
     }
 }

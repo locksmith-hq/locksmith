@@ -67,3 +67,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Last CI: only `macos` red on b484d4d (nextest exit 100, log blob blocked by the proxy, annotations show no test name; all portable tests pass on Linux, 323/323). Rerun needs Actions write; the new push reruns it.
 - Evaluator notes: action checks sha256 only (not minisign), install.sh repo slug differs from action's; cosmetic spaces in GitHub error text.
 - Remaining: 4.3, 6.x (web/desktop page), 7.x.
+
+## 2026-11-21 09:20 worker
+- Task: d4 - ci-fix (hygiene gitleaks flagged example UUID in integrations/github-action/README.md)
+- Verified: gitleaks git . -> only the p4-branch leak remains (not in this branch); just quick -> ok
+- Notes for next session: remaining checks on PR #530 not yet re-observed; check CI after push.

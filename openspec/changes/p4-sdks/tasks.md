@@ -10,7 +10,7 @@
 ## 2. One client [sonnet]
 - [x] 2.1 `packages/control-plane-client` re-exports types from `@locksmith/sdk` and implements its `Client` through the SDK; delete its hand-written `fetch` code and its own `schema.d.ts` and `gen:types` script.
 - [x] 2.2 Keep the enrollment-secret rule: a test asserts the secret only lives in the returned object (not logged, cached or stored).
-- [ ] 2.3 Verify: `npm test --workspace packages/control-plane-client && npm test --workspace apps/web && npm test --workspace apps/desktop && just apps-build`.
+- [x] 2.3 Verify: `npm test --workspace packages/control-plane-client && npm test --workspace apps/web && npm test --workspace apps/desktop && just apps-build`.
 
 ## 3. Recipes and smoke [sonnet]
 - [x] 3.1 `just sdk-gen` (regenerate) and `just test sdk`; add the `packages/sdk` row to `docs/testing.md`, which tree-check requires.

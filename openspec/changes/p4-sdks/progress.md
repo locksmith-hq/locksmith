@@ -34,3 +34,8 @@
 - Task: p4-sdks - ci-fix (conflicts on #561 resolved: SDK-based client kept, main's workload-identity helpers/methods added; docs/testing.md kept both rows)
 - Verified: vitest control-plane-client (9 pass), just quick -> pass
 - Notes for next session: all tasks ticked; auto-merge enabled on #561, waits for checks and merge-review.
+
+## 2026-11-21 worker (alfie)
+- Task: 2.3 - done. Correction: the earlier entry saying all tasks were ticked was wrong; 5.1 and 5.2 are still open.
+- Verified: control-plane-client 9, web 27, desktop 29 tests pass; `tauri build --debug --no-bundle` OK after `npm ci` (stale node_modules had caused TS errors).
+- Notes: 5.1 needs `just ci` (banned locally; the PR's checks run it) and 5.2 needs a manual ci-platforms dispatch. Parked via needs-rescue; auto-merge disabled meanwhile.

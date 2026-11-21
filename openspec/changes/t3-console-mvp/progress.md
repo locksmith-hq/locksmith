@@ -75,3 +75,8 @@
 - Task: groups 2, 3, 4 (2.1-4.5) audited against their task lines by an independent Sonnet evaluator and ticked; the only FAIL (4.2: no test that the enrollment secret stays out of the query cache) was fixed with a new test in `apps/web/src/App.test.tsx`.
 - Verified: `npm test --workspace apps/web` (47 passed), `npm run build --workspace apps/web` OK, main merged in (`.gitignore` kept both sides).
 - Notes for next session: group 5 (desktop) and 6.4.1+ remain. 6.4.1 code is on the branch but needs `just up && just web-e2e` to verify; Activity page heading still says "Audit"; Agents page does not use `QueryState`; grant mode is hardcoded "relay" in `Grants.tsx:36`; `/grants` route has no dedicated test.
+
+## 2026-11-21 worker (josie, later)
+- Task: group 5 (5.1-5.3) audited by an independent Sonnet evaluator (PASS) and ticked.
+- Verified: `npm test --workspace apps/desktop` (36 passed), `just apps-build` exit 0.
+- Notes for next session: remaining 6.1-6.3, 6.4.1-6.4.3, 6.5-6.6, 7.x need `just up && just web-e2e` (docker/Keycloak). Weak spot: the desktop 5.2 `fetch` assertion is near-vacuous (client mocked); the method allow-list is the real check.

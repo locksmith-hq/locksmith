@@ -4,7 +4,19 @@ import createClient, { type Client } from "openapi-fetch";
 import type { paths, components } from "./schema";
 
 export type { paths, components };
-export type LocksmithClient = Client<paths>;
+
+/**
+ * Value and key-material routes. The SDK never exposes a call to them: they are removed from the
+ * client's path type, and a test checks this list against the OpenAPI spec.
+ */
+export const VALUE_ROUTE_DENYLIST = [
+  "/internal/v1/secrets/{secret_id}/versions/{version}/material",
+] as const;
+
+type DeniedPath = (typeof VALUE_ROUTE_DENYLIST)[number] | Extract<keyof paths, `/internal/${string}`>;
+/** The API surface an SDK user can call: every path except the denied ones. */
+export type PublicPaths = Omit<paths, DeniedPath>;
+export type LocksmithClient = Client<PublicPaths>;
 
 export interface LocksmithOptions {
   baseUrl: string;
@@ -14,7 +26,7 @@ export interface LocksmithOptions {
 }
 
 export function createLocksmith(opts: LocksmithOptions): LocksmithClient {
-  const client = createClient<paths>({ baseUrl: opts.baseUrl, fetch: opts.fetch });
+  const client = createClient<PublicPaths>({ baseUrl: opts.baseUrl, fetch: opts.fetch });
   client.use({
     onRequest({ request }) {
       const token = typeof opts.token === "function" ? opts.token() : opts.token;

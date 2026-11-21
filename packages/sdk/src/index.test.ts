@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLocksmith, LocksmithError, paginate, unwrap } from "./index";
+import { createLocksmith, LocksmithError, paginate, unwrap, VALUE_ROUTE_DENYLIST } from "./index";
 
 const spec = JSON.parse(readFileSync(new URL("../../../services/control-plane/openapi.json", import.meta.url), "utf8"));
 
@@ -80,9 +80,17 @@ describe("generated schema", () => {
     for (const id of ids) expect(schema, id).toContain(`${id}: {`);
   });
 
-  it("exposes no plaintext value or material route on the public API", () => {
-    const denied = Object.keys(spec.paths).filter((p) => /\/(value|material|plaintext)(\/|$)/.test(p));
-    // The only such route is the internal relay path, not under /v1 and never reachable by users or agents.
-    expect(denied.filter((p) => !p.startsWith("/internal/"))).toEqual([]);
+  it("exposes no plaintext value or material route", () => {
+    const matching = Object.keys(spec.paths).filter((p) => /\/(value|material|plaintext)(\/|$)/.test(p));
+    expect(VALUE_ROUTE_DENYLIST.length).toBeGreaterThan(0);
+    // Every matching route in the spec is on the denylist, so a new one fails this test.
+    for (const p of matching) expect(VALUE_ROUTE_DENYLIST as readonly string[], p).toContain(p);
+    for (const p of VALUE_ROUTE_DENYLIST) expect(Object.keys(spec.paths), p).toContain(p);
+  });
+
+  it("does not type the material route on the client", () => {
+    const c = createLocksmith({ baseUrl: "http://localhost", token: "t", fetch: async () => new Response("{}") });
+    // @ts-expect-error the material route is not part of the SDK surface
+    void c.GET("/internal/v1/secrets/{secret_id}/versions/{version}/material", {});
   });
 });

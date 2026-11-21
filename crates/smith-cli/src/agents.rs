@@ -253,7 +253,10 @@ pub fn hub_mcp_url(hub: &str) -> Result<String, String> {
         .strip_prefix("https://")
         .or_else(|| {
             base.strip_prefix("http://").filter(|r| {
-                let host = r.split(['/', ':']).next().unwrap_or("");
+                let host = match r.strip_prefix('[') {
+                    Some(v6) => r.get(..v6.find(']').map_or(0, |i| i + 2)).unwrap_or(""),
+                    None => r.split(['/', ':']).next().unwrap_or(""),
+                };
                 matches!(host, "localhost" | "127.0.0.1" | "[::1]")
             })
         })
@@ -382,6 +385,10 @@ mod tests {
         assert_eq!(
             hub_mcp_url("http://127.0.0.1:8080").unwrap(),
             "http://127.0.0.1:8080/mcp"
+        );
+        assert_eq!(
+            hub_mcp_url("http://[::1]:8080").unwrap(),
+            "http://[::1]:8080/mcp"
         );
         for bad in [
             "http://hub.example",

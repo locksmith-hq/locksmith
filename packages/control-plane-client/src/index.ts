@@ -79,9 +79,6 @@ export interface Client {
   listWorkloadIdentities(): Promise<WorkloadIdentity[]>;
   createWorkloadIdentity(body: NewWorkloadIdentity): Promise<WorkloadIdentity>;
   deleteWorkloadIdentity(id: string): Promise<void>;
-  listWorkloadIdentities(): Promise<WorkloadIdentity[]>;
-  createWorkloadIdentity(body: NewWorkloadIdentity): Promise<WorkloadIdentity>;
-  deleteWorkloadIdentity(id: string): Promise<void>;
   /** Every MCP tool of both layers with its default and the org's switch. */
   listMcpTools(): Promise<McpToolSetting[]>;
   /** Turn one MCP tool on or off. Enforced server-side: a client cannot list or call an off tool. */

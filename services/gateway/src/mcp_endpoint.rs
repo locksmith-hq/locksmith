@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use axum::extract::{Request, State};
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::any;
@@ -289,14 +289,10 @@ fn unauthorized(token_presented: bool) -> Response {
         "unauthenticated",
         &Uuid::new_v4().to_string(),
     );
-    let challenge = if token_presented {
-        HeaderValue::from_static(r#"Bearer error="invalid_token""#)
-    } else {
-        HeaderValue::from_static("Bearer")
-    };
-    response
-        .headers_mut()
-        .insert(header::WWW_AUTHENTICATE, challenge);
+    response.headers_mut().insert(
+        header::WWW_AUTHENTICATE,
+        ls_control_plane::auth::bearer_challenge(token_presented, None),
+    );
     response
 }
 

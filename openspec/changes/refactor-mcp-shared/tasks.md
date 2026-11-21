@@ -18,9 +18,9 @@
 - [x] 3.3 Verify: `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane -E 'test(mcp)'`; existing outcome and `tools/list` snapshot tests pass unchanged.
 
 ## 4. Audit append and bearer challenge [sonnet]
-- [ ] 4.1 `services/gateway/src/audit.rs`: add `append_to(path, body, ok_statuses)` and make `post` (`&[200, 201]`) and `post_mcp_call` (`&[201]`) call it (design decision 5). Add one test per status class (accepted, `4xx`, `5xx`, unparsable body, transport unavailable) for both callers.
-- [ ] 4.2 Add `bearer_challenge(token_presented, resource_metadata)` next to `bearer` in `services/control-plane/src/auth.rs`; unit test byte equality with today's four header values. Use it in `McpEndpoint::challenge` (hub) and in the gateway `unauthorized` (design decision 6). Leave `RMCP_MESSAGE_TARGETS` unchanged.
-- [ ] 4.3 Verify: `cargo nextest run -p ls-gateway -E 'test(audit) | test(mcp)'` and `cargo nextest run -p ls-control-plane -E 'test(bearer) | binary(mcp_auth)'`.
+- [x] 4.1 `services/gateway/src/audit.rs`: add `append_to(path, body, ok_statuses)` and make `post` (`&[200, 201]`) and `post_mcp_call` (`&[201]`) call it (design decision 5). Add one test per status class (accepted, `4xx`, `5xx`, unparsable body, transport unavailable) for both callers.
+- [x] 4.2 Add `bearer_challenge(token_presented, resource_metadata)` next to `bearer` in `services/control-plane/src/auth.rs`; unit test byte equality with today's four header values. Use it in `McpEndpoint::challenge` (hub) and in the gateway `unauthorized` (design decision 6). Leave `RMCP_MESSAGE_TARGETS` unchanged.
+- [x] 4.3 Verify: `cargo nextest run -p ls-gateway -E 'test(audit) | test(mcp)'` and `cargo nextest run -p ls-control-plane -E 'test(bearer) | binary(mcp_auth)'`.
 
 ## 5. Local verification [haiku]
 - [ ] 5.1 `git diff origin/main --stat -- ':!openspec'` touches only the files named in the proposal's Impact; `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane` passes with no assertion edited in `services/gateway/src/relay/tests/mcp*.rs` or `services/control-plane/tests/mcp*.rs` (`git diff` on those paths shows no changed `assert`).

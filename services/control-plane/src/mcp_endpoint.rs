@@ -142,17 +142,8 @@ impl McpEndpoint {
 
     /// The `WWW-Authenticate` challenge. `invalid_token` is added when a token was presented.
     fn challenge(&self, token_presented: bool) -> HeaderValue {
-        let error = if token_presented {
-            r#"error="invalid_token", "#
-        } else {
-            ""
-        };
-        // Built from validated URL text; a bad value would fall back to the bare scheme.
-        HeaderValue::from_str(&format!(
-            r#"Bearer {error}resource_metadata="{}""#,
-            self.metadata_url
-        ))
-        .unwrap_or_else(|_| HeaderValue::from_static("Bearer"))
+        // Built from validated URL text; a bad value falls back to the bare scheme.
+        crate::auth::bearer_challenge(token_presented, Some(&self.metadata_url))
     }
 
     fn metadata(&self) -> serde_json::Value {

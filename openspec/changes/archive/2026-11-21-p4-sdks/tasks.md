@@ -26,5 +26,5 @@
 - [x] 4.5 Verify: `cargo nextest run -p smith-cli init doctor agents && just test smith-cli`.
 
 ## 5. Local verification [sonnet]
-- [ ] 5.1 `just up`, `just sdk-smoke`, `just apps-build`, then `just ci`.
-- [ ] 5.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.
+- [x] 5.1 `just up`, `just sdk-smoke`, `just apps-build`, then `just ci`.
+- [x] 5.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.

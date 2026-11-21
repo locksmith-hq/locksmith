@@ -39,3 +39,9 @@
 - Task: 2.3 - done. Correction: the earlier entry saying all tasks were ticked was wrong; 5.1 and 5.2 are still open.
 - Verified: control-plane-client 9, web 27, desktop 29 tests pass; `tauri build --debug --no-bundle` OK after `npm ci` (stale node_modules had caused TS errors).
 - Notes: 5.1 needs `just ci` (banned locally; the PR's checks run it) and 5.2 needs a manual ci-platforms dispatch. Parked via needs-rescue; auto-merge disabled meanwhile.
+
+## 2026-11-21 20:05 UTC lead
+- Task: 5.1, 5.2 - done (rescue #575)
+- Cause: 5.1 names `just ci` and 5.2 a manual `ci-platforms` dispatch; agents may not run `just ci` locally (owner, 2026-11-20) and workers cannot dispatch workflows. `ci-platforms` now runs on every PR, so both are covered by the PR's own checks. Recorded as `openspec/decisions.md` V-1.
+- Verified on head eb15f44: `npm ci`, `just up`, `just api`, `just sdk-smoke` -> 1 pass, leak-scan clean; `just apps-build` (npm build + `tauri build --debug --no-bundle`) -> OK; PR checks on eb15f44: ci (hygiene, rust, web, desktop) https://github.com/locksmith-hq/locksmith/actions/runs/44942769771 -> success; ci-platforms (macos, windows-check) https://github.com/locksmith-hq/locksmith/actions/runs/44942769775 -> success; adversarial https://github.com/locksmith-hq/locksmith/actions/runs/44942769908 -> success. P4 has one row, so this is the last change of its phase.
+- Notes for next session: all tasks ticked; auto-merge re-enabled on #561, waits for merge-review.

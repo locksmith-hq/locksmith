@@ -24,6 +24,9 @@ pub const ENV_BINDINGS: &str = "LOCKSMITH_GATEWAY_BINDINGS";
 /// STS endpoint override for `/v1/aws/credentials` (D2): local and test use only (moto). Unset in
 /// production, where the regional `https://sts.<region>.amazonaws.com/` is called.
 pub const ENV_AWS_STS_ENDPOINT: &str = "LOCKSMITH_GATEWAY_AWS_STS_ENDPOINT";
+/// Comma-separated public host names (`host` or `host:port`) `/mcp` accepts in the `Host`
+/// header, on top of loopback (DNS rebinding protection). Optional.
+pub const ENV_MCP_ALLOWED_HOSTS: &str = "LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS";
 
 /// Shortest accepted bearer token, in bytes. Shorter values are rejected, not accepted as a
 /// guessable credential.
@@ -80,6 +83,8 @@ pub struct Config {
     pub bindings: Bindings,
     /// [`ENV_AWS_STS_ENDPOINT`]: tests and the local moto smoke only.
     pub aws_sts_endpoint: Option<String>,
+    /// Extra `Host` values `/mcp` accepts ([`ENV_MCP_ALLOWED_HOSTS`]).
+    pub mcp_allowed_hosts: Vec<String>,
 }
 
 /// OpenBao transit settings for unwrapping DEKs: the gateway's decrypt-capable token.
@@ -274,6 +279,15 @@ impl Config {
                     .ok_or(ConfigError::Invalid(ENV_AWS_STS_ENDPOINT))?,
             ),
         };
+        let mcp_allowed_hosts = get(ENV_MCP_ALLOWED_HOSTS)
+            .map(|v| {
+                v.split(',')
+                    .map(str::trim)
+                    .filter(|h| !h.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
 
         Ok(Self {
             bind,
@@ -284,6 +298,7 @@ impl Config {
             openbao,
             bindings,
             aws_sts_endpoint,
+            mcp_allowed_hosts,
         })
     }
 }

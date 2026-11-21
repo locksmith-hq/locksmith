@@ -11,7 +11,16 @@
 //!
 //! An event holds ids, closed codes, numbers and the upstream host only. The host is sent only
 //! once the URL's origin has matched the secret's binding (configuration, not caller input), so
-//! a refused caller's host never reaches the ledger. Nothing here holds the value, a header, a
+//! a refused caller's host never reaches the ledger.
+//!
+//! Every `/mcp` tool call also appends one `mcp.call` event (m1-remote-mcp task 3.4): the agent,
+//! the tool (a registry name, else `unknown`), the outcome and a static reason; never arguments
+//! or results. A ledger that cannot take it is logged and does not fail the call (the relay and
+//! credential events behind a tool already fail closed).
+//!
+//! An agent MCP `issue_short_lived_credential` call (m1-remote-mcp task 3.3) appends one
+//! `credential.issued` event before the credential becomes usable: the agent, the secret, the
+//! credential's id and its expiry. Never the credential. Nothing here holds the value, a header, a
 //! body, a path or the query string. `gateway_audit` is read-only legacy (migration 0009).
 
 use std::sync::{Arc, Mutex};
@@ -26,6 +35,7 @@ const MAX_APPEND_RESPONSE: usize = 16 * 1024;
 
 /// The append endpoint, relative to the control-plane base URL.
 const EVENTS_PATH: &str = "internal/v1/audit/events";
+const MCP_CALLS_PATH: &str = "internal/v1/mcp/agent-calls";
 
 /// What happened to one relay attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,6 +116,8 @@ pub enum EventKind {
     GitPush(Outcome),
     /// A refused Git call (`Outcome::is_denial`).
     GitDenied(Outcome),
+    /// A short-lived credential was issued (outcome `ok`); the event carries [`Issued`].
+    CredentialIssued,
 }
 
 impl EventKind {
@@ -117,6 +129,7 @@ impl EventKind {
             Self::GitFetch(o) => ("git.fetch", o.as_str()),
             Self::GitPush(o) => ("git.push", o.as_str()),
             Self::GitDenied(o) => ("git.denied", o.as_str()),
+            Self::CredentialIssued => ("credential.issued", "ok"),
         }
     }
 }
@@ -168,6 +181,8 @@ pub struct RelayEvent {
     /// The agent whose verified token made the call.
     pub agent_id: Uuid,
     pub secret_id: Uuid,
+    /// The secret version (`0` and not sent for `credential.issued`, which is not
+    /// version-bound).
     pub version: u32,
     pub method: Option<Method>,
     /// The upstream host (no port), set only when the origin matched the binding.
@@ -178,6 +193,17 @@ pub struct RelayEvent {
     pub status: Option<u16>,
     /// The attempt this outcome closes (the attempt event's id).
     pub attempt_id: Option<Uuid>,
+    /// For [`EventKind::CredentialIssued`] only: which credential, and until when.
+    pub issued: Option<Issued>,
+}
+
+/// What a `credential.issued` event records about the credential: its id and expiry, never the
+/// credential.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Issued {
+    pub credential_id: Uuid,
+    /// Unix seconds.
+    pub expires_at: i64,
 }
 
 /// Why an append failed. Carries no response body.
@@ -208,6 +234,9 @@ pub trait AuditSink: Send + Sync {
 
     /// Append an AWS credential-vending event (D2).
     fn append_aws(&self, ev: AwsEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+
+    /// Append the `mcp.call` event for one `/mcp` tool call (m1-remote-mcp task 3.4).
+    fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
 }
 
 /// What happened to one `POST /v1/aws/credentials` call (D2).
@@ -224,6 +253,24 @@ impl AwsEventKind {
         match self {
             Self::Issued => ("aws.credentials.issued", "ok"),
             Self::Denied(o) => ("aws.credentials.denied", o.as_str()),
+        }
+    }
+}
+
+/// How an agent MCP call ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpOutcome {
+    Ok,
+    Denied,
+    Error,
+}
+
+impl McpOutcome {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Denied => "denied",
+            Self::Error => "error",
         }
     }
 }
@@ -255,6 +302,45 @@ struct WireAwsEvent {
     duration_secs: Option<u32>,
 }
 
+/// Why a call was refused or failed: a closed set of static codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpReason {
+    ToolOff,
+    InvalidArguments,
+    ToolError,
+    SettingsUnavailable,
+}
+
+impl McpReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ToolOff => "tool_off",
+            Self::InvalidArguments => "invalid_arguments",
+            Self::ToolError => "tool_error",
+            Self::SettingsUnavailable => "settings_unavailable",
+        }
+    }
+}
+
+/// One agent MCP call: who, which tool (a registry name or `unknown`, never client text) and how
+/// it ended. No arguments, no result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct McpCallEvent {
+    pub agent_id: Uuid,
+    pub tool: &'static str,
+    pub outcome: McpOutcome,
+    pub reason: Option<McpReason>,
+}
+
+#[derive(Serialize)]
+struct WireMcpCall {
+    agent_id: Uuid,
+    tool: &'static str,
+    outcome: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+}
+
 /// The wire body of `POST /internal/v1/audit/events` (`NewRelayEvent` in `openapi.json`).
 #[derive(Serialize)]
 struct WireEvent {
@@ -262,7 +348,8 @@ struct WireEvent {
     outcome: &'static str,
     agent_id: Uuid,
     secret_id: Uuid,
-    version: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     method: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -273,6 +360,10 @@ struct WireEvent {
     status: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     attempt_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expires_at: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -345,15 +436,45 @@ impl HttpAudit {
             outcome,
             agent_id: ev.agent_id,
             secret_id: ev.secret_id,
-            version: ev.version,
+            // A short-lived credential is scoped to the secret, not to one version.
+            version: (ev.kind != EventKind::CredentialIssued).then_some(ev.version),
             method: ev.method.map(Method::as_str),
             host: ev.host,
             port: ev.port,
             status: ev.status,
             attempt_id: ev.attempt_id,
+            credential_id: ev.issued.map(|i| i.credential_id),
+            expires_at: ev.issued.map(|i| i.expires_at),
         })
         .map_err(|_| AuditError::Rejected)?;
         self.send(body).await
+    }
+}
+
+impl HttpAudit {
+    async fn post_mcp_call(&self, ev: McpCallEvent) -> Result<Uuid, AuditError> {
+        let body = serde_json::to_vec(&WireMcpCall {
+            agent_id: ev.agent_id,
+            tool: ev.tool,
+            outcome: ev.outcome.as_str(),
+            reason: ev.reason.map(McpReason::as_str),
+        })
+        .map_err(|_| AuditError::Rejected)?;
+        let (status, resp) = self
+            .control_plane
+            .internal_post_json(MCP_CALLS_PATH, body, MAX_APPEND_RESPONSE)
+            .await
+            .map_err(|e| match e {
+                Internal::Unavailable => AuditError::Unavailable,
+                _ => AuditError::Rejected,
+            })?;
+        match status {
+            201 => serde_json::from_slice::<Appended>(&resp)
+                .map(|a| a.id)
+                .map_err(|_| AuditError::Rejected),
+            500..=599 => Err(AuditError::Unavailable),
+            _ => Err(AuditError::Rejected),
+        }
     }
 }
 
@@ -364,6 +485,10 @@ impl AuditSink for HttpAudit {
 
     fn append_aws(&self, ev: AwsEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         Box::pin(self.post_aws(ev))
+    }
+
+    fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        Box::pin(self.post_mcp_call(ev))
     }
 }
 
@@ -380,9 +505,19 @@ pub struct MemoryAudit {
     pub tries: Mutex<usize>,
     /// Stored AWS events (D2); `fail` fails these too.
     pub aws_events: Mutex<Vec<AwsEvent>>,
+    /// The `mcp.call` events appended.
+    pub mcp_calls: Mutex<Vec<McpCallEvent>>,
 }
 
 impl MemoryAudit {
+    /// The `mcp.call` events in order.
+    pub fn mcp_calls(&self) -> Vec<McpCallEvent> {
+        self.mcp_calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
     /// The stored events in order.
     pub fn events(&self) -> Vec<RelayEvent> {
         self.stored().into_iter().map(|(_, e)| e).collect()
@@ -410,6 +545,19 @@ impl MemoryAudit {
 }
 
 impl AuditSink for MemoryAudit {
+    fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        let result = if self.fail {
+            Err(AuditError::Unavailable)
+        } else {
+            self.mcp_calls
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(ev);
+            Ok(Uuid::now_v7())
+        };
+        Box::pin(async move { result })
+    }
+
     fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         *self.tries.lock().unwrap_or_else(|e| e.into_inner()) += 1;
         let result = {

@@ -388,3 +388,43 @@ fn agent_routes_are_documented() {
     let mode = &spec["components"]["schemas"]["GrantMode"];
     assert_eq!(mode["enum"], serde_json::json!(["relay", "delegate"]));
 }
+
+/// M1 task 1.4: the MCP switch and client routes are documented, org-scoped, and carry no
+/// token or value field.
+#[test]
+fn mcp_routes_are_documented() {
+    let spec: Value = serde_json::from_str(&generated()).unwrap();
+    for (path, method, id) in [
+        ("/v1/mcp/tools", "get", "list_mcp_tool_settings"),
+        (
+            "/v1/mcp/tools/{layer}/{tool}",
+            "put",
+            "update_mcp_tool_setting",
+        ),
+        ("/v1/mcp/clients", "get", "list_mcp_clients"),
+        (
+            "/v1/mcp/clients/{client_row_id}/revoke",
+            "post",
+            "revoke_mcp_client",
+        ),
+    ] {
+        let op = &spec["paths"][path][method];
+        assert_eq!(op["operationId"], id, "{method} {path}");
+        assert_eq!(op["security"], serde_json::json!([{ "dev_org": [] }]));
+    }
+    assert_eq!(
+        spec["components"]["schemas"]["McpLayer"]["enum"],
+        serde_json::json!(["hub", "agent"])
+    );
+    for name in ["McpClient", "McpToolSetting", "McpToolSettingUpdate"] {
+        let props = spec["components"]["schemas"][name]["properties"]
+            .as_object()
+            .unwrap_or_else(|| panic!("{name}"));
+        for prop in props.keys() {
+            assert!(
+                !["value", "token", "secret", "key", "password"].contains(&prop.as_str()),
+                "{name}.{prop}"
+            );
+        }
+    }
+}

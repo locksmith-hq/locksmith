@@ -200,6 +200,15 @@ async fn non_allow_listed_bodies_are_400() {
         json!({"kind": "relay.denied", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": "us-east-1"}),
         // An outcome must name its attempt (the idempotency key).
         json!({"kind": "relay.outcome", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        // A short-lived credential issue: outcome `ok`, its id and expiry, no upstream fields,
+        // and no field for the credential itself.
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "expires_at": 1}),
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7()}),
+        json!({"kind": "credential.issued", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7(), "expires_at": 1}),
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7(), "expires_at": 1, "host": "api.example.com"}),
+        json!({"kind": "credential.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "credential_id": Uuid::now_v7(), "expires_at": 1, "credential": CANARY}),
+        with("credential_id", json!(Uuid::now_v7())),
+        with("expires_at", json!(1)),
     ] {
         let r = post_event(&app, Some(&auth), org, &bad).await;
         assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
@@ -297,6 +306,127 @@ async fn aws_credential_events_append_to_the_chain() {
     assert_eq!(
         rows[0].target.as_deref(),
         Some(format!("secret:{secret}").as_str())
+    );
+}
+
+/// m1-remote-mcp task 3.3: `credential.issued` appends with the credential's id and expiry as
+/// attributes, actor the agent and target the secret.
+#[tokio::test]
+async fn credential_issued_appends_to_the_chain() {
+    let f = Fixture::start().await;
+    let org = f.org("short-lived").await;
+    let auth = bearer(TOKEN);
+    let (agent, secret, credential) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    let body = json!({
+        "kind": "credential.issued", "outcome": "ok", "agent_id": agent, "secret_id": secret,
+        "version": 1, "credential_id": credential, "expires_at": 1_900_000_000_i64,
+    });
+    let r = post_event(&f.app, Some(&auth), Some(org), &body).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+    let rows = f.records(org).await;
+    assert_intact(&rows);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        (rows[0].kind.as_str(), rows[0].outcome.as_str()),
+        ("credential.issued", "ok")
+    );
+    let text = f.ledger_text().await;
+    assert!(text.contains(&credential.to_string()), "{text}");
+    assert!(text.contains("1900000000"), "{text}");
+}
+
+/// m1-remote-mcp task 3.4: the gateway reads the org's agent-tool overrides (only its own org's,
+/// and only the agent layer), and appends one `mcp.call` per agent MCP call.
+#[tokio::test]
+async fn gateway_reads_agent_tool_settings_and_appends_mcp_calls() {
+    let f = Fixture::start().await;
+    let (a, b) = (f.org("tools-a").await, f.org("tools-b").await);
+    let auth = bearer(TOKEN);
+    // Overrides set in the console: one agent tool on, one hub tool (never returned here).
+    for (uri, on) in [
+        ("/v1/mcp/tools/agent/issue_short_lived_credential", true),
+        ("/v1/mcp/tools/agent/list_my_keys", false),
+        ("/v1/mcp/tools/hub/revoke_grant", true),
+    ] {
+        let r = dev(&f.app, "PUT", uri, a, Some(json!({"enabled": on}))).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    }
+    let get = |org: Option<Uuid>, auth: Option<&str>| {
+        let mut b = Request::builder()
+            .method("GET")
+            .uri("/internal/v1/mcp/agent-tool-settings");
+        if let Some(a) = auth {
+            b = b.header("authorization", a);
+        }
+        if let Some(o) = org {
+            b = b.header("x-locksmith-org", o.to_string());
+        }
+        send(&f.app, b.body(Body::empty()).unwrap())
+    };
+    let r = get(Some(a), Some(&auth)).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    assert_eq!(
+        r.body["items"],
+        json!([
+            {"tool": "issue_short_lived_credential", "enabled": true},
+            {"tool": "list_my_keys", "enabled": false},
+        ])
+    );
+    assert_eq!(get(Some(b), Some(&auth)).await.body["items"], json!([]));
+    assert_eq!(get(Some(a), None).await.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        get(Some(a), Some(&bearer(WRONG))).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+
+    // Calls: a registry name is recorded as is, anything else as `unknown`.
+    let agent = Uuid::now_v7();
+    let call = |body: Value| {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/internal/v1/mcp/agent-calls")
+            .header("content-type", "application/json")
+            .header("authorization", auth.clone())
+            .header("x-locksmith-org", a.to_string())
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        send(&f.app, req)
+    };
+    for body in [
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok"}),
+        json!({"agent_id": agent, "tool": "issue_short_lived_credential", "outcome": "denied", "reason": "tool_off"}),
+        json!({"agent_id": agent, "tool": "SECRET sk_live_abc", "outcome": "denied", "reason": "tool_off"}),
+    ] {
+        assert_eq!(call(body).await.status, StatusCode::CREATED);
+    }
+    for bad in [
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok", "reason": "tool_off"}),
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "denied"}),
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok", "arguments": {"x": 1}}),
+        json!({"agent_id": agent, "tool": "list_my_keys", "outcome": "ok", "reason": "free text"}),
+    ] {
+        assert_eq!(call(bad).await.status, StatusCode::BAD_REQUEST);
+    }
+    let rows = f.records(a).await;
+    assert_intact(&rows);
+    let seen: Vec<_> = rows
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("mcp.call", "ok"),
+            ("mcp.call", "denied"),
+            ("mcp.call", "denied")
+        ]
+    );
+    let text = f.ledger_text().await;
+    assert!(text.contains("issue_short_lived_credential"), "{text}");
+    assert!(text.contains("unknown"), "{text}");
+    assert!(
+        !text.contains("sk_live_abc"),
+        "client text reached the ledger"
     );
 }
 
@@ -878,4 +1008,168 @@ async fn audit_read_api_pages_newest_first_and_is_org_scoped() {
     assert!(v.get("broken_seq").is_none());
     let r = dev(&f.app, "GET", "/v1/audit/status", b, None).await;
     assert_eq!(r.body, json!({"head_seq": 1}));
+}
+
+/// m1-remote-mcp task 4.2 (gateway half): the gateway records an agent as an MCP client on
+/// `initialize`, the console lists and revokes it, and the gateway reads the revoked set. All of
+/// it per org, service token only.
+#[tokio::test]
+async fn gateway_records_agent_mcp_clients_and_reads_the_revoked_ones() {
+    let f = Fixture::start().await;
+    let (a, b) = (f.org("rev-a").await, f.org("rev-b").await);
+    let auth = bearer(TOKEN);
+    let agent_of = |org: Uuid, name: &'static str| {
+        let app = f.app.clone();
+        async move {
+            let r = dev(&app, "POST", "/v1/agents", org, Some(json!({"name": name}))).await;
+            assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+            r.body["agent"]["id"]
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        }
+    };
+    let (one, two, theirs) = (
+        agent_of(a, "one").await,
+        agent_of(a, "two").await,
+        agent_of(b, "theirs").await,
+    );
+    let upsert = |org: Option<Uuid>, auth: Option<&str>, body: Value| {
+        let mut r = Request::builder()
+            .method("POST")
+            .uri("/internal/v1/mcp/agent-clients")
+            .header("content-type", "application/json");
+        if let Some(a) = auth {
+            r = r.header("authorization", a);
+        }
+        if let Some(o) = org {
+            r = r.header("x-locksmith-org", o.to_string());
+        }
+        send(&f.app, r.body(Body::from(body.to_string())).unwrap())
+    };
+    let revoked = |org: Uuid| {
+        send(
+            &f.app,
+            Request::builder()
+                .method("GET")
+                .uri("/internal/v1/mcp/revoked-agent-clients")
+                .header("authorization", auth.clone())
+                .header("x-locksmith-org", org.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+
+    // Initialize records the agent (twice is one row); nothing is revoked yet.
+    for _ in 0..2 {
+        let r = upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": one, "client_name": "claude"}),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+        assert_eq!(r.body, json!({"revoked": false}));
+    }
+    upsert(
+        Some(a),
+        Some(&auth),
+        json!({"agent_id": two, "client_name": "x"}),
+    )
+    .await;
+    let r = dev(&f.app, "GET", "/v1/mcp/clients", a, None).await;
+    let items = r.body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{}", r.raw);
+    let row = items
+        .iter()
+        .find(|i| i["client_id"] == one.to_string())
+        .unwrap();
+    assert_eq!(row["layer"], "agent");
+    assert_eq!(row["principal"], one.to_string());
+    assert_eq!(row["client_name"], "claude");
+    assert_eq!(revoked(a).await.body["items"], json!([]));
+
+    // The console revokes agent one; only that agent is listed, and only in its org.
+    let r = dev(
+        &f.app,
+        "POST",
+        &format!("/v1/mcp/clients/{}/revoke", row["id"].as_str().unwrap()),
+        a,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
+    assert_eq!(revoked(a).await.body["items"], json!([{"agent_id": one}]));
+    assert_eq!(revoked(b).await.body["items"], json!([]));
+    // A second initialize keeps it revoked and says so; the row is not recreated.
+    let r = upsert(
+        Some(a),
+        Some(&auth),
+        json!({"agent_id": one, "client_name": "again"}),
+    )
+    .await;
+    assert_eq!(r.body, json!({"revoked": true}));
+    let r = dev(&f.app, "GET", "/v1/mcp/clients", a, None).await;
+    assert_eq!(r.body["items"].as_array().unwrap().len(), 2);
+
+    // Another org's agent is a 404 (like one that does not exist); no token, a wrong token and
+    // unknown fields are refused.
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": theirs, "client_name": "x"})
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": Uuid::now_v7(), "client_name": "x"})
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        upsert(Some(a), None, json!({"agent_id": one, "client_name": "x"}))
+            .await
+            .status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&bearer(WRONG)),
+            json!({"agent_id": one, "client_name": "x"})
+        )
+        .await
+        .status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        upsert(
+            Some(a),
+            Some(&auth),
+            json!({"agent_id": one, "client_name": "x", "token": "t"})
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    let no_token = send(
+        &f.app,
+        Request::builder()
+            .method("GET")
+            .uri("/internal/v1/mcp/revoked-agent-clients")
+            .header("x-locksmith-org", a.to_string())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(no_token.status, StatusCode::UNAUTHORIZED);
 }

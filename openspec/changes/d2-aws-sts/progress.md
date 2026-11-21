@@ -66,3 +66,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - parked (merged origin/main into the branch; no code change)
 - Verified: merge clean, tree clean. Open tasks 5.1/5.2 need the bindings page from t3-console-mvp (28 tasks open there, nothing on main or its branch); 7.2 needs `just apps-build` after 5.x and a real AWS account for the P1 session-policy check.
 - Notes for next session: take 5.x after t3 lands a bindings page; do 7.2 last.
+
+## 2026-11-21 merge (origin/main into the branch)
+- Task: none - merged origin/main (m1-remote-mcp). Renumbered this change's migration `0012_grant_delegate.sql` to `0013_grant_delegate.sql` (main's `0012_mcp.sql` keeps 12) and the AWS adversarial case `G9` to `G11` (main's agent MCP case is `G9`, hub MCP `G10`). Kept both sides' audit kinds (`aws.credentials.*`, `credential.issued`), attrs, gateway config and relay options.

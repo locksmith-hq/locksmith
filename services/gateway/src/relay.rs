@@ -132,6 +132,11 @@ pub struct Relay {
     options: RelayOptions,
     git: crate::git::GitState,
     aws: crate::aws::AwsOptions,
+    /// Short-lived credentials issued over MCP (m1-remote-mcp task 3.3).
+    short_lived: crate::short_lived::ShortLivedStore,
+    /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
+    /// honoured so a revoke takes effect here without waiting for `/mcp` traffic.
+    revoked_agents: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
 }
 
 impl Relay {
@@ -155,6 +160,40 @@ impl Relay {
             options,
             git: crate::git::GitState::default(),
             aws: crate::aws::AwsOptions::default(),
+            short_lived: crate::short_lived::ShortLivedStore::default(),
+            revoked_agents: None,
+        }
+    }
+
+    /// Check short-lived credentials against the agent MCP client registry (task 4.2): a
+    /// credential of a revoked agent is refused and the agent's credentials are dropped, and a
+    /// registry that cannot be read refuses every short-lived credential (fail closed). In
+    /// production the same cache `/mcp` reads ([`crate::mcp_clients::ClientsCache`]).
+    pub fn with_revoked_agents(
+        mut self,
+        clients: Arc<dyn crate::mcp_clients::AgentClients>,
+    ) -> Self {
+        self.revoked_agents = Some(clients);
+        self
+    }
+
+    /// Whether short-lived credentials of `agent_id` must be refused: its MCP access is revoked,
+    /// or the registry cannot be read. Drops the agent's credentials when it is revoked.
+    async fn short_lived_agent_revoked(&self, agent_id: Uuid) -> bool {
+        let Some(clients) = &self.revoked_agents else {
+            return false;
+        };
+        match clients.revoked().await {
+            Ok(set) if set.contains(&agent_id) => {
+                let dropped = self.short_lived.drop_agent(agent_id);
+                tracing::info!(agent.id = %agent_id, dropped, "revoked MCP agent: short-lived credentials dropped");
+                true
+            }
+            Ok(_) => false,
+            Err(_) => {
+                tracing::warn!("revoked MCP agents unreadable; short-lived credential refused");
+                true
+            }
         }
     }
 
@@ -176,6 +215,10 @@ impl Relay {
 
     pub(crate) fn git(&self) -> &crate::git::GitState {
         &self.git
+    }
+
+    pub(crate) fn short_lived(&self) -> &crate::short_lived::ShortLivedStore {
+        &self.short_lived
     }
 
     pub(crate) fn audit(&self) -> &dyn AuditSink {
@@ -367,6 +410,7 @@ impl CallAudit {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
             EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => true,
+            EventKind::CredentialIssued => false,
         };
         RelayEvent {
             kind,
@@ -378,6 +422,7 @@ impl CallAudit {
             port: self.port.filter(|_| host_ok),
             status,
             attempt_id,
+            issued: None,
         }
     }
 }
@@ -407,8 +452,52 @@ pub(crate) async fn append_outcome(relay: &Relay, ev: RelayEvent) -> bool {
 }
 
 /// The handler. See the module docs for the order of checks.
+///
+/// Besides an agent token, the bearer may be a short-lived credential the agent MCP issued
+/// ([`crate::short_lived`], m1-remote-mcp task 3.3): it runs as the agent it was issued to and
+/// is refused (`403 denied`, audited) for any secret but the one it is scoped to. An unknown or
+/// expired one is a `401` like a bad agent token.
 pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Response {
     let request_id = Uuid::new_v4().to_string();
+    let short_lived = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| ls_control_plane::auth::bearer(v.as_bytes()))
+        .and_then(|t| std::str::from_utf8(t).ok())
+        .filter(|t| t.starts_with(crate::short_lived::PREFIX))
+        .map(|t| {
+            relay
+                .short_lived
+                .resolve(t, time::OffsetDateTime::now_utc())
+        });
+    if let Some(scope) = short_lived {
+        return match scope.filter(|s| s.org_id == relay.bindings.org_id) {
+            Some(s) if relay.short_lived_agent_revoked(s.agent_id).await => {
+                tracing::info!(
+                    reason = "short_lived_agent_revoked",
+                    "relay credential refused"
+                );
+                error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id)
+            }
+            Some(s) => {
+                let agent = crate::auth::AgentIdentity {
+                    agent_id: s.agent_id,
+                    org_id: s.org_id,
+                };
+                let only = Only {
+                    secret_id: s.secret_id,
+                    credential_id: s.credential_id,
+                };
+                handle_scoped(relay, agent, Some(only), request_id, body).await
+            }
+            None => {
+                tracing::info!(
+                    reason = "short_lived_unknown_or_expired",
+                    "relay credential refused"
+                );
+                error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id)
+            }
+        };
+    }
     let agent = match relay.auth.authenticate(&headers).await {
         Ok(a) => a,
         Err(e) => {
@@ -416,6 +505,35 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
             return error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id);
         }
     };
+    handle_as(relay, agent, request_id, body).await
+}
+
+/// The relay for an already authenticated agent: every check, the audit events and the
+/// redaction are the ones `/v1/relay` runs. The MCP `relay_http_request` tool enters here
+/// (m1-remote-mcp task 3.2) after `/mcp` verified the same agent token.
+pub(crate) async fn handle_as(
+    relay: Arc<Relay>,
+    agent: crate::auth::AgentIdentity,
+    request_id: String,
+    body: Bytes,
+) -> Response {
+    handle_scoped(relay, agent, None, request_id, body).await
+}
+
+/// A short-lived credential's restriction: the one secret it may relay.
+#[derive(Clone, Copy)]
+struct Only {
+    secret_id: Uuid,
+    credential_id: Uuid,
+}
+
+async fn handle_scoped(
+    relay: Arc<Relay>,
+    agent: crate::auth::AgentIdentity,
+    only: Option<Only>,
+    request_id: String,
+    body: Bytes,
+) -> Response {
     let Some(req) = parse(&body, relay.options.max_request_body) else {
         return error(StatusCode::BAD_REQUEST, "bad_request", &request_id);
     };
@@ -431,7 +549,11 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
         http.request.method = %req.method,
         outcome = tracing::field::Empty,
         upstream.status = tracing::field::Empty,
+        credential.id = tracing::field::Empty,
     );
+    if let Some(o) = only {
+        span.record("credential.id", tracing::field::display(o.credential_id));
+    }
     let call = CallAudit {
         agent_id: agent.agent_id,
         secret_id: req.secret_id,
@@ -443,7 +565,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
 
     async move {
         let mut attempt = None;
-        let result = run(&relay, &call, &mut attempt, req).await;
+        let result = run(&relay, &call, &mut attempt, req, only).await;
         let span = tracing::Span::current();
         let (outcome, status) = match &result {
             Ok(resp) => (Outcome::Ok, Some(resp.status)),
@@ -529,8 +651,13 @@ async fn run(
     call: &CallAudit,
     attempt: &mut Option<Uuid>,
     req: Parsed,
+    only: Option<Only>,
 ) -> Result<RelayResponse, Failure> {
     let agent_id = call.agent_id;
+    // A short-lived credential relays its one secret and nothing else (before any lookup).
+    if only.is_some_and(|o| o.secret_id != req.secret_id) {
+        return Err(denied());
+    }
     // 3. Grant and its expiry: refused before the binding lookup, DNS, fetch or unwrap. The
     // expiry is re-checked here because the set may come from the cache.
     let grants = relay.grants.grants(agent_id).await.map_err(|e| {
@@ -844,6 +971,17 @@ mod tests {
     /// Tasks 5.1 and 5.2 of s6-adversarial-gate-1: the G2 to G4 payloads, judged by the oracle.
     mod adversarial;
 
+    /// Task 3.2 of m1-remote-mcp: the gateway's default-on MCP tools over the same harness.
+    mod mcp;
+
+    /// Task 4.2 of m1-remote-mcp: a revoked agent is refused on `/mcp`, calls and initialize.
+    mod mcp_revoke;
+    /// Task 3.3 of m1-remote-mcp: `issue_short_lived_credential` and its adversarial cases.
+    mod mcp_short_lived;
+
+    /// Task 3.4 of m1-remote-mcp: per-org tool switches and the per-call `mcp.call` event.
+    mod mcp_settings;
+
     fn grant(secret_id: Uuid, name: &str, expires_at: Option<time::OffsetDateTime>) -> Grant {
         Grant {
             grant_id: Uuid::now_v7(),
@@ -927,6 +1065,7 @@ mod tests {
 
     struct Harness {
         app: Router,
+        relay: Arc<Relay>,
         upstream: MockServer,
         cp: MockServer,
         bao: MockServer,
@@ -954,6 +1093,12 @@ mod tests {
         options: RelayOptions,
         /// The sealed secret value (the adversarial tests use the oracle's canary).
         value: Vec<u8>,
+        /// MCP tool switches over the registry defaults (m1-remote-mcp task 3.3).
+        mcp_tools: Vec<(&'static str, bool)>,
+        /// Replaces the fixed switches with a source read on every call (task 3.4).
+        settings_source: Option<Arc<dyn crate::mcp_settings::ToolSettingsSource>>,
+        /// The agent-layer client registry (task 4.2); none means nobody is revoked.
+        clients: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
     }
 
     impl Default for Setup {
@@ -966,6 +1111,9 @@ mod tests {
                 audit: None,
                 grant_ttl: crate::grants::MAX_GRANT_TTL,
                 value: VALUE.to_vec(),
+                mcp_tools: Vec::new(),
+                settings_source: None,
+                clients: None,
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
@@ -1088,7 +1236,22 @@ mod tests {
             Some(a) => a,
             None => audit.clone(),
         };
-        let relay = Relay::new(
+        let mut mcp =
+            crate::mcp_endpoint::McpEndpoint::new(auth.clone(), &["gateway.test".to_owned()])
+                .with_tool_settings(
+                    setup
+                        .mcp_tools
+                        .iter()
+                        .map(|(n, on)| ((*n).to_owned(), *on))
+                        .collect(),
+                );
+        if let Some(source) = setup.settings_source {
+            mcp = mcp.with_settings_source(source);
+        }
+        if let Some(clients) = setup.clients.clone() {
+            mcp = mcp.with_clients(clients);
+        }
+        let mut relay = Relay::new(
             auth,
             Arc::new(cache),
             bindings,
@@ -1097,10 +1260,18 @@ mod tests {
             sink,
             setup.options,
         );
-        let app =
-            app::build(AppState::new(Arc::new(ReadyFlag::new(true))).with_relay(Arc::new(relay)));
+        if let Some(clients) = setup.clients {
+            relay = relay.with_revoked_agents(clients);
+        }
+        let relay = Arc::new(relay);
+        let app = app::build(
+            AppState::new(Arc::new(ReadyFlag::new(true)))
+                .with_relay(relay.clone())
+                .with_mcp(mcp),
+        );
         Harness {
             app,
+            relay,
             upstream,
             cp,
             bao,
@@ -1180,9 +1351,10 @@ mod tests {
                 .filter_map(|e| match e.kind {
                     EventKind::Attempt => None,
                     EventKind::Outcome(o) | EventKind::Denied(o) => Some((o, e)),
-                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {
-                        None
-                    }
+                    EventKind::GitFetch(_)
+                    | EventKind::GitPush(_)
+                    | EventKind::GitDenied(_)
+                    | EventKind::CredentialIssued => None,
                 })
                 .collect()
         }
@@ -1203,7 +1375,10 @@ mod tests {
                         assert!(o.is_denial());
                         assert!(e.attempt_id.is_none());
                     }
-                    EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => {}
+                    EventKind::GitFetch(_)
+                    | EventKind::GitPush(_)
+                    | EventKind::GitDenied(_)
+                    | EventKind::CredentialIssued => {}
                 }
             }
             assert!(open.is_none(), "attempt left open");
@@ -1281,6 +1456,7 @@ mod tests {
                 port,
                 status: None,
                 attempt_id: None,
+                issued: None,
             }
         );
         assert_eq!(
@@ -2545,6 +2721,7 @@ mod tests {
             port: None,
             status: None,
             attempt_id: None,
+            issued: None,
         };
         let attempt = sink.append(base.clone()).await.unwrap();
         let outcome = RelayEvent {

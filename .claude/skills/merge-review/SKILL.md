@@ -1,6 +1,6 @@
 ---
 name: merge-review
-description: Independent pre-merge review of a Locksmith PR (runs in GitHub Actions on the ready-to-merge label). Reviews the diff against the OpenSpec change and security rules, posts inline findings and one verdict comment "merge-review <sha>: PASS|FAIL". Owner-only skill.
+description: Independent pre-merge review of a Locksmith PR (runs in GitHub Actions when auto-merge is enabled on a PR). Reviews the diff against the OpenSpec change and security rules, posts inline findings and one verdict comment "merge-review <sha>: PASS|FAIL". Owner-only skill.
 argument-hint: <pr-number> <head-sha>
 ---
 

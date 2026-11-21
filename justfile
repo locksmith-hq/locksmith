@@ -2,6 +2,30 @@ set positional-arguments
 
 ci: fmt lint test-rust test-web tree-check task-guard public-check
 
+# Fast local check: fmt + lint only for files committed on this branch since `base`.
+# The full `just ci` runs in GitHub Actions on every PR.
+quick base="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    files=$(git diff --name-only --diff-filter=ACMR "$1"...HEAD)
+    [ -n "$files" ] || { echo "quick: no committed changes vs $1"; exit 0; }
+    rs=$(grep '\.rs$' <<<"$files" || true)
+    if [ -n "$rs" ]; then
+      rustfmt --check $rs
+      # Clippy only the crates that own a changed file (nearest Cargo.toml), in one run so deps build once.
+      dirs=$(for f in $rs; do d=$(dirname "$f"); until [ -f "$d/Cargo.toml" ] || [ "$d" = . ]; do d=$(dirname "$d"); done; echo "$d"; done | sort -u)
+      pkgs=""
+      for d in $dirs; do
+        case "$d" in
+          apps/desktop/*) cargo clippy --manifest-path "$d/Cargo.toml" --all-targets -- -D warnings ;; # not in the workspace
+          .) pkgs="--workspace" ;;
+          *) pkgs="$pkgs -p $(sed -n 's/^name *= *"\(.*\)"/\1/p' "$d/Cargo.toml" | head -1)" ;;
+        esac
+      done
+      if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
+    fi
+    if grep -q '^apps/web/' <<<"$files"; then npm run lint -w apps/web; fi
+
 fmt:
     cargo fmt --all --check
 
@@ -198,12 +222,16 @@ api:
     set -euo pipefail
     root={{quote(justfile_directory())}}
     set -a; . "$root/infra/compose/.env.example"; set +a
-    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 LOCKSMITH_MCP_RESOURCE_URL=http://127.0.0.1:8080/mcp OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
 
 # T1 sign-up, verify, sign-in (auth code + PKCE), reset and API calls against Keycloak (needs `just up` and `just api`).
 auth-e2e:
     python3 -I scripts/auth-e2e.py
+
+# M1 hub MCP sign-in: a scripted MCP client signs in on Keycloak (consent, PKCE, resource) and lists tools (needs `just up` and `just api`).
+mcp-e2e:
+    python3 -I scripts/mcp-e2e.py
 
 # Run locksmith-gateway against `just up` and `just api`. Needs LOCKSMITH_GATEWAY_BINDINGS (a TOML
 # file naming the org and bindings; see tests/e2e/tests/relay.rs for the shape). The gateway connects

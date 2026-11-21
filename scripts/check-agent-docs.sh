@@ -9,7 +9,7 @@ check() { # <file> <max-words>
   w=$(wc -w <"$1" | tr -d ' ')
   if [ "$w" -gt "$2" ]; then echo "agent-docs: $1 has $w words (max $2)"; fail=1; fi
 }
-check docs/agents/common.md 600
+check docs/agents/common.md 660  # owner 2026-11-20: owner tags and the research channel
 for f in docs/agents/{review,health,research,merge}.md; do check "$f" 400; done
 check docs/agents/worker.md 450  # owner 2026-11-19: several tasks, changes and PRs per run; plan ahead for parallel work
 check docs/agents/lead.md 580  # owner 2026-11-18: owner-reply step 0, PM/lead scope; 2026-11-19: debates, rescue decisions

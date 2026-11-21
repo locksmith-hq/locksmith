@@ -273,6 +273,26 @@ pub struct GrantView {
     pub allowed_origin: Option<String>,
 }
 
+/// The agent's unexpired grants as it sees them (shared by `/v1/grants` and the MCP
+/// `list_my_keys` tool). No value, ever.
+pub(crate) fn grant_views(relay: &Relay, grants: Vec<Grant>) -> Vec<GrantView> {
+    let now = OffsetDateTime::now_utc();
+    grants
+        .into_iter()
+        .filter(|g| g.active_at(now))
+        .map(|g| GrantView {
+            allowed_origin: relay
+                .bindings()
+                .for_secret(g.secret_id)
+                .map(|b| b.origin.clone()),
+            secret_id: g.secret_id,
+            secret_name: g.secret_name,
+            mode: g.mode,
+            expires_at: g.expires_at,
+        })
+        .collect()
+}
+
 async fn list(relay: &Relay, headers: &HeaderMap, request_id: &str) -> Response {
     let agent = match relay.auth().authenticate(headers).await {
         Ok(a) => a,
@@ -299,21 +319,7 @@ async fn list(relay: &Relay, headers: &HeaderMap, request_id: &str) -> Response 
             return error(StatusCode::BAD_GATEWAY, "grants_unavailable", request_id);
         }
     };
-    let now = OffsetDateTime::now_utc();
-    let grants: Vec<GrantView> = grants
-        .into_iter()
-        .filter(|g| g.active_at(now))
-        .map(|g| GrantView {
-            allowed_origin: relay
-                .bindings()
-                .for_secret(g.secret_id)
-                .map(|b| b.origin.clone()),
-            secret_id: g.secret_id,
-            secret_name: g.secret_name,
-            mode: g.mode,
-            expires_at: g.expires_at,
-        })
-        .collect();
+    let grants = grant_views(relay, grants);
     tracing::info!(grants = grants.len(), "agent grants listed");
     let mut r = (
         StatusCode::OK,

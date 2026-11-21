@@ -319,11 +319,10 @@ pub fn mcp_issuer_revoke(actor: Actor, org_id: Uuid, outcome: Code, reason: Opti
 /// Host name of an OIDC issuer URL, if it is one the ledger accepts. The issuer is the only
 /// identity attribute recorded besides the user id: no subject, email, token or claim text.
 fn issuer_host(issuer: &str) -> Option<Host> {
-    let rest = issuer.split_once("://")?.1;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    let host = authority.rsplit('@').next()?;
-    let host = host.split(':').next()?;
-    Host::parse(host).ok()
+    // `http::Uri` keeps the brackets of an IPv6 literal (`[::1]`), which `Host::parse` accepts;
+    // splitting the authority on ':' by hand dropped such issuers from the ledger.
+    let uri: http::Uri = issuer.parse().ok()?;
+    Host::parse(uri.authority()?.host()).ok()
 }
 
 fn auth(
@@ -382,4 +381,33 @@ pub fn org_personal_created(user: Uuid, org_id: Uuid, issuer: &str) -> Event {
         issuer,
         None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::issuer_host;
+
+    #[test]
+    fn issuer_host_parses_names_ports_and_ipv6() {
+        let host = |s: &str| issuer_host(s).map(|h| h.as_str().to_owned());
+        assert_eq!(
+            host("https://Issuer.Example.com/realms/x"),
+            Some("issuer.example.com".into())
+        );
+        assert_eq!(
+            host("https://token.actions.githubusercontent.com"),
+            Some("token.actions.githubusercontent.com".into())
+        );
+        assert_eq!(
+            host("http://localhost:8080/realms/ls"),
+            Some("localhost".into())
+        );
+        assert_eq!(
+            host("https://user@idp.example:8443/x?y#z"),
+            Some("idp.example".into())
+        );
+        assert_eq!(host("https://[::1]:8443/realms/ls"), Some("[::1]".into()));
+        assert_eq!(host("not a url"), None);
+        assert_eq!(host(""), None);
+    }
 }

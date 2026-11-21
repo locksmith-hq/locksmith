@@ -79,3 +79,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - resolved PR #480 conflicts (merged origin/main: D4 workload identities took migration 0013, so this change's migration is now `0014_grant_delegate.sql`; kept both justfile recipes and both e2e dev-dependency sets; Cargo.lock regenerated from main's).
 - Verified: `cargo check --workspace --tests`, `just quick`, `cargo test -p ls-control-plane --lib`.
 - Notes for next session: 19 tasks still unticked; take them in order. Also took no action on #489 (another worker holds t3-console-mvp).
+
+## 2026-11-21 worker C
+- Task: CI fix (rust red on 42ddd897: `tenancy.rs` still expected 13 migrations after d2's migration was renumbered to 0014 behind d4's 0013) - done
+- Verified: `cargo nextest run -p ls-control-plane --test tenancy --test tenant_lint` -> 13 passed (needs dockerd: start it by hand on a fresh VM); `just quick`
+- Notes for next session: any new main migration shifts d2's number again; bump the two counts in `services/control-plane/tests/tenancy.rs` (lines 91, 101). Lead's follow-up still open: wrap `0014_grant_delegate.sql` DDL in `SET LOCAL ROLE locksmith_owner`.

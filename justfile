@@ -82,6 +82,11 @@ public-check:
     scripts/public-check.test.sh
     scripts/public-check.sh
 
+# Install a git pre-push hook that runs the denylist check (see docs/public-private-boundary.md).
+install-hooks:
+    printf '#!/usr/bin/env bash\nexec "$(git rev-parse --show-toplevel)/scripts/public-check.sh" denylist\n' > "$(git rev-parse --git-path hooks)/pre-push"
+    chmod +x "$(git rev-parse --git-path hooks)/pre-push"
+
 dev app:
     npm run build -w apps/{{app}}
 

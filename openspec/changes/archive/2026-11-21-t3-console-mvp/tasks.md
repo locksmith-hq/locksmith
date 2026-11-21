@@ -43,4 +43,4 @@
 
 ## 7. Local verification [sonnet]
 - [x] 7.1 `just up`, `just web-e2e`, `just apps-build`, then `just ci`.
-- [ ] 7.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.
+- [x] 7.2 Run the manual `ci-platforms` workflow if this is the last change of its phase and record the result in progress.md.

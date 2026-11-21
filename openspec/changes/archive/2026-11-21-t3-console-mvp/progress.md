@@ -120,3 +120,8 @@
 - Task: 7.1 - done (ticked). After merging main in: `just up` + `just web-e2e` (2 passed, snapshots unchanged) and `just apps-build` OK; the full `just ci` is left to the PR's required checks.
 - Verified: `PW_CHROMIUM=/opt/pw-browsers/chromium just web-e2e && just apps-build` -> exit 0.
 - Notes for next session: only 7.2 remains (manual `ci-platforms` run; record the result), then archive the change (`archive-change`) in this PR.
+
+## 2026-11-21 worker (josie)
+- Task: 7.2 - not applicable: T3 is not the last change of phase 2 (T4, T6, T7, T8, N1 still open), so ci-platforms was not run manually; the PR runs it anyway.
+- Verified: all required checks green on the branch head; main CI green.
+- Notes: change archived in this PR.

@@ -59,3 +59,8 @@
 - Task: 6.4 gate ticked (owner approved option B on #510); 6.4.1 code done but NOT ticked
 - Verified: `npm test` in apps/web -> 38 passed, tsc clean; guard OK; evaluator PASS (sonnet)
 - Notes for next session: sidebar grouped (Home; Secret Management: Projects/Environments/Secrets; Agent Gateway: Agents/Grants; Activity) with user card at the bottom; Environments is a placeholder route pointing to Projects; org switcher is a static label in the sidebar (no workspace API yet). Task lines 6.4.1-6.4.3 exist only on planning PR #524 (not merged: merge-gate rejects agent-app-authored PRs "not opened by the owner"), so tasks.md here is main's version and the task-guard fails if they are merged in. Once #524 is on main, merge main, tick 6.4.1, then do 6.4.2 (style pages with packages/ui kit) and 6.4.3 (e2e + screenshots). Also note: `just ci` was not run to green here because of that guard; the other recipes passed before task-guard.
+
+## 2026-11-21 12:10 worker
+- Task: merge main into the change branch (conflict resolution) - done
+- Verified: `npm test` in packages/control-plane-client, apps/web, apps/desktop + `tsc --noEmit` -> pass (9, 45, 36 tests)
+- Notes for next session: conflicts came from m1 MCP Tools/Clients pages landing in the old single-file web App. They now live in `apps/web/src/pages/McpTools.tsx`, `McpClients.tsx` (routes `tools`, `clients` in Shell). Desktop and control-plane-client keep both sides. Tasks 6.4.1-6.4.3 restored from main as unticked; 6.4.1 code is on the branch but not yet verified (`just web-e2e`), so left unticked.

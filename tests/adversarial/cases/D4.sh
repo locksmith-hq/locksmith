@@ -24,10 +24,13 @@ export PATH="/opt/homebrew/opt/rustup/bin:$CARGO_HOME/bin:$PATH"
 export ADVERSARIAL_CANARY_FILE="$CANARY_FILE"
 export WORKLOAD_ABUSE_ARTIFACT_DIR="$ARTIFACT_DIR"
 cd "$root"
+# Show the end of the cargo log on failure: CI job logs only carry the case's exit code.
 if command -v cargo-nextest >/dev/null 2>&1; then
-  cargo nextest run -p ls-control-plane workload_abuse >"$ARTIFACT_DIR/cargo-test.log" 2>&1
+  cargo nextest run -p ls-control-plane workload_abuse >"$ARTIFACT_DIR/cargo-test.log" 2>&1 ||
+    { tail -n 80 "$ARTIFACT_DIR/cargo-test.log" >&2; exit 1; }
 else
-  cargo test -p ls-control-plane --test workload_exchange workload_abuse >"$ARTIFACT_DIR/cargo-test.log" 2>&1
+  cargo test -p ls-control-plane --test workload_exchange workload_abuse >"$ARTIFACT_DIR/cargo-test.log" 2>&1 ||
+    { tail -n 80 "$ARTIFACT_DIR/cargo-test.log" >&2; exit 1; }
 fi
 for f in canary.logs canary.ledger canary.rows; do
   [[ -s "$ARTIFACT_DIR/$f" ]] || { echo "the tests wrote no $f" >&2; exit 1; }

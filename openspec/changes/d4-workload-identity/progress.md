@@ -46,3 +46,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (adversarial check red on PR #530, case D4 cargo exit 101) - blocked
 - Verified: `cargo nextest run -p ls-control-plane workload_abuse` x5 -> 14 passed each; `bash tests/adversarial/run.sh D4` -> PASS (oracle clean). Could not reproduce the CI failure; job logs only show "case exit 101", cargo-test.log artifact not downloadable from the VM and rerun-failed-jobs is 403.
 - Notes for next session: this push re-triggers CI. If D4 is red again, suspect testcontainers/postgres startup timing under CI load (tests take ~15s each cold); get the cargo-test.log via a CI step that tails it on failure. 4.3 still open (needs `just up` for leak-scan), then 5.x.
+
+## 2026-11-21 worker (C), seventh run
+- Task: ci-fix (adversarial D4 still red on PR #530) - diagnostics only
+- Change: `D4.sh` now prints the last 80 lines of cargo-test.log to stderr when cargo fails, so the next CI log shows the real failure. Not reproducible locally; job logs not downloadable from the VM.
+- Notes for next session: read the adversarial job log after this push; 4.3 and 5.x still open.

@@ -80,3 +80,8 @@
 - Task: p2-packaging - blocked (no task started)
 - Verified: auto-merge on #534 had been enabled again with tasks open; disabled with --disable-auto. Red `hygiene` is the gitleaks step (2 fake worker-branch fixtures, lead PR #557 ignores them); tree-check, task guard, public-check pass locally.
 - Notes for next session: next takeable tasks 6.1-6.4. 4.4/4.5 need kind (absent), 5.4 needs a lead PR, 7.1 is an owner gate. Keep auto-merge off until every task is ticked.
+
+## 2026-11-21 worker
+- Task: p2-packaging - ci-fix (merge conflicts on #534 resolved: .gitignore and justfile, kept both sides; no task started)
+- Verified: just quick -> pass
+- Notes for next session: next takeable tasks none without kind/cosign; 5.4 needs a lead PR, 7.1 is an owner gate. Keep auto-merge off until every task is ticked. #561 (p4-sdks-v2) is dirty (conflicts), not handled this run.

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Head } from "@locksmith/ui";
 import type { Client, McpToolSetting } from "@locksmith/control-plane-client";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
@@ -24,8 +25,8 @@ export function McpTools({ client }: { client: Client }) {
 
   return (
     <section aria-label="Tools">
-      <h2>MCP tools</h2>
-      {error && <p role="alert">{error}</p>}
+      <Head title="MCP tools" />
+      {error && <p role="alert" className="state">{error}</p>}
       {!tools ? (error ? null : <p>Loading tools…</p>) : tools.length === 0 ? <p>No MCP tools.</p> : (
         (["hub", "agent"] as const).map((layer) => {
           const rows = tools.filter((t) => t.layer === layer);
@@ -33,12 +34,13 @@ export function McpTools({ client }: { client: Client }) {
           return (
             <div key={layer} aria-label={`${layerName(layer)} tools`}>
               <h3>{layerName(layer)}</h3>
-              <ul>
+              <ul className="list">
                 {rows.map((t) => (
-                  <li key={t.tool}>
+                  <li key={t.tool} className="row">
                     <label>
                       <input
                         type="checkbox"
+                        className="switch"
                         role="switch"
                         aria-label={`${t.tool} (${layer})`}
                         checked={t.enabled}

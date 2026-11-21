@@ -20,13 +20,13 @@ export function QueryState<T>({ query, isEmpty = (d) => Array.isArray(d) && d.le
   empty?: ReactNode;
   children: (data: T) => ReactNode;
 }) {
-  if (query.isPending) return <p role="status">Loading…</p>;
+  if (query.isPending) return <p role="status" className="state">Loading…</p>;
   if (query.isError || query.data === undefined) {
     const msg = query.error instanceof Error ? query.error.message : "request failed";
     return (
-      <div role="alert">
+      <div role="alert" className="state">
         <p>{msg}</p>
-        <button onClick={() => void query.refetch()}>Retry</button>
+        <button className="btn sm" onClick={() => void query.refetch()}>Retry</button>
       </div>
     );
   }

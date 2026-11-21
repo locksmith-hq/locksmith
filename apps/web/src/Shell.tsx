@@ -35,6 +35,13 @@ function EnvironmentsRedirect({ client, selected }: { client: Client; selected?:
 /** Org switcher (top right). Single org until a workspace API lists the user's orgs (T3 progress.md). */
 function OrgSwitcher({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const away = (e: MouseEvent) => { if (!(e.target as Element).closest(".shell-org")) setOpen(false); };
+    document.addEventListener("keydown", esc); document.addEventListener("mousedown", away);
+    return () => { document.removeEventListener("keydown", esc); document.removeEventListener("mousedown", away); };
+  }, [open]);
   return (
     <div className="shell-org" aria-label="Organization">
       <button aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{name} ▾</button>

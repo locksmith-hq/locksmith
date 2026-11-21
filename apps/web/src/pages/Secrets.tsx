@@ -19,7 +19,7 @@ function SecretList({ client }: { client: Client }) {
       <Head title="Secrets" />
       <QueryState query={projects} empty="No projects yet, so no secrets.">
         {(ps: Project[]) => (
-          <label>Project{" "}
+          <label className="muted">Project{" "}
             <select aria-label="Project" value={project} onChange={(e) => { setPid(e.target.value); setEid(""); }}>
               {ps.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -29,7 +29,7 @@ function SecretList({ client }: { client: Client }) {
       {project && (
         <QueryState query={envs} empty="No environments in this project.">
           {(es: Environment[]) => (
-            <label>Environment{" "}
+            <label className="muted">Environment{" "}
               <select aria-label="Environment" value={env} onChange={(e) => setEid(e.target.value)}>
                 {es.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
@@ -40,9 +40,9 @@ function SecretList({ client }: { client: Client }) {
       {project && env && (
         <QueryState query={secrets} empty="No secrets in this environment.">
           {(items: Secret[]) => (
-            <ul>
+            <ul className="list">
               {items.map((s) => (
-                <li key={s.id}>
+                <li key={s.id} className="row">
                   <Link to={`/secrets/${project}/${env}/${s.id}`}>{s.name}</Link> ({s.version_count} versions)
                 </li>
               ))}
@@ -60,14 +60,14 @@ function SecretDetail({ client }: { client: Client }) {
   const versions = useQuery({ queryKey: ["secret-versions", pid, eid, sid], queryFn: () => client.listSecretVersions(pid, eid, sid) });
   return (
     <>
-      <p><Link to="/secrets">All secrets</Link></p>
+      <nav className="crumbs"><Link to="/secrets">All secrets</Link></nav>
       <QueryState query={secret}>
         {(s: Secret) => <><Head title={s.name} /><p>{s.description}</p><p>Updated {s.updated_at}</p></>}
       </QueryState>
       <h3>Versions</h3>
       <QueryState query={versions} empty="No versions yet.">
         {(vs: SecretVersion[]) => (
-          <table>
+          <table className="grid">
             <thead><tr><th>Version</th><th>Key</th><th>Created</th></tr></thead>
             <tbody>{vs.map((v) => <tr key={v.version}><td>{v.version}</td><td>{v.key_id}</td><td>{v.created_at}</td></tr>)}</tbody>
           </table>

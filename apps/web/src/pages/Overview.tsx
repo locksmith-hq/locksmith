@@ -23,22 +23,22 @@ export function Overview({ client }: { client: Client }) {
   return (
     <>
       <Head title="Overview" />
-      <section aria-label="Counts">
+      <section aria-label="Counts" className="panel">
         <QueryState query={projects} isEmpty={() => false}>{(p) => <p data-testid="count-projects">Projects: {p.length}</p>}</QueryState>
         <QueryState query={agents} isEmpty={() => false}>{(a) => <p data-testid="count-agents">Agents: {a.length}</p>}</QueryState>
       </section>
       {!dismissed && (
-        <section aria-label="Get started">
+        <section aria-label="Get started" className="panel">
           <h2>Get started</h2>
           <ol>
             <li><Link to="/projects">Create a project</Link></li>
             <li><Link to="/secrets">Add a secret</Link></li>
             <li><Link to="/agents">Register an agent</Link></li>
           </ol>
-          <button onClick={dismiss}>Dismiss</button>
+          <button className="btn sm" onClick={dismiss}>Dismiss</button>
         </section>
       )}
-      <section aria-label="Recent activity">
+      <section aria-label="Recent activity" className="panel">
         <h2>Recent activity</h2>
         <QueryState query={audit} isEmpty={(d) => d.items.length === 0} empty="No activity yet.">
           {(d) => <ul>{d.items.map((e) => <li key={e.id}>{e.kind} ({e.outcome})</li>)}</ul>}

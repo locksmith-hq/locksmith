@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Head } from "@locksmith/ui";
 import type { Client, McpClient } from "@locksmith/control-plane-client";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
@@ -25,10 +26,10 @@ export function McpClients({ client }: { client: Client }) {
   const label = (c: McpClient) => c.client_name || c.client_id;
   return (
     <section aria-label="Clients">
-      <h2>MCP clients</h2>
-      {error && <p role="alert">{error}</p>}
+      <Head title="MCP clients" />
+      {error && <p role="alert" className="state">{error}</p>}
       {!clients ? (error ? null : <p>Loading clients…</p>) : clients.length === 0 ? <p>No MCP clients have signed in yet.</p> : (
-        <table>
+        <table className="grid">
           <thead>
             <tr><th>Client</th><th>Layer</th><th>Principal</th><th>Last seen</th><th>Status</th><th></th></tr>
           </thead>
@@ -37,7 +38,7 @@ export function McpClients({ client }: { client: Client }) {
               <tr key={c.id}>
                 <td>{label(c)}</td><td>{layerName(c.layer)}</td><td>{c.principal}</td><td>{c.last_seen_at}</td>
                 <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
-                <td>{!c.revoked_at && <button onClick={() => void revoke(c)}>Revoke {label(c)}</button>}</td>
+                <td>{!c.revoked_at && <button className="btn sm danger" onClick={() => void revoke(c)}>Revoke {label(c)}</button>}</td>
               </tr>
             ))}
           </tbody>

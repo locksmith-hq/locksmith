@@ -10,6 +10,7 @@ import "@fontsource/jetbrains-mono/latin-500.css";
 import "@fontsource/unbounded/latin-500.css";
 import "@locksmith/ui/tokens.css";
 import "../../../desktop/src/styles.css";
+import "@locksmith/ui/kit.css";
 import "./console.css";
 import { Console } from "./Console";
 

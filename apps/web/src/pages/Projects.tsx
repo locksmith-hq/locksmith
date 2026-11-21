@@ -14,26 +14,26 @@ function RowActions({ name, onRename, onDelete }: { name: string; onRename: (n: 
   const [value, setValue] = useState(name);
   if (editing) {
     return (
-      <form onSubmit={(e) => { e.preventDefault(); void onRename(value).then(() => setEditing(false), () => {}); }}>
+      <form className="inline-form" onSubmit={(e) => { e.preventDefault(); void onRename(value).then(() => setEditing(false), () => {}); }}>
         <input aria-label={`New name for ${name}`} value={value} onChange={(e) => setValue(e.target.value)} />
-        <button type="submit">Save</button>
-        <button type="button" onClick={() => setEditing(false)}>Cancel</button>
+        <button type="submit" className="btn sm primary">Save</button>
+        <button type="button" className="btn sm quiet" onClick={() => setEditing(false)}>Cancel</button>
       </form>
     );
   }
   if (confirming) {
     return (
-      <span role="alertdialog" aria-label={`Delete ${name}?`}>
+      <span role="alertdialog" className="inline-form" aria-label={`Delete ${name}?`}>
         Delete {name}?
-        <button onClick={() => void onDelete().then(() => setConfirming(false), () => setConfirming(false))}>Confirm delete</button>
-        <button onClick={() => setConfirming(false)}>Cancel</button>
+        <button className="btn sm danger" onClick={() => void onDelete().then(() => setConfirming(false), () => setConfirming(false))}>Confirm delete</button>
+        <button className="btn sm quiet" onClick={() => setConfirming(false)}>Cancel</button>
       </span>
     );
   }
   return (
     <>
-      <button onClick={() => setEditing(true)}>Rename {name}</button>
-      <button onClick={() => setConfirming(true)}>Delete {name}</button>
+      <button className="btn sm" onClick={() => setEditing(true)}>Rename {name}</button>
+      <button className="btn sm quiet danger-text" onClick={() => setConfirming(true)}>Delete {name}</button>
     </>
   );
 }
@@ -41,9 +41,9 @@ function RowActions({ name, onRename, onDelete }: { name: string; onRename: (n: 
 function CreateForm({ label, onCreate }: { label: string; onCreate: (name: string) => Promise<unknown> }) {
   const [name, setName] = useState("");
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void onCreate(name).then(() => setName(""), () => {}); }}>
+    <form className="panel form inline-form" onSubmit={(e) => { e.preventDefault(); void onCreate(name).then(() => setName(""), () => {}); }}>
       <input aria-label={`${label} name`} value={name} onChange={(e) => setName(e.target.value)} required />
-      <button type="submit">Create {label}</button>
+      <button type="submit" className="btn primary">Create {label}</button>
     </form>
   );
 }
@@ -59,13 +59,13 @@ function ProjectList({ client }: { client: Client }) {
   return (
     <>
       <Head title="Projects" />
-      {err && <p role="alert">{errMsg(err)}</p>}
+      {err && <p role="alert" className="state">{errMsg(err)}</p>}
       <CreateForm label="project" onCreate={(n) => create.mutateAsync(n)} />
       <QueryState query={q} empty="No projects yet.">
         {(items: Project[]) => (
-          <ul>
+          <ul className="list">
             {items.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="row">
                 <Link to={`/projects/${p.id}`}>{p.name}</Link>
                 <RowActions name={p.name} onRename={(name) => rename.mutateAsync({ id: p.id, name })} onDelete={() => del.mutateAsync(p.id)} />
               </li>
@@ -89,14 +89,14 @@ function ProjectDetail({ client }: { client: Client }) {
   return (
     <>
       <Head title="Environments" />
-      <p><Link to="/projects">All projects</Link></p>
-      {err && <p role="alert">{errMsg(err)}</p>}
+      <nav className="crumbs"><Link to="/projects">All projects</Link></nav>
+      {err && <p role="alert" className="state">{errMsg(err)}</p>}
       <CreateForm label="environment" onCreate={(n) => create.mutateAsync(n)} />
       <QueryState query={q} empty="No environments yet.">
         {(items: Environment[]) => (
-          <ul>
+          <ul className="list">
             {items.map((e) => (
-              <li key={e.id}>
+              <li key={e.id} className="row">
                 {e.name}
                 <RowActions name={e.name} onRename={(name) => rename.mutateAsync({ env: e.id, name })} onDelete={() => del.mutateAsync(e.id)} />
               </li>

@@ -95,3 +95,8 @@
 - Task: 6.4.1 shell frame done and ticked: org switcher (button + menu, top right), user card holds sign-out, Environments opens the viewed project (else first, else /projects), with tests.
 - Verified: `npm test --workspace apps/web` (49 passed), tsc clean. Evaluator: Sonnet FAIL and Opus FAIL on earlier attempts (static switcher; selected-project test could not fail), fixed; third review (Opus) PASS, plus a mutation check that the test fails when `selected` is ignored.
 - Notes for next session: org switcher is single-org (no API lists orgs yet); `selected` is not cleared if its project is deleted; org menu has no Escape/outside-click close (do in 6.4.2). Remaining: 6.1, 6.4.2, 6.4.3 (needs `just up && just web-e2e`), 6.5-6.6, 7.x.
+
+## 2026-11-21 worker (josie, run 5)
+- Task: 6.4.2 restyle done and ticked: web imports the shared desktop styles, fonts (deps added to apps/web) and new `@locksmith/ui/kit.css` (crumbs, plain, inline-form, panel.form, switch moved out of the mockup CSS); all pages use kit classes (btn, panel, grid, list, state) and `Head`; org menu closes on Escape and outside click (test added).
+- Verified: tsc clean, `npm test --workspace apps/web` (50), web build OK. Evaluator: Sonnet FAIL (dead classes, fixed), then PASS.
+- Notes for next session: not yet seen in a browser; 6.4.3 (needs `just up && just web-e2e`, screenshots) and 6.1 caveats remain, then 6.5-6.6, 7.x.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Agent, AgentGrant, Client } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
 import { useQuery } from "@tanstack/react-query";
+import { Head } from "@locksmith/ui";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
@@ -19,17 +20,18 @@ export function Grants({ client, agent, onError }: { client: Client; agent: Agen
 
   return (
     <div aria-label={`Grants for ${agent.name}`}>
-      <ul>
+      <ul className="plain">
         {grants.map((g) => (
           <li key={g.id}>
             {g.secret_name} ({g.mode}) {g.expires_at ? `expires ${g.expires_at}` : "no expiry"}
-            <button onClick={() => void act(() => client.revokeGrant(agent.id, g.id))}>
+            <button className="btn sm quiet danger-text" onClick={() => void act(() => client.revokeGrant(agent.id, g.id))}>
               Revoke {g.secret_name}
             </button>
           </li>
         ))}
       </ul>
       <form
+        className="inline-form"
         onSubmit={(e) => {
           e.preventDefault();
           void act(async () => {
@@ -44,7 +46,7 @@ export function Grants({ client, agent, onError }: { client: Client; agent: Agen
       >
         <input aria-label={`Secret id for ${agent.name}`} required value={secretId} onChange={(e) => setSecretId(e.target.value.trim())} />
         <input aria-label={`Expiry for ${agent.name}`} type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} />
-        <button type="submit">Grant {agent.name}</button>
+        <button type="submit" className="btn sm primary">Grant {agent.name}</button>
       </form>
     </div>
   );
@@ -56,11 +58,11 @@ export function GrantsPage({ client }: { client: Client }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <section aria-label="Grants">
-      <h2>Grants</h2>
-      {error && <p role="alert">{error}</p>}
+      <Head title="Grants" />
+      {error && <p role="alert" className="state">{error}</p>}
       <QueryState query={q} empty="No agents yet, so no grants.">
         {(agents: Agent[]) => (
-          <ul>{agents.map((a) => <li key={a.id}><strong>{a.name}</strong><Grants client={client} agent={a} onError={setError} /></li>)}</ul>
+          <ul className="list">{agents.map((a) => <li key={a.id} className="row"><strong>{a.name}</strong><Grants client={client} agent={a} onError={setError} /></li>)}</ul>
         )}
       </QueryState>
     </section>

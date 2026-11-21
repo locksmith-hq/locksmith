@@ -1,3 +1,4 @@
+import { Head } from "@locksmith/ui";
 import { useEffect, useRef, useState } from "react";
 import { auditOutcomeMatches as auditMatches, type AuditOutcomeFilter as AuditFilter, type AuditEvent, type AuditStatus, type Client } from "@locksmith/control-plane-client";
 
@@ -42,10 +43,10 @@ export function Activity({ client }: { client: Client }) {
 
   return (
     <section aria-label="Audit">
-      <h2>Audit</h2>
-      {error && <p role="alert">{error}</p>}
+      <Head title="Activity" />
+      {error && <p role="alert" className="state">{error}</p>}
       {status && (
-        <div aria-label="Chain status">
+        <div aria-label="Chain status" className="panel">
           <p>Head seq: {status.head_seq}</p>
           <p>
             Latest checkpoint:{" "}
@@ -63,7 +64,7 @@ export function Activity({ client }: { client: Client }) {
         </select>
       </label>
       {!events ? (error ? null : <p>Reading the ledger…</p>) : events.length === 0 ? <p>No audit events yet.</p> : !events.some((e) => auditMatches(e, filter)) ? <p>No matching events{next ? " loaded yet" : ""}.</p> : (
-        <table>
+        <table className="grid">
           <thead>
             <tr><th>Seq</th><th>Time</th><th>Kind</th><th>Actor</th><th>Target</th><th>Outcome</th></tr>
           </thead>
@@ -76,7 +77,7 @@ export function Activity({ client }: { client: Client }) {
           </tbody>
         </table>
       )}
-      {next && <button disabled={loadingMore} onClick={more}>Load more</button>}
+      {next && <button className="btn" disabled={loadingMore} onClick={more}>Load more</button>}
     </section>
   );
 }

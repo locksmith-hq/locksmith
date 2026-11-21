@@ -93,3 +93,18 @@ test("Environments keeps the project being viewed (not the first), even after an
   await userEvent.click(screen.getByRole("button", { name: /Locksmith/ }));
   expect(screen.getByRole("menuitem", { name: "Locksmith" })).toBeInTheDocument();
 });
+
+test("org menu closes on Escape and on a click outside it", async () => {
+  installFixtureFetch();
+  window.history.pushState({}, "", "/overview");
+  render(<App auth={fakeAuth(signedIn)} />);
+  const toggle = await screen.findByRole("button", { name: /Locksmith/ });
+  await userEvent.click(toggle);
+  expect(screen.getByRole("menuitem", { name: "Locksmith" })).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}");
+  expect(screen.queryByRole("menuitem")).toBeNull();
+  await userEvent.click(toggle);
+  expect(screen.getByRole("menuitem", { name: "Locksmith" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("heading", { name: "Overview" }));
+  expect(screen.queryByRole("menuitem")).toBeNull();
+});

@@ -1,4 +1,5 @@
-//! Orgs: dev-only create, and get of the bound org.
+//! Orgs: dev-only create, and get of the bound org (by id, or as `current` for a caller that
+//! does not know its org id, such as the web console after sign-in).
 
 use axum::Json;
 use axum::extract::State;
@@ -94,6 +95,27 @@ pub async fn create(
     Ok(created(format!("/v1/orgs/{id}"), org))
 }
 
+/// `GET /v1/orgs/current`: the org the request is bound to. A human's org is resolved on the
+/// server from the verified user, so the console needs no org claim in the token to learn it.
+#[utoipa::path(
+    get,
+    path = "/v1/orgs/current",
+    operation_id = "get_current_org",
+    tag = "orgs",
+    summary = "Get the caller's org",
+    responses(
+        (status = 200, description = "OK", body = Org),
+        ReadErrors,
+    ),
+    security(("dev_org" = []))
+)]
+pub async fn get_current(
+    State(state): State<AppState>,
+    org: OrgBinding,
+) -> Result<Json<Org>, ApiError> {
+    Ok(Json(load(&state, org.org_id).await?))
+}
+
 /// `GET /v1/orgs/{org_id}`: only the bound org exists as far as a request can tell.
 #[utoipa::path(
     get,
@@ -116,9 +138,14 @@ pub async fn get_one(
     if org_id != org.org_id {
         return Err(ApiError::not_found());
     }
-    let row = state
+    Ok(Json(load(&state, org_id).await?))
+}
+
+/// The bound org's row, read inside its own tenant transaction.
+async fn load(state: &AppState, org_id: Uuid) -> Result<Org, ApiError> {
+    state
         .db()
-        .with_org(org.org_id, move |c| {
+        .with_org(org_id, move |c| {
             Box::pin(async move {
                 let row = sql::query(concat!("SELECT ", cols!(), " FROM orgs WHERE id = $1"))
                     .bind(org_id)
@@ -127,6 +154,5 @@ pub async fn get_one(
                 one(row, from_row)
             })
         })
-        .await?;
-    Ok(Json(row))
+        .await
 }

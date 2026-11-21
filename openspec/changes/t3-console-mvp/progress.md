@@ -104,4 +104,4 @@
 ## 2026-11-21 worker (josie, run 6)
 - Task: 6.4.3 - done (ticked). Live screenshots in `openspec/changes/t3-console-mvp/screenshots/`: `live-overview.png` and `live-projects.png` vs `mockup-overview.png` (the mockup is the Home product-card page; live Overview has the same frame: grouped sidebar, org switcher, user card; the Home card grid is not built).
 - Verified: `npm test --workspace apps/web` (50 passed), `npm run build --workspace apps/web` OK, `just up` + `just api` + `just web-e2e` (1 passed, leak check included).
-- Notes for next session: not independently evaluated this run (verification-only task). Live Overview uses plain bullet lists and default-blue links (Get started, Recent activity), unlike the mockup. Remaining: 6.1 caveats, 6.5-6.6, 7.x.
+- Notes for next session: independent Sonnet evaluator PASS (re-ran tests, build, e2e). Live Overview uses plain bullet lists and default-blue links (Get started, Recent activity), unlike the mockup. Remaining: 6.1 caveats, 6.5-6.6, 7.x.

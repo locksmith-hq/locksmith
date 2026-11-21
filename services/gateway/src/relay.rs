@@ -133,6 +133,9 @@ pub struct Relay {
     git: crate::git::GitState,
     /// Short-lived credentials issued over MCP (m1-remote-mcp task 3.3).
     short_lived: crate::short_lived::ShortLivedStore,
+    /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
+    /// honoured so a revoke takes effect here without waiting for `/mcp` traffic.
+    revoked_agents: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
 }
 
 impl Relay {
@@ -156,6 +159,39 @@ impl Relay {
             options,
             git: crate::git::GitState::default(),
             short_lived: crate::short_lived::ShortLivedStore::default(),
+            revoked_agents: None,
+        }
+    }
+
+    /// Check short-lived credentials against the agent MCP client registry (task 4.2): a
+    /// credential of a revoked agent is refused and the agent's credentials are dropped, and a
+    /// registry that cannot be read refuses every short-lived credential (fail closed). In
+    /// production the same cache `/mcp` reads ([`crate::mcp_clients::ClientsCache`]).
+    pub fn with_revoked_agents(
+        mut self,
+        clients: Arc<dyn crate::mcp_clients::AgentClients>,
+    ) -> Self {
+        self.revoked_agents = Some(clients);
+        self
+    }
+
+    /// Whether short-lived credentials of `agent_id` must be refused: its MCP access is revoked,
+    /// or the registry cannot be read. Drops the agent's credentials when it is revoked.
+    async fn short_lived_agent_revoked(&self, agent_id: Uuid) -> bool {
+        let Some(clients) = &self.revoked_agents else {
+            return false;
+        };
+        match clients.revoked().await {
+            Ok(set) if set.contains(&agent_id) => {
+                let dropped = self.short_lived.drop_agent(agent_id);
+                tracing::info!(agent.id = %agent_id, dropped, "revoked MCP agent: short-lived credentials dropped");
+                true
+            }
+            Ok(_) => false,
+            Err(_) => {
+                tracing::warn!("revoked MCP agents unreadable; short-lived credential refused");
+                true
+            }
         }
     }
 
@@ -423,6 +459,13 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
         });
     if let Some(scope) = short_lived {
         return match scope.filter(|s| s.org_id == relay.bindings.org_id) {
+            Some(s) if relay.short_lived_agent_revoked(s.agent_id).await => {
+                tracing::info!(
+                    reason = "short_lived_agent_revoked",
+                    "relay credential refused"
+                );
+                error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id)
+            }
             Some(s) => {
                 let agent = crate::auth::AgentIdentity {
                     agent_id: s.agent_id,
@@ -1191,10 +1234,10 @@ mod tests {
         if let Some(source) = setup.settings_source {
             mcp = mcp.with_settings_source(source);
         }
-        if let Some(clients) = setup.clients {
+        if let Some(clients) = setup.clients.clone() {
             mcp = mcp.with_clients(clients);
         }
-        let relay = Relay::new(
+        let mut relay = Relay::new(
             auth,
             Arc::new(cache),
             bindings,
@@ -1203,6 +1246,9 @@ mod tests {
             sink,
             setup.options,
         );
+        if let Some(clients) = setup.clients {
+            relay = relay.with_revoked_agents(clients);
+        }
         let relay = Arc::new(relay);
         let app = app::build(
             AppState::new(Arc::new(ReadyFlag::new(true)))

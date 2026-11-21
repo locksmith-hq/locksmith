@@ -236,3 +236,58 @@ async fn mcp_the_first_sighting_of_a_revoke_drops_credentials_even_when_another_
         0
     );
 }
+
+/// Mints a short-lived credential for `agent` straight into the store and returns it with the
+/// relay body that uses it against the upstream `/echo`.
+async fn minted(h: &Harness, agent: Uuid) -> (String, Value) {
+    Mock::given(method("GET"))
+        .and(path("/echo"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+        .mount(&h.upstream)
+        .await;
+    let t = time::OffsetDateTime::now_utc();
+    let m = h
+        .relay
+        .short_lived()
+        .mint(agent, ORG, SECRET, t + time::Duration::minutes(10), t)
+        .unwrap();
+    h.relay.short_lived().insert(&m, t).unwrap();
+    let body = json!({"secret_id": SECRET, "version": 1, "method": "GET",
+                      "url": format!("{}/echo", h.origin())});
+    use secrecy::ExposeSecret as _;
+    (m.token().expose_secret().to_owned(), body)
+}
+
+#[tokio::test]
+async fn mcp_revoke_refuses_short_lived_credentials_on_the_relay_without_any_mcp_traffic() {
+    let reg = Arc::new(Registry::default());
+    let h = with(&reg).await;
+    let (token, body) = minted(&h, AGENT).await;
+    let (status, _) = h.call(Some(&token), body.clone()).await;
+    assert_eq!(status, StatusCode::OK, "usable before the revoke");
+
+    reg.revoke(AGENT);
+    // No /mcp request in between: the relay itself reads the revoked set.
+    let (status, _) = h.call(Some(&token), body).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        h.relay.short_lived().live(time::OffsetDateTime::now_utc()),
+        0,
+        "the revoked agent's credentials were dropped"
+    );
+    assert_eq!(h.kms_calls().await, 1, "no key was used after the revoke");
+}
+
+#[tokio::test]
+async fn mcp_an_unreadable_registry_refuses_short_lived_credentials_on_the_relay() {
+    let reg = Arc::new(Registry::default());
+    let h = with(&reg).await;
+    let (token, body) = minted(&h, AGENT).await;
+    *reg.unreadable.lock().unwrap() = true;
+    let (status, _) = h.call(Some(&token), body.clone()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // Readable again (and not revoked): the credential still works.
+    *reg.unreadable.lock().unwrap() = false;
+    let (status, _) = h.call(Some(&token), body).await;
+    assert_eq!(status, StatusCode::OK);
+}

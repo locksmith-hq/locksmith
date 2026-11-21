@@ -136,7 +136,7 @@ async fn main() -> ExitCode {
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)
         .with_settings_source(tool_settings)
-        .with_clients(clients);
+        .with_clients(clients.clone());
     let binding_count = config.bindings.bindings.len();
     let relay = Relay::new(
         auth,
@@ -146,7 +146,9 @@ async fn main() -> ExitCode {
         Arc::new(SystemResolver),
         audit,
         RelayOptions::default(),
-    );
+    )
+    // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
+    .with_revoked_agents(clients);
 
     let router = app::build(
         AppState::new(readiness)

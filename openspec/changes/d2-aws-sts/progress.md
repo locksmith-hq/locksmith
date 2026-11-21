@@ -111,3 +111,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - finish PR (5.1/5.2 stay open, waiting on T3's shell per D2-1/D2-2)
 - Verified: merged origin/main (clean); no code change; PR #480 checks all green on previous head
 - Notes for next session: take 5.1/5.2 after t3-console-mvp (#489) lands, binding-list contract in `packages/api-types` first.
+
+## 2026-11-21 worker (josie)
+- Task: none - resolved PR #480 conflicts (merged origin/main, no file conflicts; p4-sdks and others landed)
+- Verified: `just quick`; no migration number clash (0014 is still last)
+- Notes for next session: 5.1/5.2 still wait on t3-console-mvp (#489); binding-list contract in `packages/api-types` first.

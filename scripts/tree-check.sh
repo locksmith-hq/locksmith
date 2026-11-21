@@ -32,8 +32,8 @@ done)
 if [ -d infra/tofu ]; then
   for d in infra/tofu/*/; do
     case "$(basename "$d")" in
-      guardrails|base|session|policy) ;;
-      *) echo "tree-check: unexpected infra/tofu directory (allowed: guardrails, base, session, policy): $d" >&2; fail=1 ;;
+      base|session|policy) ;;
+      *) echo "tree-check: unexpected infra/tofu directory (allowed: base, session, policy): $d" >&2; fail=1 ;;
     esac
   done
 fi

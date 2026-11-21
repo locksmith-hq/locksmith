@@ -2,3 +2,12 @@
 # Add private identifiers here (owner email, account IDs, private hostnames); never real secret values.
 [A-Za-z0-9._%+-]+@gmail\.com
 \.internal\.locksmith
+# AWS environment identifiers: real values belong in the private locksmith-cloud repo.
+\.awsapps\.com
+ssoins-[0-9a-f]{12,}
+\bd-[0-9a-f]{10}\b
+[0-9]{12}\.dkr\.ecr\.
+\.rds\.amazonaws\.com
+cognito-idp\.[a-z0-9-]+\.amazonaws\.com/[a-z0-9-]+_[A-Za-z0-9]{9}
+locksmith-tfstate-[0-9]{12}
+locksmith-dev-(artifacts|checkpoints)-[0-9]{12}

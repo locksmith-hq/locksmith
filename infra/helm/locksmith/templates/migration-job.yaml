@@ -1,0 +1,53 @@
+{{- if .Values.migration.enabled }}
+{{- $_ := include "locksmith.requireSecrets" . -}}
+{{- $n := include "locksmith.name" . -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $n }}-migrate
+  labels:
+    {{- include "locksmith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: locksmith
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- include "locksmith.pullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "locksmith.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "locksmith.image" (dict "img" .Values.images.controlPlane "root" .) | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- with .Values.migration.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "locksmith.containerSecurityContext" . | nindent 12 }}
+          env:
+            {{- include "locksmith.secretEnv" (dict "name" "DATABASE_URL" "secret" .Values.secrets.database.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "DATABASE_OWNER_URL" "secret" .Values.secrets.database.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "LOCKSMITH_GATEWAY_SERVICE_TOKEN" "secret" .Values.secrets.internal.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "LOCKSMITH_AGENT_SIGNING_KEY" "secret" .Values.secrets.internal.existingSecret) | nindent 12 }}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 32Mi}
+{{- end }}

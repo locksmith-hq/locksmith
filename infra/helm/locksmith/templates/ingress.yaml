@@ -1,0 +1,38 @@
+{{- if .Values.ingress.enabled }}
+{{- $n := include "locksmith.name" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $n }}
+  labels:
+    {{- include "locksmith.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ required "ingress.host is required" .Values.ingress.host | quote }}]
+      secretName: {{ required "ingress.tls.secretName is required" .Values.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ required "ingress.host is required" .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.gatewayPathPrefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $n }}-gateway
+                port: {name: http}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $n }}-control-plane
+                port: {name: http}
+{{- end }}

@@ -1,0 +1,12 @@
+# Optional TLS front for the self-host bundle (compose profile `tls`).
+# LOCKSMITH_DOMAIN defaults to localhost (Caddy's internal CA); a public name gets automatic
+# certificates. /internal/* (service-to-service, service token only) is never proxied.
+{$LOCKSMITH_DOMAIN:localhost} {
+	@internal path /internal/*
+	respond @internal 404
+
+	@gateway path /v1/relay* /v1/grants* /git/*
+	reverse_proxy @gateway gateway:8090
+
+	reverse_proxy control-plane:8080
+}

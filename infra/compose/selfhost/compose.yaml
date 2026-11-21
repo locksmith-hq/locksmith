@@ -1,0 +1,176 @@
+# Locksmith self-host bundle (P2 packaging). One command: `just selfhost-up` (bootstrap, then
+# `docker compose up --wait`). Every secret is generated on this host by bootstrap.sh into .env
+# (mode 0600); nothing here carries a fixed or dev-only value.
+#
+# KEY CUSTODY LABEL (containment, not prevention): the bundled OpenBao runs in production mode
+# (single node, on-disk raft storage, one unseal key). Its unseal key and root token sit in the separate
+# `openbao-keys` volume, which only the openbao service mounts. Anyone with root on this host can
+# read that volume and the data volume, so the bundle contains the blast radius of a leak in the
+# services; it does not protect against a hostile host. For stronger custody run your own OpenBao
+# and start with `bootstrap.sh --external-keys` (the bundled service then never starts).
+#
+# Profiles: bundled-keys (default, set in .env), tls (Caddy), demo-oidc (Keycloak, NOT for production).
+name: locksmith-selfhost
+
+x-hardening: &hardening
+  restart: unless-stopped
+  read_only: true
+  tmpfs: ["/tmp"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  postgres:
+    image: postgres:18.7
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: locksmith
+      POSTGRES_DB: locksmith
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run bootstrap.sh first}
+      # Read by postgres-init.sh on first start only: the three roles the migrations would
+      # otherwise create with fixed dev passwords.
+      LOCKSMITH_OWNER_PASSWORD: ${LOCKSMITH_OWNER_PASSWORD:?run bootstrap.sh first}
+      LOCKSMITH_APP_PASSWORD: ${LOCKSMITH_APP_PASSWORD:?run bootstrap.sh first}
+      LOCKSMITH_AUDIT_VERIFIER_PASSWORD: ${LOCKSMITH_AUDIT_VERIFIER_PASSWORD:?run bootstrap.sh first}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-locksmith-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U locksmith -d locksmith"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # Production mode, single node, on-disk (raft) storage. The entrypoint initialises once, unseals from the
+  # openbao-keys volume on every start, and creates the transit keys, policies and the three
+  # scoped tokens (ids come from .env). Healthy means initialised, unsealed and set up.
+  openbao:
+    profiles: [bundled-keys]
+    image: ${OPENBAO_IMAGE:-openbao/openbao:2.7.2}
+    restart: unless-stopped
+    init: true
+    # Root only for the entrypoint (volume ownership and the 0700 keys directory); the server and
+    # its files run as the image's openbao user via su-exec.
+    user: "0"
+    entrypoint: ["/bin/sh", "/openbao-entrypoint.sh"]
+    environment:
+      OPENBAO_CONTROL_PLANE_TOKEN: ${OPENBAO_CONTROL_PLANE_TOKEN:?run bootstrap.sh first}
+      OPENBAO_GATEWAY_TOKEN: ${OPENBAO_GATEWAY_TOKEN:?run bootstrap.sh first}
+      OPENBAO_AUDIT_CHECKPOINT_TOKEN: ${OPENBAO_AUDIT_CHECKPOINT_TOKEN:?run bootstrap.sh first}
+    volumes:
+      - openbao-data:/openbao/file
+      - openbao-keys:/openbao-keys
+      - ./openbao-entrypoint.sh:/openbao-entrypoint.sh:ro
+      - ./openbao.hcl:/openbao/config/config.hcl:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/openbao-ready && BAO_ADDR=http://127.0.0.1:8200 bao status >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 5s
+
+  control-plane:
+    image: ${LOCKSMITH_CONTROL_PLANE_IMAGE:-ghcr.io/locksmith-hq/locksmith-control-plane:${LOCKSMITH_VERSION:-latest}}
+    <<: *hardening
+    environment:
+      DATABASE_URL: postgres://locksmith_app:${LOCKSMITH_APP_PASSWORD:?run bootstrap.sh first}@postgres:5432/locksmith
+      # Same login as the bundled Postgres bootstrap user: migration 0008 creates a BYPASSRLS role
+      # when missing, which needs a superuser (the role is pre-created by postgres-init.sh).
+      DATABASE_OWNER_URL: postgres://locksmith:${POSTGRES_PASSWORD:?run bootstrap.sh first}@postgres:5432/locksmith
+      LOCKSMITH_GATEWAY_SERVICE_TOKEN: ${LOCKSMITH_GATEWAY_SERVICE_TOKEN:?run bootstrap.sh first}
+      LOCKSMITH_AGENT_SIGNING_KEY: ${LOCKSMITH_AGENT_SIGNING_KEY:?run bootstrap.sh first}
+      OPENBAO_ADDR: ${OPENBAO_ADDR:?run bootstrap.sh first}
+      OPENBAO_CONTROL_PLANE_TOKEN: ${OPENBAO_CONTROL_PLANE_TOKEN:?run bootstrap.sh first}
+      OPENBAO_AUDIT_CHECKPOINT_TOKEN: ${OPENBAO_AUDIT_CHECKPOINT_TOKEN:?run bootstrap.sh first}
+      # Any OIDC issuer works; all three empty means human sign-in is off. Public values only.
+      LOCKSMITH_OIDC_ISSUER: ${LOCKSMITH_OIDC_ISSUER:-}
+      LOCKSMITH_OIDC_AUDIENCE: ${LOCKSMITH_OIDC_AUDIENCE:-}
+      LOCKSMITH_OIDC_JWKS_URL: ${LOCKSMITH_OIDC_JWKS_URL:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports: ["127.0.0.1:${LOCKSMITH_API_PORT:-8080}:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      openbao: {condition: service_healthy, required: false}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  gateway:
+    image: ${LOCKSMITH_GATEWAY_IMAGE:-ghcr.io/locksmith-hq/locksmith-gateway:${LOCKSMITH_VERSION:-latest}}
+    <<: *hardening
+    environment:
+      DATABASE_URL: postgres://locksmith_app:${LOCKSMITH_APP_PASSWORD:?run bootstrap.sh first}@postgres:5432/locksmith
+      LOCKSMITH_CONTROL_PLANE_URL: http://control-plane:8080
+      LOCKSMITH_GATEWAY_SERVICE_TOKEN: ${LOCKSMITH_GATEWAY_SERVICE_TOKEN:?run bootstrap.sh first}
+      OPENBAO_ADDR: ${OPENBAO_ADDR:?run bootstrap.sh first}
+      OPENBAO_GATEWAY_TOKEN: ${OPENBAO_GATEWAY_TOKEN:?run bootstrap.sh first}
+      LOCKSMITH_GATEWAY_BINDINGS: /etc/locksmith/bindings.toml
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      # Org, origins and secret ids only, never values. bootstrap.sh writes a placeholder; edit it
+      # and run `docker compose restart gateway`.
+      - ${LOCKSMITH_BINDINGS_FILE:-./gateway-bindings.toml}:/etc/locksmith/bindings.toml:ro
+    ports: ["127.0.0.1:${LOCKSMITH_GATEWAY_PORT:-8090}:8090"]
+    depends_on:
+      control-plane: {condition: service_healthy}
+      openbao: {condition: service_healthy, required: false}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8090 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  # Optional TLS reverse proxy. Binds loopback by default; set LOCKSMITH_TLS_BIND_ADDR=0.0.0.0 and
+  # LOCKSMITH_DOMAIN to a public name for automatic certificates.
+  caddy:
+    profiles: [tls]
+    image: caddy:2.11.9
+    restart: unless-stopped
+    environment:
+      LOCKSMITH_DOMAIN: ${LOCKSMITH_DOMAIN:-localhost}
+    ports:
+      - "${LOCKSMITH_TLS_BIND_ADDR:-127.0.0.1}:${LOCKSMITH_HTTP_PORT:-80}:80"
+      - "${LOCKSMITH_TLS_BIND_ADDR:-127.0.0.1}:${LOCKSMITH_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      control-plane: {condition: service_healthy}
+      gateway: {condition: service_healthy}
+
+  # DEMO ONLY, NOT FOR PRODUCTION: Keycloak `start-dev` with the repo's dev realm, whose seeded
+  # users have fixed demo passwords. Point LOCKSMITH_OIDC_* at your own issuer instead.
+  keycloak:
+    profiles: [demo-oidc]
+    image: ${KEYCLOAK_IMAGE:-keycloak/keycloak:26.0.8}
+    restart: unless-stopped
+    labels:
+      com.locksmith.demo: "NOT FOR PRODUCTION"
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      KC_HOSTNAME: http://localhost:${LOCKSMITH_KEYCLOAK_PORT:-8180}
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes: ["../keycloak/locksmith-realm.json:/opt/keycloak/data/import/locksmith-realm.json:ro"]
+    ports: ["127.0.0.1:${LOCKSMITH_KEYCLOAK_PORT:-8180}:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+volumes:
+  pgdata:
+  openbao-data:
+  openbao-keys:
+  caddy-data:
+  caddy-config:

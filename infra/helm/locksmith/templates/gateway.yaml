@@ -1,0 +1,97 @@
+{{- $_ := include "locksmith.requireSecrets" . -}}
+{{- $n := include "locksmith.name" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $n }}-gateway-bindings
+  labels:
+    {{- include "locksmith.labels" . | nindent 4 }}
+data:
+  bindings.toml: |
+    {{- .Values.gateway.bindingsToml | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $n }}-gateway
+  labels:
+    {{- include "locksmith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  selector:
+    matchLabels:
+      {{- include "locksmith.selector" (dict "root" . "component" "gateway") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "locksmith.selector" (dict "root" . "component" "gateway") | nindent 8 }}
+      annotations:
+        checksum/bindings: {{ .Values.gateway.bindingsToml | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "locksmith.pullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- include "locksmith.podSecurityContext" . | nindent 8 }}
+      {{- with .Values.gateway.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.gateway.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: gateway
+          image: {{ include "locksmith.image" (dict "img" .Values.images.gateway "root" .) | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- include "locksmith.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: {{ .Values.gateway.port }}}
+          env:
+            - {name: LOCKSMITH_GATEWAY_BIND, value: {{ printf "0.0.0.0:%v" .Values.gateway.port | quote }}}
+            - {name: LOCKSMITH_CONTROL_PLANE_URL, value: {{ printf "http://%s-control-plane:%v" $n .Values.controlPlane.port | quote }}}
+            - {name: OPENBAO_ADDR, value: {{ .Values.keyProvider.address | quote }}}
+            - {name: LOCKSMITH_GATEWAY_BINDINGS, value: /etc/locksmith/bindings.toml}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ .Values.otlpEndpoint | quote }}}
+            - {name: RUST_LOG, value: {{ .Values.logLevel | quote }}}
+            {{- include "locksmith.secretEnv" (dict "name" "DATABASE_URL" "secret" .Values.secrets.database.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "LOCKSMITH_GATEWAY_SERVICE_TOKEN" "secret" .Values.secrets.internal.existingSecret) | nindent 12 }}
+            {{- include "locksmith.secretEnv" (dict "name" "OPENBAO_GATEWAY_TOKEN" "secret" .Values.secrets.keyProvider.existingSecret) | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 3
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: bindings, mountPath: /etc/locksmith, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}
+        - name: bindings
+          configMap:
+            name: {{ $n }}-gateway-bindings
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $n }}-gateway
+  labels:
+    {{- include "locksmith.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "locksmith.selector" (dict "root" . "component" "gateway") | nindent 4 }}
+  ports:
+    - {name: http, port: {{ .Values.gateway.port }}, targetPort: http}

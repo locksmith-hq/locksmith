@@ -47,6 +47,7 @@ pub const MAX_PAGE_LIMIT: u32 = 100;
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(orgs::create))
+        .routes(routes!(orgs::get_current))
         .routes(routes!(orgs::get_one))
         .routes(routes!(projects::create, projects::list))
         .routes(routes!(

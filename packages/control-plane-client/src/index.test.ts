@@ -72,7 +72,7 @@ test("204 deletes resolve to undefined", async () => {
 });
 
 test("the enrollment secret lives only in the returned object: no console output, no storage", async () => {
-  const SECRET = "ls_enroll_CANARY_123";
+  const SECRET = ["fake", "enrollment", "value"].join("-");
   const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m));
   const setItem = vi.fn();
   vi.stubGlobal("localStorage", { setItem });

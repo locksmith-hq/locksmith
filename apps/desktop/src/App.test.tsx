@@ -507,6 +507,16 @@ test("secrets: empty states and 403", async () => {
   await nav("Overview");
   await nav("Secrets");
   expect(await screen.findByRole("alert")).toHaveTextContent("Not allowed");
+  expect(screen.queryByText("No secrets in this environment.")).toBeNull();
+  // A failed first load offers Retry instead of the empty message, and Retry reloads.
+  const listSecrets = vi.fn().mockRejectedValueOnce(new ApiError(500, "boom")).mockResolvedValue([]);
+  cpClient({ listSecrets });
+  await nav("Overview");
+  await nav("Secrets");
+  await screen.findByRole("alert");
+  expect(screen.queryByText("No secrets in this environment.")).toBeNull();
+  await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("No secrets in this environment.")).toBeInTheDocument();
 });
 
 test("workload identities: list, prefix warning, create, delete with confirm, no secret rendered or requested", async () => {

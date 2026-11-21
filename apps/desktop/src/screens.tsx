@@ -900,17 +900,24 @@ function useCpList<T>(fn: () => Promise<T[]>, deps: unknown[]) {
   const [items, setItems] = useState<T[] | null>(null);
   const [err, setErr] = useState("");
   const load = useCallback(async () => {
-    try { setItems(await fn()); } catch (e) { setErr(cpErr(e)); setItems((cur) => cur ?? []); }
+    try { setItems(await fn()); } catch (e) { setErr(cpErr(e)); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
-  useEffect(() => { setItems(null); void load(); }, [load]);
+  useEffect(() => { setItems(null); setErr(""); void load(); }, [load]);
   /** Runs a mutation; a rejection is shown and rethrown-free so forms keep their input. */
   const run = async (f: () => Promise<unknown>) => {
     setErr("");
     try { await f(); } catch (e) { setErr(cpErr(e)); throw e; }
     await load();
   };
-  return { items, err, run };
+  /** A failed first load leaves items unset, so the screen shows the error and a Retry, never the empty message. */
+  const failed = items === null && err !== "";
+  const retry = () => { setErr(""); void load(); };
+  return { items, err, run, failed, retry };
+}
+
+function ListWait({ what, l }: { what: string; l: { failed: boolean; retry: () => void } }) {
+  return l.failed ? <button type="button" className="btn sm" onClick={l.retry}>Retry</button> : <Loading what={what} />;
 }
 
 /** Projects, and the environments of the selected project, from the control plane. */
@@ -929,7 +936,7 @@ function ProjectsView({ client }: { client: Client }) {
       <Head id="h-projects" title="Projects" sub="Projects hold environments, and environments hold secrets." />
       {ps.err && <Alert>{ps.err}</Alert>}
       <CreateForm label="project" onCreate={(n) => ps.run(() => client.createProject({ name: n }))} />
-      {!ps.items ? <Loading what="projects" /> : ps.items.length === 0 ? <Empty icon="key"><b>No projects yet.</b></Empty> : (
+      {!ps.items ? <ListWait what="projects" l={ps} /> : ps.items.length === 0 ? <Empty icon="key"><b>No projects yet.</b></Empty> : (
         <ul>
           {ps.items.map((p) => (
             <li key={p.id}>
@@ -946,7 +953,7 @@ function ProjectsView({ client }: { client: Client }) {
           <div className="sec-h spaced"><h2>Environments of {sel.name}</h2></div>
           {es.err && <Alert>{es.err}</Alert>}
           <CreateForm label="environment" onCreate={(n) => es.run(() => client.createEnvironment(sel.id, { name: n }))} />
-          {!es.items ? <Loading what="environments" /> : es.items.length === 0 ? <Empty icon="key"><b>No environments yet.</b></Empty> : (
+          {!es.items ? <ListWait what="environments" l={es} /> : es.items.length === 0 ? <Empty icon="key"><b>No environments yet.</b></Empty> : (
             <ul>
               {es.items.map((e) => (
                 <li key={e.id}>
@@ -984,7 +991,7 @@ function SecretsView({ client }: { client: Client }) {
     <section className="screen" aria-labelledby="h-secrets">
       <Head id="h-secrets" title="Secrets" sub="Metadata only. Secret values never leave the vault and are not shown here." />
       {(ps.err || es.err || ss.err) && <Alert>{ps.err || es.err || ss.err}</Alert>}
-      {!ps.items ? <Loading what="projects" /> : ps.items.length === 0 ? <Empty icon="key"><b>No projects yet, so no secrets.</b></Empty> : (
+      {!ps.items ? <ListWait what="projects" l={ps} /> : ps.items.length === 0 ? <Empty icon="key"><b>No projects yet, so no secrets.</b></Empty> : (
         <>
           <label>Project{" "}
             <select aria-label="Project" value={project} onChange={(e) => { setPid(e.target.value); setEid(""); setOpen(null); }}>
@@ -998,7 +1005,7 @@ function SecretsView({ client }: { client: Client }) {
               </select>
             </label>
           )}
-          {env && (!ss.items ? <Loading what="secrets" /> : ss.items.length === 0 ? <Empty icon="key">No secrets in this environment.</Empty> : (
+          {env && (!ss.items ? <ListWait what="secrets" l={ss} /> : ss.items.length === 0 ? <Empty icon="key">No secrets in this environment.</Empty> : (
             <ul>
               {ss.items.map((s) => (
                 <li key={s.id}>

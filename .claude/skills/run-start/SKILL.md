@@ -10,7 +10,7 @@ description: Start of every scheduled Locksmith agent run. Runs preflight (docke
    - Fix every `FAIL` before doing real work.
    - Record each `WARN` or `FAIL` line, and each `FIXED` except docker (expected), as `friction` (format: `run-log` skill).
 2. Read the active lessons the script prints at the end, and follow them. Also read `docs/agents/owner.md`: those are the owner's standing decisions.
-3. If you work on an existing `claude/change-<id>` branch and `git rev-list --count HEAD..origin/main` is not 0, run `git merge --no-edit origin/main` before the baseline `just ci`. Never rebase a pushed branch. If the merge conflicts in a way you can't resolve cleanly, run `git merge --abort` and record it as friction.
+3. If you work on an existing `claude/change-<id>` branch and `git rev-list --count HEAD..origin/main` is not 0, run `git merge --no-edit origin/main` before any work. Never rebase a pushed branch. If the merge conflicts in a way you can't resolve cleanly, run `git merge --abort` and record it as friction.
 
 ## Gotchas (cloud VM, observed 2026-11-16)
 - `ghcr.io` returns 403 even though the docs allow it. Use Docker Hub images, for example `openbao/openbao:2.7.2`.

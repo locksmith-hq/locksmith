@@ -9,6 +9,8 @@ import { Activity } from "./pages/Activity";
 import { Secrets } from "./pages/Secrets";
 import { Overview } from "./pages/Overview";
 import { Projects } from "./pages/Projects";
+import { McpTools } from "./pages/McpTools";
+import { McpClients } from "./pages/McpClients";
 import { EmptyPage } from "./pages/EmptyPage";
 import "./shell.css";
 
@@ -16,6 +18,7 @@ const NAV: ReadonlyArray<{ heading?: string; items: ReadonlyArray<readonly [path
   { items: [["overview", "Home"]] },
   { heading: "Secret Management", items: [["projects", "Projects"], ["environments", "Environments"], ["secrets", "Secrets"]] },
   { heading: "Agent Gateway", items: [["agents", "Agents"], ["grants", "Grants"]] },
+  { heading: "MCP", items: [["tools", "Tools"], ["clients", "Clients"]] },
   { items: [["activity", "Activity"]] },
 ];
 
@@ -50,6 +53,8 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
           <Route path="environments" element={<EmptyPage title="Environments" note="Environments belong to a project: open a project to manage its environments." />} />
           <Route path="agents" element={<Agents client={client} />} />
           <Route path="grants" element={<GrantsPage client={client} />} />
+          <Route path="tools" element={<McpTools client={client} />} />
+          <Route path="clients" element={<McpClients client={client} />} />
           <Route path="activity" element={<Activity client={client} />} />
           <Route path="*" element={<EmptyPage title="Not found" />} />
         </Routes>

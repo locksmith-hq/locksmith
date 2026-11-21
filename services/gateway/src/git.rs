@@ -421,6 +421,7 @@ fn git_event(
         port: binding.port,
         status,
         attempt_id: None,
+        issued: None,
     }
 }
 

@@ -17,8 +17,8 @@ Repeatable procedures live as skills in `.claude/skills/`, each with scripts. Us
 - `run-start`
 - `long-commands`
 - `evaluate-escalate`
+- `finish-pr`
 - `run-log`
-- `merge-queue`
 - `merge-review` (runs in GitHub Actions)
 - `archive-change`
 
@@ -28,4 +28,4 @@ Repeatable procedures live as skills in `.claude/skills/`, each with scripts. Us
 - `/opsx:archive <id>` archives one, or use the `archive-change` skill.
 
 ## GitHub
-Write `@claude` in any PR or issue comment to get Claude to help through GitHub Actions. PRs labelled `ready-to-merge` get an automatic Opus merge review.
+Write `@claude` in any PR or issue comment to get Claude to help through GitHub Actions. PRs with auto-merge enabled get an automatic Opus merge review (the required `merge-ready` check; `docs/agents/merge.md`).

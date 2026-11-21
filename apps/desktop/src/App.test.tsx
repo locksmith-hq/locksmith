@@ -508,3 +508,71 @@ test("secrets: empty states and 403", async () => {
   await nav("Secrets");
   expect(await screen.findByRole("alert")).toHaveTextContent("Not allowed");
 });
+
+const mcpTool = (layer: string, tool: string, def: boolean, enabled: boolean) => ({ layer, tool, description: `${tool} desc.`, default_enabled: def, enabled, overridden: def !== enabled });
+const mcpClient = (id: string, name: string, revoked: string | null = null) => ({ id, layer: "hub", client_id: `cid-${id}`, principal: "user-1", client_name: name, first_seen_at: "t", last_seen_at: "2026-01-02T00:00:00Z", revoked_at: revoked });
+
+test("mcp tools: one switch per tool by layer, saves a change, shows an error when refused", async () => {
+  const client = {
+    listMcpTools: vi.fn().mockResolvedValue([mcpTool("hub", "list_projects", true, true), mcpTool("hub", "revoke_grant", false, false), mcpTool("agent", "relay_http_request", true, true)]),
+    setMcpTool: vi.fn().mockResolvedValueOnce(mcpTool("hub", "revoke_grant", false, true)).mockRejectedValueOnce(new Error("Forbidden")),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  render(<App />);
+  await nav("MCP tools");
+  const sw = await screen.findByRole("switch", { name: "revoke_grant (hub)" });
+  expect(sw).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "relay_http_request (agent)" })).toBeChecked();
+  await userEvent.click(sw);
+  await waitFor(() => expect(screen.getByRole("switch", { name: "revoke_grant (hub)" })).toBeChecked());
+  expect(client.setMcpTool).toHaveBeenCalledWith("hub", "revoke_grant", true);
+  await userEvent.click(screen.getByRole("switch", { name: "list_projects (hub)" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  expect(screen.getByRole("switch", { name: "list_projects (hub)" })).toBeChecked();
+});
+
+test("mcp tools: 403, empty and not-connected states", async () => {
+  m.agentsClient.mockReturnValue({ listMcpTools: vi.fn().mockRejectedValue(new Error("Forbidden")) } as never);
+  const r = render(<App />);
+  await nav("MCP tools");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  expect(screen.queryByRole("switch")).toBeNull();
+  r.unmount();
+  m.agentsClient.mockReturnValue({ listMcpTools: vi.fn().mockResolvedValue([]) } as never);
+  const r2 = render(<App />);
+  await nav("MCP tools");
+  expect(await screen.findByText("No MCP tools.")).toBeInTheDocument();
+  r2.unmount();
+  m.agentsClient.mockReturnValue(null as never);
+  render(<App />);
+  await nav("MCP tools");
+  expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
+});
+
+test("mcp clients: lists, revokes an active client, and shows 403 and empty states", async () => {
+  const client = {
+    listMcpClients: vi.fn().mockResolvedValue([mcpClient("c1", "Claude"), mcpClient("c2", "", "2026-01-03T00:00:00Z")]),
+    revokeMcpClient: vi.fn().mockResolvedValue(mcpClient("c1", "Claude", "2026-01-04T00:00:00Z")),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  const r = render(<App />);
+  await nav("MCP clients");
+  expect(await screen.findByText("Claude")).toBeInTheDocument();
+  expect(screen.getByText(/Revoked 2026-01-03/)).toBeInTheDocument();
+  const tbl = within(screen.getByRole("table"));
+  expect(tbl.getAllByRole("button", { name: /^Revoke / })).toHaveLength(1);
+  await userEvent.click(screen.getByRole("button", { name: "Revoke Claude" }));
+  expect(client.revokeMcpClient).toHaveBeenCalledWith("c1");
+  expect(await screen.findByText(/Revoked 2026-01-04/)).toBeInTheDocument();
+  expect(within(screen.getByRole("table")).queryByRole("button", { name: /^Revoke / })).toBeNull();
+  r.unmount();
+  m.agentsClient.mockReturnValue({ listMcpClients: vi.fn().mockRejectedValue(new Error("Forbidden")) } as never);
+  const r2 = render(<App />);
+  await nav("MCP clients");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  r2.unmount();
+  m.agentsClient.mockReturnValue({ listMcpClients: vi.fn().mockResolvedValue([]) } as never);
+  render(<App />);
+  await nav("MCP clients");
+  expect(await screen.findByText(/No MCP clients have signed in yet/)).toBeInTheDocument();
+});

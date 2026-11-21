@@ -8,7 +8,7 @@ Skip idle passes. Window: since the newest `lead` agent-log comment not `answere
 For each issue from `bash scripts/owner-replies.sh` (recheck before acting), read the thread:
 - **Not approved:** reply with a revised plan or questions; keep the current plan in the issue body and keep `needs-owner`.
 - **Owner must act again:** update the body's `Action:`; remove and re-add `needs-owner`.
-- **Approved:** apply it, marked ready: OpenSpec edits and `x-priority` on `claude/planning-<date>` (merge-gate exempts only `openspec/changes/`); roadmap order and a line in `owner.md` or `openspec/decisions.md` on `claude/lead-<date>`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
+- **Approved:** apply it, auto-merged: OpenSpec edits and `x-priority` on `claude/planning-<date>` roadmap order and a line in `owner.md` or `openspec/decisions.md` on `claude/lead-<date>`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
 
 A wake does only what it names (reply, rescue, debate) and open rescues; outcome `answered`.
 
@@ -16,7 +16,7 @@ A wake does only what it names (reply, rescue, debate) and open rescues; outcome
 Take the oldest open `needs-rescue` issue whose change you can lock (`run-lock.sh acquire lead-<session> <id>`; busy: next; release at end). One per run (~45m).
 - Read the issue, change docs, last 5 progress entries and CI logs; reproduce the cause.
 - **`Rescue:`** fix via `evaluate-escalate`, Opus evaluator. **`Decision:`** decide with evidence in `design.md`; owner matters go on (`common.md`).
-- **PASS:** tick the task, add a `rescue` progress entry (cause, fix, verification), close the issue, mark ready if complete.
+- **PASS:** tick the task, add a `rescue` progress entry (cause, fix, verification), close the issue, finish the PR if complete.
 - **Wrong task text:** fix on `claude/planning-<id>-tasks` with evidence.
 - **FAIL** (both attempts): comment `rescue-attempt` and add `needs-owner` now.
 - **Agent-system fix:** only for red main, a security fix or every run failing, on `claude/hotfix-<date>`; otherwise comment it on the `harness-backlog` issue.
@@ -38,4 +38,4 @@ Close each `for-lead` issue with what you did.
 Quality work never adds `needs-rescue` or `needs-owner`.
 
 ## Ship
-Run `just ci` (docs-only diff: `just tree-check task-guard`). Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); add `ready-to-merge` (`merge-queue` skill). Then, every run (idle too), run `bash scripts/issues-sync.sh` (issues and board follow main); log a failure. Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.
+Run `just quick` (docs-only diff: `just tree-check task-guard`). Push each branch once; one PR per branch, a section per fix (evidence, cause, change, metric); finish it (`finish-pr`; also stuck worker PRs). Then, every run (idle too), run `bash scripts/issues-sync.sh` (issues and board follow main); log a failure. Use the `run-log` skill; outcome `rescued`, `reviewed` or `idle`.

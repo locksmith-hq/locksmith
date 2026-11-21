@@ -19,6 +19,9 @@ export type NewEnvironment = components["schemas"]["NewEnvironment"];
 export type Secret = components["schemas"]["Secret"];
 export type SecretVersion = components["schemas"]["SecretVersion"];
 export type Patch = components["schemas"]["Patch"];
+export type McpLayer = components["schemas"]["McpLayer"];
+export type McpToolSetting = components["schemas"]["McpToolSetting"];
+export type McpClient = components["schemas"]["McpClient"];
 export type Problem = components["schemas"]["Problem"];
 
 /** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
@@ -56,6 +59,14 @@ export interface Client {
   listSecrets(projectId: string, envId: string): Promise<Secret[]>;
   getSecret(projectId: string, envId: string, secretId: string): Promise<Secret>;
   listSecretVersions(projectId: string, envId: string, secretId: string): Promise<SecretVersion[]>;
+  /** Every MCP tool of both layers with its default and the org's switch. */
+  listMcpTools(): Promise<McpToolSetting[]>;
+  /** Turn one MCP tool on or off. Enforced server-side: a client cannot list or call an off tool. */
+  setMcpTool(layer: McpLayer, tool: string, enabled: boolean): Promise<McpToolSetting>;
+  /** MCP clients that signed in, revoked ones included. */
+  listMcpClients(): Promise<McpClient[]>;
+  /** Revoke a client by its row `id` (not the OAuth `client_id`). Idempotent. */
+  revokeMcpClient(id: string): Promise<McpClient>;
 }
 
 /**
@@ -128,6 +139,11 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     listSecrets: (pid, eid) => all<Secret>(`${env(pid, eid)}/secrets`),
     getSecret: (pid, eid, sid) => req("GET", sec(pid, eid, sid)),
     listSecretVersions: async (pid, eid, sid) => (await req<{ items: SecretVersion[] }>("GET", `${sec(pid, eid, sid)}/versions`)).items,
+    listMcpTools: async () => (await req<{ items: McpToolSetting[] }>("GET", "/v1/mcp/tools")).items,
+    setMcpTool: (layer, tool, enabled) =>
+      req("PUT", `/v1/mcp/tools/${layer}/${encodeURIComponent(tool)}`, { enabled }),
+    listMcpClients: () => all<McpClient>("/v1/mcp/clients"),
+    revokeMcpClient: (id) => req("POST", `/v1/mcp/clients/${encodeURIComponent(id)}/revoke`),
     revokeGrant: (id, g) => req("DELETE", `${a(id)}/grants/${encodeURIComponent(g)}`),
   };
 }

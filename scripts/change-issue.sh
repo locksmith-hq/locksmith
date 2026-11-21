@@ -14,7 +14,9 @@ lookup() { gh api "repos/$repo/issues?labels=change&state=all&per_page=100" \
 n=$(lookup)
 if [ -z "$n" ]; then
   [ "${2:-}" = --find ] && exit 1
-  title=$(sed -nE '1s/^# *(Proposal: *)?//p' "openspec/changes/$id/proposal.md" 2>/dev/null)
+  # A typo once created a bogus issue (#501): the id must be a change directory or a roadmap id.
+  [ -d "openspec/changes/$id" ] || grep -qF "\`$id\`" docs/roadmap.md || { echo "change-issue: unknown change id '$id'" >&2; exit 1; }
+  title=$(sed -nE '/^# /{s/^# *(Proposal: *)?//p;q;}' "openspec/changes/$id/proposal.md" 2>/dev/null)
   mine=$(gh api "repos/$repo/issues" -f title="$id: ${title:-$id}" -f 'labels[]=change' \
     -f body="Status page for OpenSpec change \`$id\`. Kept current by the change-sync workflow." -q .number) || exit 1
   # New issues reach the list API after a few seconds; wait until ours shows, then take the lowest.

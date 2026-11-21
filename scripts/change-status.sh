@@ -8,6 +8,8 @@
 #              escalated it with needs-owner), or an open needs-owner-only issue names it and the next unticked
 #              task is a `Gate:` task (detail: owner #n). Owner gates go last, so they block only their own tasks (#470).
 #   claimed    another worker holds the change lock (detail: holder)
+#   owned      another agent App opened the change's PR (detail: its login); only that author continues it
+#              (owner 2026-11-20). The caller is AGENT_PERSONA's App; without one, every App-owned PR counts.
 #   review     every task ticked on the branch; waiting for the merge queue
 #   finished   every task ticked on main but not archived
 # Usage: scripts/change-status.sh [--ready|--plannable]
@@ -66,6 +68,9 @@ blockers=""
 # One line per open blocker issue: "<number> <kind> <title and body on one line>"; kind is owner (escalated
 # rescue: both labels), rescue, or gate (needs-owner only).
 # shellcheck disable=SC2016 # jq variables
+AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
+me=${AGENT_PERSONA:+locksmith-$AGENT_PERSONA[bot]}
+pr_authors=""; [ "${OFFLINE:-0}" = 1 ] || pr_authors=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[]|[.head.ref, .user.login]|@tsv' 2>/dev/null)
 [ "${OFFLINE:-0}" = 1 ] || blockers=$(gh api "repos/$repo/issues?state=open&per_page=100" \
   -q '.[]|select(any(.labels[]; .name=="needs-owner" or .name=="needs-rescue"))
     |(any(.labels[]; .name=="needs-owner")) as $o | (any(.labels[]; .name=="needs-rescue")) as $r
@@ -99,6 +104,10 @@ for id in $ids; do
     if [ "$state" = ready ] || [ "$state" = stackable ] && [ "${OFFLINE:-0}" != 1 ]; then
       h=$(bash scripts/run-lock.sh holder "status-check" "$id" 2>/dev/null)
       [ -n "$h" ] && { state=claimed; detail="$h"; }
+    fi
+    if { [ "$state" = ready ] || [ "$state" = stackable ]; } && [ "${OFFLINE:-0}" != 1 ]; then
+      a=$(awk -F'\t' -v b="claude/change-$id" '$1==b{print $2; exit}' <<<"$pr_authors")
+      [[ "$a" == *"[bot]" ]] && [ "$a" != "$me" ] && { state=owned; detail="$a"; }
     fi
   fi
   if [ "$only_ready" = 1 ]; then

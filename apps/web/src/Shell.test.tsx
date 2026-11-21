@@ -78,14 +78,18 @@ test("frame: org switcher in the top bar, user card holds sign-out, Environments
   expect(screen.getByRole("link", { name: "All projects" })).toBeInTheDocument();
 });
 
-test("Environments keeps the project being viewed, and the org switcher opens a menu", async () => {
+test("Environments keeps the project being viewed (not the first), even after another page", async () => {
   installFixtureFetch();
-  window.history.pushState({}, "", "/projects/00000000-0000-4000-8000-000000000001");
+  const res = await fetch("/v1/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "second" }) });
+  const second = (await res.json()) as { id: string };
+  window.history.pushState({}, "", `/projects/${second.id}`);
   render(<App auth={fakeAuth(signedIn)} />);
-  expect(await screen.findByText("dev")).toBeInTheDocument();
+  await screen.findByRole("heading", { name: "Environments" });
+  await userEvent.click(screen.getByRole("link", { name: "Secrets" }));
+  await screen.findByRole("heading", { name: "Secrets" });
   await userEvent.click(screen.getByRole("link", { name: "Environments" }));
-  expect(await screen.findByText("dev")).toBeInTheDocument();
-  expect(window.location.pathname).toBe("/projects/00000000-0000-4000-8000-000000000001");
+  await screen.findByRole("heading", { name: "Environments" });
+  expect(window.location.pathname).toBe(`/projects/${second.id}`);
   await userEvent.click(screen.getByRole("button", { name: /Locksmith/ }));
   expect(screen.getByRole("menuitem", { name: "Locksmith" })).toBeInTheDocument();
 });

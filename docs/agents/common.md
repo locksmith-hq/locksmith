@@ -15,7 +15,7 @@ Procedures are skills in `.claude/skills/` (load one only when needed); the key 
 - Every comment an agent posts starts with `<!-- agent -->`. Each routine posts as its own GitHub App (`docs/agents/routing.json` maps logins to roles).
 
 ## Budget
-- **CI.** Verify locally with `just ci` before pushing; CI runs the same recipes on every PR.
+- **CI.** Run `just quick` locally, never `just ci` (even if tasks say so): PR checks run it.
 - **Tokens.** Read only what the current step needs. Use the `long-commands` skill for anything slow or flaky.
 
 ## Help: only the lead (and the optimizer) asks the owner

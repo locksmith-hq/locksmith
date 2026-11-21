@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-20
+# Roadmap row P4 Needs "m1-remote-mcp:contract" (its group 1 is ticked on claude/change-m1-remote-mcp).
+x-depends_on: [m1-remote-mcp:contract]

@@ -390,10 +390,22 @@ mod tests {
     #[test]
     fn issuer_host_parses_names_ports_and_ipv6() {
         let host = |s: &str| issuer_host(s).map(|h| h.as_str().to_owned());
-        assert_eq!(host("https://Issuer.Example.com/realms/x"), Some("issuer.example.com".into()));
-        assert_eq!(host("https://token.actions.githubusercontent.com"), Some("token.actions.githubusercontent.com".into()));
-        assert_eq!(host("http://localhost:8080/realms/ls"), Some("localhost".into()));
-        assert_eq!(host("https://user@idp.example:8443/x?y#z"), Some("idp.example".into()));
+        assert_eq!(
+            host("https://Issuer.Example.com/realms/x"),
+            Some("issuer.example.com".into())
+        );
+        assert_eq!(
+            host("https://token.actions.githubusercontent.com"),
+            Some("token.actions.githubusercontent.com".into())
+        );
+        assert_eq!(
+            host("http://localhost:8080/realms/ls"),
+            Some("localhost".into())
+        );
+        assert_eq!(
+            host("https://user@idp.example:8443/x?y#z"),
+            Some("idp.example".into())
+        );
         assert_eq!(host("https://[::1]:8443/realms/ls"), Some("[::1]".into()));
         assert_eq!(host("not a url"), None);
         assert_eq!(host(""), None);

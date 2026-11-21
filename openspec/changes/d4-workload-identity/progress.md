@@ -96,3 +96,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 ## 2026-11-21 worker (C), eleventh run
 - Tasks: 4.3 and 7.1 done. Verified: `cargo nextest run -p ls-control-plane workload_abuse` 14 passed; `bash tests/adversarial/run.sh all` 9 passed, 1 skipped (aws CLI absent); `just workload-smoke` (needs `just workload-smoke-api`) passed; `just leak-scan` clean; `just quick` ok. Sonnet implemented 7.1.
 - Remaining: 7.2 only (its `just ci` step is run by the PR's required checks, not locally); tick it once CI is green.
+
+## 2026-11-21 14:54 worker
+- Task: PR conflict - ci-fix (merged origin/main; .gitignore kept both sides)
+- Verified: just quick -> ok
+- Notes for next session: only 7.2 (just up/workload-smoke/apps-build/ci) remains unticked; needs docker stack run, then archive + auto-merge.

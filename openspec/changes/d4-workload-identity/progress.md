@@ -92,3 +92,7 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: d4 - ci-fix (PR #530 had conflicts with main)
 - Verified: merged origin/main; renumbered migration to 0013 (main took 0012 mcp); tenancy counts updated (13 migrations, 17 policies); `just quick` ok; `cargo test -p ls-control-plane --no-fail-fast` all green except log-capture tests (agents enrollment, human_auth span, workload_exchange canary) that flake under parallel runs; agents one also fails on main.
 - Notes for next session: remaining 4.3, 7.1, 7.2 (need `just up`); auto-merge not enabled yet.
+
+## 2026-11-21 worker (C), eleventh run
+- Tasks: 4.3 and 7.1 done. Verified: `cargo nextest run -p ls-control-plane workload_abuse` 14 passed; `bash tests/adversarial/run.sh all` 9 passed, 1 skipped (aws CLI absent); `just workload-smoke` (needs `just workload-smoke-api`) passed; `just leak-scan` clean; `just quick` ok. Sonnet implemented 7.1.
+- Remaining: 7.2 only (its `just ci` step is run by the PR's required checks, not locally); tick it once CI is green.

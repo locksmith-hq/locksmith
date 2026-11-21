@@ -21,7 +21,7 @@
 ## 4. Abuse limits and adversarial cases [sonnet]
 - [x] 4.1 `jti` replay cache (decision 6; resolve the `[verify]` OSS item first) and per-policy plus per-source rate limits with config defaults.
 - [x] 4.2 Add cases to `tests/adversarial/`: forged `iss` pointing at an attacker host (no outbound call), `jku` header ignored, token for another audience, replayed `jti`, policy handle for another org, canary external token absent from logs, traces and ledger.
-- [ ] 4.3 Verify: `cargo nextest run -p ls-control-plane workload_abuse`, `bash tests/adversarial/run.sh`, `just leak-scan`.
+- [x] 4.3 Verify: `cargo nextest run -p ls-control-plane workload_abuse`, `bash tests/adversarial/run.sh`, `just leak-scan`.
 
 ## 5. CLI and GitHub Action [sonnet]
 - [x] 5.1 `smith login --workload github|kubernetes` with `--policy` / `LOCKSMITH_WORKLOAD_POLICY`: fetch the external token (runner request variables with `audience`; projected token file), exchange, write only the agent token via the existing `agent.json` path; token in `secrecy` types, never in argv, output or disk.
@@ -35,5 +35,5 @@
 - [x] 6.3 Verify: `npm test --workspace apps/web` and `just apps-build`.
 
 ## 7. Local verification [sonnet]
-- [ ] 7.1 `just workload-smoke` recipe and `tests/e2e/tests/workload.rs`: start the stack, serve a stub GitHub-shaped issuer, create an agent, grant and a workload policy through the API, run `smith login --workload github` against the stub runner endpoint, relay a request to the canary upstream, assert the upstream saw the secret and the workload held no Locksmith secret; then assert a non-matching `ref` and a revoked grant are refused.
+- [x] 7.1 `just workload-smoke` recipe and `tests/e2e/tests/workload.rs`: start the stack, serve a stub GitHub-shaped issuer, create an agent, grant and a workload policy through the API, run `smith login --workload github` against the stub runner endpoint, relay a request to the canary upstream, assert the upstream saw the secret and the workload held no Locksmith secret; then assert a non-matching `ref` and a revoked grant are refused.
 - [ ] 7.2 `just up`, `just workload-smoke`, `just apps-build`, then `just ci`.

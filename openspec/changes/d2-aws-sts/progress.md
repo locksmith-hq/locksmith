@@ -69,3 +69,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-21 merge (origin/main into the branch)
 - Task: none - merged origin/main (m1-remote-mcp). Renumbered this change's migration `0012_grant_delegate.sql` to `0013_grant_delegate.sql` (main's `0012_mcp.sql` keeps 12) and the AWS adversarial case `G9` to `G11` (main's agent MCP case is `G9`, hub MCP `G10`). Kept both sides' audit kinds (`aws.credentials.*`, `credential.issued`), attrs, gateway config and relay options.
+
+## 2026-11-21 worker C
+- Task: CI fix (hygiene and web red on 377446cf: `just` recipe `aws-smoke` defined twice once main's P1 recipe (`aws-smoke`, real-AWS session smoke) merged) - done
+- Verified: `just --list` parses with both recipes; `just quick` -> see push
+- Notes for next session: D2's local moto smoke is now `just aws-vend-smoke` (P1 owns `just aws-smoke`). tasks.md 7.1/7.2 text still says `just aws-smoke` and cannot be edited; read it as `aws-vend-smoke`.

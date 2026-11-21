@@ -87,6 +87,12 @@ enum Cmd {
         /// Apply every change without asking (CI).
         #[arg(long)]
         yes: bool,
+        /// Also add the remote Hub MCP server (`<URL>/mcp`, OAuth) for agents that support it.
+        #[arg(long, value_name = "URL")]
+        hub: Option<String>,
+        /// Print the planned changes and exit without writing anything.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Agent hook entry point: `smith hook <agent> <event>` reads the hook JSON on stdin.
     Hook { agent: String, event: String },
@@ -226,7 +232,12 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
                 ExitCode::Ok
             })
         }
-        Some(Cmd::Init { binding_only, yes }) => init_cmd::run(&ro, binding_only, yes),
+        Some(Cmd::Init {
+            binding_only,
+            yes,
+            hub,
+            dry_run,
+        }) => init_cmd::run(&ro, binding_only, yes, hub.as_deref(), dry_run),
         Some(Cmd::Login(a)) => connector::login(cli.json, a),
         Some(Cmd::Grants) => connector::grants(cli.json),
         Some(Cmd::Relay(a)) => connector::relay(cli.json, a),

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "locksmith-hub": {
+      "oauth": {
+        "clientId": "locksmith-mcp"
+      },
+      "type": "http",
+      "url": "https://hub.example/mcp"
+    }
+  }
+}

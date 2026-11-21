@@ -3,8 +3,13 @@
     "postgres": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm", "--network", "host",
-        "-e", "DATABASE_URI=postgresql://${POSTGRES_USER:-locksmith}:${POSTGRES_PASSWORD:-locksmith-dev-only}@127.0.0.1:5432/${POSTGRES_DB:-locksmith}",
+        "run",
+        "-i",
+        "--rm",
+        "--network",
+        "host",
+        "-e",
+        "DATABASE_URI=postgresql://${POSTGRES_USER:-locksmith}:${POSTGRES_PASSWORD:-locksmith-dev-only}@127.0.0.1:5432/${POSTGRES_DB:-locksmith}",
         "crystaldba/postgres-mcp:0.3.0",
         "--access-mode=restricted"
       ]
@@ -12,11 +17,30 @@
     "grafana": {
       "command": "docker",
       "args": [
-        "run", "-i", "--rm", "--network", "host",
-        "-e", "GRAFANA_URL=http://127.0.0.1:3000",
+        "run",
+        "-i",
+        "--rm",
+        "--network",
+        "host",
+        "-e",
+        "GRAFANA_URL=http://127.0.0.1:3000",
         "grafana/mcp-grafana:2.3.0",
-        "-t", "stdio", "--disable-write"
+        "-t",
+        "stdio",
+        "--disable-write"
       ]
+    },
+    "aws": {
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-api-mcp-server==1.6.1"
+      ],
+      "env": {
+        "AWS_PROFILE": "locksmith-readonly",
+        "AWS_REGION": "us-east-1",
+        "READ_OPERATIONS_ONLY": "true",
+        "AWS_API_MCP_TELEMETRY": "false"
+      }
     }
   }
 }

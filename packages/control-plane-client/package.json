@@ -13,7 +13,8 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "vitest": "^3.0.0"
+    "openapi-typescript": "^7.13.0",
+    "vitest": "^4.1.12"
   },
   "dependencies": {
     "@locksmith/sdk": "*"

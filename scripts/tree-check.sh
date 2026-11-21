@@ -4,7 +4,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 fail=0
-prune=( \( -name target -o -name node_modules -o -name .git \) -prune -o )
+prune=( \( -name target -o -name node_modules -o -name .git -o -path ./.claude/worktrees \) -prune -o )
 
 while IFS= read -r f; do
   case "$f" in
@@ -27,6 +27,16 @@ done < <(for w in .github/workflows/*.yml; do
     j && /^  [A-Za-z0-9_-]+:[[:space:]]*$/{if (job && !t) print f": "job; job=$1; t=0}
     j && /^    timeout-minutes:/{t=1} END{if (job && !t) print f": "job}' "$w"
 done)
+
+# infra/tofu holds only the three root modules and the plan policy.
+if [ -d infra/tofu ]; then
+  for d in infra/tofu/*/; do
+    case "$(basename "$d")" in
+      base|session|policy) ;;
+      *) echo "tree-check: unexpected infra/tofu directory (allowed: base, session, policy): $d" >&2; fail=1 ;;
+    esac
+  done
+fi
 
 # docs/testing.md must have a row per component directory.
 bash scripts/test-recipes-check.sh || fail=1

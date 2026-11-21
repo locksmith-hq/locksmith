@@ -65,16 +65,20 @@ check_denylist() {
   # One extended regex per line; '#' starts a comment. Files may be exempted in the allow file.
   local deny=scripts/public-denylist.txt allow=scripts/public-denylist.allow
   [ -f "$deny" ] || { bad "$deny missing"; return; }
-  local pat f hits
+  # Optional git-ignored file of real private values (account IDs, hostnames), one literal per line.
+  local local_deny=scripts/public-denylist.local
+  local files pat hit
+  files="$(mktemp)"
+  [ -f "$allow" ] || allow=/dev/null
+  list_files | grep -vE '^(node_modules|target)/|/(node_modules|target)/|^(scripts/public-denylist\.(txt|local)|scripts/public-check\.test\.sh|package-lock\.json|Cargo\.lock)$' \
+    | { grep -vxFf "$allow" || true; } | while IFS= read -r f; do [ -f "$f" ] && printf '%s\0' "$f"; done > "$files"
   while IFS= read -r pat; do
     case "$pat" in ''|'#'*) continue ;; esac
-    while IFS= read -r f; do
-      case "$f" in node_modules/*|*/node_modules/*|target/*|*/target/*|scripts/public-denylist.txt|scripts/public-check.test.sh|package-lock.json|Cargo.lock) continue ;; esac
-      [ -f "$f" ] || continue
-      if [ -f "$allow" ] && grep -qxF "$f" "$allow"; then continue; fi
-      if grep -IEq -- "$pat" "$f" 2>/dev/null; then bad "denylisted pattern '$pat' in $f"; fi
-    done < <(list_files)
-  done < "$deny"
+    while IFS= read -r hit; do
+      [ -n "$hit" ] && bad "denylisted pattern '$pat' in $hit"
+    done < <(xargs -0 grep -IEl -e "$pat" -- < "$files" 2>/dev/null)
+  done < <(cat "$deny"; [ -f "$local_deny" ] && sed -E 's/[][\\.^$*+?(){}|]/\\&/g' "$local_deny")
+  rm -f "$files"
 }
 
 check_canary() {

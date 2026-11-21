@@ -5,17 +5,21 @@ set -uo pipefail
 repo=locksmith-hq/locksmith
 work=()
 git fetch -q origin 2>/dev/null
+# A worker acts only on PRs it opened (owner 2026-11-20); without a persona (identities paused) count every PR.
+AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
+me=${AGENT_PERSONA:+locksmith-$AGENT_PERSONA[bot]}
+mine='select(env.me == "" or .user.login == env.me)'; export me
 
-# Finished PRs waiting for the merge queue
-n=$(gh api "repos/$repo/issues?labels=ready-to-merge&state=open" -q length)
-[ "$n" -gt 0 ] && work+=("$n ready-to-merge PR(s)")
+# Your PRs whose merge review failed (fix the findings; worker.md step 0)
+n=$(gh api "repos/$repo/issues?labels=review-failed&state=open" -q "[.[]|select(.pull_request)|$mine]|length")
+[ "$n" -gt 0 ] && work+=("$n of your PR(s) failed merge review")
 
 # Red main CI
 c=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&per_page=1" -q '.workflow_runs[0].conclusion // ""')
 [ "$c" = failure ] && work+=("main CI is red")
 
 # Open change PRs whose latest ci run failed (worker.md step 0 fixes them first)
-for b in $(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[].head.ref|select(startswith("claude/change-"))'); do
+for b in $(gh api "repos/$repo/pulls?state=open&per_page=100" -q ".[]|$mine|.head.ref|select(startswith(\"claude/change-\"))"); do
   r=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=$b&per_page=1" -q '.workflow_runs[0].conclusion // ""')
   [ "$r" = failure ] && work+=("CI is red on $b")
 done
@@ -33,11 +37,11 @@ done <<<"$status"
 # first), no open planning PR, and a roadmap row whose Needs are met, writing that row is work.
 next=$(bash "$(dirname "$0")/change-status.sh" --plannable | head -1)
 takeable=$(grep -cE $'\t(ready|stackable)\t' <<<"$status" || true)
-plans=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[]|select(.head.ref|startswith("claude/planning-"))|[.number, any(.labels[]; .name=="ready-to-merge")]|@tsv')
+plans=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[]|select(.head.ref|startswith("claude/planning-"))|[.number, (.auto_merge != null)]|@tsv')
 [ "${takeable:-0}" -lt 3 ] && [ -z "$plans" ] && [ -n "$next" ] && work+=("fewer than 3 changes ready: plan the next one ($next)")
-# An unlabelled planning PR is invisible to the merge queue and also suppresses planning, so workers would idle forever.
-while IFS=$'\t' read -r pr labelled; do
-  [ "$labelled" = false ] && work+=("planning PR #$pr is not marked ready")
+# A planning PR without auto-merge never merges and also suppresses planning, so workers would idle forever.
+while IFS=$'\t' read -r pr auto; do
+  [ "$auto" = false ] && work+=("planning PR #$pr does not have auto-merge on")
 done <<<"$plans"
 
 if [ "${#work[@]}" -gt 0 ]; then printf 'work: %s\n' "${work[@]}"; exit 0; fi

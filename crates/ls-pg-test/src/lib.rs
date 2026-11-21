@@ -11,9 +11,13 @@ use std::time::Duration;
 use sqlx_core::connection::Connection;
 use sqlx_core::migrate::{MigrateError, Migrator};
 use sqlx_postgres::{PgConnectOptions, PgConnection, PgPoolOptions};
+use testcontainers::core::error::{ClientError, TestcontainersError};
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+
+/// How many times [`Pg::start`] tries a container whose image pull failed.
+const PULL_ATTEMPTS: u32 = 4;
 
 // Test-only values; the container is local and discarded after the test.
 pub const BOOTSTRAP_USER: &str = "postgres";
@@ -38,16 +42,31 @@ pub struct Pg {
 impl Pg {
     /// Start the container and wait until TCP logins work. Not migrated.
     pub async fn start() -> Self {
-        let container = GenericImage::new("postgres", "18")
-            .with_exposed_port(5432.tcp())
-            .with_wait_for(WaitFor::message_on_stderr(
-                "database system is ready to accept connections",
-            ))
-            .with_env_var("POSTGRES_PASSWORD", BOOTSTRAP_PASSWORD)
-            .with_startup_timeout(Duration::from_secs(120))
-            .start()
-            .await
-            .expect("start postgres:18 (is Docker running?)");
+        // On a cold runner many tests pull `postgres:18` at once, and a pull can be cut off
+        // mid-stream ("bytes remaining on stream", seen in CI on 2026-11-20). Retry pull
+        // failures only; any other error still fails the test at once.
+        let mut attempt = 1;
+        let container = loop {
+            let started = GenericImage::new("postgres", "18")
+                .with_exposed_port(5432.tcp())
+                .with_wait_for(WaitFor::message_on_stderr(
+                    "database system is ready to accept connections",
+                ))
+                .with_env_var("POSTGRES_PASSWORD", BOOTSTRAP_PASSWORD)
+                .with_startup_timeout(Duration::from_secs(120))
+                .start()
+                .await;
+            match started {
+                Ok(c) => break c,
+                Err(TestcontainersError::Client(ClientError::PullImage { .. }))
+                    if attempt < PULL_ATTEMPTS =>
+                {
+                    tokio::time::sleep(Duration::from_secs(2 * u64::from(attempt))).await;
+                    attempt += 1;
+                }
+                Err(e) => panic!("start postgres:18 (is Docker running?): {e:?}"),
+            }
+        };
         let port = container.get_host_port_ipv4(5432.tcp()).await.unwrap();
         let pg = Self { container, port };
         // The image restarts the server once after init; wait until TCP logins work.

@@ -744,7 +744,7 @@ async fn send_query(c: &mut Client, sql: &str) {
     c.stream.flush().await.unwrap();
 }
 
-/// Adversarial case (G10): a real server that raises the password in `RAISE EXCEPTION` and
+/// Adversarial case (G11): a real server that raises the password in `RAISE EXCEPTION` and
 /// `RAISE NOTICE` (message, DETAIL and HINT) cannot get it past the relay.
 #[tokio::test]
 async fn pg_relay_raise_error_and_notice_echo_of_the_password_is_redacted() {
@@ -789,7 +789,7 @@ async fn pg_relay_raise_error_and_notice_echo_of_the_password_is_redacted() {
     assert_eq!(c.query("SELECT 5").await.unwrap(), vec!["5".to_owned()]);
 }
 
-/// Adversarial case (G10): none of a hostile client's startup parameters beyond the allow-list
+/// Adversarial case (G11): none of a hostile client's startup parameters beyond the allow-list
 /// reach the upstream; `user`, `database` and the role come from the binding.
 #[tokio::test]
 async fn pg_relay_startup_parameter_injection_is_not_forwarded() {
@@ -839,7 +839,7 @@ async fn pg_relay_startup_parameter_injection_is_not_forwarded() {
     );
 }
 
-/// Adversarial case (G10): `options` and friends against a real server leave the session on the
+/// Adversarial case (G11): `options` and friends against a real server leave the session on the
 /// bound user with no role switch.
 #[tokio::test]
 async fn pg_relay_options_role_switch_runs_as_the_bound_user() {
@@ -870,7 +870,7 @@ async fn pg_relay_options_role_switch_runs_as_the_bound_user() {
     );
 }
 
-/// Adversarial case (G10): cancel requests with guessed keys, including the upstream's real
+/// Adversarial case (G11): cancel requests with guessed keys, including the upstream's real
 /// backend pid (learned through `pg_backend_pid()`), cancel nothing.
 #[tokio::test]
 async fn pg_relay_cancel_with_guessed_keys_cancels_nothing() {

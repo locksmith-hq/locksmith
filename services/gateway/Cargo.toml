@@ -51,6 +51,13 @@ pgwire = { version = "=0.42.3", default-features = false }
 # D3 task 2.1: TLS on the Postgres listener, with the gateway's rustls `ring` provider.
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
+# M1 task 3.1: the agent MCP server (`/mcp`), same rmcp pin and features as the hub.
+ls-mcp-server = { path = "../../crates/ls-mcp-server" }
+rmcp = { version = "=3.11.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
+# M1 task 3.3: short-lived credentials are random tokens (OS RNG) kept only as SHA-256 hashes.
+# Same versions the workspace already uses (ls-crypto, ls-envelope, ls-audit).
+getrandom = "0.2"
+sha2 = "0.10"
 
 [dev-dependencies]
 http-body-util = "0.1"

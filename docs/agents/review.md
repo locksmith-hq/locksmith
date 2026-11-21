@@ -26,14 +26,14 @@
 
    If the numbers justify it, propose cadence or tier changes in a `needs-owner` issue.
 3. **Re-verify each open `claude/change-*` branch.**
-   - With a haiku subagent, run `just ci` and the verification commands of the ticked tasks.
+   - With a haiku subagent, run the verification commands of the ticked tasks; the PR's CI checks cover `just ci`.
    - Untick anything that fails.
    - Append a `review` progress entry.
 4. **Plan ahead.** Do this only if `bash scripts/change-status.sh --ready` lists fewer than three changes.
-   - Take the first id from `bash scripts/change-status.sh --plannable`, and lock its id (`run-lock.sh acquire review-<session> <id>`; if busy, take the next; release at end).
+   - Lock one: `run-lock.sh claim review-<session> $(bash scripts/change-status.sh --plannable)` (release at end).
    - Branch `claude/planning-<id>` from origin/main; set `x-depends_on: [..]` in `.openspec.yaml`.
    - Write the next change using the openspec-propose workflow, including an empty `progress.md`.
    - Research first (haiku searches): maintained, free, licence-compatible OSS and MCP servers.
    - Record versions, release dates and URLs; tag every task with its tier.
-   - Run `openspec validate --all`, commit, push once, open a PR, mark it ready as described in `merge.md`.
+   - Run `openspec validate --all`, commit, push once, open a PR, finish it (`finish-pr` skill).
 5. **Log.** Use the `run-log` skill to post the agent-log comment with the stats table and the metadata.

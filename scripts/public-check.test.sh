@@ -29,6 +29,15 @@ if run "$S" licenses; then no "UNLICENSED manifest fails"; else ok "UNLICENSED m
 S=$(mk); echo "mail owner@gmail.com" >> "$S/README.md"
 if run "$S" denylist; then no "denylisted string fails"; else ok "denylisted string fails"; fi; rm -rf "$S"
 
+S=$(mk); echo "start https://d-0123456789.awsapps.com/start" >> "$S/README.md"
+if run "$S" denylist; then no "SSO portal URL fails"; else ok "SSO portal URL fails"; fi; rm -rf "$S"
+
+S=$(mk); echo "image 999988887777.dkr.ecr.us-east-1.amazonaws.com/x" >> "$S/README.md"
+if run "$S" denylist; then no "ECR account URL fails"; else ok "ECR account URL fails"; fi; rm -rf "$S"
+
+S=$(mk); echo "999988887777" > "$S/scripts/public-denylist.local"; echo "acct 999988887777" >> "$S/README.md"
+if run "$S" denylist; then no "local literal denylist fails"; else ok "local literal denylist fails"; fi; rm -rf "$S"
+
 S=$(mk); echo "[gone](docs/missing.md)" >> "$S/README.md"
 if run "$S" links; then no "broken link fails"; else ok "broken link fails"; fi; rm -rf "$S"
 

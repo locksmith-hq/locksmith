@@ -363,3 +363,121 @@ test("org audit: outcome filter narrows to denied and redaction_failed events", 
   expect(screen.getByText("relay.outcome")).toBeInTheDocument();
   expect(screen.queryByText("relay.denied")).toBeNull();
 });
+
+test("workload identities: list, prefix warning, create, delete with confirm, no secret rendered or requested", async () => {
+  const wl = { id: "w1", name: "ci-deploy", agent_id: "a1", audience: "https://cp.example", issuer_kind: "github", issuer: "https://token.actions.githubusercontent.com",
+    handle: "lsw_abc", conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/release-*" }], last_used_at: null };
+  const client = {
+    listWorkloadIdentities: vi.fn().mockResolvedValue([wl]),
+    createWorkloadIdentity: vi.fn().mockResolvedValue(wl),
+    deleteWorkloadIdentity: vi.fn().mockResolvedValue(undefined),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  const { container } = render(<App />);
+  await nav("Workload identities");
+  expect(await screen.findByText("ci-deploy")).toBeInTheDocument();
+  expect(screen.getByText("lsw_abc")).toBeInTheDocument();
+  expect(screen.getByText(/last used never/)).toBeInTheDocument();
+  expect(screen.getByText(/uses a prefix/)).toBeInTheDocument();
+
+  expect(screen.queryByTestId("prefix-warning")).toBeNull();
+  await userEvent.type(screen.getByLabelText("Policy name"), "n1");
+  await userEvent.type(screen.getByLabelText("Agent id"), "a1");
+  await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");
+  await userEvent.type(screen.getByLabelText("Repository (owner/repo)"), "acme/api");
+  await userEvent.type(screen.getByLabelText("Ref (optional)"), "refs/heads/rel-*");
+  expect(screen.getByTestId("prefix-warning")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Create workload identity" }));
+  const sent = client.createWorkloadIdentity.mock.calls[0]![0];
+  expect(sent).toEqual({ name: "n1", agent_id: "a1", audience: "https://cp.example", issuer_kind: "github",
+    conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/rel-*" }] });
+  expect(JSON.stringify(sent)).not.toMatch(/token|secret|password/i);
+
+  await userEvent.selectOptions(screen.getByLabelText("Issuer preset"), "kubernetes");
+  await userEvent.type(screen.getByLabelText("Policy name"), "k1");
+  await userEvent.type(screen.getByLabelText("Agent id"), "a1");
+  await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");
+  await userEvent.type(screen.getByLabelText("Issuer URL"), "https://k8s.example");
+  await userEvent.type(screen.getByLabelText("Namespace"), "prod");
+  await userEvent.type(screen.getByLabelText("Service account"), "deployer");
+  await userEvent.click(screen.getByRole("button", { name: "Create workload identity" }));
+  expect(client.createWorkloadIdentity.mock.calls[1]![0]).toMatchObject({ issuer_kind: "oidc", issuer: "https://k8s.example",
+    conditions: [{ claim: "sub", pattern: "system:serviceaccount:prod:deployer" }] });
+
+  noPassword(container);
+  expect(screen.queryByLabelText(/token|secret|password/i)).toBeNull();
+  expect(document.body.textContent).not.toMatch(/enrollment secret|Bearer/i);
+
+  await userEvent.click(screen.getByRole("button", { name: "Delete ci-deploy" }));
+  expect(client.deleteWorkloadIdentity).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "Confirm delete ci-deploy" }));
+  expect(client.deleteWorkloadIdentity).toHaveBeenCalledWith("w1");
+});
+
+const mcpTool = (layer: string, tool: string, def: boolean, enabled: boolean) => ({ layer, tool, description: `${tool} desc.`, default_enabled: def, enabled, overridden: def !== enabled });
+const mcpClient = (id: string, name: string, revoked: string | null = null) => ({ id, layer: "hub", client_id: `cid-${id}`, principal: "user-1", client_name: name, first_seen_at: "t", last_seen_at: "2026-01-02T00:00:00Z", revoked_at: revoked });
+
+test("mcp tools: one switch per tool by layer, saves a change, shows an error when refused", async () => {
+  const client = {
+    listMcpTools: vi.fn().mockResolvedValue([mcpTool("hub", "list_projects", true, true), mcpTool("hub", "revoke_grant", false, false), mcpTool("agent", "relay_http_request", true, true)]),
+    setMcpTool: vi.fn().mockResolvedValueOnce(mcpTool("hub", "revoke_grant", false, true)).mockRejectedValueOnce(new Error("Forbidden")),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  render(<App />);
+  await nav("MCP tools");
+  const sw = await screen.findByRole("switch", { name: "revoke_grant (hub)" });
+  expect(sw).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "relay_http_request (agent)" })).toBeChecked();
+  await userEvent.click(sw);
+  await waitFor(() => expect(screen.getByRole("switch", { name: "revoke_grant (hub)" })).toBeChecked());
+  expect(client.setMcpTool).toHaveBeenCalledWith("hub", "revoke_grant", true);
+  await userEvent.click(screen.getByRole("switch", { name: "list_projects (hub)" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  expect(screen.getByRole("switch", { name: "list_projects (hub)" })).toBeChecked();
+});
+
+test("mcp tools: 403, empty and not-connected states", async () => {
+  m.agentsClient.mockReturnValue({ listMcpTools: vi.fn().mockRejectedValue(new Error("Forbidden")) } as never);
+  const r = render(<App />);
+  await nav("MCP tools");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  expect(screen.queryByRole("switch")).toBeNull();
+  r.unmount();
+  m.agentsClient.mockReturnValue({ listMcpTools: vi.fn().mockResolvedValue([]) } as never);
+  const r2 = render(<App />);
+  await nav("MCP tools");
+  expect(await screen.findByText("No MCP tools.")).toBeInTheDocument();
+  r2.unmount();
+  m.agentsClient.mockReturnValue(null as never);
+  render(<App />);
+  await nav("MCP tools");
+  expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
+});
+
+test("mcp clients: lists, revokes an active client, and shows 403 and empty states", async () => {
+  const client = {
+    listMcpClients: vi.fn().mockResolvedValue([mcpClient("c1", "Claude"), mcpClient("c2", "", "2026-01-03T00:00:00Z")]),
+    revokeMcpClient: vi.fn().mockResolvedValue(mcpClient("c1", "Claude", "2026-01-04T00:00:00Z")),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  const r = render(<App />);
+  await nav("MCP clients");
+  expect(await screen.findByText("Claude")).toBeInTheDocument();
+  expect(screen.getByText(/Revoked 2026-01-03/)).toBeInTheDocument();
+  const tbl = within(screen.getByRole("table"));
+  expect(tbl.getAllByRole("button", { name: /^Revoke / })).toHaveLength(1);
+  await userEvent.click(screen.getByRole("button", { name: "Revoke Claude" }));
+  expect(client.revokeMcpClient).toHaveBeenCalledWith("c1");
+  expect(await screen.findByText(/Revoked 2026-01-04/)).toBeInTheDocument();
+  expect(within(screen.getByRole("table")).queryByRole("button", { name: /^Revoke / })).toBeNull();
+  r.unmount();
+  m.agentsClient.mockReturnValue({ listMcpClients: vi.fn().mockRejectedValue(new Error("Forbidden")) } as never);
+  const r2 = render(<App />);
+  await nav("MCP clients");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  r2.unmount();
+  m.agentsClient.mockReturnValue({ listMcpClients: vi.fn().mockResolvedValue([]) } as never);
+  render(<App />);
+  await nav("MCP clients");
+  expect(await screen.findByText(/No MCP clients have signed in yet/)).toBeInTheDocument();
+});

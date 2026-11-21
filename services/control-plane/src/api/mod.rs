@@ -8,17 +8,20 @@
 //! credential a response carries is an agent's enrollment secret (shown once, at registration or
 //! rotation) and the short-lived agent token from `POST /v1/agent-tokens` (`agents.rs`).
 
-mod agents;
-mod audit;
-mod environments;
-mod extract;
+pub(crate) mod agents;
+pub(crate) mod audit;
+pub(crate) mod environments;
+pub(crate) mod extract;
 mod internal;
+mod mcp;
 mod orgs;
-mod projects;
+pub(crate) mod projects;
 mod responses;
-mod secrets;
+pub(crate) mod secrets;
 mod session;
-mod versions;
+pub(crate) mod versions;
+mod workload_identities;
+mod workload_tokens;
 
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -67,12 +70,29 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(agents::delete_grant))
         .routes(routes!(agents::mint_token))
         .routes(routes!(agents::jwks))
+        .routes(routes!(
+            workload_identities::create,
+            workload_identities::list
+        ))
+        .routes(routes!(
+            workload_identities::get_one,
+            workload_identities::delete
+        ))
+        .routes(routes!(workload_tokens::exchange))
         .routes(routes!(session::sign_in))
         .routes(routes!(session::sign_out))
         .routes(routes!(audit::list_events))
         .routes(routes!(audit::status))
+        .routes(routes!(mcp::list_tools))
+        .routes(routes!(mcp::update_tool))
+        .routes(routes!(mcp::list_clients))
+        .routes(routes!(mcp::revoke_client))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
+        .routes(routes!(internal::agent_tool_settings))
+        .routes(routes!(internal::append_agent_mcp_call))
+        .routes(routes!(internal::upsert_agent_mcp_client))
+        .routes(routes!(internal::revoked_agent_clients))
         .routes(routes!(internal::append_event))
 }
 

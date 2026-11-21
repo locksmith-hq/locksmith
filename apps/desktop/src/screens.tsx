@@ -3,7 +3,7 @@ import type {
   AuditEvent, AuditVerifyView, HttpTokenInfo, LeaseInfo, RelayInfo, SourceKind, StatusView,
 } from "@locksmith/api-types";
 import * as api from "./api";
-import { auditOutcomeMatches, type AuditOutcomeFilter } from "@locksmith/control-plane-client";
+import { auditOutcomeMatches, buildWorkloadIdentity, hasPrefixCondition, isPrefixPattern, type AuditOutcomeFilter } from "@locksmith/control-plane-client";
 import { Icon, type IconName } from "./brand";
 
 export interface ScreenProps {
@@ -658,6 +658,96 @@ export function Agents(_: ScreenProps) {
   );
 }
 
+/** Trust policies that let a CI job or cluster workload swap its own OIDC token for an agent token. No secret anywhere. */
+export function WorkloadIdentities(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [items, setItems] = useState<api.WorkloadIdentity[] | null>(null);
+  const [err, setErr] = useState("");
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [preset, setPreset] = useState<api.WorkloadPreset>("github");
+  const [f, setF] = useState({ name: "", agentId: "", audience: "", issuer: "", repository: "", ref: "", environment: "", namespace: "", serviceaccount: "" });
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+
+  const load = useCallback(async () => {
+    if (!client) return;
+    try { setItems(await client.listWorkloadIdentities()); } catch (e) { setErr(msg(e)); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const body = buildWorkloadIdentity({ ...f, preset });
+  const run = async (fn: () => Promise<unknown>) => {
+    setErr("");
+    try { await fn(); } catch (e) { setErr(msg(e)); }
+    await load();
+  };
+
+  return (
+    <section className="screen" aria-labelledby="h-wl">
+      <Head id="h-wl" title="Workload identities" sub="A CI job or cluster workload exchanges its own OIDC token for a short-lived agent token. Nothing secret is entered or shown here." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="key">Connect a control plane and org id on the Agents screen first.</Empty> : (
+        <>
+          <form className="card" aria-label="Create workload identity" onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              await client.createWorkloadIdentity(body);
+              setF({ ...f, name: "", repository: "", ref: "", environment: "", namespace: "", serviceaccount: "" });
+            });
+          }}>
+            <select aria-label="Issuer preset" value={preset} onChange={(e) => setPreset(e.target.value as api.WorkloadPreset)}>
+              <option value="github">GitHub Actions</option>
+              <option value="kubernetes">Kubernetes</option>
+            </select>
+            <input aria-label="Policy name" required value={f.name} onChange={set("name")} />
+            <input aria-label="Agent id" required value={f.agentId} onChange={(e) => setF({ ...f, agentId: e.target.value.trim() })} />
+            <input aria-label="Audience" required value={f.audience} onChange={set("audience")} />
+            {preset === "github" ? (
+              <>
+                <input aria-label="Repository (owner/repo)" required value={f.repository} onChange={set("repository")} />
+                <input aria-label="Ref (optional)" value={f.ref} onChange={set("ref")} />
+                <input aria-label="Environment (optional)" value={f.environment} onChange={set("environment")} />
+              </>
+            ) : (
+              <>
+                <input aria-label="Issuer URL" type="url" required value={f.issuer} onChange={set("issuer")} />
+                <input aria-label="Namespace" required value={f.namespace} onChange={set("namespace")} />
+                <input aria-label="Service account" required value={f.serviceaccount} onChange={set("serviceaccount")} />
+              </>
+            )}
+            {hasPrefixCondition(body.conditions) && (
+              <p role="alert" className="alert" data-testid="prefix-warning"><Icon name="alert" />A condition ends in * and matches every value with that prefix. Prefer exact values.</p>
+            )}
+            <button type="submit" className="btn primary sm">Create workload identity</button>
+          </form>
+          {!items ? <Loading what="workload identities" /> : items.length === 0 ? <Empty icon="key"><b>No workload identities yet.</b></Empty> : (
+            <div className="sessions">
+              {items.map((w) => (
+                <article key={w.id} className="card" aria-label={`Workload identity ${w.name}`}>
+                  <div className="who"><b>{w.name}</b><span className="mono">{w.issuer_kind} {w.issuer}</span></div>
+                  <p>Handle: <code className="mono">{w.handle}</code> (not a secret) · audience {w.audience} · agent <span className="mono">{w.agent_id}</span> · last used {w.last_used_at ?? "never"}</p>
+                  <ul>
+                    {w.conditions.map((c) => (
+                      <li key={`${c.claim}=${c.pattern}`}><span className="mono">{c.claim} = {c.pattern}</span>{isPrefixPattern(c) ? " (prefix match)" : ""}</li>
+                    ))}
+                  </ul>
+                  {hasPrefixCondition(w.conditions) && <p className="alert"><Icon name="alert" />This policy uses a prefix (*) condition.</p>}
+                  {confirming === w.id ? (
+                    <>
+                      <button type="button" className="btn sm danger-text" onClick={() => { setConfirming(null); void run(() => client.deleteWorkloadIdentity(w.id)); }}>Confirm delete {w.name}</button>
+                      <button type="button" className="btn sm" onClick={() => setConfirming(null)}>Cancel</button>
+                    </>
+                  ) : <button type="button" className="btn sm danger-text" onClick={() => setConfirming(w.id)}>Delete {w.name}</button>}
+                </article>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 /** The org's control-plane audit ledger (events plus chain status), read-only. */
 
 export function OrgAudit(_: ScreenProps) {
@@ -729,6 +819,108 @@ export function OrgAudit(_: ScreenProps) {
           {next && <button type="button" className="btn sm" disabled={loadingMore} onClick={more}>Load more</button>}
         </>
       )}
+    </section>
+  );
+}
+
+const layerName = (l: string) => (l === "hub" ? "Hub (people)" : "Gateway (agents)");
+
+/** One switch per MCP tool, grouped by layer; saved through the control plane. */
+export function McpTools(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [tools, setTools] = useState<api.McpToolSetting[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!client) return;
+    let live = true;
+    client.listMcpTools().then((t) => live && setTools(t), (e) => live && setErr(msg(e)));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const toggle = async (t: api.McpToolSetting, enabled: boolean) => {
+    if (!client) return;
+    setErr("");
+    try {
+      const u = await client.setMcpTool(t.layer, t.tool, enabled);
+      setTools((cur) => cur?.map((x) => (x.layer === u.layer && x.tool === u.tool ? u : x)) ?? cur);
+    } catch (e) { setErr(msg(e)); }
+  };
+  return (
+    <section className="screen" aria-labelledby="h-mcp-tools">
+      <Head id="h-mcp-tools" title="MCP tools" sub="Which tools the Hub and the Gateway offer to MCP clients." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="key">Connect a control plane on the Agents screen to manage MCP tools.</Empty>
+        : !tools ? (err ? null : <Loading what="MCP tools" />)
+        : tools.length === 0 ? <Empty icon="key">No MCP tools.</Empty>
+        : (["hub", "agent"] as const).map((layer) => {
+          const rows = tools.filter((t) => t.layer === layer);
+          if (rows.length === 0) return null;
+          return (
+            <div key={layer} className="card" role="group" aria-label={`${layerName(layer)} tools`}>
+              <h2>{layerName(layer)}</h2>
+              <ul>
+                {rows.map((t) => (
+                  <li key={t.tool}>
+                    <label>
+                      <input type="checkbox" role="switch" aria-label={`${t.tool} (${layer})`} checked={t.enabled} onChange={(e) => void toggle(t, e.target.checked)} />{" "}
+                      <strong>{t.tool}</strong>
+                    </label>{" "}
+                    <span className="muted">{t.description} {t.default_enabled ? "On by default" : "Off by default"}{t.overridden ? ", changed" : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+    </section>
+  );
+}
+
+/** MCP clients that have signed in, with revoke. */
+export function McpClients(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [clients, setClients] = useState<api.McpClient[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!client) return;
+    let live = true;
+    client.listMcpClients().then((c) => live && setClients(c), (e) => live && setErr(msg(e)));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const revoke = async (c: api.McpClient) => {
+    if (!client) return;
+    setErr("");
+    try {
+      const u = await client.revokeMcpClient(c.id);
+      setClients((cur) => cur?.map((x) => (x.id === u.id ? u : x)) ?? cur);
+    } catch (e) { setErr(msg(e)); }
+  };
+  const label = (c: api.McpClient) => c.client_name || c.client_id;
+  return (
+    <section className="screen" aria-labelledby="h-mcp-clients">
+      <Head id="h-mcp-clients" title="MCP clients" sub="Apps that signed in over MCP. Revoking one refuses its next call." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="sessions">Connect a control plane on the Agents screen to see MCP clients.</Empty>
+        : !clients ? (err ? null : <Loading what="MCP clients" />)
+        : clients.length === 0 ? <Empty icon="sessions">No MCP clients have signed in yet.</Empty>
+        : (
+          <div className="table-wrap">
+            <table className="grid">
+              <caption className="sr-only">MCP clients</caption>
+              <thead><tr><th>Client</th><th>Layer</th><th>Principal</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {clients.map((c) => (
+                  <tr key={c.id}>
+                    <td className="strong">{label(c)}</td><td>{layerName(c.layer)}</td><td className="mono">{c.principal}</td><td className="mono nowrap">{c.last_seen_at}</td>
+                    <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
+                    <td>{!c.revoked_at && <button type="button" className="btn sm" onClick={() => void revoke(c)}>Revoke {label(c)}</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
     </section>
   );
 }

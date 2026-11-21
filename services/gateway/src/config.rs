@@ -27,6 +27,9 @@ pub const ENV_PG_LISTEN: &str = "LOCKSMITH_GATEWAY_PG_LISTEN";
 pub const ENV_PG_TLS_CERT: &str = "LOCKSMITH_GATEWAY_PG_TLS_CERT";
 /// PEM private key for [`ENV_PG_TLS_CERT`] (required with [`ENV_PG_LISTEN`]).
 pub const ENV_PG_TLS_KEY: &str = "LOCKSMITH_GATEWAY_PG_TLS_KEY";
+/// Comma-separated public host names (`host` or `host:port`) `/mcp` accepts in the `Host`
+/// header, on top of loopback (DNS rebinding protection). Optional.
+pub const ENV_MCP_ALLOWED_HOSTS: &str = "LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS";
 
 /// Shortest accepted bearer token, in bytes. Shorter values are rejected, not accepted as a
 /// guessable credential.
@@ -91,6 +94,8 @@ pub struct Config {
     pub bindings: Bindings,
     /// The Postgres listener (D3), when [`ENV_PG_LISTEN`] is set.
     pub pg_listen: Option<PgListenConfig>,
+    /// Extra `Host` values `/mcp` accepts ([`ENV_MCP_ALLOWED_HOSTS`]).
+    pub mcp_allowed_hosts: Vec<String>,
 }
 
 /// Where the Postgres listener binds and the TLS files it serves (paths only; the key is read
@@ -345,6 +350,16 @@ impl Config {
             }),
         };
 
+        let mcp_allowed_hosts = get(ENV_MCP_ALLOWED_HOSTS)
+            .map(|v| {
+                v.split(',')
+                    .map(str::trim)
+                    .filter(|h| !h.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(Self {
             bind,
             database_url,
@@ -354,6 +369,7 @@ impl Config {
             openbao,
             bindings,
             pg_listen,
+            mcp_allowed_hosts,
         })
     }
 }

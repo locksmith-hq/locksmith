@@ -4,7 +4,7 @@
 //! Modules: [`config`], [`auth`] (agent tokens verified through the control plane's JWKS),
 //! [`grants`] (`GET /v1/grants`), [`decrypt`] (material fetch, DEK unwrap and cache, open), [`egress`]
 //! (host allowlist, address guard, pinned client), [`relay`] (`POST /v1/relay`: inject, call,
-//! redact), [`pg`] (the Postgres listener, D3), [`audit`] (relay events in the org's audit ledger), [`app`] (the router).
+//! redact), [`pg`] (the Postgres listener, D3), [`mcp_endpoint`] (`/mcp`, the agent MCP server), [`short_lived`] (the MCP short-lived credentials `/v1/relay` accepts), [`audit`] (relay events in the org's audit ledger), [`app`] (the router).
 
 pub mod app;
 pub mod audit;
@@ -15,5 +15,10 @@ pub mod egress;
 pub mod git;
 pub mod grants;
 pub mod http_client;
+pub mod mcp_clients;
+pub mod mcp_endpoint;
+pub mod mcp_settings;
+mod mcp_tools;
 pub mod pg;
 pub mod relay;
+pub mod short_lived;

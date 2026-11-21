@@ -21,7 +21,8 @@ use serde_json::{Value, json};
 
 const SERVICE_TOKEN: &str = "dev-only-gateway-service-token-0123456789";
 const PG_ADDR: &str = "127.0.0.1:5432";
-const PG_SUPERUSER: &str = "host=127.0.0.1 user=locksmith password=locksmith-dev-only dbname=locksmith";
+const PG_SUPERUSER: &str =
+    "host=127.0.0.1 user=locksmith password=locksmith-dev-only dbname=locksmith";
 
 async fn cp(c: &Client, path: &str, org: Option<&str>, body: Value) -> Value {
     let mut req = c.post(format!("{}{path}", api())).json(&body);
@@ -78,7 +79,10 @@ async fn start_gateway(c: &Client, dir: &Path, bindings: &str, cert: &Path, key:
         .env("OPENBAO_ADDR", "http://127.0.0.1:8200")
         .env("OPENBAO_GATEWAY_TOKEN", "dev-only-gateway")
         .env("LOCKSMITH_GATEWAY_BINDINGS", &path)
-        .env("LOCKSMITH_GATEWAY_PG_LISTEN", format!("127.0.0.1:{pg_port}"))
+        .env(
+            "LOCKSMITH_GATEWAY_PG_LISTEN",
+            format!("127.0.0.1:{pg_port}"),
+        )
         .env("LOCKSMITH_GATEWAY_PG_TLS_CERT", cert)
         .env("LOCKSMITH_GATEWAY_PG_TLS_KEY", key)
         .stdout(Stdio::null())
@@ -132,10 +136,15 @@ async fn unavailable(c: &Client) -> Option<String> {
         return Some("psql is not on PATH".into());
     }
     if tokio::net::TcpStream::connect(PG_ADDR).await.is_err() {
-        return Some(format!("Postgres is not reachable at {PG_ADDR} (run `just up`)"));
+        return Some(format!(
+            "Postgres is not reachable at {PG_ADDR} (run `just up`)"
+        ));
     }
     if c.get(format!("{}/healthz", api())).send().await.is_err() {
-        return Some(format!("locksmith-api is not reachable at {} (run `just api`)", api()));
+        return Some(format!(
+            "locksmith-api is not reachable at {} (run `just api`)",
+            api()
+        ));
     }
     None
 }
@@ -170,11 +179,23 @@ async fn psql_through_smith_db_connect_holds_no_password_or_token() {
     let o = Some(org.as_str());
     let pid = id_of(&cp(&c, "/v1/projects", o, json!({ "name": "p" })).await);
     let eid = id_of(
-        &cp(&c, &format!("/v1/projects/{pid}/environments"), o, json!({ "name": "e" })).await,
+        &cp(
+            &c,
+            &format!("/v1/projects/{pid}/environments"),
+            o,
+            json!({ "name": "e" }),
+        )
+        .await,
     );
     let base = format!("/v1/projects/{pid}/environments/{eid}/secrets");
     let sid = id_of(&cp(&c, &base, o, json!({ "name": "DB_PASSWORD" })).await);
-    cp(&c, &format!("{base}/{sid}/versions"), o, json!({ "value": password })).await;
+    cp(
+        &c,
+        &format!("{base}/{sid}/versions"),
+        o,
+        json!({ "value": password }),
+    )
+    .await;
     let enrolled = cp(&c, "/v1/agents", o, json!({ "name": uniq("db-agent") })).await;
     let agent_id = id_of(&enrolled["agent"]);
     let enrollment = enrolled["enrollment_secret"].as_str().unwrap().to_owned();
@@ -238,7 +259,17 @@ async fn psql_through_smith_db_connect_holds_no_password_or_token() {
         .arg(format!("localhost:{}", gw.pg_port))
         .arg("--ca-cert")
         .arg(&cert_path)
-        .args(["--", "psql", "-X", "-w", "-tA", "-F", "|", "-c", "SELECT current_user, 6 * 7"])
+        .args([
+            "--",
+            "psql",
+            "-X",
+            "-w",
+            "-tA",
+            "-F",
+            "|",
+            "-c",
+            "SELECT current_user, 6 * 7",
+        ])
         .output()
         .unwrap();
     let after = (snapshot(&home), snapshot(&cwd));
@@ -250,33 +281,61 @@ async fn psql_through_smith_db_connect_holds_no_password_or_token() {
     let expected = format!("{role}|42");
 
     // Drop the role before asserting, so a failure leaves nothing behind.
-    let _ = pg.batch_execute(&format!("DROP ROLE IF EXISTS {role}")).await;
+    let _ = pg
+        .batch_execute(&format!("DROP ROLE IF EXISTS {role}"))
+        .await;
 
     assert!(ok, "psql through smith db connect failed");
     assert_eq!(stdout.trim(), expected, "query ran as the bound role");
 
     // `db connect` wrote nothing: every file except agent.json is identical, none is new.
-    for (name, (b, a)) in [("home", (&before.0, &after.0)), ("cwd", (&before.1, &after.1))] {
+    for (name, (b, a)) in [
+        ("home", (&before.0, &after.0)),
+        ("cwd", (&before.1, &after.1)),
+    ] {
         let strip = |m: &BTreeMap<PathBuf, Vec<u8>>| {
             m.iter()
                 .filter(|(p, _)| p.as_os_str() != "agent.json")
                 .map(|(p, v)| (p.clone(), v.clone()))
                 .collect::<BTreeMap<_, _>>()
         };
-        assert!(strip(b) == strip(a), "db connect created or changed a file in the {name}");
+        assert!(
+            strip(b) == strip(a),
+            "db connect created or changed a file in the {name}"
+        );
     }
-    assert!(after.0.contains_key(Path::new("agent.json")), "agent.json is kept");
+    assert!(
+        after.0.contains_key(Path::new("agent.json")),
+        "agent.json is kept"
+    );
 
     // No file holds the database password; no file but agent.json holds the token; neither shows
     // in anything the agent saw.
     for (p, bytes) in after.0.iter().chain(after.1.iter()) {
-        assert!(!contains(bytes, &password), "{} holds the database password", p.display());
+        assert!(
+            !contains(bytes, &password),
+            "{} holds the database password",
+            p.display()
+        );
         if p.as_os_str() != "agent.json" {
-            assert!(!contains(bytes, &token), "{} holds the agent token", p.display());
+            assert!(
+                !contains(bytes, &token),
+                "{} holds the agent token",
+                p.display()
+            );
         }
     }
-    assert!(!contains(observed.as_bytes(), &password), "output shows the database password");
-    assert!(!contains(observed.as_bytes(), &token), "output shows the agent token");
-    assert!(!contains(observed.as_bytes(), &enrollment), "output shows the enrollment secret");
+    assert!(
+        !contains(observed.as_bytes(), &password),
+        "output shows the database password"
+    );
+    assert!(
+        !contains(observed.as_bytes(), &token),
+        "output shows the agent token"
+    );
+    assert!(
+        !contains(observed.as_bytes(), &enrollment),
+        "output shows the enrollment secret"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

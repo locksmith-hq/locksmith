@@ -70,3 +70,8 @@
 - Task: p2-packaging 5.2, 5.3 - done (auto-merge on #534 had been enabled again; disabled, review had failed only on unchecked tasks and CODEOWNERS path crates/ls-update)
 - Verified: `just release-verify` (make-manifest, verify-release with throwaway minisign key and stub cosign incl. tampered asset/manifest/key/identity, gen-formula tests), test-recipes-check
 - Notes for next session: cosign is not in the VM, so the cosign check is tested with a stub; real identity check runs in release.yml (task 5.4, lead PR). Next: 6.1-6.4. PR touches /crates/ls-update/ (CODEOWNERS): the owner's approval is required to merge. Keep auto-merge off until every task is ticked.
+
+## 2026-11-21 worker (wake-up: merge review finished on #534)
+- Task: p2-packaging 6.1-6.4 - done, evaluator PASS (sonnet); auto-merge on #534 stays off (tasks 4.4, 4.5, 5.4, 5.6, 7.x, 8.x open)
+- Verified: `just installer-test` (good, --version, bad signature, bad hash, missing minisign, unsupported platform, canary credentials never printed), test-recipes-check, just quick
+- Notes for next session: 7.1 is an owner gate; 4.4/4.5 need kind, 5.4 needs a lead PR, 5.6 needs cosign/actionlint. #534 hygiene check failed once on the PR (log blocked by proxy); tree-check, task-guard, public-check and gitleaks pass locally on HEAD, so rerun/likely transient. #534 touches /crates/ls-update/ (CODEOWNERS): owner approval needed.

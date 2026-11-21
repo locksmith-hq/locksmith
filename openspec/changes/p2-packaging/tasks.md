@@ -37,10 +37,10 @@
 - [ ] 5.6 Verify: `bash scripts/verify-release.test.sh`, `cargo nextest run -p ls-update`, `actionlint .github/workflows/release.yml`, then `just release-dry-run` (a documented local run of the same scripts against a one-triple build).
 
 ## 6. smith installers [sonnet]
-- [ ] 6.1 Rewrite `scripts/install.sh`: public release source via plain HTTPS (`curl`), no `gh`, platform detection for macOS and Linux (arm64, x86_64), `--version` and `--dir` options, minisign verification and SHA-256 before install, and a clear stop (never a silent skip) when no verifier is available; install only the binary.
-- [ ] 6.2 `scripts/install.test.sh` (`just installer-test`): serve a local test release directory, cover good install, bad signature, bad hash, missing verifier, unsupported platform, and assert the installer reads no credential file and prints no environment values.
-- [ ] 6.3 [haiku] Add `docs/testing.md` rows and `justfile` recipes for `images`, `selfhost-smoke`, `helm-test`, `release-verify` and `installer-test`, as the recipe check requires.
-- [ ] 6.4 Verify: `just installer-test` and `bash scripts/test-recipes-check.sh`.
+- [x] 6.1 Rewrite `scripts/install.sh`: public release source via plain HTTPS (`curl`), no `gh`, platform detection for macOS and Linux (arm64, x86_64), `--version` and `--dir` options, minisign verification and SHA-256 before install, and a clear stop (never a silent skip) when no verifier is available; install only the binary.
+- [x] 6.2 `scripts/install.test.sh` (`just installer-test`): serve a local test release directory, cover good install, bad signature, bad hash, missing verifier, unsupported platform, and assert the installer reads no credential file and prints no environment values.
+- [x] 6.3 [haiku] Add `docs/testing.md` rows and `justfile` recipes for `images`, `selfhost-smoke`, `helm-test`, `release-verify` and `installer-test`, as the recipe check requires.
+- [x] 6.4 Verify: `just installer-test` and `bash scripts/test-recipes-check.sh`.
 
 ## 7. Docs and owner gate [haiku]
 - [ ] 7.1 Gate: confirm `openspec/decisions.md` records the owner's approval of the self-host key custody default (bundled production-mode OpenBao labelled containment, external provider option). Otherwise stop applying the tasks below and report to the lead; tasks 1 to 6 do not depend on it.

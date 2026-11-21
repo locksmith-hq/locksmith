@@ -329,3 +329,7 @@ release-verify:
     bash scripts/make-manifest.test.sh
     bash scripts/verify-release.test.sh
     bash scripts/gen-formula.test.sh
+
+# Installer (P2): scripts/install.sh against a local release directory with a throwaway minisign key (good install, bad signature, bad hash, missing verifier, unsupported platform, no credential reads). Needs minisign, jq and curl; says SKIP, never PASS, when missing.
+installer-test:
+    bash scripts/install.test.sh

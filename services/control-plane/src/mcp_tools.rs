@@ -230,17 +230,11 @@ pub fn call_outcome(result: &Result<CallToolResult, McpError>) -> (Code, Option<
     match result {
         Err(_) => (outcome::ERROR, Some(Code::new("invalid_arguments"))),
         Ok(r) if r.is_error != Some(true) => (outcome::OK, None),
-        Ok(r) => {
-            let status = r
-                .structured_content
-                .as_ref()
-                .and_then(|v| v["error"]["status"].as_u64());
-            match status {
-                Some(401 | 403) => (outcome::DENIED, Some(Code::new("forbidden"))),
-                Some(501) => (outcome::ERROR, Some(Code::new("not_available"))),
-                _ => (outcome::ERROR, Some(Code::new("tool_error"))),
-            }
-        }
+        Ok(r) => match ls_mcp_server::error_status(r) {
+            Some(401 | 403) => (outcome::DENIED, Some(Code::new("forbidden"))),
+            Some(501) => (outcome::ERROR, Some(Code::new("not_available"))),
+            _ => (outcome::ERROR, Some(Code::new("tool_error"))),
+        },
     }
 }
 

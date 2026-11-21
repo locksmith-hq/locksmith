@@ -21,10 +21,10 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::any;
-use ls_mcp_server::{Layer, Registry, ToolDef, agent_tools};
+use ls_mcp_server::{Layer, Registry, agent_tools};
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult, JsonObject,
-    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
+    CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult,
+    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig,
 };
 use rmcp::service::RequestContext;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
@@ -150,15 +150,6 @@ impl GatewayMcp {
     }
 }
 
-fn to_tool(def: &ToolDef) -> Tool {
-    let object = |v: &serde_json::Value| -> Arc<JsonObject> {
-        Arc::new(v.as_object().cloned().unwrap_or_default())
-    };
-    let mut tool = Tool::new(def.name, def.description, object(&def.input_schema));
-    tool.output_schema = def.output_schema.as_ref().map(object);
-    tool
-}
-
 impl ServerHandler for GatewayMcp {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
@@ -205,7 +196,7 @@ impl ServerHandler for GatewayMcp {
             .registry
             .list(&settings)
             .into_iter()
-            .map(to_tool)
+            .map(ls_mcp_server::tool_from_def)
             .collect();
         Ok(ListToolsResult {
             tools,
@@ -260,12 +251,7 @@ fn call_outcome(
         Err(_) => (McpOutcome::Error, Some(McpReason::InvalidArguments)),
         Ok(r) if r.is_error != Some(true) => (McpOutcome::Ok, None),
         Ok(r) => {
-            let status = r
-                .structured_content
-                .as_ref()
-                .and_then(|v| v.pointer("/error/status"))
-                .and_then(serde_json::Value::as_u64);
-            if matches!(status, Some(401 | 403)) {
+            if matches!(ls_mcp_server::error_status(r), Some(401 | 403)) {
                 (McpOutcome::Denied, Some(McpReason::ToolError))
             } else {
                 (McpOutcome::Error, Some(McpReason::ToolError))

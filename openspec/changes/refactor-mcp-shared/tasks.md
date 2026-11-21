@@ -13,9 +13,9 @@
 - [ ] 2.4 Verify: `cargo nextest run -p ls-control-plane -E 'binary(mcp) | binary(mcp_tools) | binary(tenancy) | binary(tenant_lint) | binary(audit) | binary(openapi)'` and `rg -n 'INSERT INTO mcp_clients|FROM mcp_tool_settings' services/control-plane/src` lists only `mcp_store.rs`.
 
 ## 3. Shared tool helpers in ls-mcp-server [sonnet]
-- [ ] 3.1 Add `rmcp` (`=3.11.0`, features `server`, `transport-streamable-http-server`, same as the services) to `crates/ls-mcp-server/Cargo.toml`; add `tool_from_def(&ToolDef) -> Tool` and `error_status(&CallToolResult) -> Option<u64>` with unit tests (output schema present and absent, status 401, 501, missing, not an error result). Check `Cargo.lock` has no new package.
-- [ ] 3.2 Hub: replace `to_tool` in `control-plane/src/mcp_endpoint.rs` (keep the read-only annotation) and the status read in `mcp_tools.rs` `call_outcome`. Gateway: replace `to_tool` and the status read in `mcp_endpoint.rs` `call_outcome`. Each side keeps its own mapping; the gateway does not map 501 (design decision 4).
-- [ ] 3.3 Verify: `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane -E 'test(mcp)'`; existing outcome and `tools/list` snapshot tests pass unchanged.
+- [x] 3.1 Add `rmcp` (`=3.11.0`, features `server`, `transport-streamable-http-server`, same as the services) to `crates/ls-mcp-server/Cargo.toml`; add `tool_from_def(&ToolDef) -> Tool` and `error_status(&CallToolResult) -> Option<u64>` with unit tests (output schema present and absent, status 401, 501, missing, not an error result). Check `Cargo.lock` has no new package.
+- [x] 3.2 Hub: replace `to_tool` in `control-plane/src/mcp_endpoint.rs` (keep the read-only annotation) and the status read in `mcp_tools.rs` `call_outcome`. Gateway: replace `to_tool` and the status read in `mcp_endpoint.rs` `call_outcome`. Each side keeps its own mapping; the gateway does not map 501 (design decision 4).
+- [x] 3.3 Verify: `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane -E 'test(mcp)'`; existing outcome and `tools/list` snapshot tests pass unchanged.
 
 ## 4. Audit append and bearer challenge [sonnet]
 - [ ] 4.1 `services/gateway/src/audit.rs`: add `append_to(path, body, ok_statuses)` and make `post` (`&[200, 201]`) and `post_mcp_call` (`&[201]`) call it (design decision 5). Add one test per status class (accepted, `4xx`, `5xx`, unparsable body, transport unavailable) for both callers.

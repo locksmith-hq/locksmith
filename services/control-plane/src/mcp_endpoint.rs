@@ -30,7 +30,7 @@ use ls_audit::{Code, outcome};
 use ls_mcp_server::{Layer, Refusal, Registry, ToolDef, hub_tools};
 use rmcp::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult, JsonObject,
+    CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult,
     ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
     ToolAnnotations,
 };
@@ -199,11 +199,7 @@ fn internal(_: ApiError) -> McpError {
 }
 
 fn to_tool(def: &ToolDef) -> Tool {
-    let object = |v: &serde_json::Value| -> Arc<JsonObject> {
-        Arc::new(v.as_object().cloned().unwrap_or_default())
-    };
-    let mut tool = Tool::new(def.name, def.description, object(&def.input_schema));
-    tool.output_schema = def.output_schema.as_ref().map(object);
+    let mut tool = ls_mcp_server::tool_from_def(def);
     // Read tools are those that ship on; state-changing tools ship off.
     tool.annotations = Some(ToolAnnotations::new().read_only(def.default_enabled));
     tool

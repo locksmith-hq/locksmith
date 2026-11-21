@@ -5,6 +5,7 @@ import type { Client } from "@locksmith/control-plane-client";
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agents } from "./pages/Agents";
+import { WorkloadIdentities } from "./pages/WorkloadIdentities";
 import { GrantsPage } from "./pages/Grants";
 import { Activity } from "./pages/Activity";
 import { Secrets } from "./pages/Secrets";
@@ -18,7 +19,7 @@ import "./shell.css";
 const NAV: ReadonlyArray<{ heading?: string; items: ReadonlyArray<readonly [path: string, label: string]> }> = [
   { items: [["overview", "Home"]] },
   { heading: "Secret Management", items: [["projects", "Projects"], ["environments", "Environments"], ["secrets", "Secrets"]] },
-  { heading: "Agent Gateway", items: [["agents", "Agents"], ["grants", "Grants"]] },
+  { heading: "Agent Gateway", items: [["agents", "Agents"], ["workload-identities", "Workload identities"], ["grants", "Grants"]] },
   { heading: "MCP", items: [["tools", "Tools"], ["clients", "Clients"]] },
   { items: [["activity", "Activity"]] },
 ];
@@ -84,6 +85,7 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
           <Route path="secrets/*" element={<Secrets client={client} />} />
           <Route path="environments" element={<EnvironmentsRedirect client={client} selected={selected} />} />
           <Route path="agents" element={<Agents client={client} />} />
+          <Route path="workload-identities" element={<WorkloadIdentities client={client} />} />
           <Route path="grants" element={<GrantsPage client={client} />} />
           <Route path="tools" element={<McpTools client={client} />} />
           <Route path="clients" element={<McpClients client={client} />} />

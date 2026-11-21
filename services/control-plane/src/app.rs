@@ -21,6 +21,8 @@ use utoipa_axum::routes;
 
 use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
+use crate::auth::abuse::{AbuseGuard, AbuseLimits};
+use crate::auth::external::ExternalVerifier;
 use crate::auth::human::HumanAuth;
 use crate::db::Database;
 use crate::issuer_admin::IssuerAdmin;
@@ -49,6 +51,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
         (name = "auth", description = "Sign-in and sign-out markers for the audit ledger; human bearer token only"),
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
         (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
+        (name = "workload-identities", description = "Workload identity trust policies and the exchange of an external OIDC token for an agent token"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
     )
 )]
@@ -91,6 +94,8 @@ pub struct AppState {
     service_token: Option<Arc<ServiceToken>>,
     agent_signer: Option<Arc<AgentTokenSigner>>,
     human_auth: Option<Arc<HumanAuth>>,
+    workload_verifier: Option<Arc<ExternalVerifier>>,
+    workload_abuse: Arc<AbuseGuard>,
     mcp: Option<Arc<McpEndpoint>>,
     issuer_admin: Option<Arc<IssuerAdmin>>,
 }
@@ -106,6 +111,8 @@ impl AppState {
             service_token: None,
             agent_signer: None,
             human_auth: None,
+            workload_verifier: None,
+            workload_abuse: Arc::new(AbuseGuard::default()),
             mcp: None,
             issuer_admin: None,
         }
@@ -144,6 +151,29 @@ impl AppState {
     /// The human token verifier, if an issuer is configured.
     pub fn human_auth(&self) -> Option<&HumanAuth> {
         self.human_auth.as_deref()
+    }
+
+    /// Verify external workload tokens with `verifier` (D4). Without one, workload token
+    /// exchanges answer `503` and policy creation skips the issuer host check.
+    pub fn with_workload_verifier(mut self, verifier: ExternalVerifier) -> Self {
+        self.workload_verifier = Some(Arc::new(verifier));
+        self
+    }
+
+    /// Replace the default workload exchange limits (`jti` replay cache, rate limits).
+    pub fn with_workload_limits(mut self, limits: AbuseLimits) -> Self {
+        self.workload_abuse = Arc::new(AbuseGuard::new(limits));
+        self
+    }
+
+    /// The workload exchange replay cache and rate limiters.
+    pub fn workload_abuse(&self) -> &AbuseGuard {
+        &self.workload_abuse
+    }
+
+    /// The external workload token verifier, if one is configured.
+    pub fn workload_verifier(&self) -> Option<&ExternalVerifier> {
+        self.workload_verifier.as_deref()
     }
 
     /// Serve the hub `/mcp` route with `endpoint` (M1 task 2.1). Without one `/mcp` answers `401`.

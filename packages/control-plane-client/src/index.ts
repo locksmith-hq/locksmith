@@ -19,6 +19,9 @@ export type NewEnvironment = components["schemas"]["NewEnvironment"];
 export type Secret = components["schemas"]["Secret"];
 export type SecretVersion = components["schemas"]["SecretVersion"];
 export type Patch = components["schemas"]["Patch"];
+export type WorkloadIdentity = components["schemas"]["WorkloadIdentity"];
+export type NewWorkloadIdentity = components["schemas"]["NewWorkloadIdentity"];
+export type WorkloadCondition = components["schemas"]["ConditionView"];
 export type McpLayer = components["schemas"]["McpLayer"];
 export type McpToolSetting = components["schemas"]["McpToolSetting"];
 export type McpClient = components["schemas"]["McpClient"];
@@ -28,6 +31,40 @@ export type Problem = components["schemas"]["Problem"];
 export type AuditOutcomeFilter = "all" | "denied" | "redaction_failed";
 export const auditOutcomeMatches = (e: AuditEvent, f: AuditOutcomeFilter): boolean =>
   f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
+
+/** True when a condition value is a trailing-`*` prefix match (broader than an exact match). */
+export const isPrefixPattern = (c: WorkloadCondition): boolean => c.pattern.endsWith("*");
+export const hasPrefixCondition = (conditions: readonly WorkloadCondition[]): boolean => conditions.some(isPrefixPattern);
+
+export type WorkloadPreset = "github" | "kubernetes";
+export interface WorkloadForm {
+  name: string;
+  agentId: string;
+  audience: string;
+  preset: WorkloadPreset;
+  /** Kubernetes only: the cluster's https issuer URL. */
+  issuer?: string;
+  /** GitHub: owner/repo (pinned subject). */
+  repository?: string;
+  ref?: string;
+  environment?: string;
+  /** Kubernetes: compiled to `sub` = `system:serviceaccount:<namespace>:<serviceaccount>`. */
+  namespace?: string;
+  serviceaccount?: string;
+}
+
+/** Builds the create request from a preset form. Carries no token or secret field by construction. */
+export function buildWorkloadIdentity(f: WorkloadForm): NewWorkloadIdentity {
+  const conditions: WorkloadCondition[] = [];
+  const add = (claim: string, pattern?: string) => { const v = pattern?.trim(); if (v) conditions.push({ claim, pattern: v }); };
+  if (f.preset === "github") {
+    add("repository", f.repository); add("ref", f.ref); add("environment", f.environment);
+    return { name: f.name.trim(), agent_id: f.agentId, audience: f.audience.trim(), issuer_kind: "github", conditions };
+  }
+  const ns = f.namespace?.trim(), sa = f.serviceaccount?.trim();
+  if (ns && sa) add("sub", `system:serviceaccount:${ns}:${sa}`);
+  return { name: f.name.trim(), agent_id: f.agentId, audience: f.audience.trim(), issuer_kind: "oidc", issuer: f.issuer?.trim(), conditions };
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -59,6 +96,9 @@ export interface Client {
   listSecrets(projectId: string, envId: string): Promise<Secret[]>;
   getSecret(projectId: string, envId: string, secretId: string): Promise<Secret>;
   listSecretVersions(projectId: string, envId: string, secretId: string): Promise<SecretVersion[]>;
+  listWorkloadIdentities(): Promise<WorkloadIdentity[]>;
+  createWorkloadIdentity(body: NewWorkloadIdentity): Promise<WorkloadIdentity>;
+  deleteWorkloadIdentity(id: string): Promise<void>;
   /** Every MCP tool of both layers with its default and the org's switch. */
   listMcpTools(): Promise<McpToolSetting[]>;
   /** Turn one MCP tool on or off. Enforced server-side: a client cannot list or call an off tool. */
@@ -139,6 +179,9 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     listSecrets: (pid, eid) => all<Secret>(`${env(pid, eid)}/secrets`),
     getSecret: (pid, eid, sid) => req("GET", sec(pid, eid, sid)),
     listSecretVersions: async (pid, eid, sid) => (await req<{ items: SecretVersion[] }>("GET", `${sec(pid, eid, sid)}/versions`)).items,
+    listWorkloadIdentities: () => all<WorkloadIdentity>("/v1/workload-identities"),
+    createWorkloadIdentity: (b) => req("POST", "/v1/workload-identities", b),
+    deleteWorkloadIdentity: (id) => req("DELETE", `/v1/workload-identities/${encodeURIComponent(id)}`),
     listMcpTools: async () => (await req<{ items: McpToolSetting[] }>("GET", "/v1/mcp/tools")).items,
     setMcpTool: (layer, tool, enabled) =>
       req("PUT", `/v1/mcp/tools/${layer}/${encodeURIComponent(tool)}`, { enabled }),

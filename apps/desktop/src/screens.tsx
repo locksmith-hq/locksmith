@@ -3,7 +3,7 @@ import type {
   AuditEvent, AuditVerifyView, HttpTokenInfo, LeaseInfo, RelayInfo, SourceKind, StatusView,
 } from "@locksmith/api-types";
 import * as api from "./api";
-import { ApiError, auditOutcomeMatches, type AuditOutcomeFilter, type Client, type Environment, type Project, type Secret, type SecretVersion } from "@locksmith/control-plane-client";
+import { ApiError, auditOutcomeMatches, buildWorkloadIdentity, hasPrefixCondition, isPrefixPattern, type AuditOutcomeFilter, type Client, type Environment, type Project, type Secret, type SecretVersion } from "@locksmith/control-plane-client";
 import { Icon, type IconName } from "@locksmith/ui";
 
 export interface ScreenProps {
@@ -658,6 +658,96 @@ export function Agents(_: ScreenProps) {
                   </form>
                   <button type="button" className="btn sm danger-text" aria-label={`Delete ${a.name}`}
                     onClick={() => void run(() => client.deleteAgent(a.id))}>Delete agent</button>
+                </article>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Trust policies that let a CI job or cluster workload swap its own OIDC token for an agent token. No secret anywhere. */
+export function WorkloadIdentities(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [items, setItems] = useState<api.WorkloadIdentity[] | null>(null);
+  const [err, setErr] = useState("");
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [preset, setPreset] = useState<api.WorkloadPreset>("github");
+  const [f, setF] = useState({ name: "", agentId: "", audience: "", issuer: "", repository: "", ref: "", environment: "", namespace: "", serviceaccount: "" });
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+
+  const load = useCallback(async () => {
+    if (!client) return;
+    try { setItems(await client.listWorkloadIdentities()); } catch (e) { setErr(msg(e)); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const body = buildWorkloadIdentity({ ...f, preset });
+  const run = async (fn: () => Promise<unknown>) => {
+    setErr("");
+    try { await fn(); } catch (e) { setErr(msg(e)); }
+    await load();
+  };
+
+  return (
+    <section className="screen" aria-labelledby="h-wl">
+      <Head id="h-wl" title="Workload identities" sub="A CI job or cluster workload exchanges its own OIDC token for a short-lived agent token. Nothing secret is entered or shown here." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="key">Connect a control plane and org id on the Agents screen first.</Empty> : (
+        <>
+          <form className="card" aria-label="Create workload identity" onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              await client.createWorkloadIdentity(body);
+              setF({ ...f, name: "", repository: "", ref: "", environment: "", namespace: "", serviceaccount: "" });
+            });
+          }}>
+            <select aria-label="Issuer preset" value={preset} onChange={(e) => setPreset(e.target.value as api.WorkloadPreset)}>
+              <option value="github">GitHub Actions</option>
+              <option value="kubernetes">Kubernetes</option>
+            </select>
+            <input aria-label="Policy name" required value={f.name} onChange={set("name")} />
+            <input aria-label="Agent id" required value={f.agentId} onChange={(e) => setF({ ...f, agentId: e.target.value.trim() })} />
+            <input aria-label="Audience" required value={f.audience} onChange={set("audience")} />
+            {preset === "github" ? (
+              <>
+                <input aria-label="Repository (owner/repo)" required value={f.repository} onChange={set("repository")} />
+                <input aria-label="Ref (optional)" value={f.ref} onChange={set("ref")} />
+                <input aria-label="Environment (optional)" value={f.environment} onChange={set("environment")} />
+              </>
+            ) : (
+              <>
+                <input aria-label="Issuer URL" type="url" required value={f.issuer} onChange={set("issuer")} />
+                <input aria-label="Namespace" required value={f.namespace} onChange={set("namespace")} />
+                <input aria-label="Service account" required value={f.serviceaccount} onChange={set("serviceaccount")} />
+              </>
+            )}
+            {hasPrefixCondition(body.conditions) && (
+              <p role="alert" className="alert" data-testid="prefix-warning"><Icon name="alert" />A condition ends in * and matches every value with that prefix. Prefer exact values.</p>
+            )}
+            <button type="submit" className="btn primary sm">Create workload identity</button>
+          </form>
+          {!items ? <Loading what="workload identities" /> : items.length === 0 ? <Empty icon="key"><b>No workload identities yet.</b></Empty> : (
+            <div className="sessions">
+              {items.map((w) => (
+                <article key={w.id} className="card" aria-label={`Workload identity ${w.name}`}>
+                  <div className="who"><b>{w.name}</b><span className="mono">{w.issuer_kind} {w.issuer}</span></div>
+                  <p>Handle: <code className="mono">{w.handle}</code> (not a secret) · audience {w.audience} · agent <span className="mono">{w.agent_id}</span> · last used {w.last_used_at ?? "never"}</p>
+                  <ul>
+                    {w.conditions.map((c) => (
+                      <li key={`${c.claim}=${c.pattern}`}><span className="mono">{c.claim} = {c.pattern}</span>{isPrefixPattern(c) ? " (prefix match)" : ""}</li>
+                    ))}
+                  </ul>
+                  {hasPrefixCondition(w.conditions) && <p className="alert"><Icon name="alert" />This policy uses a prefix (*) condition.</p>}
+                  {confirming === w.id ? (
+                    <>
+                      <button type="button" className="btn sm danger-text" onClick={() => { setConfirming(null); void run(() => client.deleteWorkloadIdentity(w.id)); }}>Confirm delete {w.name}</button>
+                      <button type="button" className="btn sm" onClick={() => setConfirming(null)}>Cancel</button>
+                    </>
+                  ) : <button type="button" className="btn sm danger-text" onClick={() => setConfirming(w.id)}>Delete {w.name}</button>}
                 </article>
               ))}
             </div>

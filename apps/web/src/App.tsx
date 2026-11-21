@@ -5,8 +5,6 @@ import { createClient, type Client } from "@locksmith/control-plane-client";
 import { withUnauthorizedHandler } from "./api/client";
 import { createAuth, defaultConfig, type AuthService, type AuthState } from "./auth";
 
-
-
 let defaultAuth: AuthService | undefined;
 const getDefaultAuth = () => (defaultAuth ??= createAuth(defaultConfig()));
 

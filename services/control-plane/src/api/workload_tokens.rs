@@ -216,7 +216,7 @@ async fn load_policy(state: &AppState, org_id: Uuid, policy_id: Uuid) -> Result<
             })
         })
         .await
-        .map_err(|e| db_denial(e.into()))?;
+        .map_err(db_denial)?;
     let row = row.ok_or(Denial::UnknownPolicy)?;
     let parse = |r: &sql::PgRow| -> sql::Result<Policy> {
         let stored: Vec<Condition> = serde_json::from_str(r.try_get::<&str, _>("conditions")?)

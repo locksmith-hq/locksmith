@@ -13,6 +13,7 @@ use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
 use ls_gateway::grants::{GrantCache, GrantCacheSettings};
+use ls_gateway::pg::{Connector, PgListener, PgListenerOptions, PgRelayUpstream, tls_acceptor};
 use ls_gateway::relay::{Relay, RelayOptions};
 use secrecy::ExposeSecret;
 use tracing_subscriber::EnvFilter;
@@ -132,7 +133,70 @@ async fn main() -> ExitCode {
         RelayOptions::default(),
     );
 
-    let router = app::build(AppState::new(readiness).with_relay(Arc::new(relay)));
+    let relay = Arc::new(relay);
+
+    // Postgres listener (D3), off unless LOCKSMITH_GATEWAY_PG_LISTEN is set. TLS is required
+    // before startup, so it does not start without a certificate and key.
+    let pg_task = match &config.pg_listen {
+        None => None,
+        Some(pg) => {
+            let cert = std::fs::read(&pg.cert_path).ok();
+            let key = std::fs::read(&pg.key_path)
+                .ok()
+                .map(zeroize::Zeroizing::new);
+            let (Some(cert), Some(key)) = (cert, key) else {
+                tracing::error!(
+                    "pg listener TLS files could not be read ({}, {})",
+                    config::ENV_PG_TLS_CERT,
+                    config::ENV_PG_TLS_KEY
+                );
+                return ExitCode::FAILURE;
+            };
+            let tls = match tls_acceptor(&cert, &key) {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!(error = %e, "pg listener TLS setup failed");
+                    return ExitCode::FAILURE;
+                }
+            };
+            drop(key);
+            let listener = match tokio::net::TcpListener::bind(pg.addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to bind pg listen address ({})", config::ENV_PG_LISTEN);
+                    return ExitCode::FAILURE;
+                }
+            };
+            let connector = match ls_http::tls_config()
+                .ok()
+                .and_then(|c| Connector::new(c).ok())
+            {
+                Some(c) => c,
+                None => {
+                    tracing::error!("pg upstream TLS client setup failed");
+                    return ExitCode::FAILURE;
+                }
+            };
+            let upstream = Arc::new(PgRelayUpstream::new(connector));
+            let pg_listener = Arc::new(
+                PgListener::new(
+                    relay.clone(),
+                    tls,
+                    upstream.clone(),
+                    PgListenerOptions::default(),
+                )
+                .with_cancel_map(upstream.cancel_map()),
+            );
+            tracing::info!(addr = %pg.addr, bindings = relay.bindings().pg.len(), "pg listener started");
+            Some(tokio::spawn(async move {
+                if let Err(e) = pg_listener.serve(listener).await {
+                    tracing::error!(error = %e, "pg listener stopped");
+                }
+            }))
+        }
+    };
+
+    let router = app::build(AppState::new(readiness).with_relay(relay));
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {
@@ -149,6 +213,9 @@ async fn main() -> ExitCode {
         .await;
     probe.abort();
     sweeper.abort();
+    if let Some(t) = pg_task {
+        t.abort();
+    }
     database.close().await;
     let _ = tokio::task::spawn_blocking(move || telemetry.shutdown()).await;
     match served {

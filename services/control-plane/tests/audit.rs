@@ -190,6 +190,16 @@ async fn non_allow_listed_bodies_are_400() {
         json!({"kind": "git.fetch", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "git.push", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "git.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        // Postgres refusals (D3): only denial outcomes.
+        json!({"kind": "db.session.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.denied", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.denied", "outcome": "upstream_timeout", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        // Session events (D3): outcome `ok` only; `reason` only on the closing event.
+        json!({"kind": "db.session.opened", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.opened", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "reason": "revoked"}),
+        json!({"kind": "db.session.opened", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "bytes_in": 1}),
+        json!({"kind": "db.session.closed", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.closed", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "reason": "query text"}),
         // An outcome must name its attempt (the idempotency key).
         json!({"kind": "relay.outcome", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
     ] {
@@ -216,6 +226,8 @@ async fn git_events_append_to_the_chain() {
         ("git.fetch", "ok"),
         ("git.push", "upstream_timeout"),
         ("git.denied", "denied"),
+        ("db.session.denied", "no_grant"),
+        ("db.session.denied", "decrypt_failed"),
     ]
     .into_iter()
     .enumerate()
@@ -237,8 +249,50 @@ async fn git_events_append_to_the_chain() {
         [
             ("git.fetch", "ok"),
             ("git.push", "upstream_timeout"),
-            ("git.denied", "denied")
+            ("git.denied", "denied"),
+            ("db.session.denied", "no_grant"),
+            ("db.session.denied", "decrypt_failed")
         ]
+    );
+}
+
+/// Session events (D3): `db.session.opened` then `db.session.closed` with reason, duration and
+/// byte counts, linked by `attempt_id`.
+#[tokio::test]
+async fn db_session_events_append_to_the_chain() {
+    let f = Fixture::start().await;
+    let org = f.org("dbsession").await;
+    let auth = bearer(TOKEN);
+    let (agent, secret) = (Uuid::now_v7(), Uuid::now_v7());
+    let opened = post_event(
+        &f.app,
+        Some(&auth),
+        Some(org),
+        &json!({"kind": "db.session.opened", "outcome": "ok", "agent_id": agent,
+                "secret_id": secret, "version": 1, "host": "db.internal", "port": 5432}),
+    )
+    .await;
+    assert_eq!(opened.status, StatusCode::CREATED);
+    let closed = post_event(
+        &f.app,
+        Some(&auth),
+        Some(org),
+        &json!({"kind": "db.session.closed", "outcome": "ok", "agent_id": agent,
+                "secret_id": secret, "version": 1, "host": "db.internal", "port": 5432,
+                "attempt_id": opened.body["id"], "reason": "revoked",
+                "duration_ms": 1234, "bytes_in": 10, "bytes_out": 2048}),
+    )
+    .await;
+    assert_eq!(closed.status, StatusCode::CREATED);
+    let rows = f.records(org).await;
+    assert_intact(&rows);
+    let seen: Vec<_> = rows
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert_eq!(
+        seen,
+        [("db.session.opened", "ok"), ("db.session.closed", "ok")]
     );
 }
 

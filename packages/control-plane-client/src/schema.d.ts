@@ -730,6 +730,21 @@ export interface components {
              */
             attempt_id?: string | null;
             /**
+             * Format: int64
+             * @description Bytes relayed client to upstream (`db.session.closed` only).
+             */
+            bytes_in?: number | null;
+            /**
+             * Format: int64
+             * @description Bytes relayed upstream to client (`db.session.closed` only).
+             */
+            bytes_out?: number | null;
+            /**
+             * Format: int64
+             * @description Session length in milliseconds (`db.session.closed` only).
+             */
+            duration_ms?: number | null;
+            /**
              * @description Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or
              *     query.
              */
@@ -742,6 +757,7 @@ export interface components {
              * @description Upstream port, when the URL names one explicitly.
              */
             port?: number | null;
+            reason?: components["schemas"]["SessionCloseReason"] | null;
             /**
              * Format: uuid
              * @description The secret the call used (the event's target).
@@ -889,7 +905,7 @@ export interface components {
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed";
         /**
          * @description The upstream request method.
          * @enum {string}
@@ -953,6 +969,11 @@ export interface components {
             /** @description A0-7 `dek-wrap` blob (the KMS-wrapped data key), standard base64 with padding. */
             wrapped_dek: string;
         };
+        /**
+         * @description Why a relayed Postgres session ended (`db.session.closed`).
+         * @enum {string}
+         */
+        SessionCloseReason: "client_closed" | "upstream_closed" | "revoked" | "expired" | "error";
     };
     responses: never;
     parameters: never;

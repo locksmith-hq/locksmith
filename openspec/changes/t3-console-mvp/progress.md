@@ -80,3 +80,8 @@
 - Task: group 5 (5.1-5.3) audited by an independent Sonnet evaluator (PASS) and ticked.
 - Verified: `npm test --workspace apps/desktop` (36 passed), `just apps-build` exit 0.
 - Notes for next session: remaining 6.1-6.3, 6.4.1-6.4.3, 6.5-6.6, 7.x need `just up && just web-e2e` (docker/Keycloak). Weak spot: the desktop 5.2 `fetch` assertion is near-vacuous (client mocked); the method allow-list is the real check.
+
+## 2026-11-21 worker (josie, run 3)
+- Task: t3 PR #489 conflicts - done (merged origin/main; vitest 4 from main kept, package-lock regenerated with npm i).
+- Verified: npm test in control-plane-client (9), apps/web (47), apps/desktop (36); web build OK; `just quick` OK.
+- Notes for next session: remaining 6.1-6.3, 6.4.1-6.4.3, 6.5-6.6, 7.x need `just up && just web-e2e` (docker/Keycloak); not attempted this run.

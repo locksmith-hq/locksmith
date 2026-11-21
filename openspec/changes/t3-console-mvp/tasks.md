@@ -32,8 +32,8 @@
 
 ## 6. End-to-end [sonnet]
 - [ ] 6.1 Playwright setup, `just web-e2e` recipe (starts `just up` with the auth profile): sign in as a test user, create a project and environment, register an agent, create and revoke a grant, see activity.
-- [ ] 6.2 Add a leak check: the e2e records all requests and fails on any value or material route.
-- [ ] 6.3 Verify: `just up && just web-e2e`.
+- [x] 6.2 Add a leak check: the e2e records all requests and fails on any value or material route.
+- [x] 6.3 Verify: `just up && just web-e2e`.
 - [x] 6.4 Gate: confirm the owner approved the live console layout (design.md Open Questions); otherwise stop and report to the lead.
 - [ ] 6.4.1 Shell in the mockup frame (owner option B, #510): product-grouped sidebar (Home; Secret Management: Projects, Environments, Secrets; Agent Gateway: Agents, Grants; Activity), org switcher top right, user card with sign-out at the bottom; Environments opens the selected project's environments; Shell and route tests updated.
 - [ ] 6.4.2 Restyle Overview, Projects, Environments, Secrets, Agents, Grants and Activity with the `packages/ui` kit components and tokens (cards, tables, buttons, dialogs, `QueryState`); no new styling source; existing tests stay green.

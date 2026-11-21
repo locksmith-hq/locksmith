@@ -85,3 +85,8 @@
 - Task: t3 PR #489 conflicts - done (merged origin/main; vitest 4 from main kept, package-lock regenerated with npm i).
 - Verified: npm test in control-plane-client (9), apps/web (47), apps/desktop (36); web build OK; `just quick` OK.
 - Notes for next session: remaining 6.1-6.3, 6.4.1-6.4.3, 6.5-6.6, 7.x need `just up && just web-e2e` (docker/Keycloak); not attempted this run.
+
+## 2026-11-21 worker (josie, run 4)
+- Task: 6.2 and 6.3 audited by an independent Sonnet evaluator (PASS) and ticked; 6.1 left unticked.
+- Verified: `just up` + `just api` + `just web-e2e` (1 test passed, with `PW_CHROMIUM=/opt/pw-browsers/chromium`); main merged in.
+- Notes for next session: 6.1 caveats: the "see activity" step only asserts the Audit region is visible (should assert a grant create/revoke row), and the `web-e2e` recipe does not start `just up` itself (task text says it does). Remaining: 6.1, 6.4.1-6.4.3, 6.5-6.6, 7.x. Docker image pull for `just up` takes ~10 min cold; cargo build of `just api` ~5 min.

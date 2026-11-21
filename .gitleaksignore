@@ -50,3 +50,5 @@ daaca0ee540ad43a11439db70d1f8ef878483db8:crates/ls-proxy/tests/aws_relay.rs:aws-
 crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
 crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
 crates/ls-envelope/vectors/v1.json:generic-api-key:50
+# Example secret id (a UUID, not a credential) in the github-action README, fixed to a placeholder in the next commit (d4).
+6e96fdab1368bc077c3a6b78d52883e5b31fa613:integrations/github-action/README.md:generic-api-key:49

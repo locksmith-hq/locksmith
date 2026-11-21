@@ -46,7 +46,7 @@ jobs:
       - run: smith grants
       - run: smith relay --secret-id "$SECRET_ID" https://api.example.com/deploy -X POST
         env:
-          SECRET_ID: 0191a3b2-7c1e-7a3f-8b2d-5e6f7a8b9c0d
+          SECRET_ID: <secret-id>
 ```
 
 A policy that matches the example pins the subject and the ref:

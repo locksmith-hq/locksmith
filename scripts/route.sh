@@ -76,10 +76,12 @@ role_of() { # <login>: the agent role whose logins include it, else nothing (the
 }
 
 # "raiser" means the role named by "<!-- raised-by: <role> -->" in the issue body, else the role of the
-# issue's author (a worker's needs-rescue), else the lead.
+# issue's author (a worker's needs-rescue), else the lead. A marker that names no routine (`worker`,
+# `optimizer`) is ignored: it used to crash fire() and drop the wake (#563).
 resolve() { # <role or "raiser"> <event.json>
   [ "$1" = raiser ] || { printf '%s' "$1"; return; }
   local r; r=$(jq -r '(.issue.body // "") | (capture("<!-- raised-by: (?<r>[a-z-]+) -->")?|.r) // empty' "$2")
+  [ -n "$r" ] && [ -z "$(cfgq --arg r "$r" '.roles[$r].trigger // empty')" ] && r=
   [ -n "$r" ] || r=$(role_of "$(jq -r '.issue.user.login // ""' "$2")")
   printf '%s' "${r:-lead}"
 }
@@ -142,7 +144,7 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
 fire() { # <role> <reason>
   local trig secret token
   trig=$(cfgq --arg r "$1" '.roles[$r].trigger // ""'); secret=$(cfgq --arg r "$1" '.roles[$r].secret // ""')
-  token=${!secret:-}
+  [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
   if [ -z "$trig" ] || [ -z "$token" ]; then echo "::warning::$1 has no routine trigger or ${secret:-token} set; its schedule picks this up"; return 0; fi
   curl -fsS -X POST "https://api.anthropic.com/v1/claude_code/routines/$trig/fire" \
@@ -218,6 +220,8 @@ no role marker"
   ev 'research\tneeds-research #6 opened' issues '{"action":"labeled","label":{"name":"needs-research"},"issue":{"number":6,"labels":[{"name":"needs-research"}]}}'
   ev 'pm\tneeds-work #16 opened' issues '{"action":"labeled","label":{"name":"needs-work"},"issue":{"number":16,"labels":[{"name":"needs-work"}]}}'
   ev 'worker-c\tneeds-work #16 closed' issues '{"action":"closed","issue":{"number":16,"body":"<!-- raised-by: worker-c -->","labels":[{"name":"needs-work"}]}}'
+  ev 'worker-a\tneeds-rescue #5 closed' issues '{"action":"closed","issue":{"number":5,"body":"<!-- raised-by: worker -->","user":{"login":"locksmith-alfie[bot]"},"labels":[{"name":"needs-rescue"}]}}'
+  ev 'lead\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"body":"<!-- raised-by: optimizer -->","user":{"login":"tomer555"},"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"done"}}'
   ev 'pm\tneeds-research #6 closed' issues '{"action":"closed","issue":{"number":6,"body":"<!-- raised-by: pm -->","labels":[{"name":"needs-research"}]}}'
   ev 'worker-a\tCI failed on main' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"main","event":"push","pull_requests":[]}}'
   ev '' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"feature","event":"pull_request","pull_requests":[]}}'

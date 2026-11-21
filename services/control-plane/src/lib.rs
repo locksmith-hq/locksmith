@@ -18,3 +18,4 @@ pub mod problem;
 pub mod readiness;
 pub mod telemetry;
 pub mod users;
+pub mod workload;

@@ -4,7 +4,9 @@ use std::sync::Arc;
 use ls_control_plane::agent_token::AgentTokenSigner;
 use ls_control_plane::app::{self, AppState};
 use ls_control_plane::auth::ServiceToken;
+use ls_control_plane::auth::external::{DEFAULT_MAX_LIFETIME, ExternalVerifier};
 use ls_control_plane::auth::human::HumanAuth;
+use ls_control_plane::auth::issuers::IssuerRegistry;
 use ls_control_plane::checkpoint::{self, CheckpointJob, Schedule};
 use ls_control_plane::config::{self, Config};
 use ls_control_plane::db::{self, Database, DbReadiness, PROBE_INTERVAL, PoolSettings};
@@ -161,6 +163,26 @@ async fn main() -> ExitCode {
             config::ENV_OIDC_ISSUER
         ),
     }
+    match IssuerRegistry::new(config.workload_issuers) {
+        Ok(registry) => {
+            if config.workload_issuers.allow_private_hosts {
+                tracing::warn!(
+                    "{} is set: workload issuers may be on private addresses (local development only)",
+                    config::ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS
+                );
+            }
+            state =
+                state.with_workload_verifier(ExternalVerifier::new(registry, DEFAULT_MAX_LIFETIME));
+        }
+        Err(e) => {
+            tracing::error!(
+                reason = e.label(),
+                "could not build the workload issuer client"
+            );
+            return ExitCode::FAILURE;
+        }
+    }
+    let mut state = state.with_workload_limits(config.workload_limits);
     if let (Some(human), Some(resource)) = (&config.human_auth, &config.mcp_resource_url) {
         match ls_control_plane::mcp_endpoint::McpEndpoint::new(human, resource) {
             Ok(endpoint) => {
@@ -202,11 +224,14 @@ async fn main() -> ExitCode {
     };
     tracing::info!(addr = %config.bind, "locksmith-api listening");
 
-    let served = axum::serve(listener, router)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await;
+    let served = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await;
     migrations.abort();
     probe.abort();
     if let Some(job) = checkpoints {

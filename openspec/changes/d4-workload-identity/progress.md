@@ -72,3 +72,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: d4 - ci-fix (hygiene gitleaks flagged example UUID in integrations/github-action/README.md)
 - Verified: gitleaks git . -> only the p4-branch leak remains (not in this branch); just quick -> ok
 - Notes for next session: remaining checks on PR #530 not yet re-observed; check CI after push.
+
+## 2026-11-21 09:35 worker
+- Task: d4 - blocked (CI red on 4218db4, hygiene/gitleaks step only)
+- Verified: gitleaks git (HEAD, origin/main, refs/pull/530/merge) -> no leaks; tree-check and task guard OK
+- Notes for next session: cannot reproduce; job log blob blocked by proxy and rerun needs Actions write (403). The next real push reruns CI; do not push an empty commit.

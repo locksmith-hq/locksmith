@@ -5,10 +5,12 @@
 //! - [`Code`]: a short static code (`relay.attempt`, `ok`, `denied_host`). It can only be built
 //!   from a `&'static str`, so a string taken from a request cannot become one;
 //! - [`Actor`] and [`Target`]: a UUID with its object type, or a service code;
-//! - [`AttrValue`]: a UUID, an integer, a code or a validated [`Host`].
+//! - [`AttrValue`]: a UUID, an integer, a code, a validated [`Host`] or a bounded [`Text`].
 //!
-//! There is no free-form string anywhere, so a secret value, a header value, a body or a query
-//! string has no field to land in.
+//! [`Text`] is the one place caller-supplied text can land: at most [`Text::MAX_LEN`] printable
+//! ASCII characters, so it can hold a short non-secret label (a verified claim such as a
+//! repository name) but not a body, a header block or a multi-line value. Callers must only put
+//! non-secret identifying values in it.
 //!
 //! A stored row is a [`Record`]. Its hash is `SHA256(canonical)` (no MAC suffix) over the
 //! [`LEDGER_DOMAIN`](crate::LEDGER_DOMAIN) encoding of every column in a fixed order, and its
@@ -92,6 +94,12 @@ pub mod kind {
     pub const AGENT_DELETED: Code = Code::new("agent.deleted");
     pub const GRANT_CREATED: Code = Code::new("grant.created");
     pub const GRANT_REVOKED: Code = Code::new("grant.revoked");
+    /// A workload identity trust policy was created or deleted (D4 task 1.3).
+    pub const WORKLOAD_IDENTITY_CREATED: Code = Code::new("workload_identity.created");
+    pub const WORKLOAD_IDENTITY_DELETED: Code = Code::new("workload_identity.deleted");
+    /// An external workload token was exchanged for an agent token, or refused (D4 task 3.2).
+    pub const WORKLOAD_IDENTITY_EXCHANGED: Code = Code::new("workload_identity.exchanged");
+    pub const WORKLOAD_IDENTITY_DENIED: Code = Code::new("workload_identity.denied");
     /// A human signed in (T1 task 5.1). Actor `user:<id>`, target the personal org.
     pub const AUTH_SIGN_IN: Code = Code::new("auth.sign_in");
     pub const AUTH_SIGN_OUT: Code = Code::new("auth.sign_out");
@@ -147,6 +155,9 @@ pub mod attr {
     pub const TOOL: Code = Code::new("tool");
     /// The id of a short-lived credential (never the credential itself).
     pub const CREDENTIAL_ID: Code = Code::new("credential_id");
+    /// The `name=value` pairs of the verified external-token claims a workload identity policy
+    /// names (a [`Text`](super::Text)); nothing else from the token.
+    pub const CLAIMS: Code = Code::new("claims");
 }
 
 /// Who acted.
@@ -176,6 +187,7 @@ pub enum Target {
     Secret(Uuid),
     Agent(Uuid),
     Grant(Uuid),
+    WorkloadIdentity(Uuid),
 }
 
 impl Target {
@@ -186,6 +198,7 @@ impl Target {
             Self::Secret(id) => ("secret", id),
             Self::Agent(id) => ("agent", id),
             Self::Grant(id) => ("grant", id),
+            Self::WorkloadIdentity(id) => ("workload", id),
         };
         format!("{t}:{}", id.hyphenated())
     }
@@ -226,13 +239,39 @@ impl Host {
     }
 }
 
-/// An attribute value. Only identifier types exist.
+/// A short non-secret label: 1 to [`Text::MAX_LEN`] printable ASCII characters (`0x20..=0x7e`),
+/// so no control character, newline or non-ASCII byte. Used for identifying claim values.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Text(String);
+
+impl Text {
+    /// The longest accepted text, in characters.
+    pub const MAX_LEN: usize = 256;
+
+    pub fn parse(s: &str) -> Result<Self, InvalidIdentifier> {
+        if !s.is_empty()
+            && s.len() <= Self::MAX_LEN
+            && s.bytes().all(|b| (0x20..=0x7e).contains(&b))
+        {
+            Ok(Self(s.to_owned()))
+        } else {
+            Err(InvalidIdentifier)
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// An attribute value: identifier types and a bounded [`Text`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttrValue {
     Id(Uuid),
     Int(i64),
     Code(Code),
     Host(Host),
+    Text(Text),
 }
 
 /// The type tag of a stored attribute (its JSON key and its encoded tag).
@@ -242,6 +281,7 @@ pub enum AttrTag {
     Int,
     Code,
     Host,
+    Text,
 }
 
 impl AttrTag {
@@ -251,6 +291,7 @@ impl AttrTag {
             Self::Int => "int",
             Self::Code => "code",
             Self::Host => "host",
+            Self::Text => "text",
         }
     }
 
@@ -260,6 +301,7 @@ impl AttrTag {
             "int" => Self::Int,
             "code" => Self::Code,
             "host" => Self::Host,
+            "text" => Self::Text,
             _ => return None,
         })
     }
@@ -272,6 +314,7 @@ impl AttrValue {
             Self::Int(i) => (AttrTag::Int, i.to_string()),
             Self::Code(c) => (AttrTag::Code, c.as_str().to_owned()),
             Self::Host(h) => (AttrTag::Host, h.as_str().to_owned()),
+            Self::Text(t) => (AttrTag::Text, t.as_str().to_owned()),
         }
     }
 }
@@ -304,6 +347,10 @@ impl Attrs {
 
     pub fn host(self, key: Code, h: Host) -> Self {
         self.with(key, AttrValue::Host(h))
+    }
+
+    pub fn text(self, key: Code, t: Text) -> Self {
+        self.with(key, AttrValue::Text(t))
     }
 
     /// The stored form.
@@ -560,13 +607,59 @@ mod tests {
         for bad in [
             r#"[]"#,
             r#"{"a":"x"}"#,
-            r#"{"a":{"text":"x"}}"#,
+            r#"{"a":{"bogus":"x"}}"#,
             r#"{"a":{"int":1.5}}"#,
             r#"{"a":{"id":"x","int":1}}"#,
         ] {
             let v: serde_json::Value = serde_json::from_str(bad).unwrap();
             assert_eq!(StoredAttrs::from_json(&v), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn text_is_bounded_printable_ascii() {
+        assert_eq!(
+            Text::parse("repository=acme/api ref=refs/heads/main")
+                .unwrap()
+                .as_str(),
+            "repository=acme/api ref=refs/heads/main"
+        );
+        assert!(Text::parse(&"a".repeat(Text::MAX_LEN)).is_ok());
+        for bad in [
+            "",
+            "a\nb",
+            "a\tb",
+            "a\u{7f}b",
+            "caf\u{e9}",
+            "a\0b",
+            &"a".repeat(Text::MAX_LEN + 1),
+        ] {
+            assert_eq!(Text::parse(bad), Err(InvalidIdentifier), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn text_attr_round_trips_and_is_hashed() {
+        let text = Text::parse("repository=acme/api").unwrap();
+        let mut e = event();
+        e.attrs = e.attrs.text(attr::CLAIMS, text);
+        let stored = e.attrs.stored();
+        let j = stored.to_json();
+        assert_eq!(
+            j["claims"],
+            serde_json::json!({"text": "repository=acme/api"})
+        );
+        assert_eq!(StoredAttrs::from_json(&j), Some(stored));
+        let r = Record::new(ORG, 1, Uuid::nil(), 1, &e, GENESIS);
+        let mut t = r.clone();
+        t.attrs = Some(
+            event()
+                .attrs
+                .text(attr::CLAIMS, Text::parse("repository=acme/web").unwrap())
+                .stored(),
+        );
+        assert_ne!(t.compute_hash(), r.hash);
+        assert!(verify([r.link()], &[]).ok());
     }
 
     /// Pins the record encoding: a change to the field order or layout breaks every stored

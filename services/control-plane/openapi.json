@@ -472,6 +472,23 @@
         ],
         "type": "object"
       },
+      "ConditionView": {
+        "description": "One claim test as shown to callers: `pattern` ends in `*` for a prefix match.",
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Exact value, or a prefix ending in one `*`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "pattern"
+        ],
+        "type": "object"
+      },
       "Environment": {
         "properties": {
           "created_at": {
@@ -976,6 +993,49 @@
         ],
         "type": "object"
       },
+      "NewWorkloadIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "description": "The existing agent whose token the workload receives (same org).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "audience": {
+            "description": "The `aud` the external token must carry.",
+            "type": "string"
+          },
+          "conditions": {
+            "description": "ANDed. A value is exact, or ends in one `*` for a prefix. At least one condition must\npin the subject: `repository` or `sub` for `github`, `sub` for `oidc`.",
+            "items": {
+              "$ref": "#/components/schemas/ConditionView"
+            },
+            "type": "array"
+          },
+          "issuer": {
+            "description": "Required for `oidc`; for `github` omit it or give the GitHub Actions issuer.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuer_kind": {
+            "description": "`github` (the GitHub Actions issuer) or `oidc` (an explicit https issuer, e.g. a\nKubernetes cluster).",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "issuer_kind",
+          "audience",
+          "agent_id",
+          "conditions"
+        ],
+        "type": "object"
+      },
       "Org": {
         "properties": {
           "created_at": {
@@ -1350,6 +1410,83 @@
         ],
         "type": "object"
       },
+      "Paged_WorkloadIdentity": {
+        "description": "One page of a list. `next` is absent on the last page.",
+        "properties": {
+          "items": {
+            "items": {
+              "description": "A trust policy. The `handle` is the non-secret routing value a workload sends to the\nexchange route.",
+              "properties": {
+                "agent_id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConditionView"
+                  },
+                  "type": "array"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "handle": {
+                  "description": "`lsw_...`: names the org and this policy. Not a secret.",
+                  "type": "string"
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "issuer": {
+                  "type": "string"
+                },
+                "issuer_kind": {
+                  "description": "`github` or `oidc`.",
+                  "type": "string"
+                },
+                "last_used_at": {
+                  "format": "date-time",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "issuer_kind",
+                "issuer",
+                "audience",
+                "agent_id",
+                "conditions",
+                "handle",
+                "created_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "Patch": {
         "additionalProperties": false,
         "description": "`PATCH` body for projects, environments and secrets: name and description only.",
@@ -1625,6 +1762,86 @@
           "key_id",
           "ciphertext",
           "wrapped_dek"
+        ],
+        "type": "object"
+      },
+      "WorkloadIdentity": {
+        "description": "A trust policy. The `handle` is the non-secret routing value a workload sends to the\nexchange route.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/ConditionView"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "handle": {
+            "description": "`lsw_...`: names the org and this policy. Not a secret.",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "issuer_kind": {
+            "description": "`github` or `oidc`.",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "issuer_kind",
+          "issuer",
+          "audience",
+          "agent_id",
+          "conditions",
+          "handle",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "WorkloadTokenRequest": {
+        "additionalProperties": false,
+        "description": "Request body of a workload token exchange. No `Debug`.",
+        "properties": {
+          "policy": {
+            "description": "The policy handle (`lsw_...`) from the workload identity. Not a secret.",
+            "type": "string"
+          },
+          "token": {
+            "description": "The external OIDC token (GitHub Actions or Kubernetes). Used once, never stored or logged.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "policy",
+          "token"
         ],
         "type": "object"
       }
@@ -5845,6 +6062,465 @@
           "secrets"
         ]
       }
+    },
+    "/v1/workload-identities": {
+      "get": {
+        "operationId": "list_workload_identities",
+        "parameters": [
+          {
+            "description": "Page size, 1 to 100 (default 50).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Opaque cursor: the `next` value of the previous page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paged_WorkloadIdentity"
+                }
+              }
+            },
+            "description": "A page of policies"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List workload identity trust policies",
+        "tags": [
+          "workload-identities"
+        ]
+      },
+      "post": {
+        "description": "Maps an issuer and claim conditions to an existing agent. A policy with no subject pin, or a bare `*`, is refused.",
+        "operationId": "create_workload_identity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewWorkloadIdentity"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIdentity"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Location": {
+                "description": "URL of the new policy",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Policy refused: no subject pin, a bare `*`, or an issuer at a private address"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Create a workload identity trust policy",
+        "tags": [
+          "workload-identities"
+        ]
+      }
+    },
+    "/v1/workload-identities/{id}": {
+      "delete": {
+        "description": "Exchanges for this policy fail from now on. Agent tokens already minted stay valid until they expire (at most 15 minutes).",
+        "operationId": "delete_workload_identity",
+        "parameters": [
+          {
+            "description": "Policy id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Delete a workload identity trust policy",
+        "tags": [
+          "workload-identities"
+        ]
+      },
+      "get": {
+        "operationId": "get_workload_identity",
+        "parameters": [
+          {
+            "description": "Policy id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIdentity"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Get a workload identity trust policy",
+        "tags": [
+          "workload-identities"
+        ]
+      }
+    },
+    "/v1/workload-tokens": {
+      "post": {
+        "description": "Verifies the external OIDC token against the policy's stored issuer and audience, checks the policy's claim conditions, and returns the same 15-minute agent token as `POST /v1/agent-tokens` for the policy's agent. An unknown policy, an invalid or mismatching token and an unreachable issuer are all the same `401`.",
+        "operationId": "create_workload_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkloadTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentToken"
+                }
+              }
+            },
+            "description": "A token",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid, unknown or replaced enrollment secret"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable or token signing not configured"
+          }
+        },
+        "summary": "Exchange an external workload token for an agent token",
+        "tags": [
+          "workload-identities"
+        ]
+      }
     }
   },
   "tags": [
@@ -5871,6 +6547,10 @@
     {
       "description": "Agent identities, their relay grants, agent tokens and the token-signing JWKS",
       "name": "agents"
+    },
+    {
+      "description": "Workload identity trust policies and the exchange of an external OIDC token for an agent token",
+      "name": "workload-identities"
     },
     {
       "description": "Service-to-service routes for the gateway; service token only, never exposed to users or agents",

@@ -3,8 +3,8 @@
 ## 1. Shared JWT pre-checks [sonnet]
 - [ ] 1.1 Add `services/control-plane/src/auth/jwt.rs` with `LEEWAY_SECS`, `MAX_TOKEN_BYTES`, `ALLOWED`, `pre_check`, `pin_alg` and `validation` (design decisions 1, 2); register it in `auth.rs`. Unit tests: oversized, malformed, `none`/`HS256`, missing `kid`, key/header alg mismatch, each with today's label.
 - [ ] 1.2 Switch `auth/human.rs` `verify_inner` to the shared functions; remove its three constants (re-export from `jwt` if other code imports them).
-- [ ] 1.3 Switch `auth/external.rs` `verify_inner`, keeping the unverified-issuer check before the key fetch and `check_lifetime` after decode; remove its duplicated constants.
-- [ ] 1.4 Verify: `cargo nextest run -p ls-control-plane -E 'binary(human_auth) | binary(workload_verify) | binary(workload_exchange) | test(jwt)'`; `rg -n 'const (LEEWAY_SECS|MAX_TOKEN_BYTES|ALLOWED)' services/control-plane/src` lists only `auth/jwt.rs`.
+- [ ] 1.3 Switch `auth/external.rs` `verify_inner`, keeping the unverified-issuer check before the key fetch and `check_lifetime` after decode; remove its duplicated constants and point `api/workload_tokens.rs` (which imports `crate::auth::external::LEEWAY_SECS`) at `auth::jwt` or keep a re-export, as in 1.2.
+- [ ] 1.4 Verify: `cargo nextest run -p ls-control-plane -E 'binary(human_auth) | binary(workload_verify) | binary(workload_exchange) | test(jwt)'`; `rg -n 'const (LEEWAY_SECS|MAX_TOKEN_BYTES|ALLOWED)' services/control-plane/src/auth` lists only `auth/jwt.rs` (`src/agent_token.rs` keeps its own 30s `LEEWAY_SECS` unchanged).
 
 ## 2. Capped read in ls-http [sonnet]
 - [ ] 2.1 Add `read_capped(response, max) -> Result<Vec<u8>, CapError>` to `crates/ls-http` with tests (under cap, over cap with and without `Content-Length`, exact cap) against a local `wiremock` server (design decision 3).

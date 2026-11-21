@@ -36,5 +36,5 @@ None.
 
 ## Impact
 
-- `services/control-plane` (new `src/auth/jwt.rs`; edits in `auth.rs`, `auth/human.rs`, `auth/external.rs`, `auth/jwks.rs`, `auth/issuers.rs`, `audit.rs`), `crates/ls-http` (new function; `reqwest` is already its dependency).
+- `services/control-plane` (new `src/auth/jwt.rs`; edits in `auth.rs`, `auth/human.rs`, `auth/external.rs`, `auth/jwks.rs`, `auth/issuers.rs`, `audit.rs`, and `api/workload_tokens.rs` only if its `LEEWAY_SECS` import path changes), `crates/ls-http` (new function; `reqwest` is already its dependency).
 - No API, data, schema, config or `Cargo.lock` changes.

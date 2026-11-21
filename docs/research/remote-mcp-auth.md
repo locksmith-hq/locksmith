@@ -45,3 +45,14 @@ Consequence: a token deleted on the client without logout is still valid until i
 - The RFC 8707 `resource` parameter is accepted on the authorization and token requests; the token's audience comes from the fixed audience mapper on the `locksmith-mcp` client (`http://127.0.0.1:8080/mcp` locally), and the token has no `locksmith-api` audience, so it is refused by the console API and a console token is refused on `/mcp`.
 - Observed manually (not asserted by the script): anonymous Dynamic Client Registration is refused (403); the discovery document advertises the `registration_endpoint` anyway. CIMD is not advertised (`client_id_metadata_document_supported` absent). The pre-registered public client `locksmith-mcp` (PKCE S256, loopback redirect, consent required) is therefore the working path locally.
 - Keycloak advertises a revocation endpoint; the exact issuer-side consent/refresh revoke call is still task 4.2.
+
+## 6. Per-agent remote Hub MCP support (p4-sdks task 4.1, 2026-11-21)
+Question per agent: does it support a remote Streamable HTTP MCP server with OAuth, and with which config shape? The entry carries only the URL and the public client id `locksmith-mcp` (no secret: the client is public, PKCE).
+
+| Agent | Remote + OAuth | Config shape | Source |
+|---|---|---|---|
+| Claude Code | Yes | `.mcp.json`: `"<name>": {"type": "http", "url": "<hub>/mcp", "oauth": {"clientId": "<id>"}}`. `oauth.callbackPort` is optional (a random port is used unless fixed); `clientSecret` is passed separately and stored in the keychain, never written by us. Needs v2.1.231 or later for loopback redirect URIs written as `http://localhost:PORT/callback` (2.1.229 sent `127.0.0.1`; our realm accepts both). | https://code.claude.com/docs/en/mcp ("Use pre-configured OAuth credentials", fetched 2026-11-21) |
+| Codex | Yes | `config.toml`: `[mcp_servers.<name>]` with `url = "<hub>/mcp"`, `oauth_resource = "<hub>/mcp"` (RFC 8707), and `[mcp_servers.<name>.oauth]` with `client_id = "<id>"` (`client_secret`, `callback_port`, `callback_url` optional). | `codex-rs/config/src/mcp_types.rs` (`McpServerConfig.oauth`, `oauth_resource`, `McpServerOAuthConfig.client_id`) at https://github.com/openai/codex, main, fetched 2026-11-21 |
+| Cursor | not verified | none written | `cursor.com` and `docs.cursor.com` do not resolve from the agent VM (000 on 2026-11-21). `smith doctor` reports `unsupported`; revisit when the docs are reachable. |
+
+`smith init --hub` therefore writes an entry for Claude Code and Codex only. The redirect URIs the pre-registered client accepts are `http://localhost/*` and `http://127.0.0.1/*` (`infra/compose/keycloak/locksmith-realm.json`), so no fixed callback port is needed.

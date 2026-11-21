@@ -1,0 +1,6 @@
+[mcp_servers.locksmith-hub]
+url = "https://hub.example/mcp"
+oauth_resource = "https://hub.example/mcp"
+
+[mcp_servers.locksmith-hub.oauth]
+client_id = "locksmith-mcp"

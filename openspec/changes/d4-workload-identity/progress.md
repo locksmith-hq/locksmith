@@ -41,3 +41,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 4.2 - done (11 `workload_abuse` tests in `tests/workload_exchange.rs`: forged iss no outbound call, jku/x5u ignored, wrong audience, concurrent jti replay, other-org handle, canary absent from logs/ledger/tables; `tests/adversarial/cases/D4.sh` + README; strengthened the jti-not-burned test)
 - Verified: `cargo nextest run -p ls-control-plane workload_abuse` 14 passed; `run.sh all` 9 passed, 0 failed, 1 skipped (A2, no aws CLI); `just quick` ok; Sonnet evaluator PASS
 - Notes for next session: 4.3 left unticked: `just leak-scan` needs the live stack and a canary (`just up`, `just canary new`), not run on this VM. Evaluator nits: the embedded-`jwk` case only fails on signature mismatch (sign with attacker key plus embedded jwk to test it properly); `futures_join` helper could be `futures::join_all`. Next: run leak-scan, tick 4.3, then 5.x.
+
+## 2026-11-21 04:10 worker
+- Task: ci-fix (adversarial check red on PR #530, case D4 cargo exit 101) - blocked
+- Verified: `cargo nextest run -p ls-control-plane workload_abuse` x5 -> 14 passed each; `bash tests/adversarial/run.sh D4` -> PASS (oracle clean). Could not reproduce the CI failure; job logs only show "case exit 101", cargo-test.log artifact not downloadable from the VM and rerun-failed-jobs is 403.
+- Notes for next session: this push re-triggers CI. If D4 is red again, suspect testcontainers/postgres startup timing under CI load (tests take ~15s each cold); get the cargo-test.log via a CI step that tails it on failure. 4.3 still open (needs `just up` for leak-scan), then 5.x.

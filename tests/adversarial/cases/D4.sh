@@ -36,7 +36,7 @@ if command -v cargo-nextest >/dev/null 2>&1; then
   cargo nextest run -p ls-control-plane workload_abuse >"$ARTIFACT_DIR/cargo-test.log" 2>&1 ||
     { d4_fail; exit 1; }
 else
-  cargo test -p ls-control-plane --test workload_exchange workload_abuse >"$ARTIFACT_DIR/cargo-test.log" 2>&1 ||
+  cargo test -p ls-control-plane --test workload_exchange workload_abuse -- --test-threads=1 >"$ARTIFACT_DIR/cargo-test.log" 2>&1 ||
     { d4_fail; exit 1; }
 fi
 for f in canary.logs canary.ledger canary.rows; do

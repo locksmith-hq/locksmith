@@ -846,7 +846,11 @@ fn capture_logs() -> (common::Capture, tracing::subscriber::DefaultGuard) {
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
         .with_ansi(false)
         .finish();
-    (capture, tracing::subscriber::set_default(subscriber))
+    let guard = tracing::subscriber::set_default(subscriber);
+    // Tests share one process under `cargo test`: a callsite first hit by a test with no
+    // subscriber caches "never", so re-evaluate every callsite against this subscriber.
+    tracing::callsite::rebuild_interest_cache();
+    (capture, guard)
 }
 
 /// When `WORKLOAD_ABUSE_ARTIFACT_DIR` is set (tests/adversarial/cases/D4.sh), write what an
@@ -1157,7 +1161,9 @@ async fn workload_abuse_canary_external_token_is_in_no_log_span_or_ledger() {
     let rows = f.dump_text().await;
     assert!(
         logs.contains("exchange_workload_token"),
-        "the span is in the capture"
+        "the span is in the capture (captured {} bytes: {})",
+        logs.len(),
+        logs.chars().take(600).collect::<String>()
     );
     for t in &tokens {
         let parts: Vec<&str> = t.split('.').collect();

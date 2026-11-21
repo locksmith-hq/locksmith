@@ -56,3 +56,7 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (adversarial D4 still red on PR #530) - diagnostics only
 - Change: `D4.sh` also emits the cargo log tail as a `::error::` annotation on failure; the job log blob host is blocked by the VM proxy but annotations are readable via `check-runs/<id>/annotations`.
 - Notes for next session: after this push, read the annotation of the adversarial check run to see the real D4 failure. 4.3 and 5.x still open.
+
+## 2026-11-21 worker (C), eighth run (cont.)
+- Root cause of the red adversarial D4: CI has no nextest, so `cargo test` runs the tests as threads of one process; the `exchange_workload_token` span callsite was first hit by a test with no subscriber and cached as disabled, so the capture test saw no span. Reproduced locally with `cargo test`; nextest (one process per test) hid it.
+- Fix: `capture_logs` rebuilds the callsite interest cache, and `D4.sh` runs `cargo test ... -- --test-threads=1`. Verified 2x `cargo test -p ls-control-plane --test workload_exchange workload_abuse -- --test-threads=1`: 11 passed. The `::error::` annotation helper stays.

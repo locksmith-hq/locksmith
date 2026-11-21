@@ -27,7 +27,7 @@
 
 | Package | Licence | Version | Last release | Why | AGPL check |
 |---|---|---|---|---|---|
-| `openapi-fetch` | MIT | 0.17.0 (pinned exact; re-checked 2026-11-21: still latest, MIT) | 2026-06-15 | Typed fetch runtime over the generated paths | Not AGPL; fine for an Apache-2.0 SDK |
+| `openapi-fetch` | MIT | 0.17.0 (pin exact; re-check in task 1.1) | 2026-06 | Typed fetch runtime over the generated paths | Not AGPL; fine for an Apache-2.0 SDK |
 | `openapi-typescript` | MIT | 7.13.0 (already a dev dependency) | see npm | Type generation | Not AGPL |
 
 Built in-house: only the auth, problem-error and paging helpers (about 100 lines). We searched for and rejected: openapi-generator (Java), orval (React Query focused, heavier), and hey-api/openapi-ts (viable, but a second generator next to openapi-typescript adds nothing).

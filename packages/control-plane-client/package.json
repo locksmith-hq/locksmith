@@ -10,12 +10,11 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "gen:types": "openapi-typescript ../../services/control-plane/openapi.json -o src/schema.d.ts",
     "test": "vitest run"
   },
   "devDependencies": {
+    "openapi-typescript": "^7.13.0",
     "vitest": "^3.0.0"
-  },
-  "dependencies": {
-    "@locksmith/sdk": "*"
   }
 }

@@ -1,7 +1,7 @@
-// Control-plane client for agents and grants. Types and transport come from @locksmith/sdk.
+// Control-plane client for agents and grants. Types come from the generated schema.
 // Nothing here logs or persists a response body: the enrollment secret only ever lives in
 // the object returned to the caller.
-import { createLocksmith, LocksmithError, paginate, unwrap, type components } from "@locksmith/sdk";
+import type { components } from "./schema";
 
 export type Agent = components["schemas"]["Agent"];
 export type AgentEnrollment = components["schemas"]["AgentEnrollment"];
@@ -21,10 +21,9 @@ export type AuditOutcomeFilter = "all" | "denied" | "redaction_failed";
 export const auditOutcomeMatches = (e: AuditEvent, f: AuditOutcomeFilter): boolean =>
   f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
 
-export class ApiError extends LocksmithError {
-  constructor(status: number, message: string) {
-    super(status, { detail: message });
-    this.name = "ApiError";
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
   }
 }
 
@@ -54,68 +53,60 @@ export interface Client {
  * With a token the dev org header is not sent: the control plane takes the org from the token.
  */
 export function createClient(orgId: string, baseUrl = "", getToken?: () => string | undefined): Client {
-  // openapi-fetch builds a Request, which needs an absolute URL: use a placeholder origin for a
-  // relative base and strip it again, so the app still fetches `/v1/...` on its own origin.
-  const origin = "http://relative.invalid";
-  const c = createLocksmith({
-    baseUrl: baseUrl || origin,
-    token: () => getToken?.(),
-    // Read the global at call time; never cache a response in the browser.
-    fetch: async (input) => {
-      const r = input as Request; // openapi-fetch always passes a Request
-      const body = (await r.text()) || undefined;
-      return globalThis.fetch(baseUrl ? r.url : r.url.slice(origin.length), {
-        method: r.method,
-        headers: Object.fromEntries(r.headers),
-        body,
-        cache: "no-store",
-      });
-    },
-  });
-  c.use({
-    onRequest({ request }) {
-      if (!getToken?.()) request.headers.set("x-locksmith-dev-org", orgId);
-      return request;
-    },
-  });
-
-  // Convert the SDK's error into the ApiError the apps already handle.
-  async function run<T>(p: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
-    const r = await p;
-    if (r.response.ok && r.response.status === 204) return undefined as T;
-    try {
-      return unwrap(r);
-    } catch (e) {
-      if (e instanceof LocksmithError) throw new ApiError(e.status, e.message);
-      throw e;
+  async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const token = getToken?.();
+    const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : { "x-locksmith-dev-org": orgId };
+    if (body !== undefined) headers["content-type"] = "application/json";
+    const res = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers,
+      cache: "no-store",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let msg = `request failed (${res.status})`;
+      try {
+        const p = (await res.json()) as Partial<Problem>;
+        if (p.detail || p.title) msg = String(p.detail ?? p.title);
+      } catch { /* no problem body */ }
+      throw new ApiError(res.status, msg);
     }
+    return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
   }
 
-  async function all<T>(page: (cursor: string | null) => Promise<{ items: T[]; next?: string | null }>): Promise<T[]> {
+  async function all<T>(path: string): Promise<T[]> {
     const out: T[] = [];
-    for await (const p of paginate(page)) out.push(...p.items);
+    let cursor: string | null | undefined;
+    do {
+      const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+      const page = await req<{ items: T[]; next?: string | null }>("GET", path + q);
+      out.push(...page.items);
+      cursor = page.next;
+    } while (cursor);
     return out;
   }
 
-  const q = (cursor: string | null) => (cursor ? { cursor } : {});
+  const a = (id: string) => `/v1/agents/${encodeURIComponent(id)}`;
   return {
-    listAgents: () => all((cursor) => run(c.GET("/v1/agents", { params: { query: q(cursor) } }))),
-    createAgent: (body) => run(c.POST("/v1/agents", { body })),
-    deleteAgent: (agent_id) => run(c.DELETE("/v1/agents/{agent_id}", { params: { path: { agent_id } } })),
-    rotateEnrollment: (agent_id) => run(c.POST("/v1/agents/{agent_id}/enrollment-secret", { params: { path: { agent_id } } })),
-    listGrants: (agent_id) =>
-      all((cursor) => run(c.GET("/v1/agents/{agent_id}/grants", { params: { path: { agent_id }, query: q(cursor) } }))),
-    createGrant: (agent_id, body) => run(c.POST("/v1/agents/{agent_id}/grants", { params: { path: { agent_id } }, body })),
-    revokeGrant: (agent_id, grant_id) =>
-      run(c.DELETE("/v1/agents/{agent_id}/grants/{grant_id}", { params: { path: { agent_id, grant_id } } })),
-    listAuditEvents: ({ cursor, limit } = {}) =>
-      run(c.GET("/v1/audit/events", { params: { query: { ...(limit ? { limit } : {}), ...q(cursor ?? null) } } })),
-    auditStatus: () => run(c.GET("/v1/audit/status")),
-    listMcpTools: async () => (await run(c.GET("/v1/mcp/tools"))).items,
+    listAgents: () => all<Agent>("/v1/agents"),
+    createAgent: (b) => req("POST", "/v1/agents", b),
+    deleteAgent: (id) => req("DELETE", a(id)),
+    rotateEnrollment: (id) => req("POST", `${a(id)}/enrollment-secret`),
+    listGrants: (id) => all<AgentGrant>(`${a(id)}/grants`),
+    createGrant: (id, b) => req("POST", `${a(id)}/grants`, b),
+    listAuditEvents: ({ cursor, limit } = {}) => {
+      const q = new URLSearchParams();
+      if (limit) q.set("limit", String(limit));
+      if (cursor) q.set("cursor", cursor);
+      const qs = q.toString();
+      return req("GET", `/v1/audit/events${qs ? `?${qs}` : ""}`);
+    },
+    auditStatus: () => req("GET", "/v1/audit/status"),
+    listMcpTools: async () => (await req<{ items: McpToolSetting[] }>("GET", "/v1/mcp/tools")).items,
     setMcpTool: (layer, tool, enabled) =>
-      run(c.PUT("/v1/mcp/tools/{layer}/{tool}", { params: { path: { layer, tool } }, body: { enabled } })),
-    listMcpClients: () => all((cursor) => run(c.GET("/v1/mcp/clients", { params: { query: q(cursor) } }))),
-    revokeMcpClient: (client_row_id) =>
-      run(c.POST("/v1/mcp/clients/{client_row_id}/revoke", { params: { path: { client_row_id } } })),
+      req("PUT", `/v1/mcp/tools/${layer}/${encodeURIComponent(tool)}`, { enabled }),
+    listMcpClients: () => all<McpClient>("/v1/mcp/clients"),
+    revokeMcpClient: (id) => req("POST", `/v1/mcp/clients/${encodeURIComponent(id)}/revoke`),
+    revokeGrant: (id, g) => req("DELETE", `${a(id)}/grants/${encodeURIComponent(g)}`),
   };
 }

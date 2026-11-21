@@ -30,9 +30,9 @@
 - [x] 5.4 Verify: `cargo nextest run -p smith-cli workload` (stub runner endpoint and token file; asserts no file other than `agent.json` is written and the external token appears in no output).
 
 ## 6. Console and desktop [sonnet]
-- [ ] 6.1 Workload identities page in `apps/web` (list, create form with issuer presets for GitHub and Kubernetes, delete with confirm, warning on prefix conditions); no token or secret field anywhere.
-- [ ] 6.2 Same page in `apps/desktop` using the shared client; Vitest tests for both including the "no secret rendered or requested" assertion.
-- [ ] 6.3 Verify: `npm test --workspace apps/web` and `just apps-build`.
+- [x] 6.1 Workload identities page in `apps/web` (list, create form with issuer presets for GitHub and Kubernetes, delete with confirm, warning on prefix conditions); no token or secret field anywhere.
+- [x] 6.2 Same page in `apps/desktop` using the shared client; Vitest tests for both including the "no secret rendered or requested" assertion.
+- [x] 6.3 Verify: `npm test --workspace apps/web` and `just apps-build`.
 
 ## 7. Local verification [sonnet]
 - [ ] 7.1 `just workload-smoke` recipe and `tests/e2e/tests/workload.rs`: start the stack, serve a stub GitHub-shaped issuer, create an agent, grant and a workload policy through the API, run `smith login --workload github` against the stub runner endpoint, relay a request to the canary upstream, assert the upstream saw the secret and the workload held no Locksmith secret; then assert a non-matching `ref` and a revoked grant are refused.

@@ -82,3 +82,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: CI fix (hygiene/gitleaks) - ci-fix
 - Verified: gitleaks detect -> no leaks; just quick -> ok
 - Notes for next session: gitleaks failed on a removed test-fixture string in git history (e009ecf); added fingerprint to .gitleaksignore. Tasks 4.3, 6.x, 7.x remain; auto-merge not enabled yet.
+
+## 2026-11-21 worker (C), tenth run
+- Tasks: 6.1-6.3 done (Workload identities page in web and desktop, shared-client methods and request builder, no secret field). Sonnet implementer, Sonnet evaluator PASS. Verified: web vitest 20 passed, desktop 26 passed, tsc clean, just quick ok, `just apps-build` ok.
+- Remaining: 4.3 (needs `just up` for `just leak-scan`) and 7.x (workload-smoke e2e); auto-merge not enabled yet.
+- Evaluator notes: Kubernetes create test keeps form values from the first create (cosmetic); rendered-text secret check is narrow, the request-body check is the strong one.

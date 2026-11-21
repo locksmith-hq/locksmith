@@ -20,7 +20,7 @@
 
 ## 4. Abuse limits and adversarial cases [sonnet]
 - [x] 4.1 `jti` replay cache (decision 6; resolve the `[verify]` OSS item first) and per-policy plus per-source rate limits with config defaults.
-- [ ] 4.2 Add cases to `tests/adversarial/`: forged `iss` pointing at an attacker host (no outbound call), `jku` header ignored, token for another audience, replayed `jti`, policy handle for another org, canary external token absent from logs, traces and ledger.
+- [x] 4.2 Add cases to `tests/adversarial/`: forged `iss` pointing at an attacker host (no outbound call), `jku` header ignored, token for another audience, replayed `jti`, policy handle for another org, canary external token absent from logs, traces and ledger.
 - [ ] 4.3 Verify: `cargo nextest run -p ls-control-plane workload_abuse`, `bash tests/adversarial/run.sh`, `just leak-scan`.
 
 ## 5. CLI and GitHub Action [sonnet]

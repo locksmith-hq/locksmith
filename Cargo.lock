@@ -2840,6 +2840,7 @@ dependencies = [
  "base64 0.22.1",
  "jsonwebtoken",
  "p256",
+ "rcgen",
  "reqwest",
  "rustls",
  "rustls-pki-types",

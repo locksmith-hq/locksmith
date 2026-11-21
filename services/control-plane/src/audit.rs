@@ -136,6 +136,76 @@ pub fn agent_deleted(actor: Actor, agent_id: Uuid, grants_revoked: i64) -> Event
     )
 }
 
+/// `workload_identity.created`: the policy, the agent it maps to and the issuer host.
+pub fn workload_identity_created(
+    actor: Actor,
+    policy_id: Uuid,
+    agent_id: Uuid,
+    issuer: &str,
+) -> Event {
+    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    admin(
+        kind::WORKLOAD_IDENTITY_CREATED,
+        actor,
+        Target::WorkloadIdentity(policy_id),
+        attrs,
+    )
+}
+
+/// `workload_identity.deleted`.
+pub fn workload_identity_deleted(actor: Actor, policy_id: Uuid, agent_id: Uuid) -> Event {
+    admin(
+        kind::WORKLOAD_IDENTITY_DELETED,
+        actor,
+        Target::WorkloadIdentity(policy_id),
+        Attrs::new().id(attr::AGENT_ID, agent_id),
+    )
+}
+
+/// `workload_identity.exchanged`: an external token matched the policy and an agent token was
+/// minted. Actor is the agent the policy maps to; only ids and the issuer host are recorded (the
+/// ledger has no field for claim text).
+pub fn workload_identity_exchanged(policy_id: Uuid, agent_id: Uuid, issuer: &str) -> Event {
+    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    Event {
+        kind: kind::WORKLOAD_IDENTITY_EXCHANGED,
+        actor: Actor::Agent(agent_id),
+        target: Some(Target::WorkloadIdentity(policy_id)),
+        outcome: outcome::OK,
+        attrs,
+    }
+}
+
+/// `workload_identity.denied`: an exchange for this policy was refused. `reason` is a static
+/// code (the verifier's refusal label or `claims`). The agent is not authenticated, so the
+/// actor is the control plane.
+pub fn workload_identity_denied(
+    policy_id: Uuid,
+    agent_id: Uuid,
+    issuer: &str,
+    reason: Code,
+) -> Event {
+    let mut attrs = Attrs::new()
+        .id(attr::AGENT_ID, agent_id)
+        .code(attr::REASON, reason);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    Event {
+        kind: kind::WORKLOAD_IDENTITY_DENIED,
+        actor: Actor::Service(Code::new("control_plane")),
+        target: Some(Target::WorkloadIdentity(policy_id)),
+        outcome: outcome::DENIED,
+        attrs,
+    }
+}
+
 /// `grant.created`: the agent, the secret, the mode and the expiry (Unix seconds), if any.
 pub fn grant_created(
     actor: Actor,

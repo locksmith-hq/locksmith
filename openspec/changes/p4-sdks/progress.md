@@ -14,3 +14,8 @@
 - Notes for next session: gitleaks flagged the enrollment-secret test fixture (generic-api-key); now built from low-entropy words. 12 tasks still unticked, so no auto-merge yet.
 - 2026-11-21 · worker (alfie): groups 1 and 2 re-landed on `claude/change-p4-sdks-v2`: PR #554 was stacked on the already-merged m1 branch, so its commits never reached main and were reverted there (fa0c5ca). This branch reverts that revert from main. Verified: sdk 8, control-plane-client 9 tests, tree-check. Next: group 3.
 - 2026-11-21 · worker (alfie): group 3 done: `just sdk-gen`, `just sdk-smoke` (signs in as the seeded user, create/list/delete an agent through the SDK, then `leak-scan` clean; verified against `just up` + `just api`), `packages/sdk/README.md`; the `docs/testing.md` row already existed. Verified: `just test sdk` 8 pass, `just tree-check`. Next: group 4 after p3-agent-plugins lands `agents.rs`.
+
+## 2026-11-21 12:20 UTC worker
+- Task: 3.1-3.4 - done
+- Verified: `just sdk-smoke` (live stack) -> pass, leak-scan clean; `just test sdk` -> 8 pass; `just quick` -> OK
+- Notes for next session: 2.3 still unticked (tauri build not run in this VM). Group 4 edits agents.rs: wait for p3-agent-plugins. Stop-hook asked for noreply@anthropic.com authorship; ignored because the persona commits as locksmith-alfie[bot].

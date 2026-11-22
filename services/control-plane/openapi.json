@@ -1679,12 +1679,22 @@
           "public_key": {
             "description": "The X25519 public key, standard base64 (32 bytes).",
             "type": "string"
+          },
+          "signature": {
+            "description": "Ed25519 signature by the gateway identity key over `(org, environment, key_id, public\nkey)`, standard base64 (64 bytes). Stored and returned unchanged; clients verify it\nagainst a pinned gateway verifying key before sealing (message format in `ls-envelope`\n`seal_key_message`).",
+            "type": "string"
+          },
+          "signing_key_id": {
+            "description": "Id of the gateway identity key that made `signature`, so a client picks the pinned\nverifying key; the key itself is never served by the control plane.",
+            "type": "string"
           }
         },
         "required": [
           "key_id",
           "public_key",
-          "next_version"
+          "next_version",
+          "signature",
+          "signing_key_id"
         ],
         "type": "object"
       },

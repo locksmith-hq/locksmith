@@ -36,6 +36,9 @@ export const sealKey: SealKey = {
   key_id: "seal:v1",
   public_key: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
   next_version: 2,
+  // Placeholder 64-byte signature (base64), not a real signature.
+  signature: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OToLPD0+Pw==",
+  signing_key_id: "gateway:v1",
 };
 
 export const sealedVersionRequest: NewSealedSecretVersion = {

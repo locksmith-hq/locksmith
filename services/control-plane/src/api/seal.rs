@@ -27,6 +27,14 @@ pub struct SealKey {
     /// The version number the next write to this secret must carry (1 for a new secret). The
     /// number is part of the sealed binding, so a client seals for exactly this version.
     pub next_version: u32,
+    /// Ed25519 signature by the gateway identity key over `(org, environment, key_id, public
+    /// key)`, standard base64 (64 bytes). Stored and returned unchanged; clients verify it
+    /// against a pinned gateway verifying key before sealing (message format in `ls-envelope`
+    /// `seal_key_message`).
+    pub signature: String,
+    /// Id of the gateway identity key that made `signature`, so a client picks the pinned
+    /// verifying key; the key itself is never served by the control plane.
+    pub signing_key_id: String,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]

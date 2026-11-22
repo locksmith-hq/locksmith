@@ -1385,6 +1385,18 @@ export interface components {
             next_version: number;
             /** @description The X25519 public key, standard base64 (32 bytes). */
             public_key: string;
+            /**
+             * @description Ed25519 signature by the gateway identity key over `(org, environment, key_id, public
+             *     key)`, standard base64 (64 bytes). Stored and returned unchanged; clients verify it
+             *     against a pinned gateway verifying key before sealing (message format in `ls-envelope`
+             *     `seal_key_message`).
+             */
+            signature: string;
+            /**
+             * @description Id of the gateway identity key that made `signature`, so a client picks the pinned
+             *     verifying key; the key itself is never served by the control plane.
+             */
+            signing_key_id: string;
         };
         Secret: {
             /** Format: date-time */

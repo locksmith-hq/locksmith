@@ -25,6 +25,8 @@ zeroize = "1.9.1"
 # HPKE-wrapped DEK (`alg_id` 2, t7 design decision 1): DHKEM(X25519, HKDF-SHA256), HKDF-SHA256,
 # AES-256-GCM. Its getrandom feature is off: the ephemeral seed comes from getrandom 0.2.
 hpke = { workspace = true }
+# Verify the gateway's seal-key signature (t7 decision 2); verify only, no signing here.
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["alloc", "fast"] }
 
 [dev-dependencies]
 # Fixed-nonce known-answer path only. As a dev-dependency it cannot reach a production build.

@@ -22,6 +22,7 @@
 pub mod header;
 mod hpke_wrap;
 mod openbao;
+mod seal_key_sig;
 mod version;
 mod wrap;
 
@@ -31,6 +32,10 @@ pub use hpke_wrap::{
 };
 pub use ls_crypto::{SecretBytes, SecretKey32};
 pub use openbao::{BaoToken, OpenBaoTransit, TransitSignature, TransitSigner};
+pub use seal_key_sig::{
+    GATEWAY_VERIFYING_KEY_LEN, SEAL_KEY_SIG_DOMAIN, SEAL_KEY_SIG_LEN, seal_key_message,
+    verify_seal_key,
+};
 pub use version::{DataKey, SealedVersion, open_version, seal_version};
 pub use wrap::{KeyWrapper, TransportKind, WRAPPED_DEK_LEN, WrapError, WrapKeyId, WrappedDek};
 

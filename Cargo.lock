@@ -2913,6 +2913,7 @@ dependencies = [
  "aes-gcm 0.10.3",
  "base64 0.22.1",
  "bytes",
+ "ed25519-dalek",
  "getrandom 0.2.17",
  "hex",
  "hpke",

@@ -1096,7 +1096,7 @@ mod tests {
                 attempt_fails: false,
                 outcome_fails_first: 0,
                 audit: None,
-                grant_ttl: crate::grants::MAX_GRANT_TTL,
+                grant_ttl: crate::ttl::MAX_CACHE_TTL,
                 value: VALUE.to_vec(),
                 mcp_tools: Vec::new(),
                 settings_source: None,

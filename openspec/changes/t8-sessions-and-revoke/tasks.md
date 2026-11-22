@@ -1,7 +1,7 @@
 # Tasks: T8 live sessions, revoke and pause
 
 ## 1. Contract [sonnet]
-- [ ] 1.0 Add a unique `jti` claim to `AgentClaims` at issuance and expose it in the verified claims the gateway reads. Verify: `cargo nextest run -p ls-control-plane agent_token`.
+- [x] 1.0 Add a unique `jti` claim to `AgentClaims` at issuance and expose it in the verified claims the gateway reads. Verify: `cargo nextest run -p ls-control-plane agent_token`.
 - [ ] 1.1 Add the migration (`agent_sessions`, `orgs.agents_paused`), OpenAPI paths for list, revoke-one, revoke-all, pause and resume, and the `session.revoked`, `agents.paused`, `agents.resumed` ledger kinds in `ls-audit`; mock data and TS client methods in `packages/control-plane-client`. Verify: `cargo nextest run -p ls-control-plane openapi` and `npm test --workspace packages/control-plane-client`.
 
 ## 2. Control plane [sonnet]

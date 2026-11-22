@@ -83,3 +83,8 @@
 - Fix: a695b60 (rule 1: a registered tool event whose tool name or input is not found under the expected naming denies; rule 2: every string in a known tool's input is checked against the protected-path policy, recursively, with per-tool content-key exemptions) and ea6c2f1 (every string under a shell tool's command keys is shell-analysed; stray strings in shell tools are path- and shell-checked; malformed `run_commands` denies). Shape-mismatch and decoy-key fixtures for all three agents, plus an e2e test.
 - Verified: `cargo test -p ls-hooks` 15+1 pass, `cargo test -p smith-cli --test hook` 10 pass (1 ignored), `just quick` OK; Opus evaluator FAIL on a695b60 (Cline shell-key hole), PASS on ea6c2f1 after ~90 payloads through the built `smith`, no false positives on normal shell use.
 - Out of scope, noted: a wrong guessed tool name passes as unknown; the `.en*` glob is allowed for `read_many_files`/`grep_search`; event-name casing for Gemini/Cline. Recorded payloads replace the fixtures when a session with those CLIs exists.
+
+## 2026-11-22 08:05 worker
+- Task: 2.3 audit test + hygiene fix - ci-fix
+- Verified: cargo test -p smith-cli --test hook -> 11 passed; just quick -> OK
+- Notes for next session: merge-review FAIL (no audit test) and hygiene (extra roadmap cell) fixed on #513; auto-merge was already on.

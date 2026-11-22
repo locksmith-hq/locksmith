@@ -12,8 +12,8 @@
 - [x] 2.3 Verify: `cargo nextest run -p ls-http -p ls-control-plane -E 'test(jwks) | test(issuers) | test(capped)'`.
 
 ## 3. Workload audit attributes [haiku]
-- [ ] 3.1 Add private `workload_attrs` in `services/control-plane/src/audit.rs` and use it in the three workload builders (design decision 4).
-- [ ] 3.2 Verify: `cargo nextest run -p ls-control-plane -E 'binary(audit) | binary(workload_exchange) | binary(workload_identities)'`.
+- [x] 3.1 Add private `workload_attrs` in `services/control-plane/src/audit.rs` and use it in the three workload builders (design decision 4).
+- [x] 3.2 Verify: `cargo nextest run -p ls-control-plane -E 'binary(audit) | binary(workload_exchange) | binary(workload_identities)'`.
 
 ## 4. Local verification [haiku]
 - [ ] 4.1 `git diff origin/main --stat -- ':!openspec'` touches only the files in the proposal's Impact, and `git diff origin/main -- services/control-plane/tests` shows no changed `assert`.

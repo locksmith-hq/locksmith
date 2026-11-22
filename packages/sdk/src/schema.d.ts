@@ -481,7 +481,7 @@ export interface paths {
         /** List the caller's orgs */
         get: operations["list_orgs"];
         put?: never;
-        /** Create an org (dev only) */
+        /** Create a team org */
         post: operations["create_org"];
         delete?: never;
         options?: never;
@@ -3066,7 +3066,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3426,7 +3426,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3627,7 +3627,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3714,7 +3714,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3798,7 +3798,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3881,7 +3881,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3965,7 +3965,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4055,7 +4055,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4198,7 +4198,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4288,7 +4288,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Email verification required */
+            /** @description Email verification required, or the caller's role does not allow this */
             403: {
                 headers: {
                     [name: string]: unknown;

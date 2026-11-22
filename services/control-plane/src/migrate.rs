@@ -70,6 +70,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "memberships",
         include_str!("../migrations/0014_memberships.sql"),
     ),
+    (
+        15,
+        "org member read",
+        include_str!("../migrations/0015_org_member_read.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

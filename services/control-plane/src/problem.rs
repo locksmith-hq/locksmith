@@ -20,6 +20,7 @@ pub enum Kind {
     Unprocessable,
     Unauthenticated,
     EmailVerificationRequired,
+    Forbidden,
     NotFound,
     Conflict,
     PayloadTooLarge,
@@ -36,6 +37,7 @@ impl Kind {
             Kind::Unprocessable => StatusCode::UNPROCESSABLE_ENTITY,
             Kind::Unauthenticated => StatusCode::UNAUTHORIZED,
             Kind::EmailVerificationRequired => StatusCode::FORBIDDEN,
+            Kind::Forbidden => StatusCode::FORBIDDEN,
             Kind::NotFound => StatusCode::NOT_FOUND,
             Kind::Conflict => StatusCode::CONFLICT,
             Kind::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
@@ -53,6 +55,7 @@ impl Kind {
             Kind::Unprocessable => "unprocessable",
             Kind::Unauthenticated => "unauthenticated",
             Kind::EmailVerificationRequired => "email-verification-required",
+            Kind::Forbidden => "forbidden",
             Kind::NotFound => "not-found",
             Kind::Conflict => "conflict",
             Kind::PayloadTooLarge => "payload-too-large",
@@ -69,6 +72,7 @@ impl Kind {
             Kind::Unprocessable => "Request refused",
             Kind::Unauthenticated => "Authentication required",
             Kind::EmailVerificationRequired => "Email verification required",
+            Kind::Forbidden => "Forbidden",
             Kind::NotFound => "Resource not found",
             Kind::Conflict => "Conflict",
             Kind::PayloadTooLarge => "Request body too large",
@@ -142,6 +146,16 @@ impl ApiError {
     /// `403`: the token is valid but its email is not verified (T1 spec: unverified email).
     pub fn email_verification_required() -> Self {
         Self::bare(Kind::EmailVerificationRequired)
+    }
+
+    /// `403`: the caller is a member of the org but its role does not allow the action (T6).
+    pub fn forbidden() -> Self {
+        Self::bare(Kind::Forbidden)
+    }
+
+    /// `409` with a fixed detail (never request data).
+    pub fn conflict(detail: impl Into<String>) -> Self {
+        Self::new(Kind::Conflict, detail)
     }
 }
 

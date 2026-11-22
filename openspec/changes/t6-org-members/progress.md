@@ -28,3 +28,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: PR #605 conflict + red macos - ci-fix
 - Verified: vitest + tsc in packages/control-plane-client, just quick -> pass
 - Notes for next session: merged main (index.test.ts conflict: kept main's describe/it plus T6 tests). macos job failed with exit 100 before; no annotation detail, check whether it recurs on the new head.
+
+## 2026-11-22 worker (group 3)
+- Task: 3.1-3.3 (org selection and orgs) - implemented, not ticked (pending review).
+- Done: `OrgBinding` now carries `role` and `user`; a human's `X-Locksmith-Org` is checked against `memberships` in the binding (login) transaction via `app.login_user` before the org is bound (`users::bind`, span `org.select`); miss or malformed id = `404`. New users get an owner membership of their personal org. `OrgRole` moved to `auth.rs` (re-exported from `members.rs`). `GET/POST /v1/orgs`, `PATCH`/`DELETE /v1/orgs/{id}` built; new `Kind::Forbidden` (`403`), ledger kinds `org.created`/`org.renamed`/`org.deleted`. Migration `0015_org_member_read.sql` adds a SELECT-only `orgs` policy for the caller's member orgs.
+- Deviation: DELETE ends every membership and revokes open invites but keeps the `orgs` row and its ledger (append-only ledger; app has no DELETE on `orgs`); personal orgs are `409`. PATCH/DELETE require `{org_id}` to be the bound org (send `X-Locksmith-Org`).
+- Verified: `cargo nextest run -p ls-control-plane org_select orgs` (tests in `tests/orgs.rs`), `cargo nextest run -p ls-control-plane -p ls-audit -p ls-tenant-lint` (304 passed).

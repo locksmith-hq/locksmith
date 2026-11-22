@@ -4050,7 +4050,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -4516,7 +4516,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -4641,7 +4641,7 @@
             "description": "Service unavailable"
           }
         },
-        "summary": "Create an org (dev only)",
+        "summary": "Create a team org",
         "tags": [
           "orgs"
         ]
@@ -4755,7 +4755,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -4859,7 +4859,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -4960,7 +4960,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -5056,7 +5056,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -5157,7 +5157,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -5273,7 +5273,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -5374,7 +5374,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {
@@ -5566,7 +5566,7 @@
                 }
               }
             },
-            "description": "Email verification required"
+            "description": "Email verification required, or the caller's role does not allow this"
           },
           "404": {
             "content": {

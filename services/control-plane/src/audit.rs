@@ -382,6 +382,26 @@ pub fn org_personal_created(user: Uuid, org_id: Uuid, issuer: &str) -> Event {
     )
 }
 
+/// An org-level admin event (T6): actor, target the org, no attributes (never the org name).
+fn org_event(kind: Code, actor: Actor, org_id: Uuid) -> Event {
+    admin(kind, actor, Target::Org(org_id), Attrs::new())
+}
+
+/// `org.created`: a signed-in user created a team org and is its owner.
+pub fn org_created(user: Uuid, org_id: Uuid) -> Event {
+    org_event(kind::ORG_CREATED, Actor::User(user), org_id)
+}
+
+/// `org.renamed`.
+pub fn org_renamed(actor: Actor, org_id: Uuid) -> Event {
+    org_event(kind::ORG_RENAMED, actor, org_id)
+}
+
+/// `org.deleted`.
+pub fn org_deleted(actor: Actor, org_id: Uuid) -> Event {
+    org_event(kind::ORG_DELETED, actor, org_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::issuer_host;

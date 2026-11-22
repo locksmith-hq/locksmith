@@ -107,6 +107,12 @@ pub mod kind {
     pub const AUTH_VERIFY_FAILED: Code = Code::new("auth.verify_failed");
     /// A first sign-in created the user's personal org.
     pub const ORG_PERSONAL_CREATED: Code = Code::new("org.personal_created");
+    /// A signed-in user created a team org and became its owner (T6).
+    pub const ORG_CREATED: Code = Code::new("org.created");
+    /// An owner or admin renamed the org (T6). The name itself is not recorded.
+    pub const ORG_RENAMED: Code = Code::new("org.renamed");
+    /// An owner deleted the org (T6): its memberships end and open invites are revoked.
+    pub const ORG_DELETED: Code = Code::new("org.deleted");
     /// A remote MCP tool call (allowed, refused or failed). Records the layer, the tool name and
     /// the outcome only, never the call's arguments or result.
     pub const MCP_CALL: Code = Code::new("mcp.call");

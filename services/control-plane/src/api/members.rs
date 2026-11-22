@@ -1,5 +1,7 @@
-//! Org membership and invites (T6). Contract group: the types and routes below are final, the
-//! handlers answer `501` until their groups land. `OrgRole` is the shared role type T2 reads.
+//! Org membership and invites (T6). Contract group: the types and routes below are final. The
+//! org routes (`GET /v1/orgs`, rename, delete) are built (group 3); the member and invite
+//! handlers answer `501` until group 4 lands. `OrgRole` (defined with the binding in
+//! [`crate::auth`]) is the shared role type T2 reads.
 //!
 //! An invite token is 32 random bytes (base64url) shown once in [`InviteCreated`] and never
 //! stored or listed; only its SHA-256 is kept. It travels in a request body, never a URL.
@@ -8,6 +10,7 @@
 #![allow(dead_code)]
 
 use axum::Json;
+use axum::extract::State;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -15,19 +18,16 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::extract::{ApiJson, ApiPath};
-use super::orgs::Org;
+use super::orgs::{self, Org};
 use super::responses::MemberErrors;
+use super::{exists_or_404, one, validate_name};
+use crate::app::AppState;
+use crate::audit;
 use crate::auth::OrgBinding;
+use crate::db::sql::{self, Row};
 use crate::problem::ApiError;
 
-/// A member's role in an org. Data only in T6: member management is enforced, the rest is T2.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum OrgRole {
-    Owner,
-    Admin,
-    Member,
-}
+pub use crate::auth::OrgRole;
 
 /// An org the caller belongs to, with the caller's role in it.
 #[derive(Debug, Serialize, ToSchema)]
@@ -125,7 +125,8 @@ pub struct AcceptedInvite {
     pub role: OrgRole,
 }
 
-/// `GET /v1/orgs`: every org the caller is a member of.
+/// `GET /v1/orgs`: every org the caller is a member of, with their role, read through the
+/// `app.login_user` slice (migration 0015).
 #[utoipa::path(
     get,
     path = "/v1/orgs",
@@ -135,11 +136,55 @@ pub struct AcceptedInvite {
     responses((status = 200, description = "OK", body = MyOrgList), MemberErrors),
     security(("dev_org" = []))
 )]
-pub async fn list_orgs(_org: OrgBinding) -> Result<Json<MyOrgList>, ApiError> {
-    Err(ApiError::not_implemented())
+pub async fn list_orgs(
+    State(state): State<AppState>,
+    org: OrgBinding,
+) -> Result<Json<MyOrgList>, ApiError> {
+    // The dev-only header names no user: it sees just the org it names, as owner.
+    let Some(user) = org.user else {
+        let bound = orgs::load(&state, org.org_id).await?;
+        return Ok(Json(MyOrgList {
+            items: vec![MyOrg {
+                org: bound,
+                role: org.role,
+                personal: true,
+            }],
+        }));
+    };
+    let items = state
+        .db()
+        .with_user(user.user_id, move |c| {
+            Box::pin(async move {
+                let rows = sql::query(concat!(
+                    "SELECT o.id, o.name, o.region, o.created_at, o.updated_at, m.role \
+                     FROM memberships m JOIN orgs o ON o.id = m.org_id \
+                     WHERE m.user_id = $1 ORDER BY o.created_at, o.id"
+                ))
+                .bind(user.user_id)
+                .fetch_all(&mut *c)
+                .await?;
+                let mut items = Vec::with_capacity(rows.len());
+                for r in &rows {
+                    let role: String = r.try_get("role")?;
+                    let Some(role) = OrgRole::from_db(&role) else {
+                        continue;
+                    };
+                    let org = orgs::from_row(r)?;
+                    items.push(MyOrg {
+                        personal: org.id == user.personal_org_id,
+                        org,
+                        role,
+                    });
+                }
+                Ok::<_, ApiError>(items)
+            })
+        })
+        .await?;
+    Ok(Json(MyOrgList { items }))
 }
 
-/// `PATCH /v1/orgs/{org_id}`: rename (owner only).
+/// `PATCH /v1/orgs/{org_id}`: rename (owner or admin). `{org_id}` must be the bound org (select
+/// it with `X-Locksmith-Org`); any other id is `404`. Appends `org.renamed`.
 #[utoipa::path(
     patch,
     path = "/v1/orgs/{org_id}",
@@ -152,14 +197,69 @@ pub async fn list_orgs(_org: OrgBinding) -> Result<Json<MyOrgList>, ApiError> {
     security(("dev_org" = []))
 )]
 pub async fn patch_org(
-    _org: OrgBinding,
-    ApiPath(_org_id): ApiPath<Uuid>,
-    ApiJson(_input): ApiJson<PatchOrg>,
+    State(state): State<AppState>,
+    org: OrgBinding,
+    ApiPath(org_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<PatchOrg>,
 ) -> Result<Json<Org>, ApiError> {
-    Err(ApiError::not_implemented())
+    // Only the bound org exists as far as a request can tell (select it with X-Locksmith-Org).
+    if org_id != org.org_id {
+        return Err(ApiError::not_found());
+    }
+    org.require(&[OrgRole::Owner, OrgRole::Admin])?;
+    validate_name(&input.name)?;
+    let actor = org.actor();
+    let updated = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                require_role_in_tx(c, &org, &[OrgRole::Owner, OrgRole::Admin]).await?;
+                let row = sql::query(concat!(
+                    "UPDATE orgs SET name = $2, updated_at = now() WHERE id = $1 RETURNING ",
+                    orgs::cols!()
+                ))
+                .bind(org_id)
+                .bind(input.name)
+                .fetch_optional(&mut *c)
+                .await?;
+                let updated = one(row, orgs::from_row)?;
+                audit::append(c, org_id, &audit::org_renamed(actor, org_id)).await?;
+                Ok::<_, ApiError>(updated)
+            })
+        })
+        .await?;
+    Ok(Json(updated))
 }
 
-/// `DELETE /v1/orgs/{org_id}`: owner only; `409` while the org still has secrets.
+/// Re-check the caller's role inside the write transaction, locking their membership row, so a
+/// role change or removal that commits after the binding cannot be acted on. The dev-only
+/// header has no membership row and keeps its binding role.
+async fn require_role_in_tx(
+    c: &mut sql::PgConnection,
+    org: &OrgBinding,
+    allowed: &[OrgRole],
+) -> Result<(), ApiError> {
+    let Some(user) = org.user else {
+        return org.require(allowed);
+    };
+    let role: Option<String> = sql::query_scalar(
+        "SELECT role FROM memberships WHERE org_id = $1 AND user_id = $2 FOR UPDATE",
+    )
+    .bind(org.org_id)
+    .bind(user.user_id)
+    .fetch_optional(&mut *c)
+    .await?;
+    match role.as_deref().and_then(OrgRole::from_db) {
+        None => Err(ApiError::not_found()),
+        Some(r) if allowed.contains(&r) => Ok(()),
+        Some(_) => Err(ApiError::forbidden()),
+    }
+}
+
+/// `DELETE /v1/orgs/{org_id}`: owner only; `409` while the org still has secrets, and for a
+/// personal org. `{org_id}` must be the bound org. Every membership ends and open invites are
+/// revoked, in one transaction with the `org.deleted` event; the org row and its ledger are
+/// kept (the ledger is append-only), unreachable because nobody is a member any more.
 #[utoipa::path(
     delete,
     path = "/v1/orgs/{org_id}",
@@ -171,10 +271,57 @@ pub async fn patch_org(
     security(("dev_org" = []))
 )]
 pub async fn delete_org(
-    _org: OrgBinding,
-    ApiPath(_org_id): ApiPath<Uuid>,
+    State(state): State<AppState>,
+    org: OrgBinding,
+    ApiPath(org_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    Err(ApiError::not_implemented())
+    if org_id != org.org_id {
+        return Err(ApiError::not_found());
+    }
+    org.require(&[OrgRole::Owner])?;
+    let actor = org.actor();
+    state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                // Serialise with renames and other deletes of this org.
+                exists_or_404(
+                    c,
+                    sql::query_scalar("SELECT 1 FROM orgs WHERE id = $1 FOR UPDATE").bind(org_id),
+                )
+                .await?;
+                require_role_in_tx(c, &org, &[OrgRole::Owner]).await?;
+                let personal: bool = sql::query_scalar(
+                    "SELECT EXISTS (SELECT 1 FROM users WHERE personal_org_id = $1)",
+                )
+                .bind(org_id)
+                .fetch_one(&mut *c)
+                .await?;
+                if personal {
+                    return Err(ApiError::conflict("a personal org cannot be deleted"));
+                }
+                let has_secrets: bool = sql::query_scalar("SELECT EXISTS (SELECT 1 FROM secrets)")
+                    .fetch_one(&mut *c)
+                    .await?;
+                if has_secrets {
+                    return Err(ApiError::conflict("the org still has secrets"));
+                }
+                sql::query(
+                    "UPDATE invites SET revoked_at = now() \
+                     WHERE accepted_at IS NULL AND revoked_at IS NULL",
+                )
+                .execute(&mut *c)
+                .await?;
+                sql::query("DELETE FROM memberships WHERE org_id = $1")
+                    .bind(org_id)
+                    .execute(&mut *c)
+                    .await?;
+                audit::append(c, org_id, &audit::org_deleted(actor, org_id)).await?;
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `GET /v1/orgs/current/members`.

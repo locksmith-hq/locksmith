@@ -14,8 +14,9 @@
 use uuid::Uuid;
 
 use crate::audit;
+use crate::auth::OrgRole;
 use crate::auth::human::HumanIdentity;
-use crate::db::{Database, bind_org, sql};
+use crate::db::{Database, bind_login_user, bind_org, sql};
 use crate::problem::ApiError;
 
 /// Name of an auto-created personal org. Renaming is a later change (T6).
@@ -53,6 +54,61 @@ pub async fn resolve(db: &Database, identity: &HumanIdentity) -> Result<Resolved
     let email_owned = email.map(str::to_owned);
     db.with_login(&identity.issuer, &identity.subject, email, move |c| {
         Box::pin(async move { resolve_in_tx(c, &issuer, &subject, email_owned.as_deref()).await })
+    })
+    .await
+}
+
+/// A verified user bound to an org they are a member of (T6 task 3.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Membership {
+    pub user: ResolvedUser,
+    /// The org the request acts in: the requested one, or the personal org by default.
+    pub org_id: Uuid,
+    pub role: OrgRole,
+}
+
+/// Resolve `identity` as [`resolve`] does, then check, in the same transaction, that the user is
+/// a member of `requested` (or of their personal org when `None`) and read their role.
+///
+/// The membership is looked up through the `app.login_user` slice before the requested org is
+/// bound, so a non-member never binds it and reads none of its rows. `Ok(None)` means "not a member":
+/// the caller answers it with the same `404` as an org that does not exist. A first sign-in is
+/// committed either way.
+pub async fn bind(
+    db: &Database,
+    identity: &HumanIdentity,
+    requested: Option<Uuid>,
+) -> Result<Option<Membership>, ApiError> {
+    if !identity.email_verified {
+        record_unverified(db, identity).await;
+        return Err(ApiError::email_verification_required());
+    }
+    let email = identity
+        .email
+        .as_deref()
+        .map(str::trim)
+        .filter(|e| !e.is_empty());
+    let issuer = identity.issuer.clone();
+    let subject = identity.subject.clone();
+    let email_owned = email.map(str::to_owned);
+    db.with_login(&identity.issuer, &identity.subject, email, move |c| {
+        Box::pin(async move {
+            let user = resolve_in_tx(c, &issuer, &subject, email_owned.as_deref()).await?;
+            let org_id = requested.unwrap_or(user.org_id);
+            bind_login_user(c, user.user_id).await?;
+            let role: Option<String> = sql::query_scalar(
+                "SELECT role FROM memberships WHERE org_id = $1 AND user_id = $2",
+            )
+            .bind(org_id)
+            .bind(user.user_id)
+            .fetch_optional(&mut *c)
+            .await?;
+            let Some(role) = role.as_deref().and_then(OrgRole::from_db) else {
+                return Ok::<_, ApiError>(None);
+            };
+            bind_org(c, org_id).await?;
+            Ok(Some(Membership { user, org_id, role }))
+        })
     })
     .await
 }
@@ -151,6 +207,13 @@ async fn resolve_in_tx(
     .bind(org_id)
     .fetch_one(&mut *c)
     .await?;
+    // T6: membership is the source of truth for who may act in an org. A new identity owns its
+    // personal org; a linked identity (same verified person) co-owns the one it joined.
+    sql::query("INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'owner')")
+        .bind(org_id)
+        .bind(user_id)
+        .execute(&mut *c)
+        .await?;
     if linked.is_none() {
         let event = audit::org_personal_created(user_id, org_id, issuer);
         audit::append(c, org_id, &event).await?;

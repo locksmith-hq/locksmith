@@ -3,6 +3,12 @@
 //! honoured only when dev auth is enabled and no bearer token is sent. Handlers depend only on
 //! [`OrgBinding`].
 //!
+//! T6: a human names the org it acts in with [`ORG_HEADER`]. The header is never trusted alone:
+//! the user's membership in that org is checked in the binding transaction
+//! ([`users::bind`]), and a miss (not a member, no such org, a malformed id) is the same `404`.
+//! Without the header the request acts in the user's personal org. Removing a membership takes
+//! effect on the next request: nothing caches a binding.
+//!
 //! The `/internal/v1` routes use [`ServiceOrgBinding`] instead: the caller is the gateway
 //! service, authenticated by a static bearer token compared in constant time (S3 design
 //! decision 2), which names the org it acts for in [`SERVICE_ORG_HEADER`].
@@ -19,7 +25,10 @@ use axum::http::header;
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
+use tracing::Instrument;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::app::AppState;
@@ -29,11 +38,110 @@ use crate::users;
 pub const DEV_ORG_HEADER: &str = "x-locksmith-dev-org";
 /// The org an internal (service-token) request acts for.
 pub const SERVICE_ORG_HEADER: &str = "x-locksmith-org";
+/// The org a signed-in human selects (T6). Same name as [`SERVICE_ORG_HEADER`]; the two never
+/// meet, since internal routes use [`ServiceOrgBinding`].
+pub const ORG_HEADER: &str = "x-locksmith-org";
+
+/// A member's role in an org. Data only in T6: member management is enforced, the rest is T2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum OrgRole {
+    Owner,
+    Admin,
+    Member,
+}
+
+impl OrgRole {
+    /// The stored form (the `memberships.role` check constraint).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Owner => "owner",
+            Self::Admin => "admin",
+            Self::Member => "member",
+        }
+    }
+
+    /// Parse the stored form; `None` for anything else.
+    pub fn from_db(s: &str) -> Option<Self> {
+        match s {
+            "owner" => Some(Self::Owner),
+            "admin" => Some(Self::Admin),
+            "member" => Some(Self::Member),
+            _ => None,
+        }
+    }
+}
+
+/// The verified user behind a human binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BoundUser {
+    pub user_id: Uuid,
+    /// The default org when no [`ORG_HEADER`] is sent.
+    pub personal_org_id: Uuid,
+}
 
 /// The org a request is bound to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OrgBinding {
     pub org_id: Uuid,
+    /// The caller's role in `org_id`, read from `memberships` in the binding transaction. The
+    /// dev-only header names no user and acts as `owner`.
+    pub role: OrgRole,
+    /// The signed-in user; `None` for the dev-only header.
+    pub user: Option<BoundUser>,
+}
+
+impl OrgBinding {
+    /// The ledger actor: the user, or the dev-auth service actor.
+    pub fn actor(&self) -> ls_audit::Actor {
+        self.user.map_or(crate::audit::DEV_AUTH_ACTOR, |u| {
+            ls_audit::Actor::User(u.user_id)
+        })
+    }
+
+    /// `403` unless the caller's role is one of `allowed`.
+    pub fn require(&self, allowed: &[OrgRole]) -> Result<(), ApiError> {
+        if allowed.contains(&self.role) {
+            Ok(())
+        } else {
+            Err(ApiError::forbidden())
+        }
+    }
+}
+
+/// Bind a verified human to `requested` (or their personal org) after the membership check:
+/// `404` when they are not a member. Shared by [`OrgBinding`] and the hub MCP tools.
+pub async fn bind_human(
+    state: &AppState,
+    identity: &human::HumanIdentity,
+    requested: Option<Uuid>,
+) -> Result<OrgBinding, ApiError> {
+    let membership = users::bind(state.db(), identity, requested)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
+    Ok(OrgBinding {
+        org_id: membership.org_id,
+        role: membership.role,
+        user: Some(BoundUser {
+            user_id: membership.user.user_id,
+            personal_org_id: membership.user.org_id,
+        }),
+    })
+}
+
+/// The org named by [`ORG_HEADER`]: `Ok(None)` when absent, `404` when it is not a UUID (it
+/// cannot name an org the caller belongs to).
+fn requested_org(parts: &Parts) -> Result<Option<Uuid>, ApiError> {
+    parts
+        .headers
+        .get(ORG_HEADER)
+        .map(|v| {
+            v.to_str()
+                .ok()
+                .and_then(|s| Uuid::parse_str(s.trim()).ok())
+                .ok_or_else(ApiError::not_found)
+        })
+        .transpose()
 }
 
 /// Rejection for a request with no valid org binding: `401` problem details, no detail about why.
@@ -56,11 +164,14 @@ impl FromRequestParts<AppState> for OrgBinding {
         // A bearer token is a human credential: it is verified, and a bad one is never
         // downgraded to the dev header. Without human auth configured it is refused too.
         if let Some(value) = parts.headers.get(header::AUTHORIZATION) {
-            let (_, user) = human_login(state, value.as_bytes()).await?;
-            tracing::Span::current().record("org.id", tracing::field::display(user.org_id));
-            return Ok(Self {
-                org_id: user.org_id,
-            });
+            let identity = verify_bearer(state, value.as_bytes()).await?;
+            let requested = requested_org(parts)?;
+            let span = tracing::info_span!("org.select", org.selected = requested.is_some());
+            let binding = bind_human(state, &identity, requested)
+                .instrument(span)
+                .await?;
+            tracing::Span::current().record("org.id", tracing::field::display(binding.org_id));
+            return Ok(binding);
         }
         if !state.dev_auth() {
             return Err(ApiError::unauthenticated());
@@ -75,24 +186,35 @@ impl FromRequestParts<AppState> for OrgBinding {
             .and_then(|s| Uuid::parse_str(s.trim()).ok())
             .ok_or_else(ApiError::unauthenticated)?;
         tracing::Span::current().record("org.id", tracing::field::display(org_id));
-        Ok(Self { org_id })
+        Ok(Self {
+            org_id,
+            role: OrgRole::Owner,
+            user: None,
+        })
     }
 }
 
-/// Verify the bearer token in an `Authorization` value and resolve its user (T1): `401` for any
-/// bad token, `403` for an unverified email. A first sign-in creates the user and personal org.
-async fn human_login(
+/// Verify the bearer token in an `Authorization` value: `401` for any bad token.
+async fn verify_bearer(
     state: &AppState,
     authorization: &[u8],
-) -> Result<(human::HumanIdentity, users::ResolvedUser), ApiError> {
+) -> Result<human::HumanIdentity, ApiError> {
     let auth = state.human_auth().ok_or_else(ApiError::unauthenticated)?;
     let token = bearer(authorization)
         .and_then(|t| std::str::from_utf8(t).ok())
         .ok_or_else(ApiError::unauthenticated)?;
-    let identity = auth
-        .verify(token)
+    auth.verify(token)
         .await
-        .map_err(|_| ApiError::unauthenticated())?;
+        .map_err(|_| ApiError::unauthenticated())
+}
+
+/// Verify the bearer token in an `Authorization` value and resolve its user (T1): `401` for any
+/// bad token, `403` for an unverified email. A first sign-in creates the user and personal org.
+pub(crate) async fn human_login(
+    state: &AppState,
+    authorization: &[u8],
+) -> Result<(human::HumanIdentity, users::ResolvedUser), ApiError> {
+    let identity = verify_bearer(state, authorization).await?;
     let user = users::resolve(state.db(), &identity).await?;
     Ok((identity, user))
 }

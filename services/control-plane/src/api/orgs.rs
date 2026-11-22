@@ -1,8 +1,10 @@
-//! Orgs: dev-only create, and get of the bound org (by id, or as `current` for a caller that
+//! Orgs: create (a team org for a signed-in human, or the dev-only create), and get of the bound
+//! org (by id, or as `current` for a caller that
 //! does not know its org id, such as the web console after sign-in).
 
 use axum::Json;
 use axum::extract::State;
+use axum::http::{HeaderMap, header};
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -13,7 +15,8 @@ use super::extract::{ApiJson, ApiPath};
 use super::responses::{DevCreateErrors, ReadErrors};
 use super::{created, one, utc, validate_name};
 use crate::app::AppState;
-use crate::auth::OrgBinding;
+use crate::audit;
+use crate::auth::{OrgBinding, human_login};
 use crate::db::sql::{self, Row};
 use crate::problem::ApiError;
 
@@ -41,8 +44,9 @@ macro_rules! cols {
         "id, name, region, created_at, updated_at"
     };
 }
+pub(crate) use cols;
 
-fn from_row(r: &sql::PgRow) -> sql::Result<Org> {
+pub(crate) fn from_row(r: &sql::PgRow) -> sql::Result<Org> {
     Ok(Org {
         id: r.try_get("id")?,
         name: r.try_get("name")?,
@@ -52,15 +56,17 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Org> {
     })
 }
 
-/// `POST /v1/orgs`: dev only (design decision 7). The app generates a UUIDv7, binds it as the
-/// org context, and inserts through row-level security. Without dev auth there is no way to
-/// name an org yet, so the request is `401` and no query runs.
+/// `POST /v1/orgs`: a signed-in human creates a team org and becomes its `owner`; the org, the
+/// membership and the `org.created` event commit together. Without a bearer token this is the
+/// dev-only create (design decision 7 of S1), which names no user; with neither it is `401` and
+/// no query runs. The app generates a UUIDv7 and binds it as the org context, so the inserts
+/// pass row-level security.
 #[utoipa::path(
     post,
     path = "/v1/orgs",
     operation_id = "create_org",
     tag = "orgs",
-    summary = "Create an org (dev only)",
+    summary = "Create a team org",
     request_body = NewOrg,
     responses(
         (status = 201, description = "Created", body = Org, headers(("Location" = String, description = "URL of the new resource"))),
@@ -69,11 +75,14 @@ fn from_row(r: &sql::PgRow) -> sql::Result<Org> {
 )]
 pub async fn create(
     State(state): State<AppState>,
+    headers: HeaderMap,
     ApiJson(input): ApiJson<NewOrg>,
 ) -> Result<Response, ApiError> {
-    if !state.dev_auth() {
-        return Err(ApiError::unauthenticated());
-    }
+    let owner = match headers.get(header::AUTHORIZATION) {
+        Some(value) => Some(human_login(&state, value.as_bytes()).await?.1.user_id),
+        None if state.dev_auth() => None,
+        None => return Err(ApiError::unauthenticated()),
+    };
     validate_name(&input.name)?;
     let id = Uuid::now_v7();
     let org = state
@@ -86,8 +95,18 @@ pub async fn create(
                 ))
                 .bind(id)
                 .bind(input.name)
-                .fetch_one(c)
+                .fetch_one(&mut *c)
                 .await?;
+                if let Some(user_id) = owner {
+                    sql::query(
+                        "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'owner')",
+                    )
+                    .bind(id)
+                    .bind(user_id)
+                    .execute(&mut *c)
+                    .await?;
+                    audit::append(c, id, &audit::org_created(user_id, id)).await?;
+                }
                 Ok::<_, ApiError>(from_row(&row)?)
             })
         })
@@ -142,7 +161,7 @@ pub async fn get_one(
 }
 
 /// The bound org's row, read inside its own tenant transaction.
-async fn load(state: &AppState, org_id: Uuid) -> Result<Org, ApiError> {
+pub(crate) async fn load(state: &AppState, org_id: Uuid) -> Result<Org, ApiError> {
     state
         .db()
         .with_org(org_id, move |c| {

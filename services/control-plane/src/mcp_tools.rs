@@ -36,7 +36,7 @@ use crate::mcp_endpoint::McpPrincipal;
 use crate::mcp_store;
 use crate::problem::{ApiError, Kind};
 use crate::users::{self, ResolvedUser};
-use ls_audit::{Actor, Code, outcome};
+use ls_audit::{Code, outcome};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -187,12 +187,10 @@ pub async fn caller(state: &AppState, principal: &McpPrincipal) -> Result<Resolv
     users::resolve(state.db(), &principal.0).await
 }
 
-/// The person's org, resolved as a console sign-in does (`403` for an unverified email).
+/// The person's personal org, bound as a console request without `X-Locksmith-Org` is (`403`
+/// for an unverified email, `404` without a membership in it).
 async fn org_of(state: &AppState, principal: &McpPrincipal) -> Result<OrgBinding, ApiError> {
-    let user = caller(state, principal).await?;
-    Ok(OrgBinding {
-        org_id: user.org_id,
-    })
+    crate::auth::bind_human(state, &principal.0, None).await
 }
 
 /// Append an `mcp.call` event to the org's ledger. `tool` is a registry name (or `unknown`),
@@ -381,10 +379,7 @@ async fn revoke_grant(
     principal: &McpPrincipal,
     a: RevokeGrantArgs,
 ) -> Result<Value, ApiError> {
-    let user = caller(state, principal).await?;
-    let org = OrgBinding {
-        org_id: user.org_id,
-    };
+    let org = org_of(state, principal).await?;
     let grant_id = a.grant_id;
     let agent_id = state
         .db()
@@ -402,7 +397,7 @@ async fn revoke_grant(
         })
         .await?;
     // The event is attributed to the person, not the dev actor.
-    agents::revoke_grant_as(state, org, Actor::User(user.user_id), agent_id, grant_id).await?;
+    agents::revoke_grant_as(state, org, org.actor(), agent_id, grant_id).await?;
     Ok(json!({"grant_id": grant_id, "revoked_at": ts(OffsetDateTime::now_utc())}))
 }
 

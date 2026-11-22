@@ -163,6 +163,27 @@ impl Database {
         self.run(None, Some(login), f).instrument(span).await
     }
 
+    /// Run `f` in one transaction for a verified user with no org bound (T6 design decision 7):
+    /// `app.login_user` makes that user's own `memberships` rows, and the orgs they belong to,
+    /// visible across orgs. Nothing else of any org is readable. Transaction-local, like
+    /// [`Self::with_org`].
+    pub async fn with_user<T, E, F>(&self, user_id: Uuid, f: F) -> Result<T, E>
+    where
+        T: Send,
+        E: From<sql::Error> + Send,
+        F: for<'c> FnOnce(&'c mut PgConnection) -> TxFuture<'c, T, E> + Send,
+    {
+        let span = tracing::info_span!(
+            "db.transaction",
+            otel.kind = "client",
+            db.system.name = "postgresql",
+            error = tracing::field::Empty,
+        );
+        self.run_as(None, None, Some(user_id), f)
+            .instrument(span)
+            .await
+    }
+
     async fn transaction<T, E, F>(&self, org_id: Option<Uuid>, f: F) -> Result<T, E>
     where
         E: From<sql::Error>,
@@ -176,7 +197,26 @@ impl Database {
         E: From<sql::Error>,
         F: for<'c> FnOnce(&'c mut PgConnection) -> TxFuture<'c, T, E>,
     {
+        self.run_as(org_id, login, None, f).await
+    }
+
+    async fn run_as<T, E, F>(
+        &self,
+        org_id: Option<Uuid>,
+        login: Option<Login>,
+        login_user: Option<Uuid>,
+        f: F,
+    ) -> Result<T, E>
+    where
+        E: From<sql::Error>,
+        F: for<'c> FnOnce(&'c mut PgConnection) -> TxFuture<'c, T, E>,
+    {
         let mut tx = self.pool.begin().await.inspect_err(|_| mark_error())?;
+        if let Some(user_id) = login_user {
+            bind_login_user(&mut tx, user_id)
+                .await
+                .inspect_err(|_| mark_error())?;
+        }
         if let Some(org_id) = org_id {
             bind_org(&mut tx, org_id)
                 .await
@@ -247,6 +287,17 @@ struct Login {
 pub async fn bind_org(conn: &mut PgConnection, org_id: Uuid) -> sql::Result<()> {
     sql::query("SELECT set_config('app.org_id', $1, true)")
         .bind(org_id.to_string())
+        .execute(conn)
+        .await
+        .map(|_| ())
+}
+
+/// Bind the verified user for the rest of the current transaction (`app.login_user`,
+/// transaction-local): the `memberships` rows of exactly that user become visible across orgs,
+/// so the caller's orgs can be found before any org is bound (T6 design decision 7).
+pub async fn bind_login_user(conn: &mut PgConnection, user_id: Uuid) -> sql::Result<()> {
+    sql::query("SELECT set_config('app.login_user', $1, true)")
+        .bind(user_id.to_string())
         .execute(conn)
         .await
         .map(|_| ())

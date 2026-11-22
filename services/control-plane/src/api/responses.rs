@@ -401,7 +401,7 @@ pub enum MemberErrors {
     Unauthenticated(Problem),
     #[response(
         status = 403,
-        description = "Email verification required",
+        description = "Email verification required, or the caller's role does not allow this",
         content_type = "application/problem+json"
     )]
     EmailNotVerified(Problem),

@@ -10,8 +10,9 @@ name: wake-agents
 #   CI failing on main -> the lead;
 # - each PR belongs to its author: a failed merge review (claude-review) or failing CI on a claude/* PR -> the worker
 #   or lead whose App opened it (owner PRs -> Worker A).
-# The lead is fired at once only for an owner tag. Its other wakes are queued: the `lead-tick` job fires it once
-# every 2 h when something waits (`route.sh lead-tick`), so bursts cost one run (owner 2026-11-22).
+# Batched (Opus) roles - lead, PM, research - are fired at once only for an owner tag. Their other wakes label the
+# issue or PR `wake-<role>`; the `tick` job fires each once every 2 h if anything waits (`route.sh tick`), so bursts
+# and agent-to-agent tags cost one run (owner 2026-11-22).
 # The call is only a wake-up: the woken agent still decides from its own checks.
 # Secrets are the routines' API trigger tokens (web UI only); a new role adds its secret below.
 on:
@@ -23,14 +24,14 @@ on:
     workflows: [ci, claude-review]
     types: [completed]
   schedule:
-    - cron: '17 */2 * * *'  # lead-tick
+    - cron: '17 */2 * * *'  # tick
   workflow_dispatch: {}
 
 permissions:
   contents: read  # sparse checkout of the router
-  issues: read    # debate threads
+  issues: write   # debate threads; wake-<role> queue labels
   pull-requests: read  # the PR author picks its worker
-  actions: read   # lead-tick: main and PR CI state
+  actions: read   # tick: main CI state
 
 jobs:
   fire:
@@ -81,7 +82,7 @@ jobs:
             scripts/route.sh fire "$role" "$why"
           done
 
-  lead-tick:
+  tick:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -90,10 +91,11 @@ jobs:
         with:
           sparse-checkout: |
             scripts/route.sh
-            scripts/owner-replies.sh
             docs/agents/routing.json
           sparse-checkout-cone-mode: false
       - env:
           GH_TOKEN: ${{ github.token }}
           LEAD_FIRE_TOKEN: ${{ secrets.LEAD_FIRE_TOKEN }}
-        run: scripts/route.sh lead-tick
+          PM_FIRE_TOKEN: ${{ secrets.PM_FIRE_TOKEN }}
+          RESEARCH_FIRE_TOKEN: ${{ secrets.RESEARCH_FIRE_TOKEN }}
+        run: scripts/route.sh tick

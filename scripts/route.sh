@@ -3,7 +3,7 @@
 #   route.sh event <event.json>    roles to wake for a GitHub event, "role<TAB>reason" per line (wake-agents.yml)
 #   route.sh debate <issue>        debate guard: "wake <role> <why>" or "wait <why>"; agents act only on their own wake
 #   route.sh fire <role> <reason>  wake a role's routine; its token comes from the env var routing.json names
-#   route.sh lead-tick             fire the lead once for everything waiting for it (wake-agents.yml, every 2 h)
+#   route.sh tick                  fire each batched (Opus) role once for its queue (wake-agents.yml, every 2 h)
 #   route.sh selftest
 # Roles come from GitHub logins, so an agent cannot speak for another role or skip the cap. Shortcut: while
 # identities are paused (#299) agents post as the owner and a role marker decides; drop it once they are live.
@@ -142,47 +142,40 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   esac | awk -F'\t' '!seen[$1]++'  # one wake per role per event
 }
 
-# The lead wakes at once only for an owner tag; everything else waits for lead-tick, which batches it into one
-# run every 2 h (owner 2026-11-22: 29 Opus lead runs in 24 h, most of them for nothing).
-lead_now() { [[ "$1" == *"tagged you"* || "$1" == queue:* ]]; }
+# Batched roles (routing.json `batched`: the Opus routines; owner 2026-11-22: 29 Opus lead runs in 24 h, mostly for
+# nothing) wake at once only when the owner tags them. Any other wake labels the issue or PR `wake-<role>`; `tick`
+# (wake-agents.yml, every 2 h) fires each role once for everything labelled, then clears those labels.
+batched() { [ "$(cfgq --arg r "$1" '.roles[$r].batched // false')" = true ]; }
+now_ok() { [[ "$1" == "owner tagged you"* || "$1" == queue:* ]]; }
 
-lead_state() { # what lead_queue reads, as JSON (or $LEADQ_JSON in the selftest)
-  if [ -n "${LEADQ_JSON:-}" ]; then cat "$LEADQ_JSON"; return; fi
-  local n rescues="" debates=""
-  for n in $(gh api "repos/$repo/issues?labels=needs-rescue&state=open&per_page=100" -q '.[]|select(.pull_request==null)|.number'); do
-    rescues+=$(gh api "repos/$repo/issues/$n" -q '{number, labels: [.labels[].name]}' |
-      jq --arg last "$(gh api "repos/$repo/issues/$n/comments?per_page=100" -q '[.[]]|last|.user.login // ""')" '.last = $last')
-  done
-  for n in $(gh api "repos/$repo/issues?labels=debate&state=open&per_page=100" -q '.[].number'); do
-    debate_input "$n" | decide | grep -q '^wake lead' && debates+="$n "
-  done
-  local lead prs="" pr br lb
-  lead=$(cfgq '.roles.lead.logins[0]')
-  while IFS=$'\t' read -r pr br lb; do  # the lead's own PRs whose merge review or latest CI failed
-    [ -n "$pr" ] || continue
-    if [[ ",$lb," == *",review-failed,"* ]] || [ "$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=$br&per_page=1" -q '.workflow_runs[0].conclusion // ""')" = failure ]; then prs+="$pr "; fi
-  done < <(gh api "repos/$repo/pulls?state=open&per_page=100" -q ".[]|select(.user.login == \"$lead\")|[.number, .head.ref, ([.labels[].name]|join(\",\"))]|@tsv")
-  jq -n --argjson p "$(tr ' ' '\n' <<<"$prs" | grep . | jq -R 'tonumber' | jq -s .)" --argjson r "$(jq -s . <<<"$rescues")" --argjson o "$(bash "$here/owner-replies.sh" lead | jq -R 'tonumber' | jq -s .)" \
-    --argjson d "$(tr ' ' '\n' <<<"$debates" | grep . | jq -R 'tonumber' | jq -s .)" \
-    --argjson m "$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=1" -q '.workflow_runs[0]|{conclusion, updated_at}')" \
-    '{rescues: $r, replies: $o, debates: $d, prs: $p, main: $m}'
+queue_add() { # <role> <reason>: label the issue or PR the reason names; main's state needs no label (tick reads it)
+  local n; n=$(grep -oE '#[0-9]+' <<<"$2" | head -1 | tr -d '#')
+  if [ -n "$n" ] && [ -z "${ROUTE_DRYRUN:-}" ]; then gh api "repos/$repo/issues/$n/labels" -f "labels[]=wake-$1" >/dev/null || return 1; fi
+  echo "queued for $1${n:+ on #$n}: $2"
 }
 
-# One line per item waiting for the lead: open rescues it has not answered last (escalated ones wait on the owner),
-# owner replies on issues it raised, debate turns it owes, its own PRs that failed review or CI, and main red for
-# over 2 h (workers try first).
-lead_queue() {
-  lead_state | jq -r --arg lead "$(cfgq '.roles.lead.logins[0]')" --arg now "${NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" '
-    (.rescues[]|select((.labels|index("needs-owner")|not) and .last != $lead)|"rescue #\(.number)"),
-    (.replies[]|"owner reply #\(.)"),
-    (.debates[]|"debate #\(.)"),
-    ((.prs // [])[]|"own PR #\(.) failed review or CI"),
-    (.main // {}|select(.conclusion == "failure" and (($now|fromdateiso8601) - (.updated_at|fromdateiso8601)) > 7200)|"main red over 2 h")'
+queue_of() { # <role>: one item per line; from GitHub or $QUEUE_JSON {"items": [...], "main": {...}} in the selftest
+  local st; st=${QUEUE_JSON:+$(cat "$QUEUE_JSON")}
+  [ -n "$st" ] || st=$(jq -n --argjson i "$(gh api "repos/$repo/issues?labels=wake-$1&state=all&per_page=100" -q '[.[]|{number, labels: [.labels[].name]}]')" \
+    --argjson m "$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=1" -q '.workflow_runs[0]|{conclusion, updated_at}')" '{items: $i, main: $m}')
+  jq -r --arg r "$1" --arg now "${NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" '
+    (.items[]|"#\(.number) (\([.labels[]|select(startswith("wake-")|not)]|join(", ")))"),
+    (select($r == "lead")|.main // {}|select(.conclusion == "failure" and (($now|fromdateiso8601) - (.updated_at|fromdateiso8601)) > 7200)|"main red over 2 h")' <<<"$st"
+}
+
+tick() { # fire each batched role once for its queue, then clear the labels it was fired for
+  local r q n code
+  for r in $(cfgq '.roles|to_entries[]|select(.value.batched == true)|.key'); do
+    q=$(queue_of "$r"); [ -n "$q" ] || { echo "$r: queue empty"; continue; }
+    code=$(fire "$r" "queue: $(paste -sd ';' - <<<"$q" | sed 's/;/; /g')" | tail -1); echo "$r: fired ($code)"
+    [[ "$code" == 2* ]] || continue  # shortcut: a wake labelled between this fire and the clear is cleared unseen; rare, next owner tag or event re-adds it
+    for n in $(grep -oE '^#[0-9]+' <<<"$q" | tr -d '#'); do gh api -X DELETE "repos/$repo/issues/$n/labels/wake-$r" >/dev/null 2>&1; done
+  done
 }
 
 fire() { # <role> <reason>
   local trig secret token
-  if [ "$1" = lead ] && ! lead_now "$2"; then echo "queued for the lead tick: $2"; return 0; fi
+  if batched "$1" && ! now_ok "$2"; then queue_add "$1" "$2"; return; fi
   trig=$(cfgq --arg r "$1" '.roles[$r].trigger // ""'); secret=$(cfgq --arg r "$1" '.roles[$r].secret // ""')
   [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
@@ -275,19 +268,21 @@ no role marker"
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"
   DEBATE_JSON=$d/deb.json ev 'pm\tdebate #9: turn 2 of 3' issue_comment '{"issue":{"number":9,"labels":[{"name":"debate"}]},"comment":{"user":{"login":"locksmith-linus[bot]"},"body":"x"}}'
-  # the lead wakes at once only for an owner tag or its own tick; everything else is queued
-  for w in "owner tagged you on #8: u" "queue: rescue #5"; do lead_now "$w" && echo "ok: lead now: $w" || { echo "FAIL: lead now: $w"; fail=1; }; done
-  for w in "needs-rescue #5 opened" "owner replied on needs-owner #7" "CI failed on main" "debate #9: turn 2 of 3"; do
-    got=$(fire lead "$w"); [ "$got" = "queued for the lead tick: $w" ] && echo "ok: queued: $w" || { echo "FAIL: queued: $w got '$got'"; fail=1; }
+  # batched (Opus) roles wake at once only for an owner tag or their own tick; everything else is queued on its issue
+  for w in "owner tagged you on #8: u" "queue: #5 (needs-rescue)"; do now_ok "$w" && echo "ok: at once: $w" || { echo "FAIL: at once: $w"; fail=1; }; done
+  for rw in "lead|needs-rescue #5 opened|on #5" "lead|CI failed on main|" "pm|debate #9: turn 2 of 3|on #9" "pm|research tagged you on #6: u|on #6" "research|needs-research #6 opened|on #6"; do
+    IFS='|' read -r r w on <<<"$rw"; got=$(ROUTE_DRYRUN=1 fire "$r" "$w")
+    [ "$got" = "queued for $r${on:+ $on}: $w" ] && echo "ok: queued: $r $w" || { echo "FAIL: queued: $r $w got '$got'"; fail=1; }
   done
-  lq() { # <expected lines> <state json>
-    printf '%s' "$2" >"$d/q.json"; got=$(LEADQ_JSON=$d/q.json NOW=2026-11-22T12:00:00Z lead_queue)
-    [ "$got" = "$(printf '%b' "$1")" ] && echo "ok: lead queue -> ${1:-empty}" || { echo "FAIL: lead queue want '$1' got '$got'"; fail=1; }
+  got=$(fire worker-a "CI failed on PR #12 (x)" | head -1); [ "$got" = "waking worker-a: CI failed on PR #12 (x)" ] && echo "ok: workers fire at once" || { echo "FAIL: worker got '$got'"; fail=1; }
+  qo() { # <role> <expected lines> <state json>
+    printf '%s' "$3" >"$d/q.json"; got=$(QUEUE_JSON=$d/q.json NOW=2026-11-22T12:00:00Z queue_of "$1")
+    [ "$got" = "$(printf '%b' "$2")" ] && echo "ok: $1 queue -> ${2:-empty}" || { echo "FAIL: $1 queue want '$2' got '$got'"; fail=1; }
   }
-  lq '' '{"rescues":[],"replies":[],"debates":[],"main":{"conclusion":"success","updated_at":"2026-11-22T11:00:00Z"}}'
-  lq 'rescue #5\nowner reply #7\ndebate #9\nown PR #11 failed review or CI\nmain red over 2 h' '{"rescues":[{"number":5,"labels":["needs-rescue"],"last":"locksmith-alfie[bot]"}],"replies":[7],"debates":[9],"prs":[11],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
-  # answered by the lead, escalated to the owner, or main red for under 2 h (workers try first): nothing waits
-  lq '' '{"rescues":[{"number":5,"labels":["needs-rescue"],"last":"locksmith-linus[bot]"},{"number":6,"labels":["needs-rescue","needs-owner"],"last":""}],"replies":[],"debates":[],"main":{"conclusion":"failure","updated_at":"2026-11-22T11:00:00Z"}}'
+  qo lead '' '{"items":[],"main":{"conclusion":"success","updated_at":"2026-11-22T09:00:00Z"}}'
+  qo lead '#5 (needs-rescue)\n#9 (debate)\nmain red over 2 h' '{"items":[{"number":5,"labels":["needs-rescue","wake-lead"]},{"number":9,"labels":["debate","wake-lead"]}],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
+  qo lead '' '{"items":[],"main":{"conclusion":"failure","updated_at":"2026-11-22T11:00:00Z"}}'  # under 2 h: workers try first
+  qo pm '#597 (needs-work)' '{"items":[{"number":597,"labels":["needs-work","wake-pm"]}],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
   [ "$fail" = 0 ] && echo "route selftest: OK"; return "$fail"
 }
 
@@ -295,7 +290,7 @@ case "${1:-}" in
   event) event "${2:?event.json}" ;;
   debate) debate_input "${2:?issue}" | decide ;;
   fire) fire "${2:?role}" "${3:?reason}" ;;
-  lead-tick) q=$(lead_queue | paste -sd ';' - | sed 's/;/; /g'); if [ -n "$q" ]; then fire lead "queue: $q"; else echo "lead queue empty"; fi ;;
+  tick) tick ;;
   selftest) selftest ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;
 esac

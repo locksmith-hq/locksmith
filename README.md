@@ -71,22 +71,23 @@ flowchart LR
 
 ## Built by AI, used by AI
 
-Locksmith is developed by a team of AI agents, each with its own GitHub App identity, working through issues and pull requests in this repository. A human owner sets direction and makes the calls the agents escalate. This team is the Avengers.
+Locksmith is developed by a team of AI agents, each with its own GitHub App identity, working through issues and pull requests in this repository. A human owner sets direction and makes the calls the agents escalate. This team is the Avengers (names and avatars live in [`docs/agents/routing.json`](docs/agents/routing.json)).
 
+<!-- team:start -->
 <table>
   <tr>
-    <td align="center" width="25%"><img src="docs/agents/avatars/iron-man.png" width="120" alt="Iron Man"><br><b>Iron Man</b><br>Lead (Opus)<br><sub>Owns code quality and architecture, reviews merged work, rescues stuck tasks</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/nick-fury.png" width="120" alt="Nick Fury"><br><b>Nick Fury</b><br>PM (Opus)<br><sub>Owns the end goal, roadmap order, priorities and the board</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/hulk.png" width="120" alt="Hulk"><br><b>Hulk</b><br>Research (Opus)<br><sub>Smashes hard questions with primary sources</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/doctor-strange.png" width="120" alt="Doctor Strange"><br><b>Doctor Strange</b><br>Optimizer (local)<br><sub>Bends the team's schedules and prompts toward more shipped work</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/iron-man.png" width="120" alt="Iron Man"><br><b>Iron Man</b><br>Lead<br><sub>Owns code quality and architecture, reviews merged work, rescues stuck tasks</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/nick-fury.png" width="120" alt="Nick Fury"><br><b>Nick Fury</b><br>PM<br><sub>Owns the end goal, roadmap order, priorities and the board</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/hulk.png" width="120" alt="Hulk"><br><b>Hulk</b><br>Research<br><sub>Smashes hard questions with primary sources</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/doctor-strange.png" width="120" alt="Doctor Strange"><br><b>Doctor Strange</b><br>Optimizer<br><sub>Bends the team's schedules and prompts toward more shipped work</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/agents/avatars/captain-america.png" width="120" alt="Captain America"><br><b>Captain America</b><br>Worker A (Sonnet)</td>
-    <td align="center"><img src="docs/agents/avatars/spider-man.png" width="120" alt="Spider-Man"><br><b>Spider-Man</b><br>Worker B (Sonnet)</td>
-    <td align="center"><img src="docs/agents/avatars/thor.png" width="120" alt="Thor"><br><b>Thor</b><br>Worker C (Sonnet)</td>
-    <td><sub>Workers implement <a href="openspec/">OpenSpec</a> tasks around the clock, each on its own change and PR, checked by an independent evaluator.</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/captain-america.png" width="120" alt="Captain America"><br><b>Captain America</b><br>Worker A<br><sub>Implements OpenSpec tasks around the clock</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/spider-man.png" width="120" alt="Spider-Man"><br><b>Spider-Man</b><br>Worker B<br><sub>Implements OpenSpec tasks around the clock</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/thor.png" width="120" alt="Thor"><br><b>Thor</b><br>Worker C<br><sub>Implements OpenSpec tasks around the clock</sub></td>
   </tr>
 </table>
+<!-- team:end -->
 
 <sub>Persona artwork depicts Marvel characters for fun. Locksmith is not affiliated with or endorsed by Marvel or Disney.</sub>
 

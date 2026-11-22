@@ -7,9 +7,9 @@
 - [x] 1.4 Verify: `cargo nextest run -p ls-control-plane -E 'binary(human_auth) | binary(workload_verify) | binary(workload_exchange) | test(jwt)'`; `rg -n 'const (LEEWAY_SECS|MAX_TOKEN_BYTES|ALLOWED)' services/control-plane/src/auth` lists only `auth/jwt.rs` (`src/agent_token.rs` keeps its own 30s `LEEWAY_SECS` unchanged).
 
 ## 2. Capped read in ls-http [sonnet]
-- [ ] 2.1 Add `read_capped(response, max) -> Result<Vec<u8>, CapError>` to `crates/ls-http` with tests (under cap, over cap with and without `Content-Length`, exact cap) against a local `wiremock` server (design decision 3).
-- [ ] 2.2 Use it in `auth/jwks.rs` and `auth/issuers.rs` `fetch_capped`, mapping errors to today's labels and `IssuerError` values.
-- [ ] 2.3 Verify: `cargo nextest run -p ls-http -p ls-control-plane -E 'test(jwks) | test(issuers) | test(capped)'`.
+- [x] 2.1 Add `read_capped(response, max) -> Result<Vec<u8>, CapError>` to `crates/ls-http` with tests (under cap, over cap with and without `Content-Length`, exact cap) against a local `wiremock` server (design decision 3).
+- [x] 2.2 Use it in `auth/jwks.rs` and `auth/issuers.rs` `fetch_capped`, mapping errors to today's labels and `IssuerError` values.
+- [x] 2.3 Verify: `cargo nextest run -p ls-http -p ls-control-plane -E 'test(jwks) | test(issuers) | test(capped)'`.
 
 ## 3. Workload audit attributes [haiku]
 - [ ] 3.1 Add private `workload_attrs` in `services/control-plane/src/audit.rs` and use it in the three workload builders (design decision 4).

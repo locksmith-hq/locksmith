@@ -78,7 +78,10 @@ mod tests {
 
     #[test]
     fn jwt_pre_check_refuses_none_and_hs256() {
-        for h in [r#"{"alg":"none","kid":"k"}"#, r#"{"alg":"HS256","kid":"k"}"#] {
+        for h in [
+            r#"{"alg":"none","kid":"k"}"#,
+            r#"{"alg":"HS256","kid":"k"}"#,
+        ] {
             let r = pre_check(&token(h));
             // `none` does not parse at all; HS256 parses and is not allowed.
             assert!(matches!(r, Err(Refused("malformed" | "algorithm"))), "{h}");

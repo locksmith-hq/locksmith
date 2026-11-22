@@ -13,8 +13,8 @@ use std::time::Duration;
 use serde::Deserialize;
 use tracing::Instrument as _;
 
-use super::jwt;
 use super::jwks::{DEFAULT_MAX_AGE, DEFAULT_MIN_REFRESH, JwksCache, JwksError};
+use super::jwt;
 
 pub use super::jwt::{LEEWAY_SECS, MAX_TOKEN_BYTES};
 

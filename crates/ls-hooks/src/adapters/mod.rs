@@ -60,6 +60,29 @@ pub(crate) fn field<'a>(v: &'a Value, k: &str) -> Option<&'a str> {
     v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty())
 }
 
+/// The path and glob of a doc-derived search tool's arguments, or `None` (the caller denies) when
+/// the arguments cannot be trusted: not an object, the path or glob key holds a non-string, neither
+/// is set, or a key outside `path_key`, `glob_key` and `other` holds a string, array or object.
+/// Such a key may be a misnamed path or glob (decision P3-2: a wrong guess must deny); a bool,
+/// number or null cannot name a file, so option flags and counts pass.
+pub(crate) fn search_args(
+    args: &Value,
+    path_key: &str,
+    glob_key: &str,
+    other: &[&str],
+) -> Option<(Option<PathBuf>, Option<String>)> {
+    let known = args.as_object()?.iter().all(|(k, v)| {
+        if k == path_key || k == glob_key {
+            v.is_string()
+        } else {
+            other.contains(&k.as_str()) || v.is_boolean() || v.is_number() || v.is_null()
+        }
+    });
+    let path = field(args, path_key).map(PathBuf::from);
+    let glob = field(args, glob_key).map(String::from);
+    (known && (path.is_some() || glob.is_some())).then_some((path, glob))
+}
+
 pub(crate) fn cwd_of(v: &Value) -> PathBuf {
     PathBuf::from(field(v, "cwd").unwrap_or("."))
 }
@@ -110,20 +133,30 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
     if !json.is_object() || unreadable(agent, event, &json) {
         return Some(bad_in());
     }
-    Some(match parse(event, &json) {
-        None => Handled {
-            out: render(event, &Decision::Allow),
-            decision: Decision::Allow,
-            target: String::new(),
-        },
-        Some(ev) => {
-            let decision = decide(&ev, v);
-            Handled {
+    // A tool that reads several files at once yields one event per file; the first one that is
+    // not allowed decides.
+    let events = match agent {
+        "gemini-cli" => gemini_cli::parse_many(event, &json),
+        _ => None,
+    }
+    .or_else(|| parse(event, &json).map(|e| vec![e]))
+    .unwrap_or_default();
+    let mut first = None;
+    for ev in &events {
+        let decision = decide(ev, v);
+        if decision != Decision::Allow {
+            return Some(Handled {
                 out: render(event, &decision),
-                target: target_of(&ev),
+                target: target_of(ev),
                 decision,
-            }
+            });
         }
+        first.get_or_insert(ev);
+    }
+    Some(Handled {
+        out: render(event, &Decision::Allow),
+        decision: Decision::Allow,
+        target: first.map(target_of).unwrap_or_default(),
     })
 }
 

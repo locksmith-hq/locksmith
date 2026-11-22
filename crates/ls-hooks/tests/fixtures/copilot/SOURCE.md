@@ -11,3 +11,9 @@ Version: none. No Copilot CLI or VS Code was run, so there is no agent version t
 pages above (checked 2026-11-21) are the only source. Owner accepted doc-derived fixtures on #594
 on the condition that an unrecognised key denies: `grep-missing-path` and the other
 `*-missing-*` fixtures cover it.
+
+Search keys are an allowlist: `grep` (and Claude-style `Grep`) reads `path` and `glob` plus
+`pattern`, ripgrep-style options and bool/number values; any other key denies
+(`grep-wrong-path-key`, `pascal-grep-wrong-key`). The `PreToolUse` casing fails closed the same
+way as `preToolUse` (`pascal-*-wrong-key`, `pascal-read-no-input`) and also reads Copilot's own
+lowercase tool names (`pascal-view-env-deny`).

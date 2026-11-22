@@ -1,7 +1,7 @@
 //! Cline: the `PreToolUse` hook script. Payload `{preToolUse:{toolName, parameters}}` with string
 //! values; the SDK/CLI runner sends `{tool_call:{name, input}}` instead, so both are parsed. The
 //! reply is JSON on exit 0 (`cancel` true blocks); exit codes are undocumented, so none is used.
-use super::{MALFORMED, Out, cwd_of, field};
+use super::{MALFORMED, Out, cwd_of, field, search_args};
 use crate::{Decision, Event};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -79,15 +79,12 @@ pub fn parse(event: &str, v: &Value) -> Option<Event> {
         "write_to_file" | "replace_in_file" | "apply_patch" => {
             Some(Event::Edit { path: path()?, cwd })
         }
-        // Both keys are optional, so a guessed key name would leave neither: deny (see
-        // `unreadable`) rather than treat it as a search of nothing.
+        // `path`, `regex` and `file_pattern` are the only keys: a guessed key name (one right,
+        // one wrong, or neither set) cancels via `unreadable` rather than search with the wrong
+        // key dropped.
         "search_files" => {
-            let glob = field(args, "file_pattern").map(String::from);
-            (path().is_some() || glob.is_some()).then(|| Event::Search {
-                path: path(),
-                glob,
-                cwd,
-            })
+            let (path, glob) = search_args(args, "path", "file_pattern", &["regex"])?;
+            Some(Event::Search { path, glob, cwd })
         }
         _ => None,
     }

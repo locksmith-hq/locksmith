@@ -17,3 +17,8 @@
 - Task: 1.1 sessions contract (migration 0014, 5 OpenAPI paths as documented 501 stubs, ledger kinds, TS client + fixtures) - done
 - Verified: cargo nextest run -p ls-control-plane openapi -> 3 passed; cargo test -p ls-control-plane --test tenancy (real Postgres) -> 9 passed; npm test --workspace packages/control-plane-client -> 14 passed; just quick clean. Evaluator PASS after one fix (0014 was not registered in migrate.rs).
 - Notes for next session: handlers in services/control-plane/src/api/sessions.rs return 501 until 2.1/2.2; `revoked_jtis`/`agents_paused` still to add to the grant-set response (2.2). Postgres tests run locally with `cargo test -p ls-control-plane --test <name>` (nextest default filter excludes them).
+
+## 2026-11-22 worker
+- Task: 2.1 internal session report (open, heartbeat, close) and GET /v1/sessions with the 15 s liveness rule - done
+- Verified: cargo nextest run -p ls-control-plane sessions -> 9 passed (5 Postgres-backed, canary jti leak assertions, org isolation); openapi tests passed; just quick clean. Evaluator PASS.
+- Notes for next session: close sets last_seen_at 1 min in the past (app role can only update last_seen_at, revoked_at). List omits agent name (spec says id and name): add with the web task 4.1 or 2.2. A heartbeat after close revives a session; gateway must stop heartbeating on close (3.1). 2.2 next.

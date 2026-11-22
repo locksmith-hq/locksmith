@@ -136,6 +136,16 @@ pub fn agent_deleted(actor: Actor, agent_id: Uuid, grants_revoked: i64) -> Event
     )
 }
 
+/// The attributes every workload-identity event starts with: the mapped agent and the issuer
+/// host. Each builder adds its own outcome, reason and claims.
+fn workload_attrs(agent_id: Uuid, issuer: &str) -> Attrs {
+    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
+    if let Some(h) = issuer_host(issuer) {
+        attrs = attrs.host(attr::ISSUER, h);
+    }
+    attrs
+}
+
 /// `workload_identity.created`: the policy, the agent it maps to and the issuer host.
 pub fn workload_identity_created(
     actor: Actor,
@@ -143,10 +153,7 @@ pub fn workload_identity_created(
     agent_id: Uuid,
     issuer: &str,
 ) -> Event {
-    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
-    if let Some(h) = issuer_host(issuer) {
-        attrs = attrs.host(attr::ISSUER, h);
-    }
+    let attrs = workload_attrs(agent_id, issuer);
     admin(
         kind::WORKLOAD_IDENTITY_CREATED,
         actor,
@@ -202,10 +209,7 @@ pub fn workload_identity_exchanged(
     issuer: &str,
     claims: &[(String, String)],
 ) -> Event {
-    let mut attrs = Attrs::new().id(attr::AGENT_ID, agent_id);
-    if let Some(h) = issuer_host(issuer) {
-        attrs = attrs.host(attr::ISSUER, h);
-    }
+    let mut attrs = workload_attrs(agent_id, issuer);
     if let Some(t) = claims_text(claims) {
         attrs = attrs.text(attr::CLAIMS, t);
     }
@@ -228,12 +232,7 @@ pub fn workload_identity_denied(
     reason: Code,
     claims: &[(String, String)],
 ) -> Event {
-    let mut attrs = Attrs::new()
-        .id(attr::AGENT_ID, agent_id)
-        .code(attr::REASON, reason);
-    if let Some(h) = issuer_host(issuer) {
-        attrs = attrs.host(attr::ISSUER, h);
-    }
+    let mut attrs = workload_attrs(agent_id, issuer).code(attr::REASON, reason);
     if let Some(t) = claims_text(claims) {
         attrs = attrs.text(attr::CLAIMS, t);
     }

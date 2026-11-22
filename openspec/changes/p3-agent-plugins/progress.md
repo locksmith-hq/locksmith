@@ -43,3 +43,8 @@
 - Task: 7.2-7.3 - done (`just up`, `just canary new`, then `just leak-scan --dir integrations --dir crates/smith-cli/tests/fixtures` clean; tree-check OK)
 - Verified: leak-scan "clean"; `bash scripts/tree-check.sh` OK
 - Notes for next session: 2.1 (recorded fixtures) and 8.1/8.2 still open; main CI `rust` failed once on 16bc9ed but `just test-rust` passes locally (963 passed), likely a flake; stack is up on this VM only.
+
+## 2026-11-22 worker (harriet, second entry)
+- Task: 8.1 - done (`just test` for gemini-cli, copilot, windsurf, cline, generic-mcp all rc=0; `smith init --yes` and `smith doctor` in a scratch repo with all markers: gemini and copilot hooks ok, windsurf warns "not protected" as designed)
+- Verified: as above; `just quick` OK
+- Notes for next session: open: 2.1 (recorded fixtures, doc-derived only) and 8.2 (`just apps-build`, CI). Do not run `just ci` locally; the PR checks run it.

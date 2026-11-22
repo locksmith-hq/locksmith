@@ -13,7 +13,7 @@ pub const MANIFEST: &str = "manifest.json";
 pub const MANIFEST_SIG: &str = "manifest.json.minisig";
 /// Release signing key (minisign). The secret half never lives in this repo.
 pub const EMBEDDED_PUBKEY: &str = include_str!("../update-pubkey.txt");
-pub const DEFAULT_SOURCE: &str = "github://tomer555/locksmith";
+pub const DEFAULT_SOURCE: &str = "github://locksmith-hq/locksmith";
 
 #[derive(Debug)]
 pub enum Error {

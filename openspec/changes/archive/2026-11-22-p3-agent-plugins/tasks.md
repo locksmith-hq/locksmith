@@ -7,7 +7,7 @@
 - [x] 1.4 Verify: `cargo test -p smith-cli --bin smith agents`.
 
 ## 2. Hook handling [sonnet]
-- [ ] 2.1 Capture one recorded payload fixture per hook event for each hooked new agent under `crates/smith-cli/tests/fixtures/hooks/<agent>/` (source and capture date in a sibling `SOURCE.md`; no secret values, canary strings only).
+- [x] 2.1 Capture one recorded payload fixture per hook event for each hooked new agent under `crates/smith-cli/tests/fixtures/hooks/<agent>/` (source and capture date in a sibling `SOURCE.md`; no secret values, canary strings only).
 - [x] 2.2 `hook_cmd.rs`: parse each new agent's payload and answer in its reply shape using the existing `ls_hooks` decision; unknown or unparsable payload denies; update the unknown-agent error text.
 - [x] 2.3 Tests replaying the fixtures: secret read denied, env dump denied, benign command allowed, malformed payload denied, denial audited.
 - [x] 2.4 Verify: `cargo nextest run -p smith-cli hook`.

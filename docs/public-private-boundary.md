@@ -9,7 +9,9 @@ repository. This page says what goes where and how the checks enforce it.
 - Real cloud identifiers: AWS account, organization and OU IDs, SSO portal URLs, ARNs
   that carry a real account ID, state bucket names, database and Cognito endpoints.
 - Credentials of any kind, including test keys that look real (they trip scanners).
-- Production and billing infrastructure, tenant data and customer names.
+- All AWS infrastructure code (OpenTofu stacks, apply and session scripts, runbooks, cost docs),
+  production and billing infrastructure, tenant data and customer names. It lives in `locksmith-cloud`
+  (owner decision 2026-11-22).
 - Premium or hosted-only code. Premium features plug into public traits or interfaces;
   their implementation lives in the private repository and this repository never imports it.
 - Owner or staff personal email addresses.
@@ -18,9 +20,6 @@ Examples in code and docs use AWS's documented fake IDs (`123456789012`, `111122
 
 ## What may stay here
 
-- Generic, reusable infrastructure code that takes every environment value as a variable
-  (`infra/tofu/base`, `infra/tofu/session`). State and `-backend-config` values are passed at
-  apply time, never committed.
 - Design docs and decisions that describe behaviour, not identifiers.
 
 ## How the checks enforce it

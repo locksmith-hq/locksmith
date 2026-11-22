@@ -354,33 +354,3 @@ test name:
           elif grep -q 'just test-web' <<<"$cov"; then run just test-web; fi
         fi ;;
     esac
-
-# OpenTofu offline checks: fmt, validate (no backend) for each root, plan-policy tests. scripts/tofu-setup.sh installs tofu and a verified hashicorp/aws mirror.
-aws-validate:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
-    tofu fmt -check -recursive infra/tofu
-    for m in base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
-    python3 -I infra/tofu/policy/test_check_plan.py
-    python3 -I infra/tofu/policy/test_base_oidc.py
-
-# Opt-in (not in `just ci`): apply the base S3 and KMS pieces to a local moto server and assert Object Lock and the KMS alias. Installs moto into a cached venv.
-aws-moto-smoke:
-    bash infra/tofu/base/tests/moto-smoke.sh
-
-# AWS dev session (owner machine, needs AWS credentials; refuses to run without them). Set LOCKSMITH_ALLOWED_CIDR and LOCKSMITH_IMAGE_TAG for aws-up.
-aws-up:
-    bash scripts/aws-session.sh up
-
-aws-down:
-    bash scripts/aws-session.sh down
-
-aws-status:
-    bash scripts/aws-session.sh status
-
-aws-drift:
-    bash scripts/aws-session.sh drift
-
-aws-smoke:
-    bash scripts/aws-session.sh smoke

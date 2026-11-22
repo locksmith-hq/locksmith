@@ -36,6 +36,7 @@ use super::{all, exists_or_404, one};
 use crate::app::AppState;
 use crate::auth::ServiceOrgBinding;
 use crate::db::sql::{self, Row};
+use crate::mcp_store;
 use crate::problem::{ApiError, Kind, Problem};
 
 /// The stored envelope of one secret version. Ciphertext and a wrapped data key only: never the
@@ -630,19 +631,12 @@ pub async fn agent_tool_settings(
         .db()
         .with_org(org_id, move |c| {
             Box::pin(async move {
-                let rows = sql::query(
-                    "SELECT tool, enabled FROM mcp_tool_settings \
-                     WHERE org_id = $1 AND layer = 'agent' ORDER BY tool",
+                let rows = mcp_store::layer_settings(c, org_id, "agent").await?;
+                Ok::<_, ApiError>(
+                    rows.into_iter()
+                        .map(|(tool, enabled)| AgentToolSetting { tool, enabled })
+                        .collect::<Vec<_>>(),
                 )
-                .bind(org_id)
-                .fetch_all(c)
-                .await?;
-                all(&rows, |r| {
-                    Ok(AgentToolSetting {
-                        tool: r.try_get("tool")?,
-                        enabled: r.try_get("enabled")?,
-                    })
-                })
             })
         })
         .await?;
@@ -813,7 +807,7 @@ pub async fn upsert_agent_mcp_client(
 ) -> Result<Json<AgentMcpClientState>, ApiError> {
     let org_id = org.org_id;
     let agent_id = input.agent_id;
-    let name: String = input.client_name.chars().take(200).collect();
+    let name = input.client_name;
     let revoked = state
         .db()
         .with_org(org_id, move |c| {
@@ -823,19 +817,8 @@ pub async fn upsert_agent_mcp_client(
                     sql::query_scalar("SELECT 1 FROM agents WHERE id = $1").bind(agent_id),
                 )
                 .await?;
-                let row = sql::query(
-                    "INSERT INTO mcp_clients (org_id, layer, client_id, principal, client_name) \
-                     VALUES ($1, 'agent', $2, $2, $3) \
-                     ON CONFLICT (org_id, layer, client_id, principal) \
-                     DO UPDATE SET client_name = EXCLUDED.client_name, last_seen_at = now() \
-                     RETURNING revoked_at",
-                )
-                .bind(org_id)
-                .bind(agent_id.to_string())
-                .bind(name)
-                .fetch_one(c)
-                .await?;
-                let at: Option<OffsetDateTime> = row.try_get("revoked_at")?;
+                let id = agent_id.to_string();
+                let at = mcp_store::upsert_client(c, org_id, "agent", &id, &id, &name).await?;
                 Ok::<_, ApiError>(at.is_some())
             })
         })

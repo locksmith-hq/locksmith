@@ -81,3 +81,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - blocked (6.1 needs a bindings page; none exists in apps/web, apps/desktop or packages/ui; merged origin/main clean)
 - Verified: merge clean, no code changed
 - Notes for next session: 6.1/6.2 wait for t3-console-mvp (#489); 7.2 last.
+
+## 2026-11-22 worker (alfie)
+- Task: none - conflict fix on PR #485 (merge main)
+- Verified: `cargo check -p ls-gateway --all-targets`, `cargo test -p ls-gateway pg` (30 passed)
+- Notes for next session: main renamed `MAX_GRANT_TTL` to `ttl::MAX_CACHE_TTL` and dropped `MAX_SETTINGS_TTL`; fixed in `pg/listener.rs` and `main.rs`. The branch already holds pg listener/upstream code and tests, but no tasks are ticked yet; verify each against `tasks.md` before ticking.

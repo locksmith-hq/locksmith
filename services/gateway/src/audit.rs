@@ -422,26 +422,33 @@ impl HttpAudit {
             expires_at: ev.issued.map(|i| i.expires_at),
         })
         .map_err(|_| AuditError::Rejected)?;
+        // 201 appended; 200 an outcome already stored for this attempt (a retry).
+        self.append_to(EVENTS_PATH, body, &[200, 201]).await
+    }
+}
+
+impl HttpAudit {
+    /// POST `body` to the control plane's append `path`. A status in `ok` is an append (its body
+    /// must parse); `5xx` and an unreachable control plane are `Unavailable` (retried by the
+    /// caller); anything else is `Rejected`. The fail-closed mapping for every audit append.
+    async fn append_to(&self, path: &str, body: Vec<u8>, ok: &[u16]) -> Result<Uuid, AuditError> {
         let (status, resp) = self
             .control_plane
-            .internal_post_json(EVENTS_PATH, body, MAX_APPEND_RESPONSE)
+            .internal_post_json(path, body, MAX_APPEND_RESPONSE)
             .await
             .map_err(|e| match e {
                 Internal::Unavailable => AuditError::Unavailable,
                 _ => AuditError::Rejected,
             })?;
         match status {
-            // 201 appended; 200 an outcome already stored for this attempt (a retry).
-            200 | 201 => serde_json::from_slice::<Appended>(&resp)
+            s if ok.contains(&s) => serde_json::from_slice::<Appended>(&resp)
                 .map(|a| a.id)
                 .map_err(|_| AuditError::Rejected),
             500..=599 => Err(AuditError::Unavailable),
             _ => Err(AuditError::Rejected),
         }
     }
-}
 
-impl HttpAudit {
     async fn post_mcp_call(&self, ev: McpCallEvent) -> Result<Uuid, AuditError> {
         let body = serde_json::to_vec(&WireMcpCall {
             agent_id: ev.agent_id,
@@ -450,21 +457,7 @@ impl HttpAudit {
             reason: ev.reason.map(McpReason::as_str),
         })
         .map_err(|_| AuditError::Rejected)?;
-        let (status, resp) = self
-            .control_plane
-            .internal_post_json(MCP_CALLS_PATH, body, MAX_APPEND_RESPONSE)
-            .await
-            .map_err(|e| match e {
-                Internal::Unavailable => AuditError::Unavailable,
-                _ => AuditError::Rejected,
-            })?;
-        match status {
-            201 => serde_json::from_slice::<Appended>(&resp)
-                .map(|a| a.id)
-                .map_err(|_| AuditError::Rejected),
-            500..=599 => Err(AuditError::Unavailable),
-            _ => Err(AuditError::Rejected),
-        }
+        self.append_to(MCP_CALLS_PATH, body, &[201]).await
     }
 }
 
@@ -557,5 +550,117 @@ impl AuditSink for MemoryAudit {
             }
         };
         Box::pin(async move { result })
+    }
+}
+
+#[cfg(test)]
+mod append_tests {
+    use super::*;
+    use url::Url;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    const ORG: Uuid = Uuid::from_u128(1);
+    const ID: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000aa);
+
+    fn sink(base: &str) -> HttpAudit {
+        HttpAudit::new(Arc::new(
+            ControlPlane::new(Url::parse(base).unwrap(), ORG, "t".to_owned().into()).unwrap(),
+        ))
+    }
+
+    fn relay_event() -> RelayEvent {
+        RelayEvent {
+            kind: EventKind::CredentialIssued,
+            agent_id: Uuid::from_u128(2),
+            secret_id: Uuid::from_u128(3),
+            version: 0,
+            method: None,
+            host: None,
+            port: None,
+            status: None,
+            attempt_id: None,
+            issued: None,
+        }
+    }
+
+    fn mcp_event() -> McpCallEvent {
+        McpCallEvent {
+            agent_id: Uuid::from_u128(2),
+            tool: "list_projects",
+            outcome: McpOutcome::Ok,
+            reason: None,
+        }
+    }
+
+    async fn serve(status: u16, body: &str) -> (MockServer, HttpAudit) {
+        let server = MockServer::start().await;
+        for p in ["/internal/v1/audit/events", "/internal/v1/mcp/agent-calls"] {
+            Mock::given(method("POST"))
+                .and(path(p))
+                .respond_with(ResponseTemplate::new(status).set_body_string(body))
+                .mount(&server)
+                .await;
+        }
+        let a = sink(&format!("{}/", server.uri()));
+        (server, a)
+    }
+
+    fn appended() -> String {
+        format!(r#"{{"id":"{ID}"}}"#)
+    }
+
+    #[tokio::test]
+    async fn accepted_statuses_differ_per_caller() {
+        let (_s, a) = serve(201, &appended()).await;
+        assert_eq!(a.post(relay_event()).await, Ok(ID));
+        assert_eq!(a.post_mcp_call(mcp_event()).await, Ok(ID));
+        // 200 is an already-stored outcome for a relay event, but not an MCP call append.
+        let (_s, a) = serve(200, &appended()).await;
+        assert_eq!(a.post(relay_event()).await, Ok(ID));
+        assert_eq!(
+            a.post_mcp_call(mcp_event()).await,
+            Err(AuditError::Rejected)
+        );
+    }
+
+    #[tokio::test]
+    async fn client_error_is_rejected_for_both() {
+        let (_s, a) = serve(409, "{}").await;
+        assert_eq!(a.post(relay_event()).await, Err(AuditError::Rejected));
+        assert_eq!(
+            a.post_mcp_call(mcp_event()).await,
+            Err(AuditError::Rejected)
+        );
+    }
+
+    #[tokio::test]
+    async fn server_error_is_unavailable_for_both() {
+        let (_s, a) = serve(503, "{}").await;
+        assert_eq!(a.post(relay_event()).await, Err(AuditError::Unavailable));
+        assert_eq!(
+            a.post_mcp_call(mcp_event()).await,
+            Err(AuditError::Unavailable)
+        );
+    }
+
+    #[tokio::test]
+    async fn unparsable_body_is_rejected_for_both() {
+        let (_s, a) = serve(201, "not json").await;
+        assert_eq!(a.post(relay_event()).await, Err(AuditError::Rejected));
+        assert_eq!(
+            a.post_mcp_call(mcp_event()).await,
+            Err(AuditError::Rejected)
+        );
+    }
+
+    #[tokio::test]
+    async fn unreachable_control_plane_is_unavailable_for_both() {
+        let a = sink("http://127.0.0.1:1/");
+        assert_eq!(a.post(relay_event()).await, Err(AuditError::Unavailable));
+        assert_eq!(
+            a.post_mcp_call(mcp_event()).await,
+            Err(AuditError::Unavailable)
+        );
     }
 }

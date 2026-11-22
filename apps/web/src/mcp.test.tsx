@@ -37,7 +37,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const open = async (page: string) => {
   render(<App client={createClient("org1")} />);
-  await userEvent.click(await screen.findByRole("button", { name: page }));
+  await userEvent.click(await screen.findByRole("link", { name: page }));
 };
 
 test("tools page groups one switch per tool by layer and saves a change", async () => {

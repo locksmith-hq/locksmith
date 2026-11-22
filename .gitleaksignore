@@ -58,3 +58,6 @@ e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index
 # so these fail hygiene on all PRs until main ignores them (lead, 2026-11-21).
 e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index.test.ts:generic-api-key:75
 6e96fdab1368bc077c3a6b78d52883e5b31fa613:integrations/github-action/README.md:generic-api-key:49
+# t7 HPKE known-answer vectors: public test keys, not secrets (worker alfie, 2026-11-22).
+016ae34ad2889d9e63e161849c3ed2fa41bf37ea:crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
+crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54

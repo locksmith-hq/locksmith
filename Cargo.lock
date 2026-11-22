@@ -2955,6 +2955,7 @@ version = "0.0.1-alpha.4"
 name = "ls-mcp-server"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "rmcp",
  "serde_json",
 ]
 

@@ -6,8 +6,8 @@ name: wake-agents
 #   the research bot (Ada) tagging roles -> those roles, so her answers reach the PM, lead and workers;
 # - needs-rescue opened -> lead; needs-research opened -> research; needs-work (an idle worker) opened -> PM; an untagged owner reply on needs-owner -> the
 #   role that raised it (else lead); a debate turn -> the other side, or the lead to record or escalate it;
-# - needs-research or needs-work closed -> the role that asked; needs-rescue closed -> the worker that opened it; needs-owner closed or CI
-#   failing on main -> Worker A;
+# - needs-research or needs-work closed -> the role that asked; needs-rescue closed -> the worker that opened it; needs-owner closed -> Worker A;
+#   CI failing on main -> the lead;
 # - each PR belongs to its author: a finished merge review (claude-review) or failing CI on a claude/* PR -> the worker
 #   or lead whose App opened it (owner PRs -> Worker A).
 # The call is only a wake-up: the woken agent still decides from its own checks.

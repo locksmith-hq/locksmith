@@ -50,7 +50,8 @@ use crate::auth::AgentIdentity;
 use crate::config::PgBinding;
 use crate::decrypt::DecryptError;
 use crate::egress::{self, EgressError};
-use crate::grants::{MAX_GRANT_TTL, allows_relay};
+use crate::grants::allows_relay;
+use crate::ttl::MAX_CACHE_TTL;
 use crate::relay::Relay;
 
 /// Largest pre-authentication packet (startup, password), as Postgres's own limit.
@@ -90,7 +91,7 @@ impl Default for PgListenerOptions {
     fn default() -> Self {
         Self {
             handshake_timeout: Duration::from_secs(10),
-            watch_interval: MAX_GRANT_TTL,
+            watch_interval: MAX_CACHE_TTL,
         }
     }
 }

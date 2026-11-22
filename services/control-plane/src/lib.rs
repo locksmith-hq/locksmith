@@ -12,6 +12,7 @@ pub mod enrollment;
 pub mod issuer_admin;
 pub mod kms;
 pub mod mcp_endpoint;
+pub mod mcp_store;
 pub mod mcp_tools;
 pub mod migrate;
 pub mod problem;

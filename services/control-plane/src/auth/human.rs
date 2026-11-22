@@ -10,18 +10,13 @@
 
 use std::time::Duration;
 
-use jsonwebtoken::{Algorithm, Validation};
 use serde::Deserialize;
 use tracing::Instrument as _;
 
 use super::jwks::{DEFAULT_MAX_AGE, DEFAULT_MIN_REFRESH, JwksCache, JwksError};
+use super::jwt;
 
-/// Clock skew tolerated on `exp` and `nbf` (design decision 1).
-pub const LEEWAY_SECS: u64 = 60;
-/// Longest bearer token examined; anything larger is refused before parsing.
-pub const MAX_TOKEN_BYTES: usize = 8 * 1024;
-/// Algorithms a human token may use. The key decides which one applies to it.
-const ALLOWED: [Algorithm; 2] = [Algorithm::RS256, Algorithm::ES256];
+pub use super::jwt::{LEEWAY_SECS, MAX_TOKEN_BYTES};
 
 /// Issuer settings. Public values only: no secret is involved in verifying a token.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,28 +102,15 @@ impl HumanAuth {
     }
 
     async fn verify_inner(&self, token: &str) -> Result<HumanIdentity, Refused> {
-        if token.len() > MAX_TOKEN_BYTES {
-            return Err(Refused("too_large"));
-        }
-        // `Algorithm` has no `none` and no unknown values: a header naming either fails here.
-        let header = jsonwebtoken::decode_header(token).map_err(|_| Refused("malformed"))?;
-        if !ALLOWED.contains(&header.alg) {
-            return Err(Refused("algorithm"));
-        }
-        let kid = header.kid.as_deref().ok_or(Refused("no_kid"))?;
-        let key = self.jwks.key(kid).await.ok_or(Refused("unknown_key"))?;
-        // The key, not the token, fixes the algorithm: a token cannot pick a weaker one.
-        if key.alg != header.alg {
-            return Err(Refused("algorithm"));
-        }
-
-        let mut validation = Validation::new(key.alg);
-        validation.set_issuer(&[self.issuer.as_str()]);
-        validation.set_audience(&[self.audience.as_str()]);
-        validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
-        validation.leeway = LEEWAY_SECS;
-        validation.validate_exp = true;
-        validation.validate_nbf = true;
+        let (header_alg, kid) = jwt::pre_check(token)?;
+        let key = self.jwks.key(&kid).await.ok_or(Refused("unknown_key"))?;
+        jwt::pin_alg(key.alg, header_alg)?;
+        let validation = jwt::validation(
+            key.alg,
+            &self.issuer,
+            &self.audience,
+            &["exp", "iss", "aud", "sub"],
+        );
 
         let data = jsonwebtoken::decode::<Claims>(token, &key.key, &validation)
             .map_err(|_| Refused("invalid"))?;

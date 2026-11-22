@@ -31,8 +31,21 @@ The control plane SHALL NOT hold a credential or key that can unwrap a DEK or op
 - **WHEN** an environment seal key is provisioned
 - **THEN** the control plane stores only the public key and the KMS-wrapped private key, and a test that inspects its database and logs finds no private key bytes
 
-## REMOVED Requirements
-
 ### Requirement: Values are write-only through the API
-**Reason**: the API no longer accepts a plaintext value at all (decision H1-1); its guarantees are restated in `secret-write-console`.
-**Migration**: clients seal with `ls-envelope` (native or WebAssembly) and post ciphertext.
+Secret version creation SHALL NOT accept a plaintext value or a plaintext DEK (decision H1-1); it accepts only a sealed ciphertext and wrapped DEK (see `secret-write-console`) and returns only version metadata. No endpoint, log line or trace attribute SHALL return or contain a value, a DEK, a wrapped DEK or a wrapped seal private key, including read, list and `seal-key` routes.
+
+#### Scenario: Create a version
+- **WHEN** a client posts a sealed version to a secret
+- **THEN** the response is `201` with the version number and `version_count` increases, and the body contains no value
+
+#### Scenario: Read and list routes hold no key material
+- **WHEN** a client reads or lists versions or requests the seal key
+- **THEN** no response body, log line or trace attribute contains a value, a DEK, a wrapped DEK or a wrapped seal private key
+
+#### Scenario: No canary anywhere
+- **WHEN** a canary value is written through the sealed route
+- **THEN** `just leak-scan` over Postgres, Loki and Tempo finds no encoding of it
+
+#### Scenario: Cross-org isolation
+- **WHEN** org B requests versions of org A's secret
+- **THEN** the response is `404`

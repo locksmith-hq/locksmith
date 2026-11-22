@@ -16,7 +16,7 @@ The console (T3) lists secret names and versions but cannot create a value. Toda
 - `secret-write-console`: adding a secret or a version from the console and desktop, the seal-key lifecycle, and the guarantees on what the browser does with the value.
 
 ### Modified Capabilities
-- `envelope-encryption`: "Values are write-only through the API" becomes "the API accepts only ciphertext"; "DEK wrapped to a gateway key in a KMS" gains the HPKE-wrapped DEK format; "The control plane cannot decrypt" extends to "cannot see a value".
+- `envelope-encryption`: "Values are write-only through the API" is modified: the API accepts only ciphertext and the no-leak and cross-org rules are kept and extended; "DEK wrapped to a gateway key in a KMS" gains the HPKE-wrapped DEK format; "The control plane cannot decrypt" extends to "cannot see a value".
 
 ## Impact
 `crates/ls-envelope` (HPKE wrap, new alg id), `crates/ls-seal-wasm` and `packages/seal` (new), `services/control-plane` (migration, seal-key routes, version create, OpenAPI), `services/gateway` (decrypt, key provisioning), `crates/smith-cli`, `crates/ls-mcp-server`, `crates/ls-vault`, `packages/sdk`, `packages/control-plane-client`, `apps/web`, `apps/desktop`, `tests/adversarial`, `tests/e2e`.

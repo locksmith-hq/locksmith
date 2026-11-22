@@ -28,6 +28,8 @@ export type AuthState =
 export interface SignedInUser { accessToken: string; email?: string; name?: string }
 
 export interface AuthService {
+  /** Sign-in choices this deployment offers; all three when omitted. Cognito has no GitHub provider. */
+  providers?: Provider[];
   /** Handles a redirect callback if the URL carries one, then reports the state. */
   start(): Promise<void>;
   signIn(provider: Provider): Promise<void>;
@@ -108,6 +110,7 @@ export function createAuth(cfg: AuthConfig): AuthService {
     fetch(`${cfg.apiBase ?? ""}${path}`, { method: "POST", headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
 
   return {
+    providers: host ? ["google", "email"] : ["github", "google", "email"],
     async start() {
       const q = new URLSearchParams(window.location.search);
       if (!(q.has("code") || q.has("error")) || !q.has("state")) { set({ status: "signed-out" }); return; }

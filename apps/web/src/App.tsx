@@ -3,7 +3,8 @@ import { BrowserRouter, MemoryRouter } from "react-router";
 import { Shell } from "./Shell";
 import { createClient, type Client } from "@locksmith/control-plane-client";
 import { withUnauthorizedHandler } from "./api/client";
-import { createAuth, defaultConfig, type AuthService, type AuthState } from "./auth";
+import { Logo, VaultMark } from "@locksmith/ui";
+import { createAuth, defaultConfig, type AuthService, type AuthState, type Provider } from "./auth";
 
 let defaultAuth: AuthService | undefined;
 const getDefaultAuth = () => (defaultAuth ??= createAuth(defaultConfig()));
@@ -31,16 +32,24 @@ function AuthGate({ auth }: { auth: AuthService }) {
   return <Shell client={client} user={state.user.email ?? state.user.name ?? "Signed in"} onSignOut={() => void auth.signOut()} />;
 }
 
+const CHOICES: Record<Provider, string> = { github: "Continue with GitHub", google: "Continue with Google", email: "Continue with email" };
+
 function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
+  const providers = auth.providers ?? ["github", "google", "email"];
   return (
-    <main>
-      <h1>Locksmith</h1>
-      {notice && <p role="alert">{notice}</p>}
-      <section aria-label="Sign in">
-        <button onClick={() => void auth.signIn("github")}>Continue with GitHub</button>
-        <button onClick={() => void auth.signIn("google")}>Continue with Google</button>
-        <button onClick={() => void auth.signIn("email")}>Continue with email</button>
-      </section>
+    <main className="login">
+      <div className="login-card">
+        <VaultMark size={72} />
+        <h1 className="login-title"><span className="wordmark">locksmith</span></h1>
+        <p className="login-tag">Your agents use credentials without ever holding them.</p>
+        {notice && <p role="alert" className="login-notice">{notice}</p>}
+        <section aria-label="Sign in" className="login-choices">
+          {providers.map((p, i) => (
+            <button key={p} className={i === 0 ? "btn primary" : "btn"} onClick={() => void auth.signIn(p)}>{CHOICES[p]}</button>
+          ))}
+        </section>
+        <p className="login-foot"><Logo size={14} /> Access is invite-only.</p>
+      </div>
     </main>
   );
 }

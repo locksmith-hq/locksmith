@@ -25,3 +25,16 @@
 .shell-org button, .shell-signout { font: 600 13px var(--sans); color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px; padding: 4px 10px; cursor: pointer; }
 .shell-org ul { position: absolute; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); }
 .shell-org { position: relative; }
+
+/* Sign-in page. */
+.login { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(60% 50% at 50% 0%, var(--accent-weak), transparent 70%), var(--bg); }
+.login-card { width: min(380px, 100%); display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 36px 28px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow-md); text-align: center; }
+.login-card .vault-mark { color: var(--text); }
+.login-card .vault-mark .vm-bolt { stroke: var(--accent); }
+.login-title { margin: 4px 0 0; }
+.login-title .wordmark { font-size: 28px; }
+.login-tag { margin: 0 0 6px; color: var(--muted); font-size: 15px; line-height: 22px; }
+.login-notice { margin: 0; width: 100%; padding: 8px 12px; border: 1px solid var(--danger-border); border-radius: 10px; background: var(--danger-weak); color: var(--danger-text); }
+.login-choices { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.login-choices .btn { width: 100%; height: 42px; justify-content: center; font-size: 14px; border-radius: 11px; }
+.login-foot { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }

@@ -40,7 +40,7 @@
 - Notes for next session: 7.2/7.3 left open: `just leak-scan` fails on this VM (`bad canary file`, no stack canaries), so run it where the canary file exists or via CI. 2.1 and 8.x still open.
 
 ## 2026-11-22 worker (harriet)
-- Task: 7.2-7.3 - done (`just up`, `just canary new`, then `just leak-scan --dir integrations --dir crates/smith-cli/tests/fixtures` clean; tree-check OK)
+- Task: 7.2-7.3 - done (`just up`, `just canary new`, then `just leak-scan --dir integrations --dir crates/ls-hooks/tests/fixtures --dir crates/smith-cli/tests/fixtures` clean; tree-check OK)
 - Verified: leak-scan "clean"; `bash scripts/tree-check.sh` OK
 - Notes for next session: 2.1 (recorded fixtures) and 8.1/8.2 still open; main CI `rust` failed once on 16bc9ed but `just test-rust` passes locally (963 passed), likely a flake; stack is up on this VM only.
 

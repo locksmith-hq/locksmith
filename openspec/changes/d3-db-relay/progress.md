@@ -11,3 +11,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: planning review fix - done
 - Verified: openspec validate d3-db-relay --strict -> valid
 - Notes for next session: merge-review FAIL on spec.md:74 fixed (agent.json excepted, before/after home snapshot); gate 4 CI was still running; re-add ready-to-merge label if gate passes.
+
+## 2026-11-22 08:35 lead
+- Task: d3-db-relay planning PR #611 - ci-fix
+- Verified: `just tree-check task-guard` -> OK on both branches; #611 diff now only `openspec/changes/d3-db-relay/`
+- Notes for next session: #611 `merge-ready` failed in the review pre-check because the PR also touched `openspec/decisions.md`, which voids the planning-only exemption (all files under `openspec/changes/`). Planning PRs must never touch `decisions.md`; the D3-1 line moved to #612.

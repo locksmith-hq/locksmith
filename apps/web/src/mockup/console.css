@@ -24,9 +24,6 @@ h3 { margin: 0 0 8px; font-size: 13px; line-height: 18px; font-weight: 600; }
 .vault[data-paused="true"] .vault-state { color: var(--danger-text); }
 .vault[data-paused="true"] .vault-state .dot { background: var(--danger); border-color: var(--danger); }
 
-.crumbs { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 13px; color: var(--muted); }
-.crumbs a { text-decoration: none; }
-.crumbs a:hover { color: var(--text); }
 
 .tl-list { --tl-cols: minmax(200px, 250px) minmax(150px, 230px) minmax(140px, 1fr) 56px 76px; }
 /* Secret names are long: cut the list with an ellipsis instead of clipping mid-letter. */
@@ -61,13 +58,6 @@ select {
 .grid tr.detail, .grid tr.detail:hover { background: var(--raised); }
 .grid tr.detail td { padding: 16px 16px 18px 34px; }
 .detail-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 32px; }
-.plain { margin: 0 0 10px; padding: 0; list-style: none; }
-.plain li { display: flex; align-items: center; gap: 10px; min-height: 34px; border-top: 1px solid var(--border); }
-.plain li:first-child { border-top: 0; }
-.plain li > :last-child:is(button) { margin-left: auto; }
-.inline-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.inline-form input { height: 32px; width: 220px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface); font: 13px var(--sans); color: var(--text); }
-.panel.form { margin-bottom: 16px; }
 .panel.form .add { margin-top: 14px; grid-template-columns: auto auto auto 1fr; }
 .hint { margin: 12px 0 0 !important; max-width: 72ch; color: var(--muted); font-size: 13px; }
 .once { margin-bottom: 16px; border-color: var(--warning-border); background: var(--warning-weak); }

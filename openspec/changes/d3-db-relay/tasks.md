@@ -30,8 +30,10 @@
 - [ ] 5.3 Verify: `cargo nextest run -p smith-cli db`.
 
 ## 6. Console and desktop [sonnet]
-- [ ] 6.1 Show Postgres bindings (name, host, port, user, database, TLS mode; never a password) on the bindings page in `apps/web` and `apps/desktop` with Vitest tests.
-- [ ] 6.2 Verify: `npm test --workspace apps/web` and `just apps-build`.
+- [ ] 6.1 Contract (decision 10, D2-1, D2-2): `BindingSummary` (kinds `http`, `git`, `pg`, `aws`; non-secret fields only) and `GET /v1/bindings` in the control-plane OpenAPI (utoipa) and `packages/control-plane-client` (types, client call, `fixtures.ts` entries for every kind); verify `npm test --workspace packages/control-plane-client` and `npm run lint --workspace packages/control-plane-client`.
+- [ ] 6.2 Gateway publishes its non-secret binding inventory at startup with `PUT /internal/v1/gateway/bindings` (service token, retry like the audit append; a failure is logged and never blocks the relay); the control plane stores the latest snapshot per org and serves `GET /v1/bindings` to org members; tests assert no password, template value or secret material in the stored row or the response (`cargo nextest run -p ls-control-plane bindings` and `cargo nextest run -p ls-gateway bindings_publish`).
+- [ ] 6.3 Show bindings (Postgres: name, host, port, user, database, TLS mode; never a password; other kinds with their non-secret fields) on a new Bindings page under Agent Gateway in `apps/web` and `apps/desktop` (decision T3-1 sidebar), built on the 6.1 fixtures then the real client, with Vitest tests.
+- [ ] 6.4 Verify: `npm test --workspace apps/web` and `just apps-build`.
 
 ## 7. Local verification [sonnet]
 - [ ] 7.1 `just db-smoke` recipe and `tests/e2e/tests/db_relay.rs`: start gateway and API, create a SCRAM role on the compose Postgres, register an agent, grant, run real `psql` through `smith db connect --gateway`, assert the result, that `db connect` creates or modifies no file holding the token or a password (existing `agent.json` excepted, home snapshotted before and after), and that no file holds a database password.

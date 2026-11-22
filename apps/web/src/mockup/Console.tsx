@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Icon, Logo, VaultMark, type IconName } from "../../../desktop/src/brand";
+import { Icon, Logo, VaultMark, type IconName } from "@locksmith/ui";
 import * as seed from "./data";
 import { Billing } from "./Billing";
 import { Settings } from "./Settings";
@@ -7,7 +7,8 @@ import { PAGES } from "./pages";
 import { useSecrets } from "./pages/gateway-data";
 import { useNotices } from "./pages/platform-store";
 import "./settings.css";
-import { NOW, type Agent, type Secret, type Session } from "./data";
+import { NOW } from "@locksmith/ui";
+import { type Agent, type Secret, type Session } from "./data";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const clock = (ts: number) => { const d = new Date(ts * 1000); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };

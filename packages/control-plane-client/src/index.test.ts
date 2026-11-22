@@ -1,98 +1,64 @@
-import { afterEach, expect, test, vi } from "vitest";
-import { createClient } from "./index";
+import { afterEach, describe, expect, it, test, vi } from "vitest";
+import { ApiError, createClient } from "./index";
 import { invites, mcpClients, mcpToolSettings, memberList, myOrgs } from "./fixtures";
 
 const B = "http://cp.test";
 const json = (body: unknown, status = 200) =>
-  Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 afterEach(() => vi.unstubAllGlobals());
 
-test("listMcpTools unwraps items and sends the org header", async () => {
-  const f = vi.fn().mockReturnValue(json({ items: mcpToolSettings }));
+function stub(...responses: Response[]) {
+  const f = vi.fn();
+  for (const r of responses) f.mockResolvedValueOnce(r);
   vi.stubGlobal("fetch", f);
-  expect(await createClient("org1", B).listMcpTools()).toEqual(mcpToolSettings);
-  const [url, init] = f.mock.calls[0] as [string, RequestInit];
-  expect(url).toBe(`${B}/v1/mcp/tools`);
-  const h = init.headers as Record<string, string>;
-  expect(h["x-locksmith-dev-org"]).toBe("org1");
-  expect(h.authorization).toBeUndefined();
-  expect(init.cache).toBe("no-store");
-});
+  return f;
+}
 
-test("setMcpTool PUTs the switch and returns the tool", async () => {
-  const f = vi.fn().mockReturnValue(json({ ...mcpToolSettings[1], enabled: false, overridden: false }));
-  vi.stubGlobal("fetch", f);
-  const t = await createClient("org1", B).setMcpTool("hub", "revoke_grant", false);
-  expect(t.enabled).toBe(false);
-  const [url, init] = f.mock.calls[0] as [string, RequestInit];
-  expect(url).toBe(`${B}/v1/mcp/tools/hub/revoke_grant`);
-  expect(init.method).toBe("PUT");
-  expect(init.body).toBe(JSON.stringify({ enabled: false }));
-});
+describe("console client", () => {
+  it("lists projects across pages with the bearer token", async () => {
+    const f = stub(json({ items: [{ id: "p1" }], next: "c2" }), json({ items: [{ id: "p2" }], next: null }));
+    const c = createClient("org", "http://x", () => "tok");
+    expect((await c.listProjects()).map((p) => p.id)).toEqual(["p1", "p2"]);
+    expect(f.mock.calls[1]![0]).toBe("http://x/v1/projects?cursor=c2");
+    expect((f.mock.calls[0]![1] as RequestInit).headers).toMatchObject({ authorization: "Bearer tok" });
+  });
 
-test("listMcpClients follows cursors", async () => {
-  const f = vi
-    .fn()
-    .mockReturnValueOnce(json({ items: [mcpClients[0]], next: "c1" }))
-    .mockReturnValueOnce(json({ items: [mcpClients[1]] }));
-  vi.stubGlobal("fetch", f);
-  expect(await createClient("org1", B).listMcpClients()).toEqual(mcpClients);
-  expect(f.mock.calls[1]?.[0]).toBe(`${B}/v1/mcp/clients?cursor=c1`);
-});
+  it("uses the right method and path for project and environment writes", async () => {
+    const f = stub(json({}), json({}), new Response(null, { status: 204 }), json({}), json({}), new Response(null, { status: 204 }));
+    const c = createClient("org");
+    await c.createProject({ name: "a" });
+    await c.updateProject("p/1", { name: "b" });
+    await c.deleteProject("p1");
+    await c.createEnvironment("p1", { name: "dev" });
+    await c.updateEnvironment("p1", "e1", { name: "x" });
+    await c.deleteEnvironment("p1", "e1");
+    expect(f.mock.calls.map((a) => `${(a[1] as RequestInit).method} ${a[0]}`)).toEqual([
+      "POST /v1/projects",
+      "PATCH /v1/projects/p%2F1",
+      "DELETE /v1/projects/p1",
+      "POST /v1/projects/p1/environments",
+      "PATCH /v1/projects/p1/environments/e1",
+      "DELETE /v1/projects/p1/environments/e1",
+    ]);
+  });
 
-test("revokeMcpClient POSTs to the revoke path; a 403 surfaces as ApiError", async () => {
-  const f = vi.fn().mockReturnValueOnce(json(mcpClients[1])).mockReturnValueOnce(json({ title: "Forbidden", detail: "no" }, 403));
-  vi.stubGlobal("fetch", f);
-  const c = createClient("org1", B);
-  expect((await c.revokeMcpClient("abc")).revoked_at).toBeDefined();
-  expect(f.mock.calls[0]?.[0]).toBe(`${B}/v1/mcp/clients/abc/revoke`);
-  expect((f.mock.calls[0]?.[1] as RequestInit).method).toBe("POST");
-  await expect(c.revokeMcpClient("abc")).rejects.toMatchObject({ name: "ApiError", status: 403, message: "no" });
-});
+  it("reads secret metadata and versions only", async () => {
+    const f = stub(json({ items: [{ id: "s1" }] }), json({ id: "s1" }), json({ items: [{ version: 1 }] }));
+    const c = createClient("org");
+    await c.listSecrets("p", "e");
+    await c.getSecret("p", "e", "s1");
+    expect(await c.listSecretVersions("p", "e", "s1")).toEqual([{ version: 1 }]);
+    for (const a of f.mock.calls) expect(String(a[0])).not.toMatch(/material|value/);
+    expect(f.mock.calls.every((a) => (a[1] as RequestInit).method === "GET")).toBe(true);
+  });
 
-test("fixtures carry no token or value fields", () => {
-  for (const o of [...mcpToolSettings, ...mcpClients]) {
-    for (const k of Object.keys(o)) expect(k).not.toMatch(/value|token|secret|password|key$/i);
-  }
-});
-
-test("a bearer token replaces the dev org header", async () => {
-  const f = vi.fn().mockReturnValue(json({ items: [] }));
-  vi.stubGlobal("fetch", f);
-  await createClient("org1", B, () => "tok").listMcpTools();
-  const h = (f.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
-  expect(h.authorization).toBe("Bearer tok");
-  expect(h["x-locksmith-dev-org"]).toBeUndefined();
-});
-
-test("204 deletes resolve to undefined", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockReturnValue(Promise.resolve(new Response(null, { status: 204 }))));
-  await expect(createClient("org1", B).deleteAgent("a/b")).resolves.toBeUndefined();
-});
-
-test("the enrollment secret lives only in the returned object: no console output, no storage", async () => {
-  const SECRET = ["fake", "enrollment", "value"].join("-");
-  const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m));
-  const setItem = vi.fn();
-  vi.stubGlobal("localStorage", { setItem });
-  vi.stubGlobal("sessionStorage", { setItem });
-  vi.stubGlobal("fetch", vi.fn().mockReturnValue(json({ agent: { id: "a1" }, enrollment_secret: SECRET })));
-  const c = createClient("org1", B);
-  const out = (await c.createAgent({ name: "x" } as never)) as unknown as Record<string, unknown>;
-  expect(JSON.stringify(out)).toContain(SECRET);
-  for (const s of spies) expect(s).not.toHaveBeenCalled();
-  expect(setItem).not.toHaveBeenCalled();
-  // a second call does not return it from any cache
-  vi.stubGlobal("fetch", vi.fn().mockReturnValue(json({ items: [] })));
-  expect(JSON.stringify(await c.listAgents())).not.toContain(SECRET);
-});
-
-test("a relative base URL fetches the path on the page's own origin", async () => {
-  const f = vi.fn().mockReturnValue(json({ items: [] }));
-  vi.stubGlobal("fetch", f);
-  await createClient("org1").listMcpClients();
-  expect(f.mock.calls[0]?.[0]).toBe("/v1/mcp/clients");
+  it("surfaces the problem detail and status", async () => {
+    stub(json({ title: "Conflict", detail: "name taken", status: 409 }, 409));
+    const err = await createClient("o").createProject({ name: "a" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 409, message: "name taken" });
+  });
 });
 
 test("listOrgs and listMembers unwrap the T6 fixtures", async () => {

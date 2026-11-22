@@ -11,6 +11,14 @@ export type NewAgentGrant = components["schemas"]["NewAgentGrant"];
 export type AuditEvent = components["schemas"]["AuditEvent"];
 export type AuditEventPage = components["schemas"]["AuditEventPage"];
 export type AuditStatus = components["schemas"]["AuditStatus"];
+export type Org = components["schemas"]["Org"];
+export type Project = components["schemas"]["Project"];
+export type NewProject = components["schemas"]["NewProject"];
+export type Environment = components["schemas"]["Environment"];
+export type NewEnvironment = components["schemas"]["NewEnvironment"];
+export type Secret = components["schemas"]["Secret"];
+export type SecretVersion = components["schemas"]["SecretVersion"];
+export type Patch = components["schemas"]["Patch"];
 export type WorkloadIdentity = components["schemas"]["WorkloadIdentity"];
 export type NewWorkloadIdentity = components["schemas"]["NewWorkloadIdentity"];
 export type WorkloadCondition = components["schemas"]["ConditionView"];
@@ -84,6 +92,19 @@ export interface Client {
   /** One page of audit events, newest first. Pass the previous page's `next` as `cursor`. */
   listAuditEvents(opts?: { cursor?: string | null; limit?: number }): Promise<AuditEventPage>;
   auditStatus(): Promise<AuditStatus>;
+  getOrg(id: string): Promise<Org>;
+  listProjects(): Promise<Project[]>;
+  createProject(body: NewProject): Promise<Project>;
+  updateProject(id: string, body: Patch): Promise<Project>;
+  deleteProject(id: string): Promise<void>;
+  listEnvironments(projectId: string): Promise<Environment[]>;
+  createEnvironment(projectId: string, body: NewEnvironment): Promise<Environment>;
+  updateEnvironment(projectId: string, envId: string, body: Patch): Promise<Environment>;
+  deleteEnvironment(projectId: string, envId: string): Promise<void>;
+  /** Secret metadata only. The client has no method that reads, writes or fetches a secret value or its material. */
+  listSecrets(projectId: string, envId: string): Promise<Secret[]>;
+  getSecret(projectId: string, envId: string, secretId: string): Promise<Secret>;
+  listSecretVersions(projectId: string, envId: string, secretId: string): Promise<SecretVersion[]>;
   listWorkloadIdentities(): Promise<WorkloadIdentity[]>;
   createWorkloadIdentity(body: NewWorkloadIdentity): Promise<WorkloadIdentity>;
   deleteWorkloadIdentity(id: string): Promise<void>;
@@ -173,6 +194,41 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     listAuditEvents: ({ cursor, limit } = {}) =>
       run(c.GET("/v1/audit/events", { params: { query: { ...(limit ? { limit } : {}), ...q(cursor ?? null) } } })),
     auditStatus: () => run(c.GET("/v1/audit/status")),
+    getOrg: (org_id) => run(c.GET("/v1/orgs/{org_id}", { params: { path: { org_id } } })),
+    listProjects: () => all((cursor) => run(c.GET("/v1/projects", { params: { query: q(cursor) } }))),
+    createProject: (body) => run(c.POST("/v1/projects", { body })),
+    updateProject: (project_id, body) => run(c.PATCH("/v1/projects/{project_id}", { params: { path: { project_id } }, body })),
+    deleteProject: (project_id) => run(c.DELETE("/v1/projects/{project_id}", { params: { path: { project_id } } })),
+    listEnvironments: (project_id) =>
+      all((cursor) => run(c.GET("/v1/projects/{project_id}/environments", { params: { path: { project_id }, query: q(cursor) } }))),
+    createEnvironment: (project_id, body) =>
+      run(c.POST("/v1/projects/{project_id}/environments", { params: { path: { project_id } }, body })),
+    updateEnvironment: (project_id, environment_id, body) =>
+      run(c.PATCH("/v1/projects/{project_id}/environments/{environment_id}", { params: { path: { project_id, environment_id } }, body })),
+    deleteEnvironment: (project_id, environment_id) =>
+      run(c.DELETE("/v1/projects/{project_id}/environments/{environment_id}", { params: { path: { project_id, environment_id } } })),
+    listSecrets: (project_id, environment_id) =>
+      all((cursor) =>
+        run(
+          c.GET("/v1/projects/{project_id}/environments/{environment_id}/secrets", {
+            params: { path: { project_id, environment_id }, query: q(cursor) },
+          }),
+        ),
+      ),
+    getSecret: (project_id, environment_id, secret_id) =>
+      run(
+        c.GET("/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}", {
+          params: { path: { project_id, environment_id, secret_id } },
+        }),
+      ),
+    listSecretVersions: async (project_id, environment_id, secret_id) =>
+      (
+        await run(
+          c.GET("/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions", {
+            params: { path: { project_id, environment_id, secret_id } },
+          }),
+        )
+      ).items,
     listMcpTools: async () => (await run(c.GET("/v1/mcp/tools"))).items,
     listWorkloadIdentities: () => all((cursor) => run(c.GET("/v1/workload-identities", { params: { query: q(cursor) } }))),
     createWorkloadIdentity: (body) => run(c.POST("/v1/workload-identities", { body })),

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, createClient } from "./index";
+import { sealKey, sealProblems, sealedVersion, sealedVersionRequest } from "./fixtures";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -56,5 +57,29 @@ describe("console client", () => {
     const err = await createClient("o").createProject({ name: "a" }).catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 409, message: "name taken" });
+  });
+
+  it("fetches the seal key and writes a sealed version without any value field", async () => {
+    const f = stub(json(sealKey), json(sealKey), json(sealedVersion, 201));
+    const c = createClient("org");
+    expect(await c.getSealKey("p", "e")).toEqual(sealKey);
+    await c.getSealKey("p", "e", "s1");
+    expect(await c.createSealedSecretVersion("p", "e", "s1", sealedVersionRequest)).toEqual(sealedVersion);
+    expect(f.mock.calls.map((a) => `${(a[1] as RequestInit).method} ${a[0]}`)).toEqual([
+      "GET /v1/projects/p/environments/e/seal-key",
+      "GET /v1/projects/p/environments/e/seal-key?secret_id=s1",
+      "POST /v1/projects/p/environments/e/secrets/s1/sealed-versions",
+    ]);
+    const sent = JSON.parse(String((f.mock.calls[2]![1] as RequestInit).body));
+    expect(Object.keys(sent).sort()).toEqual(["ciphertext", "version", "wrapped_dek"]);
+  });
+
+  it("surfaces 409 (stale version) and 503 (key preparing) as ApiError", async () => {
+    stub(json(sealProblems.stale, 409), json(sealProblems.preparing, 503));
+    const c = createClient("org");
+    expect(await c.createSealedSecretVersion("p", "e", "s1", sealedVersionRequest).catch((e) => e)).toMatchObject({ status: 409 });
+    const err = await c.getSealKey("p", "e").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 503 });
   });
 });

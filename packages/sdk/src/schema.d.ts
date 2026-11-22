@@ -579,6 +579,23 @@ export interface paths {
         patch: operations["update_environment"];
         trace?: never;
     };
+    "/v1/projects/{project_id}/environments/{environment_id}/seal-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the environment's public seal key and the next version number */
+        get: operations["get_environment_seal_key"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{project_id}/environments/{environment_id}/secrets": {
         parameters: {
             query?: never;
@@ -614,6 +631,23 @@ export interface paths {
         head?: never;
         /** Update secret metadata */
         patch: operations["update_secret"];
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/sealed-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Write a sealed secret version (ciphertext and wrapped key; the server never sees the value) */
+        post: operations["create_sealed_secret_version"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions": {
@@ -1105,6 +1139,18 @@ export interface components {
             /** Format: int32 */
             version?: number | null;
         };
+        /** @description Request body of a sealed version write: ciphertext only, nothing the server can open. */
+        NewSealedSecretVersion: {
+            /** @description The sealed payload (A0-7 format), standard base64. */
+            ciphertext: string;
+            /**
+             * Format: int32
+             * @description Must equal the secret's `next_version`, else `409`.
+             */
+            version: number;
+            /** @description The DEK wrapped to the environment's seal key (`seal-key` `key_id`), standard base64. */
+            wrapped_dek: string;
+        };
         NewSecret: {
             description?: string;
             name: string;
@@ -1326,6 +1372,19 @@ export interface components {
         /** @description The org's agents with revoked MCP access. */
         RevokedAgentClientSet: {
             items: components["schemas"]["RevokedAgentClient"][];
+        };
+        /** @description The environment's active seal key: the public half a client seals a DEK to. */
+        SealKey: {
+            /** @description Id of the seal key; stored on every version sealed to it. */
+            key_id: string;
+            /**
+             * Format: int32
+             * @description The version number the next write to this secret must carry (1 for a new secret). The
+             *     number is part of the sealed binding, so a client seals for exactly this version.
+             */
+            next_version: number;
+            /** @description The X25519 public key, standard base64 (32 bytes). */
+            public_key: string;
         };
         Secret: {
             /** Format: date-time */
@@ -4036,6 +4095,79 @@ export interface operations {
             };
         };
     };
+    get_environment_seal_key: {
+        parameters: {
+            query?: {
+                /** @description The secret the next version is for. Omit for a new secret (`next_version` is 1). */
+                secret_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Project id */
+                project_id: string;
+                /** @description Environment id */
+                environment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The active seal key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SealKey"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The environment's seal key is still being prepared; retry after the interval in `Retry-After` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_secrets: {
         parameters: {
             query?: {
@@ -4404,6 +4536,111 @@ export interface operations {
                 };
             };
             /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_sealed_secret_version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Project id */
+                project_id: string;
+                /** @description Environment id */
+                environment_id: string;
+                /** @description Secret id */
+                secret_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewSealedSecretVersion"];
+            };
+        };
+        responses: {
+            /** @description Created; version metadata only */
+            201: {
+                headers: {
+                    /** @description URL of the secret's versions */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretVersion"];
+                };
+            };
+            /** @description Invalid request (bad base64, header, lengths or key id) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version` is not the secret's next version; fetch `seal-key` again and reseal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable or the environment's seal key is not ready */
             503: {
                 headers: {
                     [name: string]: unknown;

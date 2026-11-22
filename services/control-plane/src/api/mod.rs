@@ -17,6 +17,7 @@ mod mcp;
 mod orgs;
 pub(crate) mod projects;
 mod responses;
+mod seal;
 pub(crate) mod secrets;
 mod session;
 pub(crate) mod versions;
@@ -64,6 +65,8 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(secrets::create, secrets::list))
         .routes(routes!(secrets::get_one, secrets::patch, secrets::delete))
         .routes(routes!(versions::create, versions::list))
+        .routes(routes!(seal::get_seal_key))
+        .routes(routes!(seal::create_sealed))
         .routes(routes!(agents::create, agents::list))
         .routes(routes!(agents::get_one, agents::delete))
         .routes(routes!(agents::rotate_enrollment))

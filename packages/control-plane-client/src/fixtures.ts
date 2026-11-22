@@ -1,6 +1,6 @@
 // Fixture data for the MCP tool switches and clients, shaped like the control-plane responses.
 // Test and story data only: ids and names, never a token or a secret value.
-import type { McpClient, McpToolSetting } from "./index";
+import type { McpClient, McpToolSetting, NewSealedSecretVersion, SealKey, SecretVersion } from "./index";
 
 export const mcpToolSettings: McpToolSetting[] = [
   { layer: "hub", tool: "list_projects", description: "Projects in your org.", default_enabled: true, enabled: true, overridden: false },
@@ -30,3 +30,29 @@ export const mcpClients: McpClient[] = [
     revoked_at: "2026-01-03T00:00:00Z",
   },
 ];
+
+// Seal-to-browser mock data (T7). Public key and ciphertext are placeholder base64, not real key material.
+export const sealKey: SealKey = {
+  key_id: "seal:v1",
+  public_key: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  next_version: 2,
+};
+
+export const sealedVersionRequest: NewSealedSecretVersion = {
+  version: 2,
+  ciphertext: "Y2lwaGVydGV4dC1wbGFjZWhvbGRlcg==",
+  wrapped_dek: "d3JhcHBlZC1kZWstcGxhY2Vob2xkZXI=",
+};
+
+export const sealedVersion: SecretVersion = {
+  secret_id: "0192f0a0-0000-7000-8000-000000000051",
+  version: 2,
+  key_id: "seal:v1",
+  created_at: "2026-01-04T00:00:00Z",
+};
+
+/** RFC 9457 problems the sealed write can answer. */
+export const sealProblems = {
+  stale: { type: "about:blank", title: "Conflict", status: 409, detail: "`version` is not the secret's next version" },
+  preparing: { type: "about:blank", title: "Service unavailable", status: 503, detail: "the environment seal key is not available yet" },
+};

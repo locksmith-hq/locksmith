@@ -18,6 +18,8 @@ export type Environment = components["schemas"]["Environment"];
 export type NewEnvironment = components["schemas"]["NewEnvironment"];
 export type Secret = components["schemas"]["Secret"];
 export type SecretVersion = components["schemas"]["SecretVersion"];
+export type SealKey = components["schemas"]["SealKey"];
+export type NewSealedSecretVersion = components["schemas"]["NewSealedSecretVersion"];
 export type Patch = components["schemas"]["Patch"];
 export type WorkloadIdentity = components["schemas"]["WorkloadIdentity"];
 export type NewWorkloadIdentity = components["schemas"]["NewWorkloadIdentity"];
@@ -97,6 +99,16 @@ export interface Client {
   listSecrets(projectId: string, envId: string): Promise<Secret[]>;
   getSecret(projectId: string, envId: string, secretId: string): Promise<Secret>;
   listSecretVersions(projectId: string, envId: string, secretId: string): Promise<SecretVersion[]>;
+  /**
+   * The environment's public seal key, its id and the secret's `next_version` (1 for a new secret when
+   * `secretId` is omitted). `503` (ApiError) means the key is still being prepared: retry.
+   */
+  getSealKey(projectId: string, envId: string, secretId?: string): Promise<SealKey>;
+  /**
+   * Store a sealed version: `ciphertext` and `wrapped_dek` are base64 and already sealed on this device.
+   * `409` (ApiError) means `version` is stale: refetch `getSealKey` and reseal once.
+   */
+  createSealedSecretVersion(projectId: string, envId: string, secretId: string, body: NewSealedSecretVersion): Promise<SecretVersion>;
   listWorkloadIdentities(): Promise<WorkloadIdentity[]>;
   createWorkloadIdentity(body: NewWorkloadIdentity): Promise<WorkloadIdentity>;
   deleteWorkloadIdentity(id: string): Promise<void>;
@@ -208,6 +220,19 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
           }),
         )
       ).items,
+    getSealKey: (project_id, environment_id, secret_id) =>
+      run(
+        c.GET("/v1/projects/{project_id}/environments/{environment_id}/seal-key", {
+          params: { path: { project_id, environment_id }, query: secret_id ? { secret_id } : {} },
+        }),
+      ),
+    createSealedSecretVersion: (project_id, environment_id, secret_id, body) =>
+      run(
+        c.POST("/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/sealed-versions", {
+          params: { path: { project_id, environment_id, secret_id } },
+          body,
+        }),
+      ),
     listMcpTools: async () => (await run(c.GET("/v1/mcp/tools"))).items,
     listWorkloadIdentities: () => all((cursor) => run(c.GET("/v1/workload-identities", { params: { query: q(cursor) } }))),
     createWorkloadIdentity: (body) => run(c.POST("/v1/workload-identities", { body })),

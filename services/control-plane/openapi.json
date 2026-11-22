@@ -962,6 +962,32 @@
         ],
         "type": "object"
       },
+      "NewSealedSecretVersion": {
+        "additionalProperties": false,
+        "description": "Request body of a sealed version write: ciphertext only, nothing the server can open.",
+        "properties": {
+          "ciphertext": {
+            "description": "The sealed payload (A0-7 format), standard base64.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Must equal the secret's `next_version`, else `409`.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "wrapped_dek": {
+            "description": "The DEK wrapped to the environment's seal key (`seal-key` `key_id`), standard base64.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "ciphertext",
+          "wrapped_dek"
+        ],
+        "type": "object"
+      },
       "NewSecret": {
         "additionalProperties": false,
         "properties": {
@@ -1634,6 +1660,31 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "SealKey": {
+        "description": "The environment's active seal key: the public half a client seals a DEK to.",
+        "properties": {
+          "key_id": {
+            "description": "Id of the seal key; stored on every version sealed to it.",
+            "type": "string"
+          },
+          "next_version": {
+            "description": "The version number the next write to this secret must carry (1 for a new secret). The\nnumber is part of the sealed binding, so a client seals for exactly this version.",
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "public_key": {
+            "description": "The X25519 public key, standard base64 (32 bytes).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "public_key",
+          "next_version"
         ],
         "type": "object"
       },
@@ -5322,6 +5373,114 @@
         ]
       }
     },
+    "/v1/projects/{project_id}/environments/{environment_id}/seal-key": {
+      "get": {
+        "operationId": "get_environment_seal_key",
+        "parameters": [
+          {
+            "description": "Project id",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "environment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The secret the next version is for. Omit for a new secret (`next_version` is 1).",
+            "in": "query",
+            "name": "secret_id",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SealKey"
+                }
+              }
+            },
+            "description": "The active seal key"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The environment's seal key is still being prepared; retry after the interval in `Retry-After`"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Get the environment's public seal key and the next version number",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
     "/v1/projects/{project_id}/environments/{environment_id}/secrets": {
       "get": {
         "operationId": "list_secrets",
@@ -5882,6 +6041,162 @@
           }
         ],
         "summary": "Update secret metadata",
+        "tags": [
+          "secrets"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/sealed-versions": {
+      "post": {
+        "operationId": "create_sealed_secret_version",
+        "parameters": [
+          {
+            "description": "Project id",
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "environment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Secret id",
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSealedSecretVersion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretVersion"
+                }
+              }
+            },
+            "description": "Created; version metadata only",
+            "headers": {
+              "Location": {
+                "description": "URL of the secret's versions",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request (bad base64, header, lengths or key id)"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "`version` is not the secret's next version; fetch `seal-key` again and reseal"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable or the environment's seal key is not ready"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "Write a sealed secret version (ciphertext and wrapped key; the server never sees the value)",
         "tags": [
           "secrets"
         ]

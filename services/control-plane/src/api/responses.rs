@@ -267,6 +267,96 @@ pub enum VersionWriteErrors {
     Unavailable(Problem),
 }
 
+/// `GET .../seal-key`: no key yet (or the key service is down) answers `503`.
+#[derive(Debug, IntoResponses)]
+#[allow(dead_code)] // OpenAPI description only; never constructed.
+pub enum SealKeyErrors {
+    #[response(
+        status = 400,
+        description = "Invalid request",
+        content_type = "application/problem+json"
+    )]
+    Invalid(Problem),
+    #[response(
+        status = 401,
+        description = "Missing or invalid org binding",
+        content_type = "application/problem+json"
+    )]
+    Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
+        status = 404,
+        description = "Not found",
+        content_type = "application/problem+json"
+    )]
+    NotFound(Problem),
+    #[response(
+        status = 503,
+        description = "The environment's seal key is still being prepared; retry after the interval in `Retry-After`",
+        content_type = "application/problem+json"
+    )]
+    Unavailable(Problem),
+}
+
+/// Sealed version write: `409` when `version` is not the secret's next version.
+#[derive(Debug, IntoResponses)]
+#[allow(dead_code)] // OpenAPI description only; never constructed.
+pub enum SealedVersionWriteErrors {
+    #[response(
+        status = 400,
+        description = "Invalid request (bad base64, header, lengths or key id)",
+        content_type = "application/problem+json"
+    )]
+    Invalid(Problem),
+    #[response(
+        status = 401,
+        description = "Missing or invalid org binding",
+        content_type = "application/problem+json"
+    )]
+    Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
+        status = 404,
+        description = "Not found",
+        content_type = "application/problem+json"
+    )]
+    NotFound(Problem),
+    #[response(
+        status = 409,
+        description = "`version` is not the secret's next version; fetch `seal-key` again and reseal",
+        content_type = "application/problem+json"
+    )]
+    Conflict(Problem),
+    #[response(
+        status = 413,
+        description = "Request body too large",
+        content_type = "application/problem+json"
+    )]
+    TooLarge(Problem),
+    #[response(
+        status = 415,
+        description = "Unsupported media type",
+        content_type = "application/problem+json"
+    )]
+    UnsupportedMediaType(Problem),
+    #[response(
+        status = 503,
+        description = "Service unavailable or the environment's seal key is not ready",
+        content_type = "application/problem+json"
+    )]
+    Unavailable(Problem),
+}
+
 /// Internal (service-token) `GET` of one resource.
 #[derive(Debug, IntoResponses)]
 #[allow(dead_code)] // OpenAPI description only; never constructed.

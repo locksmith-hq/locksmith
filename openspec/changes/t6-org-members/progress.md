@@ -51,3 +51,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Verified: `cargo test -p ls-control-plane --test members` (8 passed), tenancy/tenant_lint/orgs/users/openapi/memberships, `just quick` -> pass. Migration 0016 adds SELECT-only `org_member_read` on `users`.
 - Deviation: accept returns 401 (no auth) / 403 (unverified email) before looking at the token, not the uniform 404 the spec lists for "unverified"; leaks nothing about token validity. Amend spec text or map to 404.
 - Notes for next session: 4.4 (adversarial cases) and 4.5 remain. Possible deadlock (500) when two admins act on each other at once (lock order owners, caller, target); add test/fix lock ordering. Missing tests: admin removes admin. npm tests for packages/sdk and control-plane-client not run here (node_modules stale); regenerated `packages/sdk/src/schema.d.ts` (Location header) is unverified.
+
+## 2026-11-22 worker
+- Task: ci-fix (macos exit 100 on #605) - done
+- Verified: just quick -> ok; merged main, pushed to rerun checks
+- Notes for next session: check #605 macos result; no code change was made

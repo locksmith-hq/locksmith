@@ -1,0 +1,25 @@
+# Tasks: T7 add a secret or a new version from the browser
+
+## 1. Contract [opus]
+- [ ] 1.1 [haiku] Research note `docs/research/seal-to-browser.md`: `hpke` and `wasm-bindgen` current versions, licences and release dates, wasm32 build of `hpke` with `getrandom` js, and how AWS KMS and OpenBao hold and use the wrapped private key (design decision 2). Record versions in design.md "OSS used". Verify: note committed; `bash scripts/public-check.sh`.
+- [ ] 1.2 Define the HPKE-wrapped DEK format (new `alg_id`, field layout, `info` and AAD) in `crates/ls-envelope` with seal and open functions and committed known-answer vectors. Verify: `cargo nextest run -p ls-envelope hpke`.
+- [ ] 1.3 OpenAPI and mock data: `GET .../environments/{id}/seal-key` (public key, key id, `next_version`), sealed version create (`version`, `ciphertext`, `wrapped_dek`), `409` and `503` problems; TS client methods in `packages/control-plane-client`. Verify: `cargo nextest run -p ls-control-plane openapi` and `npm test --workspace packages/control-plane-client`.
+
+## 2. Seal keys and sealed write [opus]
+- [ ] 2.1 Migration `environment_seal_keys` (org_id, environment_id, key_id, public key, wrapped private key, status active/retired/pending) with RLS, and relax the `wrapped_dek` length check to the two formats. Verify: `cargo nextest run -p ls-control-plane migrate`.
+- [ ] 2.2 Gateway provisioning: list pending environments through `/internal/v1`, generate the X25519 pair, wrap the private key with the KMS, post public key and wrapped private key; the control plane stores them and never holds the private half. Verify: `cargo nextest run -p ls-gateway seal_key` and `cargo nextest run -p ls-control-plane seal_key`.
+- [ ] 2.3 Control plane: `seal-key` route (pending gives `503` with retry hint), sealed version create that validates header, `alg_id`, lengths, key id and `version == next_version`, stores bytes untouched and audits `secret.version.created`; remove the plaintext `value` route. Verify: `cargo nextest run -p ls-control-plane versions` including `409` on a stale version and a canary leak assertion.
+- [ ] 2.4 Gateway decrypt: unwrap the environment private key into zeroizing memory for one TTL, decapsulate the DEK and open the payload; keep the KMS-wrapped path. Verify: `cargo nextest run -p ls-gateway decrypt` for both formats, a wrong binding, a retired key and a tampered `enc`.
+- [ ] 2.5 Verify: `cargo nextest run -p ls-envelope -p ls-control-plane -p ls-gateway`.
+
+## 3. Sealing clients [sonnet]
+- [ ] 3.1 `crates/ls-seal-wasm` and `packages/seal`: one exported seal function, built to wasm32 and packaged; a Vitest known-answer test checks the same vector as the native test. Verify: `cargo test -p ls-envelope hpke` and `npm test --workspace packages/seal`.
+- [ ] 3.2 Move the CLI, `ls-mcp-server`, `ls-vault` and `packages/sdk` secret-write calls to native sealing against the sealed route. Verify: `cargo nextest run -p smith-cli vault`, `cargo nextest run -p ls-mcp-server`, `npm test --workspace packages/sdk`.
+
+## 4. Console and desktop [sonnet]
+- [ ] 4.1 Secret pages in `apps/web`: "Add secret" and "Add version" form (value in one input, sealed through `packages/seal`, input and buffers cleared, no persistence, states for key preparing, `409` retry, error and `403`), CSP and wasm integrity; Vitest tests that assert the request body holds no value. Verify: `npm test --workspace apps/web`.
+- [ ] 4.2 Desktop form with the same behaviour. Verify: `npm test --workspace apps/desktop`.
+- [ ] 4.3 Adversarial cases: canary value never appears in any request or log in the browser test, plaintext route gone, stale version replay, wrong-environment key. Verify: `bash tests/adversarial/run.sh` and `just leak-scan`.
+
+## 5. Local verification [sonnet]
+- [ ] 5.1 End to end: `just up`, create an environment, add a secret through the sealed route using the wasm package in a Playwright test, run a gateway relay that uses it, assert the control plane logs and database hold no canary. Verify: new `tests/e2e` test via `cargo nextest run -p ls-e2e secret_write`; `just apps-build`, then `just quick`.

@@ -7,8 +7,10 @@
 
 pub mod explain;
 
+use rmcp::model::{CallToolResult, JsonObject, Tool};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Which MCP server a tool belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -35,6 +37,29 @@ pub struct ToolDef {
     pub input_schema: Value,
     pub output_schema: Option<Value>,
     pub default_enabled: bool,
+}
+
+/// The rmcp [`Tool`] for a definition: name, description, input schema and output schema. The
+/// hub adds its own annotations on top; the gateway uses it as is.
+pub fn tool_from_def(def: &ToolDef) -> Tool {
+    let object =
+        |v: &Value| -> Arc<JsonObject> { Arc::new(v.as_object().cloned().unwrap_or_default()) };
+    let mut tool = Tool::new(def.name, def.description, object(&def.input_schema));
+    tool.output_schema = def.output_schema.as_ref().map(object);
+    tool
+}
+
+/// The HTTP-style status a failed tool call carries in `structured_content` at `/error/status`.
+/// `None` for a successful result or when no status is present.
+pub fn error_status(result: &CallToolResult) -> Option<u64> {
+    if result.is_error != Some(true) {
+        return None;
+    }
+    result
+        .structured_content
+        .as_ref()
+        .and_then(|v| v.pointer("/error/status"))
+        .and_then(Value::as_u64)
 }
 
 /// Words that, as the last word of a schema property name, mark a field that could hold a secret
@@ -804,5 +829,43 @@ mod tests {
             Refusal::Disabled
         );
         assert!(!r.list(&off).iter().any(|t| t.name == "list_projects"));
+    }
+
+    fn def(output: Option<Value>) -> ToolDef {
+        ToolDef {
+            name: "t",
+            description: "d",
+            input_schema: json!({"type": "object"}),
+            output_schema: output,
+            default_enabled: true,
+        }
+    }
+
+    #[test]
+    fn tool_from_def_carries_schemas() {
+        let t = tool_from_def(&def(Some(json!({"type": "object", "x": 1}))));
+        assert_eq!(t.name, "t");
+        assert_eq!(t.input_schema.get("type"), Some(&json!("object")));
+        assert_eq!(t.output_schema.unwrap().get("x"), Some(&json!(1)));
+        assert!(tool_from_def(&def(None)).output_schema.is_none());
+        assert!(tool_from_def(&def(None)).annotations.is_none());
+    }
+
+    fn failed(status: Option<u64>, is_error: bool) -> CallToolResult {
+        let mut r = if is_error {
+            CallToolResult::error(vec![])
+        } else {
+            CallToolResult::success(vec![])
+        };
+        r.structured_content = status.map(|s| json!({"error": {"status": s}}));
+        r
+    }
+
+    #[test]
+    fn error_status_reads_only_error_results() {
+        assert_eq!(error_status(&failed(Some(401), true)), Some(401));
+        assert_eq!(error_status(&failed(Some(501), true)), Some(501));
+        assert_eq!(error_status(&failed(None, true)), None);
+        assert_eq!(error_status(&failed(Some(401), false)), None);
     }
 }

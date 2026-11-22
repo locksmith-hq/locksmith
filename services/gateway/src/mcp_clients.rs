@@ -7,7 +7,7 @@
 //! and a fresh `initialize` alike, by the check in [`crate::mcp_endpoint`].
 //!
 //! The revoked set is read from `GET /internal/v1/mcp/revoked-agent-clients` with the service
-//! token and reused for at most [`MAX_REVOKED_TTL`], the same bound as grants and tool switches,
+//! token and reused for at most [`MAX_CACHE_TTL`], the same bound as grants and tool switches,
 //! so a revoke takes effect within that time. A read that fails is never served from a stale
 //! cache past the TTL and never read as "nobody is revoked": the caller fails closed (`401`).
 //! Tests use a zero TTL, which makes "the next call is refused" exact.
@@ -15,16 +15,13 @@
 //! Nothing here carries a token; ids and a display name only.
 
 use std::collections::HashSet;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::decrypt::{BoxFuture, ControlPlane, Internal};
-
-/// Longest time a read of the revoked set is reused. Larger configured values are clamped.
-pub const MAX_REVOKED_TTL: Duration = Duration::from_secs(10);
+use crate::ttl::TtlCell;
 
 const MAX_RESPONSE: usize = 256 * 1024;
 const REVOKED_PATH: &str = "internal/v1/mcp/revoked-agent-clients";
@@ -122,39 +119,19 @@ impl AgentClients for ControlPlane {
 /// never cached. `record` always goes to the source.
 pub struct ClientsCache {
     source: std::sync::Arc<dyn AgentClients>,
-    ttl: Duration,
-    entry: Mutex<Option<(Instant, HashSet<Uuid>)>>,
+    cell: TtlCell<HashSet<Uuid>>,
 }
 
 impl ClientsCache {
     pub fn new(source: std::sync::Arc<dyn AgentClients>, ttl: Duration) -> Self {
         Self {
             source,
-            ttl: ttl.min(MAX_REVOKED_TTL),
-            entry: Mutex::new(None),
-        }
-    }
-
-    fn cached(&self) -> Option<HashSet<Uuid>> {
-        let guard = self.entry.lock().unwrap_or_else(|e| e.into_inner());
-        match guard.as_ref() {
-            Some((at, set)) if at.elapsed() < self.ttl => Some(set.clone()),
-            _ => None,
+            cell: TtlCell::new(ttl),
         }
     }
 
     async fn read(&self) -> Result<HashSet<Uuid>, ClientsError> {
-        if let Some(set) = self.cached() {
-            return Ok(set);
-        }
-        // Stamped when the fetch started, so an entry never outlives the TTL measured from the
-        // time the control plane was asked.
-        let started = Instant::now();
-        let set = self.source.revoked().await?;
-        if !self.ttl.is_zero() {
-            *self.entry.lock().unwrap_or_else(|e| e.into_inner()) = Some((started, set.clone()));
-        }
-        Ok(set)
+        self.cell.get_or_fetch(|| self.source.revoked()).await
     }
 }
 
@@ -231,7 +208,7 @@ mod tests {
             fail: true,
         });
         let cache = ClientsCache::new(src.clone(), Duration::from_secs(3600));
-        assert_eq!(cache.ttl, MAX_REVOKED_TTL);
+        assert_eq!(cache.cell.ttl(), crate::ttl::MAX_CACHE_TTL);
         assert!(cache.revoked().await.is_err());
         assert!(cache.revoked().await.is_err());
         assert_eq!(src.calls.load(Ordering::SeqCst), 2);

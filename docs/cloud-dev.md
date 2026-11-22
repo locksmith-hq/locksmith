@@ -122,17 +122,17 @@ GitHub triggers (web UI only; one per routine): the API stores filters as `filte
 Only the `Claude_Code_Remote` connector is attached. The others were removed on purpose: least privilege.
 
 ## Agent identities (GitHub Apps)
-Agents are the Avengers: Iron Man (Lead), Nick Fury (PM), Captain America, Spider-Man and Thor (Workers A, B, C), Hulk (Research) and Doctor Strange (Optimizer, local, no App). `routing.json` accepts both the new and the old bot logins until every App is renamed; persona keys (`alfie`, `josie`, `AGENT_APP_KEY_*`, environment names) keep their old spelling because the cloud routine prompts use them.
+Agents are the Avengers: Iron Man (Lead), Nick Fury (PM), Captain America, Spider-Man and Thor (Workers A, B, C), Hulk (Research) and Doctor Strange (Optimizer, local, no App).
 
 **Each worker owns its PRs (owner 2026-11-20).** There is no separate event worker. `wake-agents.yml` fires the worker whose App opened a PR when that PR's merge review (`claude-review`) finishes or its CI fails, and the worker that opened a `needs-rescue` issue when it closes. Red main, a closed `needs-owner` issue and PRs opened by the owner go to Worker A. An owner tag `@locksmith-alfie`, `-josie` or `-harriet` wakes that worker (`@locksmith-worker`: Worker A). Each worker's API trigger token is a repo secret (`WORKER_A_FIRE_TOKEN`, `_B_`, `_C_`). Each role has a private GitHub App owned by `locksmith-hq`, installed only on this repo, with webhooks off. Avatars are in `docs/agents/avatars/`.
 
 | Routine | App (new slug) | Access |
 |---|---|---|
-| Lead | `iron-man` (was `locksmith-linus`) | code, PRs, issues, workflows (write) |
-| Worker A | `captain-america` (was `locksmith-alfie`) | code, PRs, issues (write) |
-| Worker B | `spider-man` (was `locksmith-josie`) | code, PRs, issues (write) |
-| Worker C | `thor` (was `locksmith-harriet`) | code, PRs, issues (write) |
-| PM | `nick-fury` (was `locksmith-walt`) | PRs, issues (write); code (read) |
+| Lead | `iron-man` | code, PRs, issues, workflows (write) |
+| Worker A | `captain-america` | code, PRs, issues (write) |
+| Worker B | `spider-man` | code, PRs, issues (write) |
+| Worker C | `thor` | code, PRs, issues (write) |
+| PM | `nick-fury` | PRs, issues (write); code (read) |
 
 **Key per environment (owner, 2026-11-20).** The 2026-11-18 pause had one cause: a network secret is a fixed header, but the token request needs a JWT signed with the App's private key, and GitHub caps that JWT at 10 minutes. Like Renovate's self-hosted setup, each run now signs a fresh JWT from the App key and swaps it for a one-hour installation token. An environment with no App key at all still runs as the owner (`agent-start.sh` warns) until every key is set; one that holds other keys but not this persona's fails with `FAIL identity`.
 

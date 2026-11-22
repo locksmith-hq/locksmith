@@ -38,3 +38,15 @@ Pin `typescript` to exactly `7.0.2`. TypeScript 6.0.3 is proven too and is the f
 - npm registry data, read 2026-11-22: @nestjs/core 12.6.0 (MIT, `"type": "module"`, engines node >= 20, released 2026-11-20), typescript 7.0.2 (Apache-2.0, 2026-07-08), 6.0.3, vitest 5.1.1, oxlint 1.94.0, oxfmt 0.79.0, knip 6.47.0 (registry.npmjs.org).
 - NestJS migration guide: https://docs.nestjs.com/migration-guide (pins TypeScript 6).
 - NestJS 12 deep dive (ESM, Standard Schema): https://dev.to/x4nent/nestjs-12-deep-dive-full-esm-migration-standard-schema-route-validation-and-the-4fe0
+
+## Task 1.2: oxlint, oxfmt and knip over the real packages
+
+Run 2026-11-22 on `main` (74393b38) over `apps/web/src`, `apps/desktop/src`, `packages/{ui,control-plane-client,sdk,api-types}/src`, with oxlint 1.94.0, oxfmt 0.79.0 and knip 6.47.0 from the public registry, default configuration.
+
+| Tool | Result | Config it needs |
+|---|---|---|
+| oxlint | 0 errors, 14 warnings: 10 `no-unused-vars` (nine are `_` parameters in `apps/desktop/src/screens.tsx` and one `init` in `auth.test.tsx`), 2 `no-unsafe-optional-chaining` (`control-plane-client/src/mcp.test.ts`), 2 `no-control-regex` (`apps/web/src/mockup/pages/securityStore.ts`, probably intended) | `.oxlintrc.json` with `no-unused-vars` ignoring names that start with `_` (then fix the `init` one), the two test files reviewed, and an inline disable with a reason for the regex |
+| oxfmt | 86 of 98 files would change under defaults (25,522 insertions and 8,969 deletions). A wider `printWidth` barely helps (120: 86 files, 160: 84, 200: 83) because the code is hand-formatted with dense one-liners | A `.oxfmtrc.json`; accept one repo-wide formatting-only commit listed in `.git-blame-ignore-revs` (task 3.2), generated `schema.d.ts` and the CSS files excluded |
+| knip | 26 unused files, 1 unused devDependency (`openapi-typescript` in `control-plane-client`), 1 unlisted dependency (`react` imported by `packages/ui/src/kit.tsx`), 2 unlisted binaries (`tsc` in `control-plane-client` and `sdk`), 2 unused exports (`agent` in `desktop/src/screens.tsx`, `createFixtures` in `web/src/api/fixtures.ts`), 2 unused types (`AgentsClient`, `SignedInUser`) | `knip.json` with workspaces: `apps/web` entries including `src/mockup/main.tsx` (24 of the 26 unused files are the mockup entry's tree) and `tests/e2e/sdk-smoke/smoke.test.ts` as a test entry; list `react` as a peer dependency of `packages/ui` and `typescript` as a devDependency where `tsc` is called |
+
+Reading the numbers: oxlint and knip are cheap to adopt (a config and about a dozen small fixes). oxfmt is the expensive one: it rewrites nearly every file, so it should land as its own commit with nothing else in it, after the other tooling PRs, and the formatting diff is not a review item. Until then `format:check` stays out of CI (task 3.4 adds it after 3.2).

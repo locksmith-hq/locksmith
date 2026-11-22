@@ -14,3 +14,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 ## 2026-11-22 (owner session, spike 1.1)
 - Task 1.1 done: NestJS 12.6.0 builds, runs and tests on TypeScript 7.0.2 (0.49 s build; DI via emitted decorator metadata; vitest 5.1.1 needs no swc plugin). TypeScript 6.0.3 also works. Details and untested areas in `docs/research/nestjs-typescript7.md`. Recommendation for gate G3: pin TypeScript 7.0.2, fallback 6.0.3. Tooling check for task 1.2 on the spike: oxlint and oxfmt clean, knip needs entry and ignore config.
 - Gate G3 answered by the owner: pin TypeScript 7.0.2 (decision OC-10).
+
+## 2026-11-22 (owner session, task 1.2)
+- Task 1.2 done: baseline of oxlint (14 warnings, 0 errors), oxfmt (86 of 98 files would change; one repo-wide formatting commit needed) and knip (26 unused files, mostly the mockup entry; a handful of dependency fixes) over the real packages; configs each needs are in `docs/research/nestjs-typescript7.md`.

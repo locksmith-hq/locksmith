@@ -155,11 +155,11 @@ pub async fn list_orgs(
         .db()
         .with_user(user.user_id, move |c| {
             Box::pin(async move {
-                let rows = sql::query(concat!(
+                let rows = sql::query(
                     "SELECT o.id, o.name, o.region, o.created_at, o.updated_at, m.role \
                      FROM memberships m JOIN orgs o ON o.id = m.org_id \
-                     WHERE m.user_id = $1 ORDER BY o.created_at, o.id"
-                ))
+                     WHERE m.user_id = $1 ORDER BY o.created_at, o.id",
+                )
                 .bind(user.user_id)
                 .fetch_all(&mut *c)
                 .await?;

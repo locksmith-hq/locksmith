@@ -30,7 +30,7 @@ jobs:
       - name: tree-check, task guard, public-check
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: just tree-check task-guard public-check
+        run: just tree-check task-guard public-check migration-guard
       - name: gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1

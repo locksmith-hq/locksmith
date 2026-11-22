@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check task-guard public-check
+ci: fmt lint test-rust test-web tree-check task-guard public-check migration-guard
 
 # Fast local check: fmt + lint only for files committed on this branch since `base`.
 # The full `just ci` runs in GitHub Actions on every PR.
@@ -81,6 +81,11 @@ task-guard:
 public-check:
     scripts/public-check.test.sh
     scripts/public-check.sh
+
+# Shipped database migrations must not change (add a new one). Compares against origin/main.
+migration-guard:
+    scripts/check-migrations.test.sh
+    scripts/check-migrations.sh
 
 # Install a git pre-push hook that runs the denylist check (see docs/public-private-boundary.md).
 install-hooks:

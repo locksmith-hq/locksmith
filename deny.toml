@@ -38,6 +38,9 @@ deny = [
   { crate = "ls-control-plane", wrappers = ["ls-gateway"] },
   # ls-gateway is AGPL-3.0 and also a library: no crate may depend on it (the wrapper name matches no crate).
   { crate = "ls-gateway", wrappers = ["no-crate-may-depend-on-ls-gateway"] },
+  # ee/ is source-available under the Locksmith Enterprise License: no open-source crate may depend
+  # on it. Core asks the ls-entitlements trait; an enterprise build injects the ee implementation.
+  { crate = "ls-ee-license", wrappers = ["no-core-crate-may-depend-on-ee"] },
 ]
 
 [sources]
@@ -56,3 +59,8 @@ allow = ["AGPL-3.0-only"]
 [[licenses.exceptions]]
 name = "ls-gateway"
 allow = ["AGPL-3.0-only"]
+
+# Source-available (ee/LICENSE), not open source. Only crates under ee/ may carry it.
+[[licenses.exceptions]]
+name = "ls-ee-license"
+allow = ["LicenseRef-Locksmith-EE"]

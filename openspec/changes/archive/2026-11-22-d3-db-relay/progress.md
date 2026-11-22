@@ -132,3 +132,7 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 6.3 and 6.4 - done, ticked (Bindings page in `apps/web` under Agent Gateway and a Bindings screen in `apps/desktop`, both on `client.listBindings()`; shared `bindingDetails()` in `packages/control-plane-client` shows non-secret fields only)
 - Verified: `npm test` for control-plane-client (15), apps/web (60) and apps/desktop (38); `npm run lint`; `just apps-build`
 - Notes for next session: only 7.2 remains (`just up`, `just db-smoke`, `just apps-build`, `just ci`); `just ci` is never run locally, so verify with `just up` + `just db-smoke` and let the PR checks run the suite.
+
+## 2026-11-22 worker (alfie, sixth entry)
+- Task: 7.2 - done, ticked; change archived in this PR
+- Verified: `just up`, `just db-smoke` (psql through `smith db connect --gateway`: 1 passed), `just apps-build`, `just quick`; the full `just ci` is not run locally (PR checks run it)

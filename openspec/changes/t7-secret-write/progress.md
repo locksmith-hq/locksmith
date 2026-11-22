@@ -43,3 +43,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.4 seal-key signature contract and KATs - done
 - Verified: `cargo nextest run -p ls-control-plane openapi`, `cargo nextest run -p ls-envelope seal_key_sig` (3 vectors from an independent pyca Ed25519 script, substituted-key refusal), `npm test --workspace packages/control-plane-client`, `just quick`; Sonnet evaluator PASS
 - Notes for next session: `ls-envelope` only verifies (`verify_seal_key`, `seal_key_message`); signing is the gateway's (2.6). SealKey now has `signature` and `signing_key_id`. Next: 2.1 migration, then 2.2.
+
+## 2026-11-22 12:29 worker
+- Task: CI fix (hygiene/gitleaks on seal-key KAT vectors) - ci-fix
+- Verified: scripts/public-check.sh + gitleaks detect -> OK; just quick -> OK
+- Notes for next session: other checks (rust/desktop/macos) were still running; tasks after 1.4 remain.

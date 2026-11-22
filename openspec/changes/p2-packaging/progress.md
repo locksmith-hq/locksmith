@@ -95,3 +95,8 @@
 - Task: CI red on #534 (cargo-deny) - ci-fix
 - Verified: cargo deny check advisories -> ok; cargo check --workspace -> ok; just quick -> ok
 - Notes for next session: RUSTSEC-2026-0592 (url 2.5.8) was the cause, not this change; fixed by bumping url to 2.5.9 in Cargo.lock. Main will hit the same advisory on its next ci run.
+
+## 2026-11-22 worker
+- Task: p2-packaging - ci-fix (#534 conflicted in justfile: main moved AWS infra to the private repo, so dropped the aws-* recipes and kept the P2 ones)
+- Verified: just quick -> ok; install.test.sh -> SKIP (no minisign)
+- Notes for next session: remaining tasks need kind/cosign/helm, 5.4 needs a lead PR, 7.1 is an owner gate. Keep auto-merge off until every task is ticked.

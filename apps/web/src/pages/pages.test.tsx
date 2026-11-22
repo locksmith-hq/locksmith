@@ -38,12 +38,14 @@ test("projects: create, rename, delete with confirm", async () => {
   await waitFor(() => expect(screen.queryByText("invoices")).toBeNull());
 });
 
-test("projects: 409 on duplicate name is shown; shown", async () => {
+test("projects: 409 on duplicate name shows the problem and leaves the list unchanged", async () => {
   open("/projects");
   await screen.findByText("payments");
   await userEvent.type(screen.getByLabelText("project name"), "payments");
   await userEvent.click(screen.getByText("Create project"));
-  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toMatch(/status 409|fixture 409/);
+  expect(screen.getAllByText("payments")).toHaveLength(1);
 });
 
 test("projects: 403 list shows an error with retry, not the empty message", async () => {

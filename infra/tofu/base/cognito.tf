@@ -28,7 +28,7 @@ locals {
   web_origin = "https://${aws_cloudfront_distribution.web.domain_name}"
   cognito_clients = {
     "locksmith-web" = {
-      callbacks = concat(var.web_callback_urls, ["${local.web_origin}/auth/callback"])
+      callbacks = concat(var.web_callback_urls, ["${local.web_origin}/"])
       logouts   = concat(var.web_logout_urls, ["${local.web_origin}/"])
     }
     "locksmith-desktop" = { callbacks = var.desktop_callback_urls, logouts = var.desktop_logout_urls }

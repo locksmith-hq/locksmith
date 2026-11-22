@@ -20,7 +20,7 @@ Always-on dev resources: KMS key and alias, S3 (checkpoints with Object Lock gov
 `oidc.tf` creates the GitHub OIDC provider and `locksmith-dev-github-apply`. Its trust policy (`policies/github-apply-trust.json.tftpl`) allows only `aud = sts.amazonaws.com` and the single exact subject `repo:locksmith-hq/locksmith:environment:aws-base-apply`, so only the dispatched apply workflow job that runs in that GitHub environment (required reviewers, deployment branch limited to main) can assume it. The first apply of this role is done by the owner; after that the workflow can apply `base`. The role explicitly denies Organizations, Budgets, Cost Explorer, account, SSO and IAM role/provider changes, so CI cannot weaken the guardrails or its own trust. `python3 -I infra/tofu/policy/test_base_oidc.py` checks this offline.
 
 ## Web console (web.tf)
-Private S3 bucket behind CloudFront (OAC, default `*.cloudfront.net` domain, `PriceClass_100`). The Cognito web client's callback and logout URLs include the CloudFront origin automatically. Access is the Cognito pool, which is admin-create-only, so the closed list of emails is the list of Cognito users:
+Private S3 bucket behind CloudFront (OAC, default `*.cloudfront.net` domain, `PriceClass_100`). The Cognito web client's callback (`<origin>/`, what the app sends as redirect_uri) and logout URLs include the CloudFront origin automatically. Access is the Cognito pool, which is admin-create-only, so the closed list of emails is the list of Cognito users:
 ```bash
 aws cognito-idp admin-create-user --user-pool-id <pool-id> --username someone@example.com \
   --user-attributes Name=email,Value=someone@example.com Name=email_verified,Value=true

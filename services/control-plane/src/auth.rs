@@ -193,9 +193,55 @@ pub fn bearer(value: &[u8]) -> Option<&[u8]> {
         .filter(|t| !t.is_empty())
 }
 
+/// The `WWW-Authenticate` challenge of a refused bearer request: `Bearer`, then
+/// `error="invalid_token"` when a token was presented and `resource_metadata="<url>"` when the
+/// endpoint publishes protected-resource metadata, joined with `", "`. A value that is not a valid
+/// header falls back to the bare scheme. The one builder for the hub and the gateway `/mcp`.
+pub fn bearer_challenge(
+    token_presented: bool,
+    resource_metadata: Option<&str>,
+) -> axum::http::HeaderValue {
+    let mut params = Vec::new();
+    if token_presented {
+        params.push(r#"error="invalid_token""#.to_owned());
+    }
+    if let Some(url) = resource_metadata {
+        params.push(format!(r#"resource_metadata="{url}""#));
+    }
+    let value = if params.is_empty() {
+        "Bearer".to_owned()
+    } else {
+        format!("Bearer {}", params.join(", "))
+    };
+    axum::http::HeaderValue::from_str(&value)
+        .unwrap_or_else(|_| axum::http::HeaderValue::from_static("Bearer"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bearer_challenge_is_byte_identical_to_the_old_forms() {
+        let u = "https://hub.example/.well-known/oauth-protected-resource";
+        // Hub, as built before: with and without a presented token.
+        assert_eq!(
+            bearer_challenge(true, Some(u)).as_bytes(),
+            format!(r#"Bearer error="invalid_token", resource_metadata="{u}""#).as_bytes()
+        );
+        assert_eq!(
+            bearer_challenge(false, Some(u)).as_bytes(),
+            format!(r#"Bearer resource_metadata="{u}""#).as_bytes()
+        );
+        // Gateway, as built before.
+        assert_eq!(
+            bearer_challenge(true, None).as_bytes(),
+            br#"Bearer error="invalid_token""#
+        );
+        assert_eq!(bearer_challenge(false, None).as_bytes(), b"Bearer");
+        // An invalid header value falls back to the bare scheme.
+        assert_eq!(bearer_challenge(false, Some("a\nb")).as_bytes(), b"Bearer");
+    }
 
     #[test]
     fn bearer_parses_the_scheme_case_insensitively() {

@@ -21,6 +21,10 @@ __pycache__/
 # Self-host bundle: generated secrets and the gateway bindings written by bootstrap.sh
 infra/compose/selfhost/gateway-bindings.toml
 
+# Playwright output
+apps/web/test-results/
+apps/web/playwright-report/
+
 # OpenTofu
 .terraform/
 # Lock files from the local mirror hold only this platform's h1 hash; commit them once

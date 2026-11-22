@@ -1,7 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { App } from "./App";
+import { Agents } from "./pages/Agents";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createClient } from "@locksmith/control-plane-client";
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -42,7 +44,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-const mk = () => render(<App client={createClient("org1")} />);
+const mk = (path = "/agents") => render(<App client={createClient("org1")} initialPath={path} />);
 
 test("lists agents and grants, sending the org header", async () => {
   mk();
@@ -65,6 +67,29 @@ test("create shows the enrollment secret once and never persists it", async () =
   expect(JSON.stringify(setItem.mock.calls)).not.toContain("SUPERSECRET");
   expect(JSON.stringify(Object.entries(localStorage))).not.toContain("SUPERSECRET");
   expect(JSON.stringify(log.mock.calls)).not.toContain("SUPERSECRET");
+});
+
+test("the enrollment secret can be copied with a Copy button", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  mk();
+  await screen.findByText("bot");
+  await userEvent.type(screen.getByLabelText("Agent name"), "bot");
+  await userEvent.click(screen.getByText("Create agent"));
+  await screen.findByTestId("enrollment-secret");
+  fireEvent.click(screen.getByText("Copy"));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith("lse_SUPERSECRET"));
+});
+
+test("the enrollment secret never enters the query cache", async () => {
+  const qc = new QueryClient();
+  render(<QueryClientProvider client={qc}><Agents client={createClient("org1")} /></QueryClientProvider>);
+  await screen.findByText("bot");
+  await userEvent.type(screen.getByLabelText("Agent name"), "bot");
+  await userEvent.click(screen.getByText("Create agent"));
+  expect(await screen.findByTestId("enrollment-secret")).toHaveTextContent("lse_SUPERSECRET");
+  expect(JSON.stringify(qc.getQueryCache().getAll().map((q) => q.state.data))).not.toContain("SUPERSECRET");
+  expect(JSON.stringify(qc.getMutationCache().getAll().map((m) => m.state.data))).not.toContain("SUPERSECRET");
 });
 
 test("delete agent calls DELETE and refreshes", async () => {
@@ -95,7 +120,7 @@ test("shows problem detail on error", async () => {
 
 test("audit page shows chain status, events, and pages on demand", async () => {
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   expect(await screen.findByText("relay.outcome")).toBeInTheDocument();
   expect(screen.getByText(/seq 2 at/)).toBeInTheDocument();
   expect(screen.getByTestId("verify-result")).toHaveTextContent("Verified OK");
@@ -110,7 +135,7 @@ test("audit page never renders attrs, shows a failed verify, and surfaces load e
     return json({ title: "Bad", detail: "ledger down" }, 503);
   });
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("ledger down");
   expect(await screen.findByTestId("verify-result")).toHaveTextContent("FAILED at t2 (first broken seq 2, hash)");
   expect(screen.getByText(/none yet/)).toBeInTheDocument();
@@ -120,7 +145,7 @@ test("audit page never renders attrs, shows a failed verify, and surfaces load e
 
 test("audit load more cannot double-append on a double click", async () => {
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   const btn = await screen.findByText("Load more");
   btn.click(); btn.click();
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
@@ -135,7 +160,7 @@ test("audit outcome filter narrows to denied and redaction_failed events", async
     return json({ items: [ev(3, "relay.outcome", "redaction_failed"), ev(2, "relay.denied", "no_grant"), ev(1, "agent.created", "ok")] });
   });
   mk();
-  await userEvent.click(screen.getByText("Audit"));
+  await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
   const sel = screen.getByRole("combobox", { name: "Outcome filter" });
   await userEvent.selectOptions(sel, "denied");
@@ -163,7 +188,7 @@ test("workload identities: list, prefix warning, create with presets, delete wit
     return json({ title: "nope" }, 404);
   });
   const { container } = mk();
-  await userEvent.click(screen.getByRole("button", { name: "Workload identities" }));
+  await userEvent.click(screen.getByRole("link", { name: "Workload identities" }));
   expect(await screen.findByText("ci-deploy")).toBeInTheDocument();
   expect(screen.getByText("lsw_abc")).toBeInTheDocument();
   expect(screen.getByText("Last used: never")).toBeInTheDocument();

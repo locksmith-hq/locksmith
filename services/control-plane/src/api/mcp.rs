@@ -25,6 +25,7 @@ use crate::app::AppState;
 use crate::audit::DEV_AUTH_ACTOR;
 use crate::auth::OrgBinding;
 use crate::db::sql::{self, Row};
+use crate::mcp_store;
 use crate::problem::ApiError;
 
 /// Which MCP server a tool or client belongs to.
@@ -173,18 +174,9 @@ pub async fn list_tools(
     let rows = state
         .db()
         .with_org(org.org_id, move |c| {
-            Box::pin(async move {
-                let rows = sql::query("SELECT layer, tool, enabled FROM mcp_tool_settings")
-                    .fetch_all(c)
-                    .await?;
-                all(&rows, |r| {
-                    Ok((
-                        r.try_get::<String, _>("layer")?,
-                        r.try_get::<String, _>("tool")?,
-                        r.try_get::<bool, _>("enabled")?,
-                    ))
-                })
-            })
+            Box::pin(
+                async move { Ok::<_, ApiError>(mcp_store::all_settings(c, org.org_id).await?) },
+            )
         })
         .await?;
     let items = McpLayer::ALL

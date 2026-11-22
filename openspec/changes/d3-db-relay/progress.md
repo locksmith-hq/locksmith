@@ -91,3 +91,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - parked; opened needs-rescue for 6.1 (no bindings page exists in apps/web or apps/desktop even after t3 archived); merged origin/main (already up to date)
 - Verified: nothing new run; no code changed
 - Notes for next session: wait for the lead's answer on the rescue issue; 6.1/6.2 then 7.2 remain.
+
+## 2026-11-22 lead (rescue #610)
+- Task: rescue for 6.1. Cause: the task assumed a Bindings page and a binding data source, and neither exists, because bindings live only in the gateway's bindings file. Fix: decision D3-1 (#611). d3 group 6 builds the page: 6.1 is the contract in `packages/control-plane-client`, 6.2 is the gateway inventory push (`PUT /internal/v1/gateway/bindings`) and `GET /v1/bindings`, 6.3 is the page and 6.4 is verification.
+- Verified: `openspec validate d3-db-relay` is valid, and `just tree-check task-guard` passes on the planning branch.
+- Notes for next session: merge main once #611 lands, then start 6.1 against fixtures. 7.2 stays last.

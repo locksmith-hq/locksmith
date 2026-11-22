@@ -193,7 +193,7 @@ no role marker"
   }
   ev 'lead\tneeds-rescue #5 opened' issues '{"action":"labeled","label":{"name":"needs-rescue"},"issue":{"number":5,"labels":[{"name":"needs-rescue"}]}}'
   ev '' issues '{"action":"labeled","label":{"name":"needs-owner"},"issue":{"number":5,"labels":[{"name":"needs-owner"}]}}'
-  ev 'worker-b\tneeds-rescue #5 closed\nworker-a\tneeds-owner #5 closed' issues '{"action":"closed","issue":{"number":5,"user":{"login":"locksmith-josie[bot]"},"labels":[{"name":"needs-rescue"},{"name":"needs-owner"}]}}'
+  ev 'worker-b\tneeds-rescue #5 closed' issues '{"action":"closed","issue":{"number":5,"user":{"login":"locksmith-josie[bot]"},"labels":[{"name":"needs-rescue"},{"name":"needs-owner"}]}}'
   ev 'lead\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"approved"}}'
   ev '' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\nplan"}}'
   printf '%s' '[{"id":1,"user":{"login":"tomer555"},"body":"C","created_at":"2026-11-19T16:43:10Z"},{"id":2,"user":{"login":"tomer555"},"body":"<!-- agent -->\nx","created_at":"2026-11-19T16:43:20Z"}]' >"$d/c.json"

@@ -127,3 +127,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 6.2 - done, ticked (control-plane `gateway_bindings` table (migration 0014, FORCE RLS), `PUT /internal/v1/gateway/bindings`, `GET /v1/bindings` reads it; gateway `bindings_publish` publishes at startup with retry, never blocks the relay)
 - Verified: `cargo nextest run -p ls-control-plane bindings` (4 passed), `cargo nextest run -p ls-gateway bindings_publish` (4 passed), tenancy/openapi/tenant_lint tests, clippy -D warnings, fmt, `just quick`, migration guard; independent evaluator PASS
 - Notes for next session: `aws` bindings are not published yet (d2-aws-sts 5.1 adds them). Next: 6.3 (Bindings page in apps/web and apps/desktop on the 6.1 fixtures then the real client), 6.4, 7.2.
+
+## 2026-11-22 worker (alfie, fifth entry)
+- Task: 6.3 and 6.4 - done, ticked (Bindings page in `apps/web` under Agent Gateway and a Bindings screen in `apps/desktop`, both on `client.listBindings()`; shared `bindingDetails()` in `packages/control-plane-client` shows non-secret fields only)
+- Verified: `npm test` for control-plane-client (15), apps/web (60) and apps/desktop (38); `npm run lint`; `just apps-build`
+- Notes for next session: only 7.2 remains (`just up`, `just db-smoke`, `just apps-build`, `just ci`); `just ci` is never run locally, so verify with `just up` + `just db-smoke` and let the PR checks run the suite.

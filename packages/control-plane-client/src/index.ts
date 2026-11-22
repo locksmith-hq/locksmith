@@ -30,6 +30,16 @@ export type BindingSummary = components["schemas"]["BindingSummary"];
 export type BindingKind = components["schemas"]["BindingKind"];
 export type Problem = components["schemas"]["Problem"];
 
+/** Non-secret fields of a binding as label/value pairs for display, in a fixed order per kind; unset fields are skipped. */
+export function bindingDetails(b: BindingSummary): Array<[label: string, value: string]> {
+  const rows: Array<[string, string | number | boolean | null | undefined]> =
+    b.kind === "pg" ? [["Host", b.host], ["Port", b.port], ["User", b.user], ["Database", b.database], ["TLS", b.tls]]
+    : b.kind === "http" ? [["Origin", b.origin], ["Header", b.header]]
+    : b.kind === "git" ? [["Host", b.host], ["Repo", b.repo]]
+    : [["Role", b.role], ["Region", b.region], ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"], ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`]];
+  return rows.filter((r): r is [string, string | number | boolean] => r[1] != null && r[1] !== "").map(([l, v]) => [l, String(v)]);
+}
+
 /** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
 export type AuditOutcomeFilter = "all" | "denied" | "redaction_failed";
 export const auditOutcomeMatches = (e: AuditEvent, f: AuditOutcomeFilter): boolean =>

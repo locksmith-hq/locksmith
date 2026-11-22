@@ -85,3 +85,8 @@
 - Task: p2-packaging - ci-fix (merge conflicts on #534 resolved: .gitignore and justfile, kept both sides; no task started)
 - Verified: just quick -> pass
 - Notes for next session: next takeable tasks none without kind/cosign; 5.4 needs a lead PR, 7.1 is an owner gate. Keep auto-merge off until every task is ticked. #561 (p4-sdks-v2) is dirty (conflicts), not handled this run.
+
+## 2026-11-22 worker
+- Task: p2 CI - ci-fix (macos nextest failed on 464bcbe; PR has no Rust changes, job logs unreadable via proxy, so treated as flake/stale main)
+- Verified: just quick -> ok; merged origin/main (7 commits) and pushed to rerun checks
+- Notes for next session: if macos nextest fails again on the new head, run `cargo nextest run --workspace --profile portable` locally to find the test; read check status first.

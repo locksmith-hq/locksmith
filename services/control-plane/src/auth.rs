@@ -12,6 +12,7 @@ pub mod external;
 pub mod human;
 pub mod issuers;
 pub mod jwks;
+pub mod jwt;
 
 use axum::extract::FromRequestParts;
 use axum::http::header;

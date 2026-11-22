@@ -18,7 +18,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use jsonwebtoken::{Algorithm, Validation};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
@@ -26,16 +25,12 @@ use tracing::Instrument as _;
 
 use super::human::Refused;
 use super::issuers::IssuerRegistry;
+use super::jwt;
 
-/// Clock skew tolerated on `exp`, `nbf` and `iat`.
-pub const LEEWAY_SECS: u64 = 60;
-/// Longest external token examined; anything larger is refused before parsing.
-pub const MAX_TOKEN_BYTES: usize = 8 * 1024;
+pub use super::jwt::{LEEWAY_SECS, MAX_TOKEN_BYTES};
 /// Default maximum `exp - iat` (D4 decision 6): GitHub issues about 10 minutes, projected
 /// Kubernetes tokens at least 10 minutes.
 pub const DEFAULT_MAX_LIFETIME: Duration = Duration::from_secs(3600);
-/// Algorithms an external token may use. The key decides which one applies.
-const ALLOWED: [Algorithm; 2] = [Algorithm::RS256, Algorithm::ES256];
 
 /// A presented external JWT. Deliberately has no `Debug`, `Display`, `Clone` or `Serialize`:
 /// it is read once, verified and dropped (zeroized by `SecretString`).
@@ -133,15 +128,7 @@ impl ExternalVerifier {
         token: &str,
         anchor: TrustAnchor<'_>,
     ) -> Result<ExternalClaims, Refused> {
-        if token.len() > MAX_TOKEN_BYTES {
-            return Err(Refused("too_large"));
-        }
-        // `Algorithm` has no `none` and no unknown values: a header naming either fails here.
-        let header = jsonwebtoken::decode_header(token).map_err(|_| Refused("malformed"))?;
-        if !ALLOWED.contains(&header.alg) {
-            return Err(Refused("algorithm"));
-        }
-        let kid = header.kid.as_deref().ok_or(Refused("no_kid"))?;
+        let (header_alg, kid) = jwt::pre_check(token)?;
         // A token naming another issuer is refused before any outbound request. The signed `iss`
         // is checked again below; this only spares the issuer a fetch for an obvious mismatch.
         if unverified_issuer(token).as_deref() != Some(anchor.issuer) {
@@ -149,22 +136,17 @@ impl ExternalVerifier {
         }
         let key = self
             .issuers
-            .key(anchor.issuer, kid)
+            .key(anchor.issuer, &kid)
             .await
             .map_err(|e| Refused(e.label()))?
             .ok_or(Refused("unknown_key"))?;
-        // The key, not the token, fixes the algorithm: a token cannot pick another one.
-        if key.alg != header.alg {
-            return Err(Refused("algorithm"));
-        }
-
-        let mut validation = Validation::new(key.alg);
-        validation.set_issuer(&[anchor.issuer]);
-        validation.set_audience(&[anchor.audience]);
-        validation.set_required_spec_claims(&["exp", "iat", "iss", "aud", "sub"]);
-        validation.leeway = LEEWAY_SECS;
-        validation.validate_exp = true;
-        validation.validate_nbf = true;
+        jwt::pin_alg(key.alg, header_alg)?;
+        let validation = jwt::validation(
+            key.alg,
+            anchor.issuer,
+            anchor.audience,
+            &["exp", "iat", "iss", "aud", "sub"],
+        );
 
         let data = jsonwebtoken::decode::<Map<String, Value>>(token, &key.key, &validation)
             .map_err(|_| Refused("invalid"))?;

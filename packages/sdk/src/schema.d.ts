@@ -178,6 +178,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report an agent session opening, a heartbeat or a close (gateway only)
+         * @description The gateway reports `open` (agent, token `jti`, kind, binding slug; answers `201` with the session id), `heartbeat` every 5 seconds and `close`. A session not reported within 15 seconds is not live. An agent or session that does not exist in the org is a `404`. Unknown fields and kinds, and a slug over 100 characters, are a `400`. No response carries the `jti`.
+         */
+        post: operations["report_agent_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/readyz": {
         parameters: {
             query?: never;
@@ -683,7 +703,7 @@ export interface paths {
         };
         /**
          * List the org's live agent sessions
-         * @description Agent id, kind, binding slug, start and last-seen times, and whether the session is live (reported within 15 seconds and not revoked). No token, address or secret value is ever returned. Not implemented yet: answers `501` until t8 task 2.1.
+         * @description Agent id, kind, binding slug, start and last-seen times, and whether the session is live (reported within 15 seconds and not revoked). Sessions last seen within the past hour are listed, so a just-ended or revoked session shows as not live. No token, its `jti`, address or secret value is ever returned.
          */
         get: operations["list_agent_sessions"];
         put?: never;
@@ -1263,6 +1283,11 @@ export interface components {
             issuer_kind: string;
             name: string;
         };
+        /** @description The id of a newly opened session. */
+        OpenedSession: {
+            /** Format: uuid */
+            id: string;
+        };
         Org: {
             /** Format: date-time */
             created_at: string;
@@ -1531,6 +1556,35 @@ export interface components {
          * @enum {string}
          */
         SessionKind: "http" | "pg" | "mcp";
+        /**
+         * @description A gateway report about one agent session. Ids, a kind and a binding slug only: there is no
+         *     field for an address or a secret value.
+         */
+        SessionReport: {
+            /** Format: uuid */
+            agent_id: string;
+            /** @enum {string} */
+            event: "open";
+            kind: components["schemas"]["SessionKind"];
+            /** @description The binding slug the session targets (at most 100 characters); empty for none. */
+            slug: string;
+            /**
+             * Format: uuid
+             * @description The `jti` claim of the agent token the session was opened with. Stored so a revoke
+             *     can refuse that token; never returned by any route.
+             */
+            token_jti: string;
+        } | {
+            /** @enum {string} */
+            event: "heartbeat";
+            /** Format: uuid */
+            session_id: string;
+        } | {
+            /** @enum {string} */
+            event: "close";
+            /** Format: uuid */
+            session_id: string;
+        };
         /** @description Result of revoke-all. */
         SessionsRevoked: {
             /**
@@ -2116,6 +2170,94 @@ export interface operations {
             };
             /** @description Not found (including another org's secret) */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    report_agent_session: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the session belongs to (the agent token's `org`) */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionReport"];
+            };
+        };
+        responses: {
+            /** @description Opened */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenedSession"];
+                };
+            };
+            /** @description Heartbeat or close recorded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3484,7 +3626,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -3567,7 +3709,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -4957,15 +5099,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Service unavailable */
             503: {
                 headers: {
@@ -5040,7 +5173,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
             501: {
                 headers: {
                     [name: string]: unknown;
@@ -5126,7 +5259,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
             501: {
                 headers: {
                     [name: string]: unknown;

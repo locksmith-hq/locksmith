@@ -1091,6 +1091,19 @@
         ],
         "type": "object"
       },
+      "OpenedSession": {
+        "description": "The id of a newly opened session.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "Org": {
         "properties": {
           "created_at": {
@@ -1888,6 +1901,86 @@
           "mcp"
         ],
         "type": "string"
+      },
+      "SessionReport": {
+        "description": "A gateway report about one agent session. Ids, a kind and a binding slug only: there is no\nfield for an address or a secret value.",
+        "oneOf": [
+          {
+            "description": "A session opened. Answers `201` with its id, which the gateway uses for the rest.",
+            "properties": {
+              "agent_id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "event": {
+                "enum": [
+                  "open"
+                ],
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/SessionKind"
+              },
+              "slug": {
+                "description": "The binding slug the session targets (at most 100 characters); empty for none.",
+                "type": "string"
+              },
+              "token_jti": {
+                "description": "The `jti` claim of the agent token the session was opened with. Stored so a revoke\ncan refuse that token; never returned by any route.",
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "agent_id",
+              "token_jti",
+              "kind",
+              "slug",
+              "event"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The session is still open: sets its last-seen time to now. Answers `204`.",
+            "properties": {
+              "event": {
+                "enum": [
+                  "heartbeat"
+                ],
+                "type": "string"
+              },
+              "session_id": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "session_id",
+              "event"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The session ended: it stops being live at once. Answers `204`.",
+            "properties": {
+              "event": {
+                "enum": [
+                  "close"
+                ],
+                "type": "string"
+              },
+              "session_id": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "session_id",
+              "event"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "SessionsRevoked": {
         "description": "Result of revoke-all.",
@@ -2751,6 +2844,118 @@
           }
         ],
         "summary": "Fetch the encrypted material of a secret version (gateway only; no plaintext)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/sessions": {
+      "post": {
+        "description": "The gateway reports `open` (agent, token `jti`, kind, binding slug; answers `201` with the session id), `heartbeat` every 5 seconds and `close`. A session not reported within 15 seconds is not live. An agent or session that does not exist in the org is a `404`. Unknown fields and kinds, and a slug over 100 characters, are a `400`. No response carries the `jti`.",
+        "operationId": "report_agent_session",
+        "parameters": [
+          {
+            "description": "The org the session belongs to (the agent token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenedSession"
+                }
+              }
+            },
+            "description": "Opened"
+          },
+          "204": {
+            "description": "Heartbeat or close recorded"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Report an agent session opening, a heartbeat or a close (gateway only)",
         "tags": [
           "internal"
         ]
@@ -4488,7 +4693,7 @@
                 }
               }
             },
-            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2)."
+            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2)."
           },
           "503": {
             "content": {
@@ -4585,7 +4790,7 @@
                 }
               }
             },
-            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2)."
+            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2)."
           },
           "503": {
             "content": {
@@ -6464,7 +6669,7 @@
     },
     "/v1/sessions": {
       "get": {
-        "description": "Agent id, kind, binding slug, start and last-seen times, and whether the session is live (reported within 15 seconds and not revoked). No token, address or secret value is ever returned. Not implemented yet: answers `501` until t8 task 2.1.",
+        "description": "Agent id, kind, binding slug, start and last-seen times, and whether the session is live (reported within 15 seconds and not revoked). Sessions last seen within the past hour are listed, so a just-ended or revoked session shows as not live. No token, its `jti`, address or secret value is ever returned.",
         "operationId": "list_agent_sessions",
         "parameters": [
           {
@@ -6538,16 +6743,6 @@
               }
             },
             "description": "Not found"
-          },
-          "501": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2)."
           },
           "503": {
             "content": {
@@ -6644,7 +6839,7 @@
                 }
               }
             },
-            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2)."
+            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2)."
           },
           "503": {
             "content": {
@@ -6753,7 +6948,7 @@
                 }
               }
             },
-            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2)."
+            "description": "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2)."
           },
           "503": {
             "content": {

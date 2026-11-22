@@ -94,6 +94,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(sessions::revoke_one))
         .routes(routes!(sessions::pause))
         .routes(routes!(sessions::resume))
+        .routes(routes!(sessions::report))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
         .routes(routes!(internal::agent_tool_settings))

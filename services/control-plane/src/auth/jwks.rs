@@ -156,7 +156,7 @@ impl JwksCache {
     }
 
     async fn fetch(&self) -> Result<HashMap<String, Arc<VerificationKey>>, &'static str> {
-        let mut response = self
+        let response = self
             .client
             .get(&self.url)
             .header(reqwest::header::ACCEPT, "application/json")

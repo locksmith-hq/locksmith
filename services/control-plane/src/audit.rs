@@ -153,7 +153,7 @@ pub fn workload_identity_created(
     agent_id: Uuid,
     issuer: &str,
 ) -> Event {
-    let mut attrs = workload_attrs(agent_id, issuer);
+    let attrs = workload_attrs(agent_id, issuer);
     admin(
         kind::WORKLOAD_IDENTITY_CREATED,
         actor,

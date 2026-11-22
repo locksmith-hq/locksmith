@@ -16,5 +16,5 @@
 - [x] 3.2 Verify: `cargo nextest run -p ls-control-plane -E 'binary(audit) | binary(workload_exchange) | binary(workload_identities)'`.
 
 ## 4. Local verification [haiku]
-- [ ] 4.1 `git diff origin/main --stat -- ':!openspec'` touches only the files in the proposal's Impact, and `git diff origin/main -- services/control-plane/tests` shows no changed `assert`.
-- [ ] 4.2 `cargo nextest run -p ls-control-plane -p ls-http`, then `just quick`.
+- [x] 4.1 `git diff origin/main --stat -- ':!openspec'` touches only the files in the proposal's Impact, and `git diff origin/main -- services/control-plane/tests` shows no changed `assert`.
+- [x] 4.2 `cargo nextest run -p ls-control-plane -p ls-http`, then `just quick`.

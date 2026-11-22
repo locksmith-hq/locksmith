@@ -20,3 +20,8 @@
 - Task: 5.2 - blocked
 - Verified: `just up` -> stack healthy; `just quick` -> clean. The `/mcp` WWW-Authenticate comparison against origin/main and `just apps-build` were not run (cold service builds exceed the run budget).
 - Notes for next session: the PR's `ci-platforms` macos job failed with exit code 100 (not a code failure as far as annotations show; I cannot rerun it, the token gets 403). A new push reruns it. Only 5.2 remains; leave it unticked until the smoke test runs.
+
+## 2026-11-22 worker (alfie)
+- Task: CI fix - macos `ci-platforms` failure
+- Cause: the new `mcp_store` test binary needs Postgres (testcontainers) and was not in the `portable` nextest skip list (`.config/nextest.toml`); added it.
+- Notes for next session: 5.2 (smoke test and `just apps-build`) still pending; leave unticked.

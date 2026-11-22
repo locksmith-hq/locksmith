@@ -17,5 +17,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-22 (owner session, contract approach)
 - Before starting 1.4 found that the Rust integration tests are not HTTP: each of about 17 files builds its own router and calls it with `tower::oneshot` through its own helper (30 call sites), so "record their HTTP calls" has no hook. Amended tasks 1.4 to 1.6 (and design decision 6) to a scenario suite over real HTTP plus a two-server diff. Not started: the suite itself is about 37 paths of scenarios, sized for several worker runs.
+
 ## 2026-11-22 (owner session, task 1.2)
 - Task 1.2 done: baseline of oxlint (14 warnings, 0 errors), oxfmt (86 of 98 files would change; one repo-wide formatting commit needed) and knip (26 unused files, mostly the mockup entry; a handful of dependency fixes) over the real packages; configs each needs are in `docs/research/nestjs-typescript7.md`.

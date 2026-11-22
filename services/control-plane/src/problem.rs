@@ -22,6 +22,7 @@ pub enum Kind {
     EmailVerificationRequired,
     NotFound,
     Conflict,
+    NotImplemented,
     PayloadTooLarge,
     UnsupportedMediaType,
     Unavailable,
@@ -37,6 +38,7 @@ impl Kind {
             Kind::EmailVerificationRequired => StatusCode::FORBIDDEN,
             Kind::NotFound => StatusCode::NOT_FOUND,
             Kind::Conflict => StatusCode::CONFLICT,
+            Kind::NotImplemented => StatusCode::NOT_IMPLEMENTED,
             Kind::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Kind::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Kind::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -53,6 +55,7 @@ impl Kind {
             Kind::EmailVerificationRequired => "email-verification-required",
             Kind::NotFound => "not-found",
             Kind::Conflict => "conflict",
+            Kind::NotImplemented => "not-implemented",
             Kind::PayloadTooLarge => "payload-too-large",
             Kind::UnsupportedMediaType => "unsupported-media-type",
             Kind::Unavailable => "unavailable",
@@ -68,6 +71,7 @@ impl Kind {
             Kind::EmailVerificationRequired => "Email verification required",
             Kind::NotFound => "Resource not found",
             Kind::Conflict => "Conflict",
+            Kind::NotImplemented => "Not implemented",
             Kind::PayloadTooLarge => "Request body too large",
             Kind::UnsupportedMediaType => "Unsupported media type",
             Kind::Unavailable => "Service unavailable",
@@ -120,6 +124,11 @@ impl ApiError {
     /// policy, a private issuer address).
     pub fn unprocessable(detail: impl Into<String>) -> Self {
         Self::new(Kind::Unprocessable, detail)
+    }
+
+    /// `501`: the route is part of the contract but its behaviour is not built yet.
+    pub fn not_implemented() -> Self {
+        Self::bare(Kind::NotImplemented)
     }
 
     pub fn not_found() -> Self {

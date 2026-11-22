@@ -488,6 +488,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/current/agents/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause every agent of the org
+         * @description Sets the org's `agents_paused` flag: the gateway refuses every agent request and closes live sessions within 10 seconds, before any decrypt. Idempotent. Appends an `agents.paused` ledger event. Not implemented yet: answers `501` until t8 task 2.2.
+         */
+        post: operations["pause_agents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/current/agents/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume the agents of the org
+         * @description Clears the org's `agents_paused` flag; requests with valid grants succeed again without re-enrolment. Idempotent. Appends an `agents.resumed` ledger event. Not implemented yet: answers `501` until t8 task 2.2.
+         */
+        post: operations["resume_agents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org_id}": {
         parameters: {
             query?: never;
@@ -634,6 +674,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the org's live agent sessions
+         * @description Agent id, kind, binding slug, start and last-seen times, and whether the session is live (reported within 15 seconds and not revoked). No token, address or secret value is ever returned. Not implemented yet: answers `501` until t8 task 2.1.
+         */
+        get: operations["list_agent_sessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/revoke-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke every live agent session of the org
+         * @description Every live session closes within 10 seconds; new sessions from the same agents still work if their grants do. Appends a `session.revoked` ledger event with the count. Not implemented yet: answers `501` until t8 task 2.2.
+         */
+        post: operations["revoke_all_agent_sessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{session_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke one agent session
+         * @description Marks the session's agent token revoked; the gateway closes the session and refuses that token within 10 seconds. Appends a `session.revoked` ledger event. Not implemented yet: answers `501` until t8 task 2.2.
+         */
+        post: operations["revoke_agent_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workload-identities": {
         parameters: {
             query?: never;
@@ -765,6 +865,25 @@ export interface components {
             /** @description Whether an admin has revoked this agent's MCP access. */
             revoked: boolean;
         };
+        /** @description A live (or recently live) agent session. Never carries a token, an address or a value. */
+        AgentSession: {
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["SessionKind"];
+            /** Format: date-time */
+            last_seen_at: string;
+            /**
+             * @description True while the gateway reported the session within the last 15 seconds (three
+             *     heartbeats) and it is not revoked.
+             */
+            live: boolean;
+            /** @description The binding slug the session targets; may be empty for a session with no binding. */
+            slug: string;
+            /** Format: date-time */
+            started_at: string;
+        };
         /**
          * @description A minted agent token (RFC 6749 section 5.1 shape). No `Debug`: the token is a bearer
          *     credential for the gateway only.
@@ -799,6 +918,11 @@ export interface components {
         /** @description The org's agent-layer tool overrides. A tool with no row is at its registry default. */
         AgentToolSettingSet: {
             items: components["schemas"]["AgentToolSetting"][];
+        };
+        /** @description The org's pause state. */
+        AgentsPauseState: {
+            /** @description While true the gateway refuses every agent request of the org. */
+            agents_paused: boolean;
         };
         /** @description Where an event landed in the org's chain. */
         AppendedEvent: {
@@ -1182,6 +1306,28 @@ export interface components {
             next?: string | null;
         };
         /** @description One page of a list. `next` is absent on the last page. */
+        Paged_AgentSession: {
+            items: {
+                /** Format: uuid */
+                agent_id: string;
+                /** Format: uuid */
+                id: string;
+                kind: components["schemas"]["SessionKind"];
+                /** Format: date-time */
+                last_seen_at: string;
+                /**
+                 * @description True while the gateway reported the session within the last 15 seconds (three
+                 *     heartbeats) and it is not revoked.
+                 */
+                live: boolean;
+                /** @description The binding slug the session targets; may be empty for a session with no binding. */
+                slug: string;
+                /** Format: date-time */
+                started_at: string;
+            }[];
+            next?: string | null;
+        };
+        /** @description One page of a list. `next` is absent on the last page. */
         Paged_Environment: {
             items: {
                 /** Format: date-time */
@@ -1379,6 +1525,19 @@ export interface components {
             version: number;
             /** @description A0-7 `dek-wrap` blob (the KMS-wrapped data key), standard base64 with padding. */
             wrapped_dek: string;
+        };
+        /**
+         * @description Which gateway path a session came in on.
+         * @enum {string}
+         */
+        SessionKind: "http" | "pg" | "mcp";
+        /** @description Result of revoke-all. */
+        SessionsRevoked: {
+            /**
+             * Format: int32
+             * @description How many sessions were revoked.
+             */
+            revoked: number;
         };
         /**
          * @description A trust policy. The `handle` is the non-secret routing value a workload sends to the
@@ -3262,6 +3421,172 @@ export interface operations {
             };
         };
     };
+    pause_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The org's pause state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentsPauseState"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    resume_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The org's pause state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentsPauseState"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_org: {
         parameters: {
             query?: never;
@@ -4563,6 +4888,254 @@ export interface operations {
                 };
             };
             /** @description Service or key service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_agent_sessions: {
+        parameters: {
+            query?: {
+                /** @description Page size, 1 to 100 (default 50). */
+                limit?: number;
+                /** @description Opaque cursor: the `next` value of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Paged_AgentSession"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_all_agent_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many sessions were revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionsRevoked"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_agent_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Session id from the list */
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The revoked session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSession"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 tasks 2.1 and 2.2). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

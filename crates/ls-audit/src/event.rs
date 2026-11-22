@@ -118,6 +118,14 @@ pub mod kind {
     /// person's consent for it (m1-remote-mcp task 4.2). Outcome `ok`, or `error` when the issuer
     /// call failed (the database revoke still stands). Records the layer and a static reason only.
     pub const MCP_ISSUER_REVOKE: Code = Code::new("mcp.issuer_revoke");
+    /// One live agent session, or every live session of the org, was revoked by a member
+    /// (t8-sessions-and-revoke). Records the session id (revoke one) or the count (revoke all),
+    /// never the session's token.
+    pub const SESSION_REVOKED: Code = Code::new("session.revoked");
+    /// A member paused every agent of the org (t8-sessions-and-revoke).
+    pub const AGENTS_PAUSED: Code = Code::new("agents.paused");
+    /// A member resumed the agents of the org (t8-sessions-and-revoke).
+    pub const AGENTS_RESUMED: Code = Code::new("agents.resumed");
 }
 
 /// Common outcomes.
@@ -155,6 +163,10 @@ pub mod attr {
     pub const TOOL: Code = Code::new("tool");
     /// The id of a short-lived credential (never the credential itself).
     pub const CREDENTIAL_ID: Code = Code::new("credential_id");
+    /// The id of an agent session (never its token).
+    pub const SESSION_ID: Code = Code::new("session_id");
+    /// How many sessions a revoke-all closed.
+    pub const SESSIONS_REVOKED: Code = Code::new("sessions_revoked");
     /// The `name=value` pairs of the verified external-token claims a workload identity policy
     /// names (a [`Text`](super::Text)); nothing else from the token.
     pub const CLAIMS: Code = Code::new("claims");

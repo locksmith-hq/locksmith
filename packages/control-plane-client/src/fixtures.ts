@@ -1,6 +1,6 @@
 // Fixture data for the MCP tool switches and clients, shaped like the control-plane responses.
 // Test and story data only: ids and names, never a token or a secret value.
-import type { McpClient, McpToolSetting } from "./index";
+import type { AgentSession, AgentsPauseState, McpClient, McpToolSetting } from "./index";
 
 export const mcpToolSettings: McpToolSetting[] = [
   { layer: "hub", tool: "list_projects", description: "Projects in your org.", default_enabled: true, enabled: true, overridden: false },
@@ -30,3 +30,37 @@ export const mcpClients: McpClient[] = [
     revoked_at: "2026-01-03T00:00:00Z",
   },
 ];
+
+// Live agent sessions: ids, a kind, a binding slug and times only (never a token, its jti or an address).
+export const agentSessions: AgentSession[] = [
+  {
+    id: "0192f0b0-0000-7000-8000-000000000001",
+    agent_id: "0192f0a0-0000-7000-8000-0000000000a1",
+    kind: "http",
+    slug: "github-api",
+    started_at: "2026-01-01T00:00:00Z",
+    last_seen_at: "2026-01-01T00:05:00Z",
+    live: true,
+  },
+  {
+    id: "0192f0b0-0000-7000-8000-000000000002",
+    agent_id: "0192f0a0-0000-7000-8000-0000000000a2",
+    kind: "pg",
+    slug: "orders-db",
+    started_at: "2026-01-01T00:00:00Z",
+    last_seen_at: "2026-01-01T00:00:30Z",
+    live: false,
+  },
+  {
+    id: "0192f0b0-0000-7000-8000-000000000003",
+    agent_id: "0192f0a0-0000-7000-8000-0000000000a1",
+    kind: "mcp",
+    slug: "",
+    started_at: "2026-01-01T00:01:00Z",
+    last_seen_at: "2026-01-01T00:05:00Z",
+    live: true,
+  },
+];
+
+export const agentsPaused: AgentsPauseState = { agents_paused: true };
+export const agentsResumed: AgentsPauseState = { agents_paused: false };

@@ -17,7 +17,19 @@ fn cwd(v: &Value) -> PathBuf {
         .map_or(c, Into::into)
 }
 
-/// PreToolUse without a readable tool call, or a shell tool without its command, must cancel.
+/// Tools `parse` recognises. The payload schema is doc-derived, so a known tool whose input does
+/// not parse (a path key under another name) must cancel, not pass.
+const KNOWN_TOOLS: &[&str] = &[
+    "execute_command",
+    "run_commands",
+    "read_file",
+    "write_to_file",
+    "replace_in_file",
+    "apply_patch",
+    "search_files",
+];
+
+/// PreToolUse without a readable tool call, or a known tool that does not parse, must cancel.
 pub fn unreadable(event: &str, v: &Value) -> bool {
     if event != "PreToolUse" {
         return false;
@@ -27,13 +39,10 @@ pub fn unreadable(event: &str, v: &Value) -> bool {
         (None, Some(c)) => (field(c, "name"), c.get("input")),
         (None, None) => return true,
     };
-    let (Some(name), Some(args)) = (name, args) else {
+    let (Some(name), Some(_)) = (name, args) else {
         return true;
     };
-    matches!(name, "execute_command") && field(args, "command").is_none()
-        || name == "run_commands"
-            && args.get("commands").is_none()
-            && field(args, "command").is_none()
+    KNOWN_TOOLS.contains(&name) && parse(event, v).is_none()
 }
 
 pub fn parse(event: &str, v: &Value) -> Option<Event> {

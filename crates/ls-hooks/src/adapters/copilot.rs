@@ -7,22 +7,21 @@ use crate::{Decision, Event};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
-/// `preToolUse` with `toolName` but no readable `toolArgs` must deny, not pass as an unknown tool.
+/// Tools the `preToolUse` parser recognises (doc-derived schema: a known tool whose arguments
+/// do not parse must deny, not pass).
+const KNOWN_TOOLS: &[&str] = &["bash", "powershell", "view", "edit", "create", "grep"];
+
+/// `preToolUse` with `toolName` but no readable `toolArgs`, or a known tool that does not parse,
+/// must deny, not pass as an unknown tool.
 pub fn unreadable(event: &str, v: &Value) -> bool {
     event == "preToolUse"
         && v.get("toolName").is_some()
-        && match v.get("toolArgs") {
+        && (match v.get("toolArgs") {
             None | Some(Value::Null) => true,
-            Some(Value::String(s)) => match serde_json::from_str::<Value>(s) {
-                Ok(a) => shell_without_command(v, &a),
-                Err(_) => true,
-            },
-            Some(a) => shell_without_command(v, a),
-        }
-}
-
-fn shell_without_command(v: &Value, args: &Value) -> bool {
-    matches!(field(v, "toolName"), Some("bash" | "powershell")) && field(args, "command").is_none()
+            Some(Value::String(s)) => serde_json::from_str::<Value>(s).is_err(),
+            Some(_) => false,
+        } || field(v, "toolName").is_some_and(|n| KNOWN_TOOLS.contains(&n))
+            && parse(event, v).is_none())
 }
 
 pub fn parse(event: &str, v: &Value) -> Option<Event> {

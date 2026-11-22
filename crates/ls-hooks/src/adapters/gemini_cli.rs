@@ -6,14 +6,22 @@ use crate::{Decision, Event};
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// A tool event whose shell command or tool input cannot be read must deny, not pass as unknown.
+/// Tools `parse` recognises. A payload schema is only doc-derived, so a known tool whose input
+/// cannot be turned into an `Event` (a path key under another name) must deny, not pass.
+const KNOWN_TOOLS: &[&str] = &[
+    "run_shell_command",
+    "read_file",
+    "write_file",
+    "replace",
+    "grep_search",
+];
+
+/// A tool event whose input cannot be read, or a known tool that does not parse, must deny.
 pub fn unreadable(event: &str, v: &Value) -> bool {
     event == "BeforeTool"
         && (v.get("tool_input").is_none()
-            || (field(v, "tool_name") == Some("run_shell_command")
-                && v.get("tool_input")
-                    .and_then(|t| field(t, "command"))
-                    .is_none()))
+            || (field(v, "tool_name").is_some_and(|n| KNOWN_TOOLS.contains(&n))
+                && parse(event, v).is_none()))
 }
 
 pub fn parse(event: &str, v: &Value) -> Option<Event> {

@@ -6,7 +6,7 @@ A person can add a secret or a new version from the console or desktop; the valu
 ## ADDED Requirements
 
 ### Requirement: The API accepts only ciphertext
-Secret and version creation SHALL accept only a sealed ciphertext, a wrapped DEK and the version number, SHALL return only version metadata, and SHALL NOT accept, return or log a plaintext value, DEK or wrapped DEK.
+Secret and version creation SHALL accept a sealed ciphertext, a wrapped DEK and the version number, SHALL return only version metadata, SHALL NOT accept a plaintext value or plaintext DEK, and SHALL NOT return or log a value, DEK or wrapped DEK.
 
 #### Scenario: Sealed create
 - **WHEN** a client posts a validly sealed version for the secret's next version
@@ -53,3 +53,10 @@ The console and desktop SHALL seal the value with the Rust sealing code compiled
 #### Scenario: Form states
 - **WHEN** the key is still being provisioned, the version is stale, or the user lacks access
 - **THEN** the form shows a preparing state, a single automatic retry, or a `403` message respectively, and never shows the value again
+
+### Requirement: Seal keys are signed by the gateway
+The seal-key response SHALL carry a gateway signature over the org, environment, key id and public key, and every client SHALL verify it against a pinned gateway verifying key before sealing.
+
+#### Scenario: Substituted key refused
+- **WHEN** the control plane returns a public key whose signature does not verify under the pinned gateway key
+- **THEN** the client refuses to seal and no value leaves the device

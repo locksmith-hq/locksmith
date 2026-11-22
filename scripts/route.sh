@@ -3,6 +3,7 @@
 #   route.sh event <event.json>    roles to wake for a GitHub event, "role<TAB>reason" per line (wake-agents.yml)
 #   route.sh debate <issue>        debate guard: "wake <role> <why>" or "wait <why>"; agents act only on their own wake
 #   route.sh fire <role> <reason>  wake a role's routine; its token comes from the env var routing.json names
+#   route.sh tick                  fire each batched (Opus) role once for its queue (wake-agents.yml, every 2 h)
 #   route.sh selftest
 # Roles come from GitHub logins, so an agent cannot speak for another role or skip the cap. Shortcut: while
 # identities are paused (#299) agents post as the owner and a role marker decides; drop it once they are live.
@@ -141,8 +142,40 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   esac | awk -F'\t' '!seen[$1]++'  # one wake per role per event
 }
 
+# Batched roles (routing.json `batched`: the Opus routines; owner 2026-11-22: 29 Opus lead runs in 24 h, mostly for
+# nothing) wake at once only when the owner tags them. Any other wake labels the issue or PR `wake-<role>`; `tick`
+# (wake-agents.yml, every 2 h) fires each role once for everything labelled, then clears those labels.
+batched() { [ "$(cfgq --arg r "$1" '.roles[$r].batched // false')" = true ]; }
+now_ok() { [[ "$1" == "owner tagged you"* || "$1" == queue:* ]]; }
+
+queue_add() { # <role> <reason>: label the issue or PR the reason names; main's state needs no label (tick reads it)
+  local n; n=$(grep -oE '#[0-9]+' <<<"$2" | head -1 | tr -d '#')
+  if [ -n "$n" ] && [ -z "${ROUTE_DRYRUN:-}" ]; then gh api "repos/$repo/issues/$n/labels" -f "labels[]=wake-$1" >/dev/null || return 1; fi
+  echo "queued for $1${n:+ on #$n}: $2"
+}
+
+queue_of() { # <role>: one item per line; from GitHub or $QUEUE_JSON {"items": [...], "main": {...}} in the selftest
+  local st; st=${QUEUE_JSON:+$(cat "$QUEUE_JSON")}
+  [ -n "$st" ] || st=$(jq -n --argjson i "$(gh api "repos/$repo/issues?labels=wake-$1&state=all&per_page=100" -q '[.[]|{number, labels: [.labels[].name]}]')" \
+    --argjson m "$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=1" -q '.workflow_runs[0]|{conclusion, updated_at}')" '{items: $i, main: $m}')
+  jq -r --arg r "$1" --arg now "${NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" '
+    (.items[]|"#\(.number) (\([.labels[]|select(startswith("wake-")|not)]|join(", ")))"),
+    (select($r == "lead")|.main // {}|select(.conclusion == "failure" and (($now|fromdateiso8601) - (.updated_at|fromdateiso8601)) > 7200)|"main red over 2 h")' <<<"$st"
+}
+
+tick() { # fire each batched role once for its queue, then clear the labels it was fired for
+  local r q n code
+  for r in $(cfgq '.roles|to_entries[]|select(.value.batched == true)|.key'); do
+    q=$(queue_of "$r"); [ -n "$q" ] || { echo "$r: queue empty"; continue; }
+    code=$(fire "$r" "queue: $(paste -sd ';' - <<<"$q" | sed 's/;/; /g')" | tail -1); echo "$r: fired ($code)"
+    [[ "$code" == 2* ]] || continue  # shortcut: a wake labelled between this fire and the clear is cleared unseen; rare, next owner tag or event re-adds it
+    for n in $(grep -oE '^#[0-9]+' <<<"$q" | tr -d '#'); do gh api -X DELETE "repos/$repo/issues/$n/labels/wake-$r" >/dev/null 2>&1; done
+  done
+}
+
 fire() { # <role> <reason>
   local trig secret token
+  if batched "$1" && ! now_ok "$2"; then queue_add "$1" "$2"; return; fi
   trig=$(cfgq --arg r "$1" '.roles[$r].trigger // ""'); secret=$(cfgq --arg r "$1" '.roles[$r].secret // ""')
   [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
@@ -235,6 +268,21 @@ no role marker"
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"
   DEBATE_JSON=$d/deb.json ev 'pm\tdebate #9: turn 2 of 3' issue_comment '{"issue":{"number":9,"labels":[{"name":"debate"}]},"comment":{"user":{"login":"locksmith-linus[bot]"},"body":"x"}}'
+  # batched (Opus) roles wake at once only for an owner tag or their own tick; everything else is queued on its issue
+  for w in "owner tagged you on #8: u" "queue: #5 (needs-rescue)"; do now_ok "$w" && echo "ok: at once: $w" || { echo "FAIL: at once: $w"; fail=1; }; done
+  for rw in "lead|needs-rescue #5 opened|on #5" "lead|CI failed on main|" "pm|debate #9: turn 2 of 3|on #9" "pm|research tagged you on #6: u|on #6" "research|needs-research #6 opened|on #6"; do
+    IFS='|' read -r r w on <<<"$rw"; got=$(ROUTE_DRYRUN=1 fire "$r" "$w")
+    [ "$got" = "queued for $r${on:+ $on}: $w" ] && echo "ok: queued: $r $w" || { echo "FAIL: queued: $r $w got '$got'"; fail=1; }
+  done
+  got=$(fire worker-a "CI failed on PR #12 (x)" | head -1); [ "$got" = "waking worker-a: CI failed on PR #12 (x)" ] && echo "ok: workers fire at once" || { echo "FAIL: worker got '$got'"; fail=1; }
+  qo() { # <role> <expected lines> <state json>
+    printf '%s' "$3" >"$d/q.json"; got=$(QUEUE_JSON=$d/q.json NOW=2026-11-22T12:00:00Z queue_of "$1")
+    [ "$got" = "$(printf '%b' "$2")" ] && echo "ok: $1 queue -> ${2:-empty}" || { echo "FAIL: $1 queue want '$2' got '$got'"; fail=1; }
+  }
+  qo lead '' '{"items":[],"main":{"conclusion":"success","updated_at":"2026-11-22T09:00:00Z"}}'
+  qo lead '#5 (needs-rescue)\n#9 (debate)\nmain red over 2 h' '{"items":[{"number":5,"labels":["needs-rescue","wake-lead"]},{"number":9,"labels":["debate","wake-lead"]}],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
+  qo lead '' '{"items":[],"main":{"conclusion":"failure","updated_at":"2026-11-22T11:00:00Z"}}'  # under 2 h: workers try first
+  qo pm '#597 (needs-work)' '{"items":[{"number":597,"labels":["needs-work","wake-pm"]}],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
   [ "$fail" = 0 ] && echo "route selftest: OK"; return "$fail"
 }
 
@@ -242,6 +290,7 @@ case "${1:-}" in
   event) event "${2:?event.json}" ;;
   debate) debate_input "${2:?issue}" | decide ;;
   fire) fire "${2:?role}" "${3:?reason}" ;;
+  tick) tick ;;
   selftest) selftest ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;
 esac

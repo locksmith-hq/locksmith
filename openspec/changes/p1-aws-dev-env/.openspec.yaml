@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-11-19
-# Cognito (task group 3) is consumed by t1-human-auth only as configuration; no code dependency.
-x-depends_on: []

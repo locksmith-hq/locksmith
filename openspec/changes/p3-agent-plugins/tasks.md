@@ -38,8 +38,8 @@
 
 ## 7. Docs and leak safety [haiku]
 - [x] 7.1 Update `integrations/README.md` (generated file list, regenerate command) and add an install table to the docs for all supported agents with their protection labels.
-- [ ] 7.2 Run the leak scan over new fixtures and integration files; fix any hit.
-- [ ] 7.3 Verify: `just leak-scan` and `bash scripts/tree-check.sh`.
+- [x] 7.2 Run the leak scan over new fixtures and integration files; fix any hit.
+- [x] 7.3 Verify: `just leak-scan` and `bash scripts/tree-check.sh`.
 
 ## 8. Local verification [sonnet]
 - [ ] 8.1 `just up`, then `just test <name>` for gemini-cli, copilot, windsurf, cline and generic-mcp and a `smith init` plus `smith doctor` run in a scratch repo carrying all agent markers.

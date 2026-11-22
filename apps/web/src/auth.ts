@@ -28,6 +28,8 @@ export type AuthState =
 export interface SignedInUser { accessToken: string; email?: string; name?: string }
 
 export interface AuthService {
+  /** Sign-in choices this deployment offers; all three when omitted. Cognito has no GitHub provider. */
+  providers?: Provider[];
   /** Handles a redirect callback if the URL carries one, then reports the state. */
   start(): Promise<void>;
   signIn(provider: Provider): Promise<void>;
@@ -42,6 +44,8 @@ export interface AuthConfig {
   issuer: string;
   clientId: string;
   redirectUri: string;
+  /** Cognito hosted-UI origin. Set, the Cognito endpoint layout is used instead of Keycloak's. */
+  hostedDomain?: string;
   apiBase?: string;
   /** Page navigation; injectable for tests. */
   navigate?: (url: string) => void;
@@ -53,6 +57,7 @@ export function defaultConfig(): AuthConfig {
     issuer: env.VITE_OIDC_ISSUER ?? "http://localhost:8180/realms/locksmith",
     clientId: env.VITE_OIDC_CLIENT_ID ?? "locksmith-web",
     redirectUri: `${window.location.origin}/`,
+    hostedDomain: env.VITE_OIDC_HOSTED_DOMAIN,
   };
 }
 
@@ -62,10 +67,12 @@ export function safeReturnTo(v: unknown): string {
 }
 
 const IDP_HINTS: Partial<Record<Provider, string>> = { github: "github", google: "google" };
+const COGNITO_IDPS: Partial<Record<Provider, string>> = { google: "Google" };
 
 export function createAuth(cfg: AuthConfig): AuthService {
   const base = cfg.issuer.replace(/\/$/, "");
   const oidc = `${base}/protocol/openid-connect`;
+  const host = cfg.hostedDomain?.replace(/\/$/, "");
   const navigate = cfg.navigate ?? ((u: string) => window.location.assign(u));
   const mgr = new Manager({
     authority: base,
@@ -75,13 +82,10 @@ export function createAuth(cfg: AuthConfig): AuthService {
     response_type: "code",
     scope: "openid email profile",
     // Static metadata: no discovery round trip. Keycloak path layout.
-    metadata: {
-      issuer: base,
-      authorization_endpoint: `${oidc}/auth`,
-      token_endpoint: `${oidc}/token`,
-      end_session_endpoint: `${oidc}/logout`,
-      jwks_uri: `${oidc}/certs`,
-    },
+    metadata: host
+      // Cognito: tokens are issued by `base` but served from the hosted-UI domain.
+      ? { issuer: base, authorization_endpoint: `${host}/oauth2/authorize`, token_endpoint: `${host}/oauth2/token`, end_session_endpoint: `${host}/logout`, jwks_uri: `${base}/.well-known/jwks.json` }
+      : { issuer: base, authorization_endpoint: `${oidc}/auth`, token_endpoint: `${oidc}/token`, end_session_endpoint: `${oidc}/logout`, jwks_uri: `${oidc}/certs` },
     userStore: new WebStorageStateStore({ store: new InMemoryWebStorage() }),
     stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
     automaticSilentRenew: true, // refresh-token renewal; no iframe
@@ -106,6 +110,7 @@ export function createAuth(cfg: AuthConfig): AuthService {
     fetch(`${cfg.apiBase ?? ""}${path}`, { method: "POST", headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
 
   return {
+    providers: host ? ["google", "email"] : ["github", "google", "email"],
     async start() {
       const q = new URLSearchParams(window.location.search);
       if (!(q.has("code") || q.has("error")) || !q.has("state")) { set({ status: "signed-out" }); return; }
@@ -131,10 +136,10 @@ export function createAuth(cfg: AuthConfig): AuthService {
       }
     },
     async signIn(provider) {
-      const hint = IDP_HINTS[provider];
+      const hint = host ? COGNITO_IDPS[provider] : IDP_HINTS[provider];
       await mgr.redirectToSignin({
         state: { returnTo: safeReturnTo(window.location.pathname + window.location.search + window.location.hash) },
-        extraQueryParams: hint ? { kc_idp_hint: hint } : undefined,
+        extraQueryParams: hint ? { [host ? "identity_provider" : "kc_idp_hint"]: hint } : undefined,
       });
     },
     async signOut() {
@@ -144,7 +149,8 @@ export function createAuth(cfg: AuthConfig): AuthService {
       if (!u) return;
       try { await api("/v1/auth/sign-out", u.access_token); } catch { /* the audit marker is best effort */ }
       await mgr.removeUser();
-      await mgr.redirectToSignout({ id_token_hint: u.id_token });
+      // Cognito's /logout wants client_id and logout_uri instead of the OIDC post_logout params.
+      await mgr.redirectToSignout({ id_token_hint: u.id_token, extraQueryParams: host ? { client_id: cfg.clientId, logout_uri: cfg.redirectUri } : undefined });
     },
     token: () => (user && !user.expired ? user.access_token : undefined),
     getState: () => state,

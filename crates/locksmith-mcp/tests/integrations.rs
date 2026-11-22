@@ -61,6 +61,8 @@ fn shipped_mcp_entries_name_locksmith_mcp_and_the_server_handshakes() {
             .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(live).is_file()));
         if !on_path {
             println!("skip live: `{live}` is not on PATH ({file})");
+        } else {
+            println!("live variant not implemented: `{live}` is on PATH ({file})");
         }
     }
     let replies = handshake();

@@ -5,7 +5,7 @@
 //! agent with the origin each secret may be sent to through this gateway: ids, names, modes,
 //! expiry and origins only, never a value.
 //!
-//! [`GrantCache`] keeps each agent's grants for at most [`MAX_GRANT_TTL`] (design decision 4), so
+//! [`GrantCache`] keeps each agent's grants for at most [`MAX_CACHE_TTL`] (design decision 4), so
 //! a revoked grant stops working within that time; `/v1/relay` checks [`allows_relay`] before any
 //! material fetch or unwrap (S4 task 2.2).
 
@@ -24,6 +24,7 @@ use uuid::Uuid;
 
 use crate::decrypt::{BoxFuture, ControlPlane, Internal};
 use crate::relay::{Relay, error};
+use crate::ttl::MAX_CACHE_TTL;
 
 /// Largest grants response read.
 const MAX_GRANTS_RESPONSE: usize = 1024 * 1024;
@@ -120,14 +121,10 @@ impl GrantSource for ControlPlane {
     }
 }
 
-/// Longest time a grant set is served from the cache (design decision 4: at most 10 s), so a
-/// revocation takes effect within it. Larger configured TTLs are clamped to this.
-pub const MAX_GRANT_TTL: Duration = Duration::from_secs(10);
-
 /// Grant cache bounds.
 #[derive(Debug, Clone, Copy)]
 pub struct GrantCacheSettings {
-    /// Clamped to [`MAX_GRANT_TTL`]; zero disables caching.
+    /// Clamped to [`MAX_CACHE_TTL`]; zero disables caching.
     pub ttl: Duration,
     pub max_entries: usize,
 }
@@ -135,7 +132,7 @@ pub struct GrantCacheSettings {
 impl Default for GrantCacheSettings {
     fn default() -> Self {
         Self {
-            ttl: MAX_GRANT_TTL,
+            ttl: MAX_CACHE_TTL,
             max_entries: 10_000,
         }
     }
@@ -160,7 +157,7 @@ impl GrantCache {
         Self {
             source,
             settings: GrantCacheSettings {
-                ttl: settings.ttl.min(MAX_GRANT_TTL),
+                ttl: settings.ttl.min(MAX_CACHE_TTL),
                 ..settings
             },
             entries: Mutex::new(HashMap::new()),
@@ -475,11 +472,11 @@ mod tests {
                 max_entries: 10,
             },
         );
-        assert_eq!(c.ttl(), MAX_GRANT_TTL);
-        assert_eq!(MAX_GRANT_TTL, Duration::from_secs(10));
+        assert_eq!(c.ttl(), MAX_CACHE_TTL);
+        assert_eq!(MAX_CACHE_TTL, Duration::from_secs(10));
         assert_eq!(
             GrantCache::new(src, GrantCacheSettings::default()).ttl(),
-            MAX_GRANT_TTL
+            MAX_CACHE_TTL
         );
     }
 
@@ -496,7 +493,7 @@ mod tests {
             c.get_at(AGENT, t0 + Duration::from_millis(9_999)),
             Some(set)
         );
-        assert_eq!(c.get_at(AGENT, t0 + MAX_GRANT_TTL), None, "gone at the TTL");
+        assert_eq!(c.get_at(AGENT, t0 + MAX_CACHE_TTL), None, "gone at the TTL");
         assert_eq!(c.get_at(AGENT, t0), None, "and removed");
     }
 
@@ -505,7 +502,7 @@ mod tests {
         let c = GrantCache::new(
             Arc::new(testkit::StubGrants::default()),
             GrantCacheSettings {
-                ttl: MAX_GRANT_TTL,
+                ttl: MAX_CACHE_TTL,
                 max_entries: 2,
             },
         );
@@ -524,7 +521,7 @@ mod tests {
         let c = GrantCache::new(
             Arc::new(testkit::StubGrants::default()),
             GrantCacheSettings {
-                ttl: MAX_GRANT_TTL,
+                ttl: MAX_CACHE_TTL,
                 max_entries: 3,
             },
         );
@@ -538,7 +535,7 @@ mod tests {
         c.insert_at(a, Vec::new(), t0);
         c.insert_at(b, Vec::new(), t0 + Duration::from_secs(5));
         // `a` is stale but the map is below the bound: no sweep, and it is never served.
-        let later = t0 + MAX_GRANT_TTL + Duration::from_secs(1);
+        let later = t0 + MAX_CACHE_TTL + Duration::from_secs(1);
         c.insert_at(d, Vec::new(), later);
         assert_eq!(c.lock().len(), 3, "no sweep below the bound");
         // Full: the sweep drops only the stale `a`; the fresh `b` and `d` survive.

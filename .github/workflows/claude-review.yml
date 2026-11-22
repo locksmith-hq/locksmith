@@ -6,7 +6,7 @@ name: claude-review
 # The status is set only here, so a PR whose job never ran has no status and cannot merge (a skipped job would
 # count as passing; a missing status does not). It checks, in order:
 #   1. owner PRs on a non-claude/* branch pass (the owner reviews their own work);
-#   2. owned paths (main's .github/CODEOWNERS, last match wins) need the owner's approval of this head; an owner
+#   2. owned paths (main's .github/CODEOWNERS, last match wins) need the owner's approval of this head (or of a head with the same PR diff); an owner
 #      review re-runs the job;
 #   3. complete: every tasks.md the PR touches is fully ticked (planning-only PRs exempt, #112);
 #   4. review: an independent Claude (Opus) review posts "merge-review <sha>: PASS|FAIL"; a PASS for an earlier
@@ -74,9 +74,16 @@ jobs:
             done < <(git show origin/main:.github/CODEOWNERS)
             [ -n "$o" ] && owned="$owned $f"
           done < <(git diff --name-only origin/main...HEAD)
+          pid() { git diff "$(git merge-base origin/main "$1")" "$1" | git patch-id --stable | cut -d' ' -f1; }
           if [ -n "$owned" ]; then
-            ok=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$N/reviews?per_page=100" --paginate \
-              -q ".[]|select(.user.login==\"$OWNER\" and .state==\"APPROVED\" and .commit_id==\"$SHA\")|.id" | head -1)
+            # An approval holds while the PR's own diff is unchanged (same rule as a review PASS in step 4),
+            # so merging main in does not ask the owner again.
+            ok=""
+            for c in $(gh api "repos/$GITHUB_REPOSITORY/pulls/$N/reviews?per_page=100" --paginate \
+                -q ".[]|select(.user.login==\"$OWNER\" and .state==\"APPROVED\")|.commit_id" | sort -u); do
+              if [ "$c" = "$SHA" ] || { { git cat-file -e "$c^{commit}" 2>/dev/null || git fetch -q origin "$c" 2>/dev/null; } &&
+                 [ "$(pid "$c")" = "$(pid HEAD)" ]; }; then ok=$c; break; fi
+            done
             [ -n "$ok" ] || { st failure "owned paths need the owner's approval:${owned:0:100}"; echo "::error::needs owner approval:$owned"; exit 1; }
           fi
           # 3 complete
@@ -90,7 +97,6 @@ jobs:
           v=$(gh api "repos/$GITHUB_REPOSITORY/issues/$N/comments?per_page=100" --paginate \
             -q '.[]|select(.user.type=="Bot" and (.user.login|startswith("claude")))|.body|split("\n")[0]|select(startswith("merge-review "))' | tail -1)
           vsha=$(sed -nE 's/^merge-review ([0-9a-f]{7,40}): PASS.*/\1/p' <<<"$v")
-          pid() { git diff "$(git merge-base origin/main "$1")" "$1" | git patch-id --stable | cut -d' ' -f1; }
           if [ -n "$vsha" ] && { git cat-file -e "$vsha^{commit}" 2>/dev/null || git fetch -q origin "$vsha" 2>/dev/null; } &&
              [ "$(pid "$vsha")" = "$(pid HEAD)" ]; then
             st success "review PASS for $vsha still applies"; echo done=1 >>"$GITHUB_OUTPUT"; exit 0
@@ -119,6 +125,18 @@ jobs:
           label=review-passed; [ "$res" = PASS ] || label=review-failed
           gh api "repos/$GITHUB_REPOSITORY/issues/$N/labels" -f "labels[]=$label" >/dev/null
           if [ "$res" = PASS ]; then st success "Claude review PASS"; else st failure "Claude review FAIL: fix the findings and push"; exit 1; fi
+      # A PASS (new, or still applying) covers every earlier finding: resolve the reviewer's open threads, or the
+      # ruleset's thread rule keeps a passed PR blocked with no one owning it (#489).
+      - if: success()
+        run: |
+          gh api graphql --paginate -F owner="${GITHUB_REPOSITORY%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F n="$N" -f query='
+            query($owner:String!,$name:String!,$n:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$n){
+              reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
+                nodes{id isResolved comments(first:1){nodes{author{login}}}}}}}}' \
+            -q '.data.repository.pullRequest.reviewThreads.nodes[]|select((.isResolved|not) and .comments.nodes[0].author.login=="claude")|.id' |
+          while read -r t; do
+            gh api graphql -f id="$t" -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' >/dev/null
+          done
 
   # On-demand: the owner, org members and collaborators (author_association; the public cannot trigger it) can ask @claude something in a PR or issue comment.
   mention:

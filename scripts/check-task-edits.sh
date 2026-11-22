@@ -20,6 +20,9 @@ harness=("${trust[@]}" docs/agents .claude/skills scripts/run-lock.sh scripts/wo
          scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh
          scripts/dates-sync.sh scripts/issues-sync.sh scripts/run-meta.sh scripts/request-work.sh scripts/agent-start.sh scripts/agent-preflight.sh scripts/bg.sh)
 protected_fail=0
+# Append-only files: no line of the base version is removed or changed. New lines may sit anywhere, so a
+# `merge=union` merge (.gitattributes) of two branches that both appended still passes.
+kept() { ! grep -q '^<' <(diff <(git show "$1") "$2"); }   # <rev:path> <file>
 if git rev-parse -q --verify origin/main >/dev/null; then
   ob=$(git merge-base HEAD origin/main)
   # owner.md (owner decisions) may be appended on any branch; it is not part of the weekly release.
@@ -35,15 +38,25 @@ if git rev-parse -q --verify origin/main >/dev/null; then
     # owner.md and openspec/decisions.md: agents may only append (new owner decisions), never edit existing lines.
     for f in docs/agents/owner.md openspec/decisions.md; do
       if git cat-file -e "$ob:$f" 2>/dev/null; then
-        old=$(git show "$ob:$f" | wc -c)
-        { [ -f "$f" ] && cmp -s -n "$old" <(git show "$ob:$f") "$f"; } || { echo "task-edit guard: $f is append-only for agents"; protected_fail=1; }
+        { [ -f "$f" ] && kept "$ob:$f" "$f"; } || { echo "task-edit guard: $f is append-only for agents"; protected_fail=1; }
       fi
     done
+    # The weekly release may carry trust-root fixes: every trust path is in CODEOWNERS, so merge-ready waits for
+    # the owner's approval. Before 2026-11-22 they went into the PR body as prose and were never applied (W1).
     tchanged=$(git diff --name-only "$ob" -- "${trust[@]}" || true)
-    if [ -n "$tchanged" ]; then
+    if [ -n "$tchanged" ] && [[ "$branch" != *harness-release-* ]]; then
       echo "task-edit guard: agent branch '$branch' changed trust-root files (owner-only):"; echo "$tchanged"
       protected_fail=1
     fi
+    # A cloud session's commits carry its App identity. One without it acts as the owner (pre-persona sessions, #573).
+    case "$branch" in *harness-release-*|*hotfix-*) ;; *)
+      bad=$(git log --no-merges --since=2026-11-22T06:00:00Z --format='%h|%an|%(trailers:key=Claude-Session,valueonly,separator=%x20)' "$ob"..HEAD |
+        awk -F'|' '$3!="" && $2 !~ /^locksmith-[a-z]+\[bot\]$/{print $1" by "$2}')
+      if [ -n "$bad" ]; then
+        echo "task-edit guard: commits from a session without its App identity (archive that session):"; echo "$bad"
+        protected_fail=1
+      fi ;;
+    esac
   fi
 fi
 
@@ -77,11 +90,11 @@ while IFS= read -r f; do
   fi
 done < <(git diff --name-only "$base" -- 'openspec/changes/*/tasks.md')
 
-# progress.md is append-only: the base version must remain an exact prefix.
+# progress.md is append-only: every earlier line stays, unchanged and in order.
 while IFS= read -r f; do
   git cat-file -e "$base:$f" 2>/dev/null || continue
-  old=$(git show "$base:$f" | wc -c); cur=$(current "$f")
-  if [ -z "$cur" ] || ! cmp -s -n "$old" <(git show "$base:$f") "$cur"; then
+  cur=$(current "$f")
+  if [ -z "$cur" ] || ! kept "$base:$f" "$cur"; then
     echo "task-edit guard: $f is append-only, but earlier entries changed"; fail=1
   fi
 done < <(git diff --name-only "$base" -- 'openspec/changes/*/progress.md')

@@ -26,10 +26,10 @@
 - [x] 4.5 Verify: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` then `just test gemini-cli && just test copilot`.
 
 ## 5. Windsurf and Cline integrations [sonnet]
-- [ ] 5.1 Generate `integrations/windsurf` files and extend the drift test; README with the protection label.
-- [ ] 5.2 Same for `integrations/cline`.
-- [ ] 5.3 [haiku] Smoke tests as in 4.3 for both, and `docs/testing.md` rows.
-- [ ] 5.4 Verify: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` then `just test windsurf && just test cline`.
+- [x] 5.1 Generate `integrations/windsurf` files and extend the drift test; README with the protection label.
+- [x] 5.2 Same for `integrations/cline`.
+- [x] 5.3 [haiku] Smoke tests as in 4.3 for both, and `docs/testing.md` rows.
+- [x] 5.4 Verify: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` then `just test windsurf && just test cline`.
 
 ## 6. Generic MCP setup [haiku]
 - [ ] 6.1 `integrations/generic-mcp/README.md` and a generated `mcp.json` snippet (stdio `locksmith-mcp`, no secrets), noting that no hook protection applies and which protections are lost.

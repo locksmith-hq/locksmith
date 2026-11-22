@@ -839,6 +839,11 @@ mod tests {
             merge_hooks(Agent::Copilot, None).unwrap(),
         );
         check("copilot/mcp.json", merge_mcp(Agent::Copilot, None).unwrap());
+        check(
+            "windsurf/hooks.json",
+            merge_hooks(Agent::Windsurf, None).unwrap(),
+        );
+        check("cline/PreToolUse", cline_script());
         let hub = "https://hub.example/mcp";
         check(
             "claude-code/.mcp.hub.json",

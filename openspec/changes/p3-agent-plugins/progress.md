@@ -23,3 +23,8 @@
 - Task: 4.1-4.5 - done; merged origin/main (4 conflicts in smith-cli: hub MCP kept alongside new-agent wiring, mcp_path is Option); evaluator PASS (independent sonnet)
 - Verified: `cargo test -p smith-cli` all pass; `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents`; `just test gemini-cli` and `just test copilot` 166 passed; locksmith-mcp --test integrations passed; `just quick` OK
 - Notes for next session: next is task 5 (windsurf, cline; windsurf still gated by hook_handler_ready) then 6 and 7. No live-CLI variant exists: the smoke test only prints "skip live" when the CLI is absent. 2.1 still open (doc-derived fixtures). d2-aws-sts and d3-db-relay remain parked on the t3 bindings page (#489).
+
+## 2026-11-22 worker (harriet)
+- Task: 5.1-5.4 - done (windsurf generated but labelled "unknown, not protected": no hook handler until a Devin Desktop fixture exists; cline script generated, executable, replayed against recorded fixtures); merged origin/main (clean)
+- Verified: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents`; `cargo test -p smith-cli --test integrations` 5 passed; `just test windsurf` and `just test cline`
+- Notes for next session: next is task 6 (generic-mcp) then 7; 2.1 still open (doc-derived fixtures). d2-aws-sts and d3-db-relay remain parked on the t3 bindings page (#489).

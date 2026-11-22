@@ -148,3 +148,91 @@ fn integrations_fail_closed_without_smith() {
     assert_eq!(code, Some(2));
     assert!(err.contains("smith doctor"), "{err}");
 }
+
+/// Cline: the shipped script is run as Cline would run it (executable, JSON on stdin) and must
+/// reproduce the recorded decisions for the extension and the SDK payloads.
+#[test]
+fn cline_integration_replays_recorded_fixtures() {
+    use std::os::unix::fs::PermissionsExt;
+    let script = root().join("integrations/cline/PreToolUse");
+    let mode = std::fs::metadata(&script).unwrap().permissions().mode();
+    assert_ne!(mode & 0o111, 0, "the hook script must be executable");
+    let text = std::fs::read_to_string(&script).unwrap();
+    assert!(text.starts_with("#!/bin/sh\n"), "{text}");
+    let (bin, work, home) = sandbox("cline");
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let dir = root().join("crates/ls-hooks/tests/fixtures/cline");
+    let mut n = 0;
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        let name = p.file_name().unwrap().to_string_lossy().into_owned();
+        let Some(stem) = name.strip_suffix(".in.json") else {
+            continue;
+        };
+        let raw = std::fs::read_to_string(&p).unwrap();
+        if raw.contains("__KEY__") {
+            continue;
+        }
+        let input = raw.replace("__CWD__", &work.to_string_lossy());
+        let want = json(&dir.join(format!("{stem}.out.json")));
+        let (code, out, _) = run_hook(&script.to_string_lossy(), &bin, &work, &home, &input, &path);
+        assert_eq!(
+            code.map(i64::from),
+            want["code"].as_i64(),
+            "cline/{stem} exit code"
+        );
+        match &want["stdout"] {
+            Value::Null => assert!(out.trim().is_empty(), "cline/{stem} stdout: {out}"),
+            v => assert_eq!(
+                &serde_json::from_str::<Value>(&out).unwrap(),
+                v,
+                "cline/{stem}"
+            ),
+        }
+        n += 1;
+    }
+    assert!(n > 0, "no cline fixtures replayed");
+    // without `smith` the script blocks in Cline's shape (and exits 0)
+    let (code, out, _) = run_hook(
+        &script.to_string_lossy(),
+        &bin,
+        &work,
+        &home,
+        "{}",
+        "/usr/bin:/bin",
+    );
+    assert_eq!(code, Some(0));
+    assert_eq!(
+        serde_json::from_str::<Value>(&out).unwrap()["cancel"],
+        true,
+        "{out}"
+    );
+}
+
+/// Windsurf stays gated: no hook handler yet, so the README must say it is not protected and
+/// every shipped command must name `smith hook windsurf`.
+#[test]
+fn windsurf_integration_is_labelled_not_protected() {
+    assert!(!smith_agents_ready());
+    let readme = std::fs::read_to_string(root().join("integrations/windsurf/README.md")).unwrap();
+    assert!(readme.contains("unknown, not protected"), "{readme}");
+    let v = json(&root().join("integrations/windsurf/hooks.json"));
+    for ev in ["pre_read_code", "pre_run_command", "pre_user_prompt"] {
+        let c = v["hooks"][ev][0]["command"].as_str().unwrap();
+        assert!(c.contains(&format!("smith hook windsurf {ev}")), "{c}");
+    }
+}
+
+fn smith_agents_ready() -> bool {
+    // `smith doctor` reports Windsurf as unknown until a fixture confirms the format.
+    let o = Command::new(env!("CARGO_BIN_EXE_smith"))
+        .args(["hook", "windsurf", "pre_run_command"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    o.status.success()
+}

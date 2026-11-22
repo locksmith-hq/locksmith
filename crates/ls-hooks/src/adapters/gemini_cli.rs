@@ -47,10 +47,18 @@ pub(crate) fn call(event: &str, v: &Value) -> Call {
     }
 }
 
-/// Keys that hold a command, file content or a search pattern rather than a file name.
+/// Keys that hold a shell command: every string under one is shell-analysed.
+pub(crate) fn shell_keys(name: &str) -> &'static [&'static str] {
+    match name {
+        "run_shell_command" => &["command"],
+        _ => &[],
+    }
+}
+
+/// Keys that hold file content, prose or a search pattern rather than a file name.
 pub(crate) fn content_keys(name: &str) -> &'static [&'static str] {
     match name {
-        "run_shell_command" => &["command", "description"],
+        "run_shell_command" => &["description"],
         "write_file" => &["content"],
         "replace" => &["old_string", "new_string", "instruction"],
         "grep_search" => &["pattern", "exclude_pattern"],

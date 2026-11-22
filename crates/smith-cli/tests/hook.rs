@@ -376,4 +376,20 @@ fn doc_derived_adapters_fail_closed_on_shape_and_decoy_keys() {
         "parameters": {"path": "README.md", "paths": [".env"]}}}),
     );
     assert_eq!(out_json(&o)["cancel"], true);
+    // Every string under a shell key is shell-analysed; a key a shell tool does not use is
+    // path-checked and shell-analysed.
+    for input in [
+        json!({"name": "run_commands", "input": {"commands": ["ls"], "command": "cat .env"}}),
+        json!({"name": "run_commands", "input": {"commands": [{"command": "cat .env"}]}}),
+        json!({"name": "execute_command", "input": {"command": "ls", "commands": [".env"]}}),
+        json!({"name": "execute_command", "input": {"command": "ls", "commands": "cat .env"}}),
+    ] {
+        let o = hook(
+            &h,
+            "cline",
+            "PreToolUse",
+            &json!({"cwd": w, "tool_call": input}),
+        );
+        assert_eq!(out_json(&o)["cancel"], true, "{input}");
+    }
 }

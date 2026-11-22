@@ -11,7 +11,7 @@ pub mod gemini_cli;
 
 use crate::{Decision, Event, Vault, decide};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What the hook process prints and its exit code.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,8 +198,10 @@ struct Guard {
     known: &'static [&'static str],
     /// The events of a known tool's primary arguments, or `None` (deny) when they do not parse.
     primary: fn(&str, &Value, PathBuf) -> Option<Vec<Event>>,
-    /// Keys of a known tool that hold content, a command or a search pattern, not a file name
-    /// (shell commands go through the shell analysis in `primary`).
+    /// Keys of a known tool that hold a shell command (only keys that tool uses).
+    shell: fn(&str) -> &'static [&'static str],
+    /// Keys of a known tool that hold content or a search pattern, not a file name (only keys
+    /// that tool uses).
     content: fn(&str) -> &'static [&'static str],
 }
 
@@ -209,52 +211,90 @@ fn guard(agent: &str) -> Option<Guard> {
             call: gemini_cli::call,
             known: gemini_cli::KNOWN_TOOLS,
             primary: gemini_cli::primary,
+            shell: gemini_cli::shell_keys,
             content: gemini_cli::content_keys,
         },
         "copilot" => Guard {
             call: copilot::call,
             known: copilot::KNOWN_TOOLS,
             primary: copilot::primary,
+            shell: copilot::shell_keys,
             content: copilot::content_keys,
         },
         "cline" => Guard {
             call: cline::call,
             known: cline::KNOWN_TOOLS,
             primary: cline::primary,
+            shell: cline::shell_keys,
             content: cline::content_keys,
         },
         _ => return None,
     })
 }
 
-/// Every non-empty string in a tool input at any depth (arrays included), except those held
-/// directly by a `content` key (an array's items count as held by the array's key).
-fn input_strings<'a>(v: &'a Value, key: Option<&str>, content: &[&str], out: &mut Vec<&'a str>) {
+/// Which keys of a known tool decide how its strings are judged.
+struct Keys<'k> {
+    /// Keys that hold a shell command: every string under one, at any depth, is a shell command.
+    shell: &'k [&'k str],
+    /// Keys that hold content or a search pattern: a string held directly by one is skipped.
+    content: &'k [&'k str],
+}
+
+/// Every non-empty string in a tool input at any depth (arrays included), turned into events:
+/// a shell command when it sits anywhere under a `shell` key, nothing when held directly by a
+/// `content` key (an array's items count as held by the array's key), otherwise an `Arg`. In a
+/// shell tool (one with shell keys) such an `Arg` is also shell-analysed, since a command under a
+/// misnamed key would run just the same.
+fn input_events(
+    v: &Value,
+    key: Option<&str>,
+    in_shell: bool,
+    k: &Keys,
+    cwd: &Path,
+    out: &mut Vec<Event>,
+) {
+    let in_shell = in_shell || key.is_some_and(|key| k.shell.contains(&key));
     match v {
-        Value::String(s) if !s.is_empty() && !key.is_some_and(|k| content.contains(&k)) => {
-            out.push(s);
+        Value::String(s) if s.is_empty() => {}
+        Value::String(s) if in_shell => out.push(Event::Shell {
+            command: s.clone(),
+            cwd: cwd.to_path_buf(),
+        }),
+        Value::String(s) if !key.is_some_and(|key| k.content.contains(&key)) => {
+            out.push(Event::Arg {
+                arg: s.clone(),
+                cwd: cwd.to_path_buf(),
+            });
+            if !k.shell.is_empty() {
+                out.push(Event::Shell {
+                    command: s.clone(),
+                    cwd: cwd.to_path_buf(),
+                });
+            }
         }
-        Value::Array(a) => a.iter().for_each(|e| input_strings(e, key, content, out)),
+        Value::Array(a) => a
+            .iter()
+            .for_each(|e| input_events(e, key, in_shell, k, cwd, out)),
         Value::Object(o) => o
             .iter()
-            .for_each(|(k, e)| input_strings(e, Some(k), content, out)),
+            .for_each(|(key, e)| input_events(e, Some(key), in_shell, k, cwd, out)),
         _ => {}
     }
 }
 
-/// The events of a doc-derived tool call: its primary arguments, plus every other string in the
-/// input judged as a path or glob, so a path under a misnamed key beside a decoy one still meets
-/// the protected-path policy (decision P3-2). `None` denies.
+/// The events of a doc-derived tool call: its primary arguments, every string under one of the
+/// tool's shell keys as a shell command, and every other string judged as a path or glob, so a
+/// command or path under a misnamed key beside a decoy one still meets the policy (decision
+/// P3-2). `None` denies.
 fn guarded_events(g: &Guard, name: &str, input: &Value, cwd: PathBuf) -> Option<Vec<Event>> {
     if !g.known.contains(&name) {
         return Some(Vec::new());
     }
     let mut events = (g.primary)(name, input, cwd.clone())?;
-    let mut strings = Vec::new();
-    input_strings(input, None, (g.content)(name), &mut strings);
-    events.extend(strings.into_iter().map(|s| Event::Arg {
-        arg: s.to_string(),
-        cwd: cwd.clone(),
-    }));
+    let keys = Keys {
+        shell: (g.shell)(name),
+        content: (g.content)(name),
+    };
+    input_events(input, None, false, &keys, &cwd, &mut events);
     Some(events)
 }

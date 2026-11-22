@@ -50,10 +50,19 @@ pub(crate) fn call(event: &str, v: &Value) -> Call {
     }
 }
 
-/// Keys that hold a command, file content or a search pattern rather than a file name.
+/// Keys that hold a shell command: every string under one is shell-analysed. Only the keys each
+/// tool uses, so `commands` beside `execute_command` is path-checked like any other key.
+pub(crate) fn shell_keys(name: &str) -> &'static [&'static str] {
+    match name {
+        "execute_command" => &["command"],
+        "run_commands" => &["commands", "command"],
+        _ => &[],
+    }
+}
+
+/// Keys that hold file content or a search pattern rather than a file name.
 pub(crate) fn content_keys(name: &str) -> &'static [&'static str] {
     match name {
-        "execute_command" | "run_commands" => &["command", "commands"],
         "write_to_file" => &["content"],
         "replace_in_file" => &["diff"],
         "search_files" => &["regex"],
@@ -69,16 +78,20 @@ pub(crate) fn primary(name: &str, args: &Value, cwd: PathBuf) -> Option<Vec<Even
             command: field(args, "command")?.to_string(),
             cwd,
         },
-        // SDK runner: `commands` is a list of shell commands (or one `command`).
+        // SDK runner: `commands` is a list of shell commands (or one `command`). A non-string or
+        // empty entry, or an empty list, cancels; when both keys are set, every string under
+        // either is shell-analysed by the caller.
         "run_commands" => {
             let command = match args.get("commands") {
                 Some(Value::Array(a)) => a
                     .iter()
-                    .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
+                    .map(|e| e.as_str().filter(|s| !s.is_empty()))
+                    .collect::<Option<Vec<_>>>()
+                    .filter(|c| !c.is_empty())?
                     .join("\n"),
-                Some(Value::String(s)) => s.clone(),
-                _ => field(args, "command")?.to_string(),
+                Some(Value::String(s)) if !s.is_empty() => s.clone(),
+                None => field(args, "command")?.to_string(),
+                Some(_) => return None,
             };
             Event::Shell { command, cwd }
         }

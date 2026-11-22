@@ -393,3 +393,99 @@ fn doc_derived_adapters_fail_closed_on_shape_and_decoy_keys() {
         assert_eq!(out_json(&o)["cancel"], true, "{input}");
     }
 }
+
+/// Spec "the denial is audited": a gemini-cli, copilot and cline denial reaches the audit log
+/// through a running, unlocked daemon (the hook itself never starts one).
+#[test]
+fn doc_derived_adapter_denials_are_audited() {
+    use common::PW;
+    let h = Home::new();
+    let w = work(&h);
+    let run = std::env::temp_dir().join(format!(
+        "lsh-{}",
+        h.0.file_name()
+            .unwrap()
+            .to_string_lossy()
+            .replace("smith-e2e-", "")
+    ));
+    let bin = Path::new(env!("CARGO_BIN_EXE_smith"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    if !bin.join("locksmithd").exists() {
+        let cargo = std::env::var("CARGO").unwrap_or("cargo".into());
+        assert!(
+            Command::new(cargo)
+                .args(["build", "-p", "locksmithd"])
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    h.ready();
+    let with_env = |mut c: Command| {
+        c.current_dir(&w).env("LOCKSMITH_RUNTIME_DIR", &run).env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        );
+        c
+    };
+    // A session start auto-starts and unlocks the daemon.
+    let mut c = with_env(h.cmd(&["--passphrase-stdin", "session", "start", "--", "true"]))
+        .spawn()
+        .unwrap();
+    c.stdin
+        .take()
+        .unwrap()
+        .write_all(format!("{PW}\n").as_bytes())
+        .unwrap();
+    let o = c.wait_with_output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+
+    let send = |agent: &str, event: &str, input: Value| {
+        let mut c = with_env(h.cmd(&["hook", agent, event])).spawn().unwrap();
+        let _ = c
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.to_string().as_bytes());
+        c.wait_with_output().unwrap()
+    };
+    send(
+        "gemini-cli",
+        "BeforeTool",
+        json!({"cwd": w, "tool_name": "run_shell_command", "tool_input": {"command": "cat .env"}}),
+    );
+    send(
+        "copilot",
+        "preToolUse",
+        json!({"cwd": w, "toolName": "bash", "toolArgs": "{\"command\":\"cat .env\"}"}),
+    );
+    send(
+        "cline",
+        "PreToolUse",
+        json!({"workspaceRoots": [w], "preToolUse": {"toolName": "execute_command",
+        "parameters": {"command": "cat .env"}}}),
+    );
+
+    let o = with_env(h.cmd(&["audit", "ls", "--json", "--limit", "100"]))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+    let ev = v["events"].as_array().unwrap();
+    for agent in ["gemini-cli", "copilot", "cline"] {
+        assert!(
+            ev.iter().any(|e| e["action"] == "HOOK_DENY"
+                && e["policy_rule"]
+                    .as_str()
+                    .unwrap_or("")
+                    .starts_with(&format!("{agent}/"))),
+            "no HOOK_DENY audit for {agent}: {ev:?}"
+        );
+    }
+    if let Ok(pid) = std::fs::read_to_string(run.join("locksmithd.lock")) {
+        let _ = Command::new("kill").args(["-KILL", pid.trim()]).status();
+    }
+    let _ = std::fs::remove_dir_all(&run);
+}

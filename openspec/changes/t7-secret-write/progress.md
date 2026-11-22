@@ -33,3 +33,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.3 seal-key and sealed version contract - done
 - Verified: `cargo nextest run -p ls-control-plane openapi`, `npm test --workspace packages/control-plane-client` (15 pass), `just quick`; Sonnet evaluator PASS
 - Notes for next session: sealed create is on `POST .../secrets/{id}/sealed-versions` (old `/versions` stays until 2.3 removes it; then move the route). `seal-key` takes an optional `secret_id` query for per-secret `next_version`. Handlers are 503 stubs with `#[allow(dead_code)]`, remove in 2.3; 503 should set `Retry-After`. Next: 1.4 (signature fields and KATs).
+
+## 2026-11-22 10:20 worker
+- Task: CI fix - ci-fix (cargo-deny failed on RUSTSEC-2026-0592, url 2.5.8)
+- Verified: cargo deny check -> ok; cargo check --workspace -> ok; just quick -> ok
+- Notes for next session: bumped url to 2.5.9 in Cargo.lock only; main will hit the same advisory until it merges a bump.

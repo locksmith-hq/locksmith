@@ -342,8 +342,30 @@ async fn require_agent(
             if agent_revoked(&endpoint, relay.as_ref(), &identity).await {
                 return unauthorized(true);
             }
+            // Paused org, revoked token or unreadable state (t8): refused before the service sees
+            // the request, so no tool runs and nothing is decrypted. Fail closed.
+            let session = match relay.as_ref() {
+                Some(relay) => {
+                    if let Err(why) = relay.admit(&identity).await {
+                        tracing::info!(reason = ?why, "mcp request refused");
+                        return unauthorized(true);
+                    }
+                    relay
+                        .sessions()
+                        .and_then(|s| s.enter(&identity, crate::sessions::SessionKind::Mcp, "mcp"))
+                }
+                None => None,
+            };
             request.extensions_mut().insert(identity);
-            next.run(request).await
+            // A revoke or pause closes the session: the call in flight is dropped, and a stream
+            // already answering is cut.
+            match session {
+                Some(h) => tokio::select! {
+                    r = next.run(request) => crate::sessions::end_when_closed(r, h.clone()),
+                    () = h.closed() => unauthorized(true),
+                },
+                None => next.run(request).await,
+            }
         }
         Err(e) => {
             // The reason is a fixed label, never token text.

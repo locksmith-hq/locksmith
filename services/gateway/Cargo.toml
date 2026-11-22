@@ -40,6 +40,8 @@ ls-http = { path = "../../crates/ls-http" }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
 base64 = "0.22.1"
 bytes = "1.12.1"
+# t8 task 3.1: a response body that ends when its session closes (already in the tree via axum).
+http-body = "1"
 serde_json = "1"
 zeroize = "1.9.1"
 # S4 task 2.1: agent tokens verified through the control plane's JWKS. Same jsonwebtoken build as

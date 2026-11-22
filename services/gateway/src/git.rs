@@ -555,13 +555,58 @@ async fn handle(
             return challenge(&request_id);
         }
     };
-    let grants = match relay.grants().grants(agent.agent_id).await {
-        Ok(g) => g,
-        Err(e) => {
+    // Paused org, revoked token or unreadable state (t8): refused before anything else.
+    let grants = match relay.admit(&agent).await {
+        Ok(set) => set.items,
+        Err(crate::relay::Refused::Paused) => {
+            tracing::info!(agent.id = %agent.agent_id, reason = "paused_or_revoked", "git: request refused");
+            return fail(StatusCode::FORBIDDEN, "denied", &request_id);
+        }
+        Err(crate::relay::Refused::Unreadable(e)) => {
             tracing::warn!(reason = e.as_str(), "git: agent grants could not be read");
             return fail(StatusCode::BAD_GATEWAY, "grants_unavailable", &request_id);
         }
     };
+    // From here the request is a live session: a revoke or pause closes it, even mid-stream.
+    let session = relay
+        .sessions()
+        .and_then(|s| s.enter(&agent, crate::sessions::SessionKind::Http, "git"));
+    let work = handle_admitted(
+        relay,
+        agent,
+        grants,
+        host,
+        rest,
+        headers,
+        query,
+        body,
+        request_id.clone(),
+        post,
+    );
+    match session {
+        Some(h) => tokio::select! {
+            r = work => crate::sessions::end_when_closed(r, h.clone()),
+            () = h.closed() => fail(StatusCode::FORBIDDEN, "denied", &request_id),
+        },
+        None => work.await,
+    }
+}
+
+/// The rest of [`handle`] for an admitted agent: grants, binding and path, egress, decrypt, the
+/// streamed call.
+#[allow(clippy::too_many_arguments)]
+async fn handle_admitted(
+    relay: Arc<Relay>,
+    agent: crate::auth::AgentIdentity,
+    grants: Vec<crate::grants::Grant>,
+    host: &str,
+    rest: &str,
+    headers: HeaderMap,
+    query: Option<String>,
+    body: Body,
+    request_id: String,
+    post: bool,
+) -> Response {
     let now = time::OffsetDateTime::now_utc();
     let selected = select(
         &relay.bindings().git_bindings,

@@ -61,3 +61,8 @@ e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index
 # t7 HPKE known-answer vectors: public test keys, not secrets (worker alfie, 2026-11-22).
 016ae34ad2889d9e63e161849c3ed2fa41bf37ea:crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
 crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
+
+# Known-answer test vectors for the seal-key signature (deterministic public test seeds, not credentials).
+crates/ls-envelope/vectors/seal-key-sig-v1.json:generic-api-key:7
+crates/ls-envelope/vectors/seal-key-sig-v1.json:generic-api-key:18
+crates/ls-envelope/vectors/seal-key-sig-v1.json:generic-api-key:29

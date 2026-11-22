@@ -4,21 +4,18 @@
 //! Only overrides are stored (`mcp_tool_settings`); the defaults live in the tool registry, so a
 //! tool with no override is at its default. The gateway reads the overrides from the control
 //! plane's `GET /internal/v1/mcp/agent-tool-settings` with the service token and caches them for
-//! at most [`MAX_SETTINGS_TTL`], so a switch flipped in the console takes effect within seconds
+//! at most [`MAX_CACHE_TTL`], so a switch flipped in the console takes effect within seconds
 //! (the same bound as grants). A read that fails is never served from a stale cache past the TTL
 //! and never replaced by the defaults: the caller fails closed (an off tool must not turn on
 //! because the control plane is unreachable).
 
 use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::Deserialize;
 
 use crate::decrypt::{BoxFuture, ControlPlane, Internal};
-
-/// Longest time a read is reused. Larger configured values are clamped to this.
-pub const MAX_SETTINGS_TTL: Duration = Duration::from_secs(10);
+use crate::ttl::TtlCell;
 
 /// Largest settings response read: one row per tool, so a few hundred bytes in practice.
 const MAX_SETTINGS_RESPONSE: usize = 64 * 1024;
@@ -77,39 +74,19 @@ impl ToolSettingsSource for ControlPlane {
 /// A [`ToolSettingsSource`] that serves one read for at most the TTL. Errors are never cached.
 pub struct SettingsCache {
     source: std::sync::Arc<dyn ToolSettingsSource>,
-    ttl: Duration,
-    entry: Mutex<Option<(Instant, HashMap<String, bool>)>>,
+    cell: TtlCell<HashMap<String, bool>>,
 }
 
 impl SettingsCache {
     pub fn new(source: std::sync::Arc<dyn ToolSettingsSource>, ttl: Duration) -> Self {
         Self {
             source,
-            ttl: ttl.min(MAX_SETTINGS_TTL),
-            entry: Mutex::new(None),
-        }
-    }
-
-    fn cached(&self) -> Option<HashMap<String, bool>> {
-        let guard = self.entry.lock().unwrap_or_else(|e| e.into_inner());
-        match guard.as_ref() {
-            Some((at, map)) if at.elapsed() < self.ttl => Some(map.clone()),
-            _ => None,
+            cell: TtlCell::new(ttl),
         }
     }
 
     async fn read(&self) -> Result<HashMap<String, bool>, SettingsError> {
-        if let Some(map) = self.cached() {
-            return Ok(map);
-        }
-        // Stamp with the time the fetch started, so an entry never outlives the TTL measured
-        // from when the control plane was asked.
-        let started = Instant::now();
-        let map = self.source.settings().await?;
-        if !self.ttl.is_zero() {
-            *self.entry.lock().unwrap_or_else(|e| e.into_inner()) = Some((started, map.clone()));
-        }
-        Ok(map)
+        self.cell.get_or_fetch(|| self.source.settings()).await
     }
 }
 
@@ -178,7 +155,7 @@ mod tests {
             fail: true,
         });
         let cache = SettingsCache::new(src.clone(), Duration::from_secs(3600));
-        assert_eq!(cache.ttl, MAX_SETTINGS_TTL);
+        assert_eq!(cache.cell.ttl(), crate::ttl::MAX_CACHE_TTL);
         assert!(cache.settings().await.is_err());
         assert!(cache.settings().await.is_err());
         assert_eq!(src.calls.load(Ordering::SeqCst), 2);

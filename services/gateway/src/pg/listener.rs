@@ -51,8 +51,8 @@ use crate::config::PgBinding;
 use crate::decrypt::DecryptError;
 use crate::egress::{self, EgressError};
 use crate::grants::allows_relay;
-use crate::ttl::MAX_CACHE_TTL;
 use crate::relay::Relay;
+use crate::ttl::MAX_CACHE_TTL;
 
 /// Largest pre-authentication packet (startup, password), as Postgres's own limit.
 const MAX_STARTUP_PACKET: usize = 10_000;

@@ -15,6 +15,7 @@ on:
       - packages/api-types/**
       - package-lock.json
       - .nvmrc
+      - turbo.json
       - .github/workflows/web-deploy.yml
   workflow_dispatch:
 
@@ -38,12 +39,18 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
       - name: Build
         env:
           VITE_OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
           VITE_OIDC_CLIENT_ID: ${{ vars.VITE_OIDC_CLIENT_ID }}
           VITE_OIDC_HOSTED_DOMAIN: ${{ vars.VITE_OIDC_HOSTED_DOMAIN }}
-        run: npm run build --workspace apps/web
+        # Turborepo builds the web app and only the workspace packages it depends on (^build), with its task cache.
+        run: npx turbo run build --filter=@locksmith/web
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_WEB_DEPLOY_ROLE_ARN }}

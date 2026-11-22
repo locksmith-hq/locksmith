@@ -69,3 +69,25 @@ fn mcp_tables_are_seen_by_the_migration_lint() {
         );
     }
 }
+
+/// T6 task 2.2: the membership tables are org-scoped, forced and policed, and the lint sees them.
+#[test]
+fn membership_tables_are_seen_by_the_migration_lint() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let sql = std::fs::read_to_string(dir.join("0014_memberships.sql")).expect("0014");
+    for table in ["memberships", "invites"] {
+        assert!(sql.contains(&format!("CREATE TABLE {table}")), "{table}");
+        assert!(
+            sql.contains(&format!("ALTER TABLE {table} FORCE ROW LEVEL SECURITY")),
+            "{table}"
+        );
+        assert!(sql.contains(&format!("ON {table}")), "{table} has a policy");
+    }
+    let findings = ls_tenant_lint::scan_migrations(&dir).expect("scan migrations");
+    assert!(
+        findings
+            .iter()
+            .all(|f| f.table != "memberships" && f.table != "invites"),
+        "{findings:?}"
+    );
+}

@@ -6,9 +6,9 @@
 - [x] 1.3 Verify: `cargo nextest run -p ls-control-plane openapi` and `npm test --workspace packages/control-plane-client`.
 
 ## 2. Schema and tenancy [sonnet]
-- [ ] 2.1 Migration `0014_memberships.sql`: `memberships` and `invites` with forced RLS and grants as in design.md; backfill one `owner` membership per existing user.
-- [ ] 2.2 Cover both tables in `ls-tenant-lint`; a migration test proves the backfill and cross-org isolation.
-- [ ] 2.3 Verify: `cargo nextest run -p ls-control-plane tenancy` and `cargo nextest run -p ls-tenant-lint`.
+- [x] 2.1 Migration `0014_memberships.sql`: `memberships` and `invites` with forced RLS and grants as in design.md; backfill one `owner` membership per existing user.
+- [x] 2.2 Cover both tables in `ls-tenant-lint`; a migration test proves the backfill and cross-org isolation.
+- [x] 2.3 Verify: `cargo nextest run -p ls-control-plane tenancy` and `cargo nextest run -p ls-tenant-lint`.
 
 ## 3. Org selection and orgs [opus]
 - [ ] 3.1 `OrgBinding` honours `X-Locksmith-Org` after a membership check in the binding transaction; default is the personal org; exposes the caller's role. A miss is `404`.

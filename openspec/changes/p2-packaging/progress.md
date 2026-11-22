@@ -90,3 +90,8 @@
 - Task: p2 CI - ci-fix (macos nextest failed on 464bcbe; PR has no Rust changes, job logs unreadable via proxy, so treated as flake/stale main)
 - Verified: just quick -> ok; merged origin/main (7 commits) and pushed to rerun checks
 - Notes for next session: if macos nextest fails again on the new head, run `cargo nextest run --workspace --profile portable` locally to find the test; read check status first.
+
+## 2026-11-22 12:12 worker
+- Task: CI red on #534 (cargo-deny) - ci-fix
+- Verified: cargo deny check advisories -> ok; cargo check --workspace -> ok; just quick -> ok
+- Notes for next session: RUSTSEC-2026-0592 (url 2.5.8) was the cause, not this change; fixed by bumping url to 2.5.9 in Cargo.lock. Main will hit the same advisory on its next ci run.

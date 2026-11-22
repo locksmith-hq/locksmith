@@ -113,6 +113,18 @@ pub mod kind {
     pub const ORG_RENAMED: Code = Code::new("org.renamed");
     /// An owner deleted the org (T6): its memberships end and open invites are revoked.
     pub const ORG_DELETED: Code = Code::new("org.deleted");
+    /// An owner or admin invited an email address to the org (T6). Never records the token.
+    pub const MEMBER_INVITED: Code = Code::new("member.invited");
+    /// An open invite was revoked (T6).
+    pub const MEMBER_INVITE_REVOKED: Code = Code::new("member.invite_revoked");
+    /// A verified user accepted an invite and joined the org (T6).
+    pub const MEMBER_JOINED: Code = Code::new("member.joined");
+    /// A member's role changed (T6).
+    pub const MEMBER_ROLE_CHANGED: Code = Code::new("member.role_changed");
+    /// A member was removed by an owner or admin (T6).
+    pub const MEMBER_REMOVED: Code = Code::new("member.removed");
+    /// A member left the org themselves (T6).
+    pub const MEMBER_LEFT: Code = Code::new("member.left");
     /// A remote MCP tool call (allowed, refused or failed). Records the layer, the tool name and
     /// the outcome only, never the call's arguments or result.
     pub const MCP_CALL: Code = Code::new("mcp.call");
@@ -164,6 +176,12 @@ pub mod attr {
     /// The `name=value` pairs of the verified external-token claims a workload identity policy
     /// names (a [`Text`](super::Text)); nothing else from the token.
     pub const CLAIMS: Code = Code::new("claims");
+    /// The user a member event is about (T6).
+    pub const MEMBER_ID: Code = Code::new("member_id");
+    /// The id of an invite (never its token).
+    pub const INVITE_ID: Code = Code::new("invite_id");
+    /// A member role (`owner`, `admin`, `member`).
+    pub const ROLE: Code = Code::new("role");
 }
 
 /// Who acted.

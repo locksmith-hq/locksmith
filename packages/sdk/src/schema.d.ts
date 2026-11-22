@@ -3690,6 +3690,8 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
+                    /** @description URL of the new invite */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {

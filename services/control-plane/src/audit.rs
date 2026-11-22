@@ -11,6 +11,7 @@ use time::OffsetDateTime;
 use tracing::Instrument;
 use uuid::Uuid;
 
+use crate::auth::OrgRole;
 use crate::db::sql::{self, PgConnection};
 
 /// The actor of admin requests while the org binding is the dev-only header: it names no user.
@@ -400,6 +401,80 @@ pub fn org_renamed(actor: Actor, org_id: Uuid) -> Event {
 /// `org.deleted`.
 pub fn org_deleted(actor: Actor, org_id: Uuid) -> Event {
     org_event(kind::ORG_DELETED, actor, org_id)
+}
+
+/// A member event: actor, target the org, the affected user and (where it applies) the role.
+fn member_event(kind: Code, actor: Actor, org_id: Uuid, member: Uuid, role: Option<Code>) -> Event {
+    let mut attrs = Attrs::new().id(attr::MEMBER_ID, member);
+    if let Some(role) = role {
+        attrs = attrs.code(attr::ROLE, role);
+    }
+    admin(kind, actor, Target::Org(org_id), attrs)
+}
+
+/// The ledger form of a role.
+fn role_code(role: OrgRole) -> Code {
+    match role {
+        OrgRole::Owner => Code::new("owner"),
+        OrgRole::Admin => Code::new("admin"),
+        OrgRole::Member => Code::new("member"),
+    }
+}
+
+/// `member.invited`: the invite id and the invited role. Not the email and never the token.
+pub fn member_invited(actor: Actor, org_id: Uuid, invite_id: Uuid, role: OrgRole) -> Event {
+    admin(
+        kind::MEMBER_INVITED,
+        actor,
+        Target::Org(org_id),
+        Attrs::new()
+            .id(attr::INVITE_ID, invite_id)
+            .code(attr::ROLE, role_code(role)),
+    )
+}
+
+/// `member.invite_revoked`.
+pub fn member_invite_revoked(actor: Actor, org_id: Uuid, invite_id: Uuid) -> Event {
+    admin(
+        kind::MEMBER_INVITE_REVOKED,
+        actor,
+        Target::Org(org_id),
+        Attrs::new().id(attr::INVITE_ID, invite_id),
+    )
+}
+
+/// `member.joined`: the user accepted an invite (the actor is the new member).
+pub fn member_joined(user: Uuid, org_id: Uuid, invite_id: Uuid, role: OrgRole) -> Event {
+    admin(
+        kind::MEMBER_JOINED,
+        Actor::User(user),
+        Target::Org(org_id),
+        Attrs::new()
+            .id(attr::MEMBER_ID, user)
+            .id(attr::INVITE_ID, invite_id)
+            .code(attr::ROLE, role_code(role)),
+    )
+}
+
+/// `member.role_changed`, with the new role.
+pub fn member_role_changed(actor: Actor, org_id: Uuid, member: Uuid, role: OrgRole) -> Event {
+    member_event(
+        kind::MEMBER_ROLE_CHANGED,
+        actor,
+        org_id,
+        member,
+        Some(role_code(role)),
+    )
+}
+
+/// `member.removed` (by someone else).
+pub fn member_removed(actor: Actor, org_id: Uuid, member: Uuid) -> Event {
+    member_event(kind::MEMBER_REMOVED, actor, org_id, member, None)
+}
+
+/// `member.left` (the member removed themselves).
+pub fn member_left(org_id: Uuid, member: Uuid) -> Event {
+    member_event(kind::MEMBER_LEFT, Actor::User(member), org_id, member, None)
 }
 
 #[cfg(test)]

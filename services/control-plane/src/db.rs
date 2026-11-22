@@ -303,6 +303,17 @@ pub async fn bind_login_user(conn: &mut PgConnection, user_id: Uuid) -> sql::Res
         .map(|_| ())
 }
 
+/// Bind the SHA-256 (hex) of an invite token for the rest of the current transaction
+/// (`app.invite_hash`, transaction-local): exactly the invite with that hash becomes visible to
+/// the accepting user (T6 design decision 3).
+pub async fn bind_invite_hash(conn: &mut PgConnection, hash_hex: &str) -> sql::Result<()> {
+    sql::query("SELECT set_config('app.invite_hash', $1, true)")
+        .bind(hash_hex)
+        .execute(conn)
+        .await
+        .map(|_| ())
+}
+
 fn mark_error() {
     tracing::Span::current().record("error", true);
 }

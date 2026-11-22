@@ -75,6 +75,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "org member read",
         include_str!("../migrations/0015_org_member_read.sql"),
     ),
+    (
+        16,
+        "member emails",
+        include_str!("../migrations/0016_member_emails.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

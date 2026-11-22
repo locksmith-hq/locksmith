@@ -27,3 +27,11 @@ aws cognito-idp admin-create-user --user-pool-id <pool-id> --username someone@ex
 aws cognito-idp admin-delete-user --user-pool-id <pool-id> --username someone@example.com   # revoke
 ```
 Deploy: `VITE_OIDC_ISSUER=<cognito_issuer_url> VITE_OIDC_CLIENT_ID=<cognito_client_ids["locksmith-web"]> npm run build -w @locksmith/web`, then `aws s3 sync apps/web/dist s3://<web_bucket> --delete` and `aws cloudfront create-invalidation --distribution-id <web_distribution_id> --paths '/*'`. The bundle is public static code; only sign-in and the API are gated. The apply role gained `cloudfront:*`, so the owner applies the role change once before CI can apply `web.tf`.
+
+## Google sign-in with a closed email list (google.tf)
+Nothing is committed: pass everything at apply time. Google's OAuth client needs the redirect URI from the `google_redirect_uri` output (https://locksmith-dev.auth.us-east-1.amazoncognito.com/oauth2/idpresponse) as an authorized redirect URI.
+```bash
+export TF_VAR_google_client_id=... TF_VAR_google_client_secret=...   # secret ends up in (encrypted) tofu state
+export TF_VAR_allowed_emails='["you@example.com"]'
+```
+`lambda/presignup.py` is a Cognito pre-sign-up trigger: any email not in `allowed_emails` (or unverified) is rejected, since Google sign-in would otherwise auto-create any Google user. An empty list rejects everyone. Rebuild the zip with `python3 infra/tofu/base/lambda/build.py` after editing the source (a test checks they match). The Lambda needs an IAM role, so the owner applies this, not CI. Build the web app with `VITE_OIDC_HOSTED_DOMAIN=<cognito_hosted_domain>` to use the Cognito endpoints and `identity_provider=Google`. The console's sign-in still calls the control-plane API (`/v1/auth/sign-in`), so it cannot finish until that API is deployed.

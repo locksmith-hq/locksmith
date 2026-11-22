@@ -7,6 +7,10 @@ resource "aws_cognito_user_pool" "main" {
   auto_verified_attributes = ["email"]
   mfa_configuration        = "OFF"
 
+  lambda_config {
+    pre_sign_up = aws_lambda_function.presignup.arn
+  }
+
   admin_create_user_config {
     allow_admin_create_user_only = true
   }
@@ -46,10 +50,11 @@ resource "aws_cognito_user_pool_client" "this" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
-  supported_identity_providers         = ["COGNITO"]
+  supported_identity_providers         = local.google_enabled ? ["COGNITO", "Google"] : ["COGNITO"]
   callback_urls                        = each.value.callbacks
   logout_urls                          = length(each.value.logouts) > 0 ? each.value.logouts : null
   explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors        = "ENABLED"
   enable_token_revocation              = true
+  depends_on                           = [aws_cognito_identity_provider.google]
 }

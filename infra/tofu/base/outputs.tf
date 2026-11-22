@@ -21,3 +21,4 @@ output "github_apply_role_arn" { value = aws_iam_role.github_apply.arn }
 output "web_url" { value = "https://${aws_cloudfront_distribution.web.domain_name}" }
 output "web_bucket" { value = aws_s3_bucket.web.id }
 output "web_distribution_id" { value = aws_cloudfront_distribution.web.id }
+output "google_redirect_uri" { value = "${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com/oauth2/idpresponse" }

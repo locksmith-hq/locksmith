@@ -13,7 +13,7 @@ The control plane SHALL list an org's live agent sessions with agent id and name
 - **THEN** both appear with slugs and times, and the response contains no token or value
 
 #### Scenario: Session ends
-- **WHEN** the gateway reports a session closed or stops reporting it for longer than twice the heartbeat interval
+- **WHEN** the gateway reports a session closed or stops reporting it for longer than three times the heartbeat interval (15 seconds)
 - **THEN** it no longer appears as live
 
 ### Requirement: Revoke one or all sessions

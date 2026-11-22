@@ -351,7 +351,7 @@ impl PgListener {
             if now.unix_timestamp() >= expires_at {
                 return CloseReason::Expired;
             }
-            match self.relay.grants().grants(agent_id).await {
+            match self.relay.grants().grants_uncached(agent_id).await {
                 Ok(g) => {
                     failures = 0;
                     if !allows_relay(&g, secret_id, now) {

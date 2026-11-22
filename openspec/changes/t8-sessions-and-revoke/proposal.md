@@ -5,7 +5,7 @@ An admin can revoke a single grant or an agent's MCP client, but cannot see what
 
 ## What Changes
 - Control plane: an `agent_sessions` view of live sessions (agent, kind http/pg/mcp, target slug, started, last seen), fed by the gateway through an internal endpoint; no values, tokens or hostnames beyond binding slugs.
-- API: list sessions, revoke one session (marks its agent token family revoked), revoke all of an org's sessions, and pause or resume every agent of an org (an org-level `agents_paused` flag). Each action writes a ledger event (`session.revoked`, `agents.paused`, `agents.resumed`).
+- API: list sessions, revoke one session (marks that session's agent token `jti` revoked), revoke all of an org's sessions, and pause or resume every agent of an org (an org-level `agents_paused` flag). Each action writes a ledger event (`session.revoked`, `agents.paused`, `agents.resumed`).
 - Gateway: refuses new requests and closes live sessions for a revoked session or a paused org within one grant-cache TTL (10 s), before any decrypt.
 - Console (`apps/web`) and desktop: a Sessions page with per-row Revoke, "Revoke all" and a Pause agents toggle with confirm dialogs; states for loading, empty, error and `403`.
 - `smith doctor` reports a paused org with a clear message.

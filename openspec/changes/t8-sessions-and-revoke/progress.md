@@ -49,3 +49,8 @@
 - Task: ci-fix (macos red on daffd5b; logs blocked, passes locally: workspace portable 877 passed) - widened timing margins in sessions_revoke tests (ttl 1s->2s, 0.8s->3s, short-outage check 1ms->50ms) as the likely macOS-runner flake. If macos is still red, read its annotations/ask for logs: cause unconfirmed.
 - Verified: cargo nextest run -p ls-gateway sessions_revoke -> 9 passed; just quick clean
 - Still open: 3.1 pg half (needs d3), 3.2 adversarial, 4.1, 4.2, 5.1.
+
+## 2026-11-22 worker
+- Task: CI fix (cargo-deny RUSTSEC-2026-0592) - ci-fix
+- Verified: cargo deny check -> ok; just quick -> ok
+- Notes for next session: bumped url 2.5.8 -> 2.5.9 in Cargo.lock only. Main has the same advisory; other PRs will hit it until main takes the bump.

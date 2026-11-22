@@ -52,7 +52,24 @@ jobs:
       - run: just fmt
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - uses: EmbarkStudios/cargo-deny-action@v2
+      # Profile `ci` (.config/nextest.toml): one retry and a JUnit report. The report becomes check-run annotations,
+      # the one place cloud agents can read a failure (job logs are blocked by their proxy).
       - run: just test-rust
+        env:
+          NEXTEST_PROFILE: ci
+      - if: always()
+        run: |
+          f=target/nextest/ci/junit.xml; [ -f "$f" ] || exit 0
+          python3 - "$f" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          for tc in ET.parse(sys.argv[1]).iter("testcase"):
+              name = f"{tc.get('classname')} {tc.get('name')}"
+              bad = next((e for e in tc if e.tag in ("failure", "error")), None)
+              if bad is not None:
+                  print(f"::error title=test failed::{name}: {(bad.get('message') or '')[:300]}")
+              elif tc.find("flakyFailure") is not None:
+                  print(f"::warning title=flaky test, passed on retry::{name}")
+          PY
 
   web:
     runs-on: ubuntu-24.04

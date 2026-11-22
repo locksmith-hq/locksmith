@@ -678,10 +678,9 @@ fn doctor_m6_snapshots() {
     // 2. Daemon up (vault locked), no CA, five [db.*] targets in every state the check knows.
     let up = TcpListener::bind("127.0.0.1:0").unwrap();
     let up_port = up.local_addr().unwrap().port();
-    let down_port = {
-        let l = TcpListener::bind("127.0.0.1:0").unwrap();
-        l.local_addr().unwrap().port()
-    };
+    // A freed ephemeral port can be taken by a parallel test before doctor probes it (main CI 2026-11-22);
+    // bind(0) never hands out port 9, so nothing listens there.
+    let down_port = 9;
     let binding = format!(
         r#"[http.keys]
 API_KEY = {{ hosts = ["{HOST}"] }}

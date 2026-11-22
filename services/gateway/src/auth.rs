@@ -643,16 +643,27 @@ mod tests {
         let src = HttpJwks::new(&down.uri().parse().unwrap()).unwrap();
         assert_eq!(src.fetch().await, Err(JwksError));
 
-        // A JWKS body over the cap is refused, not parsed.
+        // Valid JWKS JSON padded past the cap is refused; the same body at the cap parses.
+        let padded = |len: usize| {
+            let head = r#"{"keys":[],"pad":""#;
+            let tail = r#""}"#;
+            format!("{head}{}{tail}", "a".repeat(len - head.len() - tail.len()))
+        };
         let big = MockServer::start().await;
         Mock::given(method("GET"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_string(" ".repeat(MAX_JWKS_RESPONSE + 1)),
-            )
+            .and(path("/over/.well-known/jwks.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(padded(MAX_JWKS_RESPONSE + 1)))
             .mount(&big)
             .await;
-        let src = HttpJwks::new(&big.uri().parse().unwrap()).unwrap();
-        assert_eq!(src.fetch().await, Err(JwksError));
+        Mock::given(method("GET"))
+            .and(path("/at/.well-known/jwks.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(padded(MAX_JWKS_RESPONSE)))
+            .mount(&big)
+            .await;
+        let over = HttpJwks::new(&format!("{}/over/", big.uri()).parse().unwrap()).unwrap();
+        assert_eq!(over.fetch().await, Err(JwksError));
+        let at = HttpJwks::new(&format!("{}/at/", big.uri()).parse().unwrap()).unwrap();
+        assert_eq!(at.fetch().await, Ok(vec![]));
     }
 
     #[test]

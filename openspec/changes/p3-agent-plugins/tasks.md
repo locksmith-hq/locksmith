@@ -43,4 +43,4 @@
 
 ## 8. Local verification [sonnet]
 - [x] 8.1 `just up`, then `just test <name>` for gemini-cli, copilot, windsurf, cline and generic-mcp and a `smith init` plus `smith doctor` run in a scratch repo carrying all agent markers.
-- [ ] 8.2 `just apps-build`, then `just ci`.
+- [x] 8.2 `just apps-build`, then `just ci`.

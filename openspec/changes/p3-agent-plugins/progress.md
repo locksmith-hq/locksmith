@@ -58,3 +58,8 @@
 - Task: none ticked; 8.2 not ticked (independent evaluator FAIL: CI was green on e815c95, not on the merged head)
 - Verified: `npm ci` then `just apps-build` rc=0 locally; PR checks on e815c95 all green
 - Notes for next session: tick 8.2 once CI is green on this pushed head (apps-build already passed). Then only 2.1 is open (recorded payloads from real Gemini/Copilot/Cline; no agent CLI on the VM, fixtures stay doc-derived), which needs a session with those CLIs or an owner decision. Do not enable auto-merge until then. d2-aws-sts and d3-db-relay remain parked on the t3 bindings page (#489).
+
+## 2026-11-22 worker (alfie, fourth entry)
+- Task: 8.2 - done (PR checks all green on head 5513ed8: hygiene, rust, web, desktop, macos, windows-check, adversarial; `just apps-build` rc=0 locally)
+- Verified: check-runs on 5513ed8; `just quick` below
+- Notes for next session: only 2.1 is open (recorded payloads need real Gemini/Copilot/Cline CLIs; fixtures stay doc-derived). Opened a `Decision:` needs-rescue so the lead can accept doc-derived fixtures or split 2.1 out. Do not enable auto-merge until then.

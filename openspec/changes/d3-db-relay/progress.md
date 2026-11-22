@@ -76,3 +76,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - parked (merged origin/main clean)
 - Verified: merge clean, no code changed
 - Notes for next session: 6.1 still needs a live bindings page (t3-console-mvp #489); 7.2 last.
+
+## 2026-11-22 00:51 worker (harriet)
+- Task: none - blocked (6.1 needs a bindings page; none exists in apps/web, apps/desktop or packages/ui; merged origin/main clean)
+- Verified: merge clean, no code changed
+- Notes for next session: 6.1/6.2 wait for t3-console-mvp (#489); 7.2 last.

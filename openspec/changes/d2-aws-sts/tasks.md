@@ -23,7 +23,7 @@
 
 ## 5. Console and desktop [sonnet]
 - [x] 5.1 Show AWS bindings (role, region, allowed actions, `vend`, max duration) on the bindings page in `apps/web` and `apps/desktop` with Vitest tests; no credentials displayed.
-- [ ] 5.2 Verify: `npm test --workspace apps/web` and `just apps-build`.
+- [x] 5.2 Verify: `npm test --workspace apps/web` and `just apps-build`.
 
 ## 6. Adversarial and audit [sonnet]
 - [x] 6.1 Add AWS cases to `tests/adversarial/cases`: agent-supplied policy ignored, over-duration, STS error echo, base credential absent from every output.

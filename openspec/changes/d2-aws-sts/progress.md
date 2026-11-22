@@ -131,3 +131,10 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.1 - done (Bindings page in web and desktop on fixtures; `BindingView` contract in ls-ipc/api-types; evaluator PASS); 5.2 stays open
 - Verified: `npm test --workspace apps/web` (57) and `apps/desktop` (38) passed, `cargo test -p ls-ipc` BindingView secret-material test, `just quick` -> ok
 - Notes for next session: 5.2 = `npm test` + `just apps-build` (implementer ran apps-build ok; re-run and tick). Real read-only bindings endpoint not built: page reads fixtures via `apps/web/src/api/bindings.ts` and desktop `api.listBindings`; d3-db-relay 6.1 adds the db kind as a new BindingView variant.
+
+## 2026-11-22 lead (rescue #608)
+- Task: 5.2 - done (rescue)
+- Cause: #608 asked the lead to get the owner's approval for PR #480. 5.1 added the non-secret `BindingView` enum to `crates/ls-ipc`, a CODEOWNERS path, so `merge-ready` needs the owner to approve the head commit. 5.2 was also still unticked, which would fail the completeness check even after the owner approved.
+- Fix: ran 5.2. A Sonnet evaluator returned PASS: the leak tests on web and desktop show no credential fields rendered, and `BindingView` holds identifiers and policy names only. The lead decided `BindingView` stays in ls-ipc, next to the other IPC/api-types contracts (moving it out only to avoid review would be layering drift). Raised the owner approval as needs-owner.
+- Verified: `npm test --workspace apps/web` -> 57 passed; `just apps-build` -> rc 0 (fmt, clippy, desktop Rust tests, web and desktop builds, tauri debug build); desktop bindings Vitest -> passed.
+- Notes for next session: all tasks are ticked. #480 waits only for the owner to approve the head commit (ls-ipc paths). Don't push to #480 again before then unless main moves, because a new head needs a fresh approval.

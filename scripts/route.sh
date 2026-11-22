@@ -3,6 +3,7 @@
 #   route.sh event <event.json>    roles to wake for a GitHub event, "role<TAB>reason" per line (wake-agents.yml)
 #   route.sh debate <issue>        debate guard: "wake <role> <why>" or "wait <why>"; agents act only on their own wake
 #   route.sh fire <role> <reason>  wake a role's routine; its token comes from the env var routing.json names
+#   route.sh lead-tick             fire the lead once for everything waiting for it (wake-agents.yml, every 2 h)
 #   route.sh selftest
 # Roles come from GitHub logins, so an agent cannot speak for another role or skip the cap. Shortcut: while
 # identities are paused (#299) agents post as the owner and a role marker decides; drop it once they are live.
@@ -141,8 +142,47 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   esac | awk -F'\t' '!seen[$1]++'  # one wake per role per event
 }
 
+# The lead wakes at once only for an owner tag; everything else waits for lead-tick, which batches it into one
+# run every 2 h (owner 2026-11-22: 29 Opus lead runs in 24 h, most of them for nothing).
+lead_now() { [[ "$1" == *"tagged you"* || "$1" == queue:* ]]; }
+
+lead_state() { # what lead_queue reads, as JSON (or $LEADQ_JSON in the selftest)
+  if [ -n "${LEADQ_JSON:-}" ]; then cat "$LEADQ_JSON"; return; fi
+  local n rescues="" debates=""
+  for n in $(gh api "repos/$repo/issues?labels=needs-rescue&state=open&per_page=100" -q '.[]|select(.pull_request==null)|.number'); do
+    rescues+=$(gh api "repos/$repo/issues/$n" -q '{number, labels: [.labels[].name]}' |
+      jq --arg last "$(gh api "repos/$repo/issues/$n/comments?per_page=100" -q '[.[]]|last|.user.login // ""')" '.last = $last')
+  done
+  for n in $(gh api "repos/$repo/issues?labels=debate&state=open&per_page=100" -q '.[].number'); do
+    debate_input "$n" | decide | grep -q '^wake lead' && debates+="$n "
+  done
+  local lead prs="" pr br lb
+  lead=$(cfgq '.roles.lead.logins[0]')
+  while IFS=$'\t' read -r pr br lb; do  # the lead's own PRs whose merge review or latest CI failed
+    [ -n "$pr" ] || continue
+    if [[ ",$lb," == *",review-failed,"* ]] || [ "$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=$br&per_page=1" -q '.workflow_runs[0].conclusion // ""')" = failure ]; then prs+="$pr "; fi
+  done < <(gh api "repos/$repo/pulls?state=open&per_page=100" -q ".[]|select(.user.login == \"$lead\")|[.number, .head.ref, ([.labels[].name]|join(\",\"))]|@tsv")
+  jq -n --argjson p "$(tr ' ' '\n' <<<"$prs" | grep . | jq -R 'tonumber' | jq -s .)" --argjson r "$(jq -s . <<<"$rescues")" --argjson o "$(bash "$here/owner-replies.sh" lead | jq -R 'tonumber' | jq -s .)" \
+    --argjson d "$(tr ' ' '\n' <<<"$debates" | grep . | jq -R 'tonumber' | jq -s .)" \
+    --argjson m "$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=1" -q '.workflow_runs[0]|{conclusion, updated_at}')" \
+    '{rescues: $r, replies: $o, debates: $d, prs: $p, main: $m}'
+}
+
+# One line per item waiting for the lead: open rescues it has not answered last (escalated ones wait on the owner),
+# owner replies on issues it raised, debate turns it owes, its own PRs that failed review or CI, and main red for
+# over 2 h (workers try first).
+lead_queue() {
+  lead_state | jq -r --arg lead "$(cfgq '.roles.lead.logins[0]')" --arg now "${NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" '
+    (.rescues[]|select((.labels|index("needs-owner")|not) and .last != $lead)|"rescue #\(.number)"),
+    (.replies[]|"owner reply #\(.)"),
+    (.debates[]|"debate #\(.)"),
+    ((.prs // [])[]|"own PR #\(.) failed review or CI"),
+    (.main // {}|select(.conclusion == "failure" and (($now|fromdateiso8601) - (.updated_at|fromdateiso8601)) > 7200)|"main red over 2 h")'
+}
+
 fire() { # <role> <reason>
   local trig secret token
+  if [ "$1" = lead ] && ! lead_now "$2"; then echo "queued for the lead tick: $2"; return 0; fi
   trig=$(cfgq --arg r "$1" '.roles[$r].trigger // ""'); secret=$(cfgq --arg r "$1" '.roles[$r].secret // ""')
   [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
@@ -235,6 +275,19 @@ no role marker"
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"
   DEBATE_JSON=$d/deb.json ev 'pm\tdebate #9: turn 2 of 3' issue_comment '{"issue":{"number":9,"labels":[{"name":"debate"}]},"comment":{"user":{"login":"locksmith-linus[bot]"},"body":"x"}}'
+  # the lead wakes at once only for an owner tag or its own tick; everything else is queued
+  for w in "owner tagged you on #8: u" "queue: rescue #5"; do lead_now "$w" && echo "ok: lead now: $w" || { echo "FAIL: lead now: $w"; fail=1; }; done
+  for w in "needs-rescue #5 opened" "owner replied on needs-owner #7" "CI failed on main" "debate #9: turn 2 of 3"; do
+    got=$(fire lead "$w"); [ "$got" = "queued for the lead tick: $w" ] && echo "ok: queued: $w" || { echo "FAIL: queued: $w got '$got'"; fail=1; }
+  done
+  lq() { # <expected lines> <state json>
+    printf '%s' "$2" >"$d/q.json"; got=$(LEADQ_JSON=$d/q.json NOW=2026-11-22T12:00:00Z lead_queue)
+    [ "$got" = "$(printf '%b' "$1")" ] && echo "ok: lead queue -> ${1:-empty}" || { echo "FAIL: lead queue want '$1' got '$got'"; fail=1; }
+  }
+  lq '' '{"rescues":[],"replies":[],"debates":[],"main":{"conclusion":"success","updated_at":"2026-11-22T11:00:00Z"}}'
+  lq 'rescue #5\nowner reply #7\ndebate #9\nown PR #11 failed review or CI\nmain red over 2 h' '{"rescues":[{"number":5,"labels":["needs-rescue"],"last":"locksmith-alfie[bot]"}],"replies":[7],"debates":[9],"prs":[11],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
+  # answered by the lead, escalated to the owner, or main red for under 2 h (workers try first): nothing waits
+  lq '' '{"rescues":[{"number":5,"labels":["needs-rescue"],"last":"locksmith-linus[bot]"},{"number":6,"labels":["needs-rescue","needs-owner"],"last":""}],"replies":[],"debates":[],"main":{"conclusion":"failure","updated_at":"2026-11-22T11:00:00Z"}}'
   [ "$fail" = 0 ] && echo "route selftest: OK"; return "$fail"
 }
 
@@ -242,6 +295,7 @@ case "${1:-}" in
   event) event "${2:?event.json}" ;;
   debate) debate_input "${2:?issue}" | decide ;;
   fire) fire "${2:?role}" "${3:?reason}" ;;
+  lead-tick) q=$(lead_queue | paste -sd ';' - | sed 's/;/; /g'); if [ -n "$q" ]; then fire lead "queue: $q"; else echo "lead queue empty"; fi ;;
   selftest) selftest ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;
 esac

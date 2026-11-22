@@ -92,6 +92,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 |---|---|---|---|---|
 | P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ◐ |
 | P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - | ◐ |
+| B1 | `b1-nestjs-api` | The control-plane API on NestJS 12 built the way Infisical builds its backend, with Rust kept for plaintext secrets, keys, proxies and audit signing; a strangler migration with contract tests, and oxlint, oxfmt and knip for all TypeScript (OC-8). Two owner gates first. | - | ☐ |
 | P4 | `p4-sdks` | SDKs generated from OpenAPI, and the plugins switched to the remote Agent MCP where it helps. | m1-remote-mcp:contract | ☑ |
 
 ## Phase 5: Parity and beyond (ordered later, by demand)

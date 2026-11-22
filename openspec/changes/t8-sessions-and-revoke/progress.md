@@ -54,3 +54,8 @@
 - Task: CI fix (cargo-deny RUSTSEC-2026-0592) - ci-fix
 - Verified: cargo deny check -> ok; just quick -> ok
 - Notes for next session: bumped url 2.5.8 -> 2.5.9 in Cargo.lock only. Main has the same advisory; other PRs will hit it until main takes the bump.
+
+## 2026-11-22 15:40 worker
+- Task: 1.0 - ci-fix
+- Verified: just quick -> ok; cargo test -p ls-gateway -> git_redact tests flaked under load, pass alone
+- Notes for next session: macos check failed with exit 100 (infra, main passes); merged origin/main (12 behind) and pushed to rerun CI. If macos is red again, read annotations. Then finish-pr (auto-merge) once green.

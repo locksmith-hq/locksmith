@@ -99,7 +99,7 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       local wf concl br trig pr
       read -r wf concl br trig pr < <(jq -r '.workflow_run|[.name, .conclusion, .head_branch, .event, (.pull_requests[0].number // "")]|@tsv' "$ev")
       if [ "$wf" = ci ] && [ "$concl" = failure ]; then
-        if [ "$br" = main ]; then printf '%s\tCI failed on main\n' "$(cfgq .default_worker)"
+        if [ "$br" = main ]; then printf '%s\tCI failed on main\n' lead
         elif [ "$trig" = pull_request ] && [[ "$br" == claude/* ]]; then printf '%s\tCI failed on PR #%s (%s)\n' "$(pr_worker "$pr")" "${pr:-?}" "$br"; fi
       elif [ "$wf" = claude-review ] && [ "$trig" = pull_request ] && [ -n "$pr" ] && [[ "$concl" =~ ^(success|failure)$ ]]; then
         printf '%s\tmerge review finished on PR #%s\n' "$(pr_worker "$pr")" "$pr"
@@ -223,7 +223,7 @@ no role marker"
   ev 'worker-a\tneeds-rescue #5 closed' issues '{"action":"closed","issue":{"number":5,"body":"<!-- raised-by: worker -->","user":{"login":"locksmith-alfie[bot]"},"labels":[{"name":"needs-rescue"}]}}'
   ev 'lead\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"body":"<!-- raised-by: optimizer -->","user":{"login":"tomer555"},"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"done"}}'
   ev 'pm\tneeds-research #6 closed' issues '{"action":"closed","issue":{"number":6,"body":"<!-- raised-by: pm -->","labels":[{"name":"needs-research"}]}}'
-  ev 'worker-a\tCI failed on main' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"main","event":"push","pull_requests":[]}}'
+  ev 'lead\tCI failed on main' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"main","event":"push","pull_requests":[]}}'
   ev '' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"feature","event":"pull_request","pull_requests":[]}}'
   # each worker owns its PRs: CI failures and finished merge reviews wake the PR's author; owner PRs go to default_worker
   PR_AUTHOR='locksmith-josie[bot]' ev 'worker-b\tCI failed on PR #12 (claude/change-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'

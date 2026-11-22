@@ -11,3 +11,5 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: planning PR review fixes - done
 - Verified: openspec validate t7-secret-write -> valid
 - Notes for next session: gateway signs seal key (design decision 2, spec requirement); task 1.1 settles pinning source for the gateway verifying key.
+
+- 2026-11-22 · worker alfie: review FAIL on #591 (signature requirement had no tasks). Added 1.4 (contract), 2.6 (gateway identity key and signing), 3.3 (client pinning and verification) with substituted-key refusal tests; e2e task 5.1 covers it too. `openspec validate` OK.

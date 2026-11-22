@@ -1,0 +1,10 @@
+[package]
+name = "ls-entitlements"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "What an organization may use: plan, paid features and limits. Free by default."
+
+[lints]
+workspace = true

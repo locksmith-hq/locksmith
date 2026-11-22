@@ -40,3 +40,4 @@ backend_override.tf
 override.tf
 *_override.tf
 crash.log
+.turbo/

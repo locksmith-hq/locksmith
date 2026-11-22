@@ -125,7 +125,7 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       # Owner tags (@locksmith-lead or the org team @locksmith-hq/lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
       # The research bot (open internet, comments only) tags the roles its answer is for; it never wakes itself.
       src=owner; [ "$owner" = false ] && [ "$(role_of "$who")" = research ] && src=research
-      tags=$({ [ "$owner" = true ] || [ "$src" = research ]; } && grep -oE '@locksmith-(hq/)?[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done | grep -vx "$([ "$src" = research ] && echo research)")
+      tags=$({ [ "$owner" = true ] || [ "$src" = research ]; } && grep -oE '@locksmith-(hq/)?[a-z][a-z-]*[a-z]' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done | grep -vx "$([ "$src" = research ] && echo research)")
       if [ -n "$tags" ]; then
         for to in $tags; do printf '%s\t%s tagged you on #%s: %s\n' "$to" "$src" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
         return 0
@@ -238,16 +238,16 @@ no role marker"
   # owner tags: on issues and PRs, any label; several roles; the tag replaces the reply rule; agents and others cannot tag
   ev 'pm\towner tagged you on #7: u\nresearch\towner tagged you on #7: u' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-pm and @locksmith-research: check this"}}'
   ev 'worker-a\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-worker rebase please"}}'
-  ev 'worker-c\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-harriet rebase please"}}'
-  ev 'worker-b\towner tagged you on #8: u\nlead\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-hq/lead and @locksmith-hq/josie: look"}}'
+  ev 'worker-c\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-worker-c rebase please"}}'
+  ev 'lead\towner tagged you on #8: u\npm\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-hq/lead and @locksmith-hq/pm: look"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\n@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"stranger"},"body":"@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"@locksmith-nobody"}}'
   # research (Ada) informs: her comment's tags wake those roles, never herself; other bots cannot tag
-  ev 'worker-b\tresearch tagged you on #6: u\npm\tresearch tagged you on #6: u' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-research"}]},"comment":{"html_url":"u","user":{"login":"locksmith-ada[bot]"},"body":"Answer: yes.\n@locksmith-pm @locksmith-josie @locksmith-ada"}}'
+  ev 'pm\tresearch tagged you on #6: u\nworker-b\tresearch tagged you on #6: u' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-research"}]},"comment":{"html_url":"u","user":{"login":"locksmith-ada[bot]"},"body":"Answer: yes.\n@locksmith-pm @locksmith-worker-b @locksmith-research"}}'
   ev '' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"locksmith-ada[bot]"},"body":"no tags"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"locksmith-alfie[bot]"},"body":"@locksmith-lead"}}'
-  ev 'research\towner tagged you on #9: u' issue_comment '{"issue":{"number":9,"labels":[]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-ada what does X cost?"}}'
+  ev 'research\towner tagged you on #9: u' issue_comment '{"issue":{"number":9,"labels":[]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-research what does X cost?"}}'
   # no tag: the role that raised the issue gets the reply, else the lead
   ev 'pm\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"body":"x\n<!-- raised-by: pm -->","labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"yes"}}'
   ev 'research\tneeds-research #6 opened' issues '{"action":"labeled","label":{"name":"needs-research"},"issue":{"number":6,"labels":[{"name":"needs-research"}]}}'

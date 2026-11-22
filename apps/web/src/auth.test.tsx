@@ -145,6 +145,7 @@ test("UI: signed-out shows the three choices; signed-in shows the user, bearer r
   await roundTrip(auth, "github");
   await auth.start();
   expect(await screen.findByTestId("signed-in-as")).toHaveTextContent("ada@example.com");
+  await userEvent.click(screen.getByRole("link", { name: "Agents" }));
   await waitFor(() => expect(fetchMock.mock.calls.some((c) => c[0] === "/v1/agents")).toBe(true));
   const call = fetchMock.mock.calls.find((c) => c[0] === "/v1/agents")!;
   expect(call[1].headers.authorization).toBe(`Bearer ${TOKEN}`);

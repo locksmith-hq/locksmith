@@ -11,9 +11,9 @@
 - [x] 2.3 Verify: `cargo nextest run -p ls-control-plane tenancy` and `cargo nextest run -p ls-tenant-lint`.
 
 ## 3. Org selection and orgs [opus]
-- [ ] 3.1 `OrgBinding` honours `X-Locksmith-Org` after a membership check in the binding transaction; default is the personal org; exposes the caller's role. A miss is `404`.
-- [ ] 3.2 `GET/POST /v1/orgs`, `PATCH`, `DELETE` (owner only, `409` while secrets exist), with ledger events.
-- [ ] 3.3 Verify: `cargo nextest run -p ls-control-plane org_select orgs`: non-member `404`, old user default, removed member refused.
+- [x] 3.1 `OrgBinding` honours `X-Locksmith-Org` after a membership check in the binding transaction; default is the personal org; exposes the caller's role. A miss is `404`.
+- [x] 3.2 `GET/POST /v1/orgs`, `PATCH`, `DELETE` (owner only, `409` while secrets exist), with ledger events.
+- [x] 3.3 Verify: `cargo nextest run -p ls-control-plane org_select orgs`: non-member `404`, old user default, removed member refused.
 
 ## 4. Members and invites [sonnet]
 - [ ] 4.1 Invite create, list and revoke: random token, SHA-256 stored, link returned once, role rules, 7-day expiry.

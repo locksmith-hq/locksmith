@@ -34,3 +34,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Done: `OrgBinding` now carries `role` and `user`; a human's `X-Locksmith-Org` is checked against `memberships` in the binding (login) transaction via `app.login_user` before the org is bound (`users::bind`, span `org.select`); miss or malformed id = `404`. New users get an owner membership of their personal org. `OrgRole` moved to `auth.rs` (re-exported from `members.rs`). `GET/POST /v1/orgs`, `PATCH`/`DELETE /v1/orgs/{id}` built; new `Kind::Forbidden` (`403`), ledger kinds `org.created`/`org.renamed`/`org.deleted`. Migration `0015_org_member_read.sql` adds a SELECT-only `orgs` policy for the caller's member orgs.
 - Deviation: DELETE ends every membership and revokes open invites but keeps the `orgs` row and its ledger (append-only ledger; app has no DELETE on `orgs`); personal orgs are `409`. PATCH/DELETE require `{org_id}` to be the bound org (send `X-Locksmith-Org`).
 - Verified: `cargo nextest run -p ls-control-plane org_select orgs` (tests in `tests/orgs.rs`), `cargo nextest run -p ls-control-plane -p ls-audit -p ls-tenant-lint` (304 passed).
+
+## 2026-11-22 worker (harriet) - group 3 verified
+- Evaluator (Opus) PASS on tasks 3.1-3.3; `cargo nextest run -p ls-control-plane org_select orgs` 11 passed.
+- Note: delete_org keeps the `orgs` row (ledger is append-only); it ends memberships and revokes invites. Differs from design.md "explicit deletes".
+- Follow-ups for later: revoke grants/disable workload identities and mcp clients on org delete; add explicit `org_id = $1` to the invites/secrets statements in delete_org.
+- Next: group 4 (members and invites), sonnet. macOS job on #605 failed with exit 100 earlier (could not rerun: 403); the push reruns CI.

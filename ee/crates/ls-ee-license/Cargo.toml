@@ -1,0 +1,19 @@
+[package]
+name = "ls-ee-license"
+edition.workspace = true
+version.workspace = true
+license = "LicenseRef-Locksmith-EE"
+publish.workspace = true
+description = "Locksmith Enterprise License: verifies a signed offline license file into entitlements."
+
+[lints]
+workspace = true
+
+[dependencies]
+ls-entitlements = { path = "../../../crates/ls-entitlements" }
+minisign-verify = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+minisign = "0.7"

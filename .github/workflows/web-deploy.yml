@@ -1,0 +1,67 @@
+name: web-deploy
+
+# Publishes the web console to the dev environment on every change to it (main only), or on demand.
+# Keyless: the job assumes an AWS role through GitHub OIDC. Every account-specific value (role, bucket,
+# distribution, Cognito ids) is a variable of the `dev` GitHub environment, so nothing is committed.
+# The `dev` environment is shared by every dev deploy job (web now, API and others later).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/web/**
+      - packages/ui/**
+      - packages/control-plane-client/**
+      - packages/api-types/**
+      - package-lock.json
+      - .nvmrc
+      - turbo.json
+      - .github/workflows/web-deploy.yml
+  workflow_dispatch:
+
+concurrency:
+  group: web-deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+      - name: Build
+        env:
+          VITE_OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
+          VITE_OIDC_CLIENT_ID: ${{ vars.VITE_OIDC_CLIENT_ID }}
+          VITE_OIDC_HOSTED_DOMAIN: ${{ vars.VITE_OIDC_HOSTED_DOMAIN }}
+        # Turborepo builds the web app and only the workspace packages it depends on (^build), with its task cache.
+        run: npx turbo run build --filter=@locksmith/web
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_WEB_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Upload
+        env:
+          BUCKET: ${{ vars.WEB_BUCKET }}
+        run: |
+          aws s3 sync apps/web/dist "s3://$BUCKET" --delete --cache-control "public,max-age=300"
+          aws s3 cp apps/web/dist/index.html "s3://$BUCKET/index.html" --cache-control "no-cache"
+      - name: Invalidate CloudFront
+        env:
+          DISTRIBUTION: ${{ vars.WEB_DISTRIBUTION_ID }}
+        run: aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*'

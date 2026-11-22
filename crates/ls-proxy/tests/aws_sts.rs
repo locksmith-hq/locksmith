@@ -301,17 +301,41 @@ fn revoke_older_sessions_put_role_policy() {
     assert_signed(&r, &b.secret_access_key, "iam", "us-east-1");
 }
 
-/// `LOCKSTACK_URL=http://localhost:4566 cargo test -p ls-proxy --test aws_sts -- --ignored`
+/// `FLOCI_URL=http://localhost:4566 cargo test -p ls-proxy --test aws_sts -- --ignored`
 #[test]
 #[ignore]
-fn localstack_assume_role() {
-    let url = std::env::var("LOCKSTACK_URL").expect("LOCKSTACK_URL");
+fn floci_assume_role() {
+    let url = std::env::var("FLOCI_URL").expect("FLOCI_URL");
     let b = Credentials {
         access_key_id: "test".into(),
         secret_access_key: Zeroizing::new("test".into()),
         session_token: None,
     };
     let arn = "arn:aws:iam::000000000000:role/locksmith-test";
+    // Floci enforces IAM, so the role must exist (needs the AWS CLI).
+    let tp = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"*"},"Action":"sts:AssumeRole"}]}"#;
+    let made = std::process::Command::new("aws")
+        .args([
+            "iam",
+            "create-role",
+            "--role-name",
+            "locksmith-test",
+            "--assume-role-policy-document",
+            tp,
+            "--endpoint-url",
+            &url,
+            "--region",
+            "us-east-1",
+        ])
+        .env("AWS_ACCESS_KEY_ID", "test")
+        .env("AWS_SECRET_ACCESS_KEY", "test")
+        .output()
+        .expect("aws cli");
+    assert!(
+        made.status.success(),
+        "{}",
+        String::from_utf8_lossy(&made.stderr)
+    );
     let (c, exp) = sts::contained(&b, "us-east-1", arn, None, "smith", Some("{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"*\"}]}"), Some(&url)).unwrap();
     assert!(!c.access_key_id.is_empty() && c.session_token.is_some());
     let now = SystemTime::now()

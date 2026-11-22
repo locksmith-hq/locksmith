@@ -36,6 +36,7 @@ CI jobs call the same `just` recipes as `just ci`, so run `just quick` locally a
 - Agents never receive secret values. Use relay, delegation, or short-lived scoped credentials.
 - Never block unlock or export because of licensing, billing or update failures.
 - Use Rust for anything that touches secrets.
+- Any test that needs an AWS API (STS, S3, DynamoDB, SQS, Cognito, KMS...) runs against Floci (https://github.com/floci-io/floci, `floci` in compose, `localhost:4566`), never real AWS, moto or LocalStack. Humans, workers, the lead and the PM all follow this.
 
 ## How we work
 - **Plan:** `docs/roadmap.md` and `openspec/changes/<id>/`. The rules for every change are in `openspec/config.yaml`.

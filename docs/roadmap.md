@@ -22,7 +22,7 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
    - `ls-crypto` (AEAD, KDF)
    - `ls-vault` (audit hash chain)
    - `smith-cli`, `locksmith-mcp`, `ls-hooks` (agent connector and hooks)
-5. **Local, then cloud.** AWS `dev` arrives in phase 2, right after sign-in (P1; owner decision H1-3). Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
+5. **Local, then cloud.** AWS `dev` arrives in phase 2, right after sign-in (P1; owner decision H1-3). Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, Floci (floci-io/floci) for S3, STS, Cognito and every other AWS API, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
 6. **Apps are built every change.** The web console and the desktop app (Tauri) grow with each slice
    instead of arriving at the end. Every change's Local verification runs `just apps-build`; the last
    change of each phase also runs the manual `ci-platforms` workflow on macOS and Linux (Windows parity is
@@ -82,7 +82,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
 | D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - | ☑ |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. | t3-console-mvp | ◐ |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on Floci first. | t3-console-mvp | ◐ |
 | D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - | ◐ |
 | D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract | ☑ |
 

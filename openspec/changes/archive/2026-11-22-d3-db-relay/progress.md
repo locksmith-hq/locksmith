@@ -136,3 +136,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 ## 2026-11-22 worker (alfie, sixth entry)
 - Task: 7.2 - done, ticked; change archived in this PR
 - Verified: `just up`, `just db-smoke` (psql through `smith db connect --gateway`: 1 passed), `just apps-build`, `just quick`; the full `just ci` is not run locally (PR checks run it)
+
+## 2026-11-22 18:25 worker
+- Task: merge-review FAIL fix (watcher grant staleness) - ci-fix
+- Verified: cargo test -p ls-gateway grants + pg_revoke -> pass; just quick -> pass
+- Notes for next session: watcher uses GrantSource::grants_uncached; PR #485 awaits re-review.

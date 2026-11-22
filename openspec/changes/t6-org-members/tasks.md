@@ -16,9 +16,9 @@
 - [x] 3.3 Verify: `cargo nextest run -p ls-control-plane org_select orgs`: non-member `404`, old user default, removed member refused.
 
 ## 4. Members and invites [sonnet]
-- [ ] 4.1 Invite create, list and revoke: random token, SHA-256 stored, link returned once, role rules, 7-day expiry.
-- [ ] 4.2 `POST /v1/invites/accept`: verified-email match, single use, uniform `404`, ledger event.
-- [ ] 4.3 Member list, role change, remove and leave with the last-owner lock; concurrent test with two owners.
+- [x] 4.1 Invite create, list and revoke: random token, SHA-256 stored, link returned once, role rules, 7-day expiry.
+- [x] 4.2 `POST /v1/invites/accept`: verified-email match, single use, uniform `404`, ledger event.
+- [x] 4.3 Member list, role change, remove and leave with the last-owner lock; concurrent test with two owners.
 - [ ] 4.4 Add the invite and membership cases (guess a token, reuse, other email, cross-org `404`) to `tests/adversarial/`.
 - [ ] 4.5 Verify: `cargo nextest run -p ls-control-plane members invites`, `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
 

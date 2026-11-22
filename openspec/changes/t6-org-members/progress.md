@@ -45,3 +45,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: PR #605 red `rust` job - ci-fix
 - Verified: `cargo deny check advisories` -> ok, `just quick` -> pass
 - Notes for next session: failure was cargo-deny RUSTSEC-2026-0592 (`url` 2.5.8), not macOS; bumped to 2.5.9 in Cargo.lock. Main has the same advisory, so other PRs will hit it until this merges. Group 4 (members and invites) is next.
+
+## 2026-11-22 worker (harriet)
+- Task: 4.1-4.3 (invites, accept, members) - done, ticked after Sonnet evaluator PASS.
+- Verified: `cargo test -p ls-control-plane --test members` (8 passed), tenancy/tenant_lint/orgs/users/openapi/memberships, `just quick` -> pass. Migration 0016 adds SELECT-only `org_member_read` on `users`.
+- Deviation: accept returns 401 (no auth) / 403 (unverified email) before looking at the token, not the uniform 404 the spec lists for "unverified"; leaks nothing about token validity. Amend spec text or map to 404.
+- Notes for next session: 4.4 (adversarial cases) and 4.5 remain. Possible deadlock (500) when two admins act on each other at once (lock order owners, caller, target); add test/fix lock ordering. Missing tests: admin removes admin. npm tests for packages/sdk and control-plane-client not run here (node_modules stale); regenerated `packages/sdk/src/schema.d.ts` (Location header) is unverified.

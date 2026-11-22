@@ -33,3 +33,8 @@
 - Task: 6.1-6.3 - done (generated `integrations/generic-mcp/mcp.json` via the drift test; README gets the stdio section with the lost protections; handshake test covers the snippet; testing.md row)
 - Verified: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` 14 passed; `cargo test -p locksmith-mcp --test integrations` passed; `just quick`/`just test generic-mcp` below
 - Notes for next session: next is task 7 (install table in docs, leak scan) then 8; 2.1 still open (doc-derived fixtures).
+
+## 2026-11-22 worker (alfie, second entry)
+- Task: 7.1 - done (supported-agents install table with protection labels in `integrations/README.md`)
+- Verified: `bash scripts/tree-check.sh` OK; `gitleaks detect --no-git` over `integrations/` and `crates/ls-hooks/tests/fixtures` no leaks
+- Notes for next session: 7.2/7.3 left open: `just leak-scan` fails on this VM (`bad canary file`, no stack canaries), so run it where the canary file exists or via CI. 2.1 and 8.x still open.

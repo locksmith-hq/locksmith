@@ -37,7 +37,7 @@
 - [x] 6.3 Verify: `just test generic-mcp`.
 
 ## 7. Docs and leak safety [haiku]
-- [ ] 7.1 Update `integrations/README.md` (generated file list, regenerate command) and add an install table to the docs for all supported agents with their protection labels.
+- [x] 7.1 Update `integrations/README.md` (generated file list, regenerate command) and add an install table to the docs for all supported agents with their protection labels.
 - [ ] 7.2 Run the leak scan over new fixtures and integration files; fix any hit.
 - [ ] 7.3 Verify: `just leak-scan` and `bash scripts/tree-check.sh`.
 

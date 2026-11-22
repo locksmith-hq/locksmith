@@ -15,3 +15,8 @@
 - Task: 2.1-2.4, 5.1 - done
 - Verified: `cargo nextest run -p ls-control-plane -E 'binary(mcp_store) | binary(mcp) | binary(mcp_tools) | binary(tenancy) | binary(tenant_lint) | binary(audit) | binary(openapi)'` (57 pass); `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane` (400 pass); no assert edited in the mcp test paths; `rg` lists only mcp_store.rs; `just quick` clean.
 - Notes for next session: only 5.2 remains (`just up` smoke comparing WWW-Authenticate on hub and gateway with origin/main, `just apps-build`); both are heavy (Keycloak profile, Tauri build), so give them a run of their own. `layer_settings` returns an ordered Vec (not a HashMap as design.md says) because the agent read needs `ORDER BY tool`; the hub collects it into a map.
+
+## 2026-11-22 worker
+- Task: 5.2 - blocked
+- Verified: `just up` -> stack healthy; `just quick` -> clean. The `/mcp` WWW-Authenticate comparison against origin/main and `just apps-build` were not run (cold service builds exceed the run budget).
+- Notes for next session: the PR's `ci-platforms` macos job failed with exit code 100 (not a code failure as far as annotations show; I cannot rerun it, the token gets 403). A new push reruns it. Only 5.2 remains; leave it unticked until the smoke test runs.

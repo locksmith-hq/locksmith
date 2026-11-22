@@ -20,3 +20,7 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-22 (owner session, task 1.2)
 - Task 1.2 done: baseline of oxlint (14 warnings, 0 errors), oxfmt (86 of 98 files would change; one repo-wide formatting commit needed) and knip (26 unused files, mostly the mockup entry; a handful of dependency fixes) over the real packages; configs each needs are in `docs/research/nestjs-typescript7.md`.
+
+## 2026-11-22 (worker-b, task 1.3)
+- Task 1.3 done: `apps/api/route-table.json` lists every method and path of `services/control-plane/openapi.json` with owner `rust`. The oasdiff check already protects the frozen contract.
+- Started task 2.1 (not ticked): `apps/api` package skeleton (`package.json`, `tsconfig.json`), a test that checks the route table against `openapi.json`, and the `docs/testing.md` row. Still open for 2.1: `tree-check.sh` learning `apps/api`, the Turborepo `typecheck` task, the shared tsconfig base decision.

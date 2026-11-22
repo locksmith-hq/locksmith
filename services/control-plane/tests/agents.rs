@@ -418,7 +418,10 @@ async fn token_exchange_mints_a_short_lived_gateway_token() {
     assert_eq!(claims.exp - claims.iat, 15 * 60);
     let now = OffsetDateTime::now_utc().unix_timestamp();
     assert!((claims.iat - now).abs() < 60);
-    assert_eq!(keys(&payload(token)), ["aud", "exp", "iat", "jti", "org", "sub"]);
+    assert_eq!(
+        keys(&payload(token)),
+        ["aud", "exp", "iat", "jti", "org", "sub"]
+    );
 }
 
 /// Scenario "expired or forged token" (verifier side): an expired token, a wrong audience and a

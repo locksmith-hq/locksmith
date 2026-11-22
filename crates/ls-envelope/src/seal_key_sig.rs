@@ -16,7 +16,7 @@
 //! The domain tag keeps the signature from being valid for any other gateway-signed message.
 
 use crate::{EnvelopeError, KeyId, SealPublicKey};
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, VerifyingKey};
 use ls_crypto::aead::Aad;
 
 /// Domain separation tag, the first field of the signed message.

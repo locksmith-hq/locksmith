@@ -121,3 +121,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: PR conflicts - ci-fix
 - Verified: `cargo test -p ls-gateway --lib -- --test-threads=1` -> 165 passed; `just quick` -> ok
 - Notes for next session: merged main (audit.rs conflict: kept main's `append_to`, dropped the branch's `send`). `git::fixture_tests` fail when run in parallel under plain `cargo test` but pass serially (fixture contention, not a regression). Next task: 1.2 spike onward; check tasks.md for the first unticked task.
+
+## 2026-11-22 worker
+- Task: 5.1 - blocked
+- Verified: merged origin/main (already up to date); PR #480 checks green on rust/web/desktop/macos/windows/adversarial/hygiene
+- Notes for next session: only 5.1/5.2 remain; the console shell (t3-console-mvp, #489) is still open and `apps/web/src` has no bindings page, so nothing to extend yet. Take them after #489 lands.

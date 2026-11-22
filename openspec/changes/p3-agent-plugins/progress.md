@@ -48,3 +48,13 @@
 - Task: 8.1 - done (`just test` for gemini-cli, copilot, windsurf, cline, generic-mcp all rc=0; `smith init --yes` and `smith doctor` in a scratch repo with all markers: gemini and copilot hooks ok, windsurf warns "not protected" as designed)
 - Verified: as above; `just quick` OK
 - Notes for next session: open: 2.1 (recorded fixtures, doc-derived only) and 8.2 (`just apps-build`, CI). Do not run `just ci` locally; the PR checks run it.
+
+## 2026-11-22 worker (alfie, third entry)
+- Task: 8.2 - NOT ticked (evaluator FAIL: CI was green on e815c95, not on the merged head; `just apps-build` rc=0 after `npm ci`; PR checks on e815c95 all green: hygiene, rust, web, desktop, macos, windows-check, adversarial)
+- Verified: as above; merged origin/main (clean)
+- Notes for next session: tick 8.2 once CI is green on the pushed head (apps-build already passed locally). Then only 2.1 is open (recorded payloads from real Gemini/Copilot/Cline sessions; no agent CLI on the VM, fixtures stay doc-derived). It needs an owner decision to accept doc-derived fixtures or a session with the CLIs; do not enable auto-merge until then. d2-aws-sts and d3-db-relay remain parked on the t3 bindings page (#489).
+
+## 2026-11-22 worker (alfie, third entry)
+- Task: none ticked; 8.2 not ticked (independent evaluator FAIL: CI was green on e815c95, not on the merged head)
+- Verified: `npm ci` then `just apps-build` rc=0 locally; PR checks on e815c95 all green
+- Notes for next session: tick 8.2 once CI is green on this pushed head (apps-build already passed). Then only 2.1 is open (recorded payloads from real Gemini/Copilot/Cline; no agent CLI on the VM, fixtures stay doc-derived), which needs a session with those CLIs or an owner decision. Do not enable auto-merge until then. d2-aws-sts and d3-db-relay remain parked on the t3 bindings page (#489).

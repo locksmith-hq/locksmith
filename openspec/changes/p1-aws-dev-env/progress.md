@@ -50,3 +50,9 @@
 - Cause: approving spend and writing `.github/workflows/*` are owner-only (owner.md 2026-11-18, common.md trust root); neither a worker nor the lead can finish 1.2/4.3.
 - Fix: brief's price caveat replaced with the verification evidence; owner issue #487 carries the cost decision, an Artifact brief and the full `aws-base-apply.yml` for the owner to commit.
 - Notes for next session: on `approved` in #487 the lead records P1-1 in decisions.md and ticks 1.2. Once the workflow is on main, run `actionlint` on it and tick 4.3/4.4. Serverless v2 support for PG18 is not stated in AWS docs; the recorded fallback stays.
+
+## 2026-11-21 owner
+- Applied for real: the AWS organization, OUs and `locksmith-dev` account, the guardrails stack (11 resources, from the management account) and the `base` stack (42 resources) in us-east-1. Cost brief approval is P1-1.
+- Aurora PostgreSQL 18.1 does not exist in us-east-1 (offers 18.3, 18.4, 18.6). The default is now 18.6; the fallback to the newest supported major in the base README did not need the 17.x branch.
+- Decision P1-2: the guardrails stack moved to the private cloud repo (task 4.1 stays ticked; its code now lives there). `just aws-validate` and `tree-check` cover `base` and `session` only.
+- Not done: `just aws-smoke`, ECR image push, `just aws-up`, workflow 4.3.

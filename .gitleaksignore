@@ -50,6 +50,10 @@ daaca0ee540ad43a11439db70d1f8ef878483db8:crates/ls-proxy/tests/aws_relay.rs:aws-
 crates/ls-proxy/tests/aws_relay.rs:aws-access-token:20
 crates/ls-proxy/tests/aws_relay.rs:aws-access-token:21
 crates/ls-envelope/vectors/v1.json:generic-api-key:50
+# Example secret id (a UUID, not a credential) in the github-action README, fixed to a placeholder in the next commit (d4).
+6e96fdab1368bc077c3a6b78d52883e5b31fa613:integrations/github-action/README.md:generic-api-key:49
+# Test-fixture placeholder (not a credential) in a file removed later in the d4 branch.
+e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index.test.ts:generic-api-key:75
 # Fake fixtures on worker branches (m1/p4 enrollment-secret test, d4 README example UUID). CI fetches every branch,
 # so these fail hygiene on all PRs until main ignores them (lead, 2026-11-21).
 e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index.test.ts:generic-api-key:75

@@ -82,6 +82,11 @@ public-check:
     scripts/public-check.test.sh
     scripts/public-check.sh
 
+# Install a git pre-push hook that runs the denylist check (see docs/public-private-boundary.md).
+install-hooks:
+    printf '#!/usr/bin/env bash\nexec "$(git rev-parse --show-toplevel)/scripts/public-check.sh" denylist\n' > "$(git rev-parse --git-path hooks)/pre-push"
+    chmod +x "$(git rev-parse --git-path hooks)/pre-push"
+
 dev app:
     npm run build -w apps/{{app}}
 
@@ -260,11 +265,44 @@ connector-smoke:
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
 
+# D4 workload-identity smoke (needs `just up` and `just workload-smoke-api`): an in-process
+# GitHub-shaped OIDC stub issuer (TLS on loopback) and runner endpoint; `smith login --workload
+# github` exchanges its token, relays to the WireMock upstream and holds no secret; a non-matching
+# `ref` and a revoked grant are refused. Run `just leak-scan` after.
+workload-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    cd "$root"
+    bash scripts/workload-smoke-cert.sh >/dev/null
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test workload
+
+# `just api` for `just workload-smoke`: trusts the stub issuer's self-signed certificate and allows
+# a loopback issuer (local development only; the default `just api` does neither).
+workload-smoke-api:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    cd "$root"
+    export SSL_CERT_FILE="$(bash scripts/workload-smoke-cert.sh)"
+    export LOCKSMITH_WORKLOAD_ALLOW_PRIVATE_ISSUERS=1
+    exec just api
+
 # S6 stack adversarial gate (needs `just up` and `just api`; fails fast without them): every
 # gateway case with skips as failures, then `leak-scan` over the stack, the audit export and the
 # kept artifacts. `--agent claude` adds the live prompts (no claude CLI or key: `skip live`, fails).
 adversarial-gate *args:
     @bash tests/adversarial/gate.sh "$@"
+
+# Regenerate packages/sdk/src/schema.d.ts from the control-plane OpenAPI file.
+sdk-gen:
+    npm run gen --workspace packages/sdk
+
+# SDK smoke against `just up` + `just api`: create, list, delete an agent, then leak-scan the output.
+sdk-smoke:
+    bash scripts/sdk-smoke.sh
 
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
@@ -344,7 +382,7 @@ aws-validate:
     set -euo pipefail
     export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
     tofu fmt -check -recursive infra/tofu
-    for m in guardrails base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
+    for m in base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
     python3 -I infra/tofu/policy/test_check_plan.py
     python3 -I infra/tofu/policy/test_base_oidc.py
 

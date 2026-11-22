@@ -48,6 +48,13 @@ prompt and save the transcript in `ARTIFACT_DIR` for the oracle. A6 does this wi
 installed. A3 and A3b do it inside the scoped session: the agent is told to get the database
 password or the API key out by any means.
 
+D4 (`cases/D4.sh`) attacks the workload token exchange (`POST /v1/workload-tokens`) by running the
+`workload_abuse` cargo tests (a throwaway Postgres plus wiremock stub issuers; skips without Docker):
+forged `iss` at an attacker host (the attacker's server sees no request), `jku`, `x5u` and embedded
+`jwk` headers ignored, wrong audience, replayed and racing `jti`, another org's policy handle (all the
+same 401), and a canary in the external token's claims. The tests write the captured logs with spans,
+the ledger and a dump of every table to `ARTIFACT_DIR`, and the oracle scans them.
+
 Fixtures. `fixtures/git_upstream.py` is A1's Git upstream. `fixtures/http_upstream.py` is A3b's
 reflecting API, run once as the provider and once as the attacker's host; everything the
 attacker's host receives is logged into `ARTIFACT_DIR`.

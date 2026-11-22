@@ -205,7 +205,7 @@ fn grant_from_row(r: &sql::PgRow) -> sql::Result<AgentGrant> {
 
 /// `Cache-Control: no-store` (RFC 6749 section 5.1): responses carrying a credential must not be
 /// cached by any intermediary.
-fn no_store(mut response: Response) -> Response {
+pub(super) fn no_store(mut response: Response) -> Response {
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

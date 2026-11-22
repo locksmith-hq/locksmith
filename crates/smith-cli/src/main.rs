@@ -17,6 +17,7 @@ mod doctor_m5;
 mod doctor_m6;
 mod doctor_m6_db;
 mod doctor_m7;
+mod doctor_workload;
 mod dotenv;
 mod git_cmd;
 mod hook_cmd;
@@ -85,6 +86,12 @@ enum Cmd {
         /// Apply every change without asking (CI).
         #[arg(long)]
         yes: bool,
+        /// Also add the remote Hub MCP server (`<URL>/mcp`, OAuth) for agents that support it.
+        #[arg(long, value_name = "URL")]
+        hub: Option<String>,
+        /// Print the planned changes and exit without writing anything.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Agent hook entry point: `smith hook <agent> <event>` reads the hook JSON on stdin.
     Hook { agent: String, event: String },
@@ -143,7 +150,7 @@ enum Cmd {
         #[command(subcommand)]
         cmd: audit_cmds::AuditCmd,
     },
-    /// Log in as an agent (`--agent`, short-lived gateway token) or as a human (`--user`, device grant, token in the OS keystore).
+    /// Log in as an agent (`--agent`, short-lived gateway token), as a CI or cluster workload with no stored secret (`--workload github|kubernetes`, OIDC token exchange), or as a human (`--user`, device grant, token in the OS keystore).
     Login(connector::LoginArgs),
     /// List the secrets this agent may use through the gateway (names and hosts, never values).
     Grants,
@@ -222,7 +229,12 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
                 ExitCode::Ok
             })
         }
-        Some(Cmd::Init { binding_only, yes }) => init_cmd::run(&ro, binding_only, yes),
+        Some(Cmd::Init {
+            binding_only,
+            yes,
+            hub,
+            dry_run,
+        }) => init_cmd::run(&ro, binding_only, yes, hub.as_deref(), dry_run),
         Some(Cmd::Login(a)) => connector::login(cli.json, a),
         Some(Cmd::Grants) => connector::grants(cli.json),
         Some(Cmd::Relay(a)) => connector::relay(cli.json, a),

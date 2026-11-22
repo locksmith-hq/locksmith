@@ -33,17 +33,39 @@ const GATEWAY_ENV: &str = ls_connector::GATEWAY_ENV;
 pub struct LoginArgs {
     /// Log in as an agent: exchange an enrollment secret for a short-lived token. The secret is
     /// read from $LOCKSMITH_ENROLLMENT_SECRET, else from stdin (a no-echo prompt on a terminal).
-    #[arg(long, required_unless_present = "user", conflicts_with = "user")]
+    #[arg(
+        long,
+        required_unless_present_any = ["user", "workload"],
+        conflicts_with_all = ["user", "workload"]
+    )]
     pub agent: bool,
     /// Log in as a human with the OAuth device grant (RFC 8628): approve in any browser; the
     /// token is kept in the OS keystore.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "workload")]
     pub user: bool,
-    /// Control plane base URL (`https`, or `http` on loopback only). Agent login only.
-    #[arg(long, env = CONTROL_PLANE_ENV, required_if_eq("agent", "true"))]
+    /// Log in as a CI or cluster workload with no stored secret: fetch the runner's OIDC token
+    /// (`github`: $ACTIONS_ID_TOKEN_REQUEST_URL and $ACTIONS_ID_TOKEN_REQUEST_TOKEN, needs
+    /// `permissions: id-token: write`; `kubernetes`: a projected token file) and exchange it for a
+    /// 15-minute agent token under the trust policy named by --policy. Only the agent token is
+    /// kept, in agent.json (0600); the external token is never written or printed.
+    #[arg(long, value_enum)]
+    pub workload: Option<Workload>,
+    /// Trust policy handle (`lsw_...`, not a secret) for `--workload`.
+    #[arg(long, env = ls_connector::WORKLOAD_POLICY_ENV, requires = "workload")]
+    pub policy: Option<String>,
+    /// Audience to request for the external token (`--workload`; default: the control plane URL,
+    /// which is the policy default). Must equal the policy's audience.
+    #[arg(long, env = ls_connector::WORKLOAD_AUDIENCE_ENV, requires = "workload")]
+    pub audience: Option<String>,
+    /// Projected service account token file for `--workload kubernetes` (default:
+    /// the pod's service account token; mount a projected token with the policy audience).
+    #[arg(long, env = ls_connector::WORKLOAD_TOKEN_FILE_ENV, requires = "workload")]
+    pub token_file: Option<std::path::PathBuf>,
+    /// Control plane base URL (`https`, or `http` on loopback only). Agent and workload login.
+    #[arg(long, env = CONTROL_PLANE_ENV)]
     pub control_plane_url: Option<String>,
-    /// Gateway base URL (`https`, or `http` on loopback only). Agent login only.
-    #[arg(long, env = GATEWAY_ENV, required_if_eq("agent", "true"))]
+    /// Gateway base URL (`https`, or `http` on loopback only). Agent and workload login.
+    #[arg(long, env = GATEWAY_ENV)]
     pub gateway_url: Option<String>,
     /// OIDC issuer URL for `--user` (Keycloak realm layout; `https`, or `http` on loopback).
     #[arg(long, env = "LOCKSMITH_OIDC_ISSUER", requires = "user")]
@@ -51,6 +73,15 @@ pub struct LoginArgs {
     /// OAuth client id for `--user` (the issuer client must allow the device grant).
     #[arg(long, env = "LOCKSMITH_OIDC_CLIENT_ID", requires = "user")]
     pub client_id: Option<String>,
+}
+
+/// Where the external identity token comes from.
+#[derive(Clone, Copy, ValueEnum, PartialEq, Eq)]
+pub enum Workload {
+    /// GitHub Actions OIDC (runner request variables).
+    Github,
+    /// Kubernetes projected service account token file.
+    Kubernetes,
 }
 
 #[derive(Args)]
@@ -128,8 +159,14 @@ pub fn login(json: bool, a: LoginArgs) -> Result<ExitCode, Fail> {
     }
     let (Some(control_plane_url), Some(gateway_url)) = (&a.control_plane_url, &a.gateway_url)
     else {
-        return Err(fail("--control-plane-url and --gateway-url are required"));
+        return Err(Fail(
+            ExitCode::Usage,
+            "--control-plane-url and --gateway-url are required".into(),
+        ));
     };
+    if let Some(kind) = a.workload {
+        return workload_login(json, kind, &a, control_plane_url, gateway_url);
+    }
     // Validate both endpoints before asking for the secret.
     ls_connector::parse_endpoint(control_plane_url)?;
     ls_connector::parse_endpoint(gateway_url)?;
@@ -142,6 +179,63 @@ pub fn login(json: bool, a: LoginArgs) -> Result<ExitCode, Fail> {
         );
     } else {
         println!("logged in as agent (token valid for {expires_in} s)");
+    }
+    Ok(ExitCode::Ok)
+}
+
+fn workload_login(
+    json: bool,
+    kind: Workload,
+    a: &LoginArgs,
+    control_plane_url: &str,
+    gateway_url: &str,
+) -> Result<ExitCode, Fail> {
+    let usage = |m: &str| Fail(ExitCode::Usage, m.to_owned());
+    // Validate everything that needs no secret before reading any token.
+    let cp = ls_connector::parse_endpoint(control_plane_url)?;
+    ls_connector::parse_endpoint(gateway_url)?;
+    let policy = a
+        .policy
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| {
+            usage("--policy or $LOCKSMITH_WORKLOAD_POLICY is required for --workload")
+        })?;
+    if !ls_connector::valid_policy_handle(policy) {
+        return Err(usage(
+            "the workload policy handle is not valid (expected lsw_...)",
+        ));
+    }
+    let audience = a.audience.clone().unwrap_or(cp);
+    let external = match kind {
+        Workload::Github => {
+            let url = std::env::var(ls_connector::GITHUB_REQUEST_URL_ENV).map_err(|_| {
+                fail(
+                    "not running in GitHub Actions with OIDC: add `permissions: id-token: write` to the job",
+                )
+            })?;
+            let tok = Zeroizing::new(
+                std::env::var(ls_connector::GITHUB_REQUEST_TOKEN_ENV)
+                    .map_err(|_| fail("the runner did not provide a token request token"))?,
+            );
+            let tok = SecretString::from(tok.to_string());
+            ls_connector::fetch_github_token(&url, &tok, &audience)?
+        }
+        Workload::Kubernetes => {
+            let default = std::path::PathBuf::from(ls_connector::KUBERNETES_DEFAULT_TOKEN_FILE);
+            ls_connector::read_token_file(a.token_file.as_ref().unwrap_or(&default))?
+        }
+    };
+    let (state, expires_in) =
+        ls_connector::login_workload(control_plane_url, gateway_url, policy, &external)?;
+    if json {
+        println!(
+            "{}",
+            json!({ "status": "logged_in", "expires_in": expires_in, "expires_at_unix": state.expires_at() })
+        );
+    } else {
+        println!("logged in as workload agent (token valid for {expires_in} s)");
     }
     Ok(ExitCode::Ok)
 }

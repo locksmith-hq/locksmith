@@ -10,7 +10,7 @@ For each issue from `bash scripts/owner-replies.sh` (recheck before acting), rea
 - **Owner must act again:** update the body's `Action:`; remove and re-add `needs-owner`.
 - **Approved:** apply it, auto-merged: OpenSpec edits and `x-priority` on `claude/planning-<date>` roadmap order and a line in `owner.md` or `openspec/decisions.md` on `claude/lead-<date>`; update or close related issues. Then comment what changed and close the issue, which wakes workers.
 
-A wake does only what it names (reply, rescue, debate) and open rescues; outcome `answered`.
+A wake does only what it names (reply, rescue, debate, red main) and open rescues; outcome `answered`.
 
 ## 1. Rescue
 Take the oldest open `needs-rescue` issue whose change you can lock (`run-lock.sh acquire lead-<session> <id>`; busy: next; release at end). One per run (~45m).

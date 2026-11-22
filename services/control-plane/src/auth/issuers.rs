@@ -264,7 +264,7 @@ async fn fetch_capped(
     url: &str,
     max: usize,
 ) -> Result<Vec<u8>, IssuerError> {
-    let mut response = client
+    let response = client
         .get(url)
         .header(reqwest::header::ACCEPT, "application/json")
         .send()
@@ -273,21 +273,9 @@ async fn fetch_capped(
     if !response.status().is_success() {
         return Err(IssuerError::Unavailable);
     }
-    if response.content_length().is_some_and(|n| n > max as u64) {
-        return Err(IssuerError::Unavailable);
-    }
-    let mut body = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
+    ls_http::read_capped(response, max)
         .await
-        .map_err(|_| IssuerError::Unavailable)?
-    {
-        if body.len() + chunk.len() > max {
-            return Err(IssuerError::Unavailable);
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
+        .map_err(|_| IssuerError::Unavailable)
 }
 
 /// The outbound client for discovery and JWKS fetches: the shared TLS policy (no redirects, no

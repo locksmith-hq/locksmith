@@ -28,3 +28,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.2 HPKE-wrapped DEK format - done
 - Verified: `cargo nextest run -p ls-envelope` (56 pass, 13 hpke), clippy/fmt clean, cargo deny ok; Opus evaluator PASS; KATs from an independent RFC 9180 implementation
 - Notes for next session: alg_id 2, 100-byte form; hpke built without its getrandom feature (seed via getrandom 0.2 `SecretKey32::random`), so wasm32 (3.1) needs the 0.2 `js` feature only. Next: 1.3 (OpenAPI and mock data, sonnet-sized), then 1.4.
+
+## 2026-11-22 worker alfie
+- Task: 1.3 seal-key and sealed version contract - done
+- Verified: `cargo nextest run -p ls-control-plane openapi`, `npm test --workspace packages/control-plane-client` (15 pass), `just quick`; Sonnet evaluator PASS
+- Notes for next session: sealed create is on `POST .../secrets/{id}/sealed-versions` (old `/versions` stays until 2.3 removes it; then move the route). `seal-key` takes an optional `secret_id` query for per-secret `next_version`. Handlers are 503 stubs with `#[allow(dead_code)]`, remove in 2.3; 503 should set `Retry-After`. Next: 1.4 (signature fields and KATs).

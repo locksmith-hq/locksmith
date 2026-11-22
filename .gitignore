@@ -18,6 +18,10 @@ infra/compose/.audit-verifier.json
 infra/compose/.audit-export/
 __pycache__/
 
+# Playwright output
+apps/web/test-results/
+apps/web/playwright-report/
+
 # OpenTofu
 .terraform/
 # Lock files from the local mirror hold only this platform's h1 hash; commit them once

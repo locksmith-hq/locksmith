@@ -1,7 +1,6 @@
 // Sample data for the console mockup. Nothing here is read from a control plane.
-import type { IconName } from "../../../desktop/src/brand";
+import { NOW, type IconName } from "@locksmith/ui";
 
-export const NOW = Math.floor(Date.now() / 1000);
 const m = 60, h = 3600, d = 86400;
 
 export interface Project { id: string; description: string; envs: string[] }

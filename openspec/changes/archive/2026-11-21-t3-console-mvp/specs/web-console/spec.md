@@ -21,7 +21,7 @@ The console SHALL open on an Overview showing counts of projects, agents and rec
 
 #### Scenario: First run
 - **WHEN** a newly created user lands after sign-in
-- **THEN** the Overview shows the personal org name and the checklist, and dismissing it persists across reloads
+- **THEN** the Overview shows the checklist, and dismissing it persists across reloads (the personal org name is shown once the API can tell the console its org id; see the follow-up logged in progress.md)
 
 ### Requirement: Projects and environments management
 The console SHALL list, create, rename and delete projects and their environments through the API and show the API's error when it refuses.

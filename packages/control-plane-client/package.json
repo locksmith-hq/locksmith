@@ -10,6 +10,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "lint": "tsc --noEmit -p .",
     "test": "vitest run"
   },
   "devDependencies": {

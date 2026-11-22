@@ -79,11 +79,16 @@ pub fn parse(event: &str, v: &Value) -> Option<Event> {
         "write_to_file" | "replace_in_file" | "apply_patch" => {
             Some(Event::Edit { path: path()?, cwd })
         }
-        "search_files" => Some(Event::Search {
-            path: path(),
-            glob: field(args, "file_pattern").map(String::from),
-            cwd,
-        }),
+        // Both keys are optional, so a guessed key name would leave neither: deny (see
+        // `unreadable`) rather than treat it as a search of nothing.
+        "search_files" => {
+            let glob = field(args, "file_pattern").map(String::from);
+            (path().is_some() || glob.is_some()).then(|| Event::Search {
+                path: path(),
+                glob,
+                cwd,
+            })
+        }
         _ => None,
     }
 }

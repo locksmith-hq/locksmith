@@ -40,11 +40,13 @@ pub fn parse(event: &str, v: &Value) -> Option<Event> {
                 }),
                 "read_file" => Some(Event::Read { path: file()?, cwd }),
                 "write_file" | "replace" => Some(Event::Edit { path: file()?, cwd }),
-                "grep_search" => Some(Event::Search {
-                    path: field(t, "dir_path").map(PathBuf::from),
-                    glob: field(t, "include_pattern").map(String::from),
-                    cwd,
-                }),
+                // Both keys are optional, so a guessed key name would leave neither: deny
+                // (see `unreadable`) rather than treat it as a search of nothing.
+                "grep_search" => {
+                    let path = field(t, "dir_path").map(PathBuf::from);
+                    let glob = field(t, "include_pattern").map(String::from);
+                    (path.is_some() || glob.is_some()).then_some(Event::Search { path, glob, cwd })
+                }
                 // Names only or no file content (list_directory, glob, web tools).
                 _ => None,
             }

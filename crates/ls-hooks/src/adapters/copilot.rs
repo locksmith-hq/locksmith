@@ -46,11 +46,13 @@ pub fn parse(event: &str, v: &Value) -> Option<Event> {
                 }),
                 "view" => Some(Event::Read { path: path()?, cwd }),
                 "edit" | "create" => Some(Event::Edit { path: path()?, cwd }),
-                "grep" => Some(Event::Search {
-                    path: field(&args, "path").map(PathBuf::from),
-                    glob: field(&args, "glob").map(String::from),
-                    cwd,
-                }),
+                // Both keys are optional, so a guessed key name would leave neither: deny (see
+                // `unreadable`) rather than treat it as a search of nothing.
+                "grep" => {
+                    let path = field(&args, "path").map(PathBuf::from);
+                    let glob = field(&args, "glob").map(String::from);
+                    (path.is_some() || glob.is_some()).then_some(Event::Search { path, glob, cwd })
+                }
                 _ => None,
             }
         }

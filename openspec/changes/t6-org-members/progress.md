@@ -40,3 +40,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Note: delete_org keeps the `orgs` row (ledger is append-only); it ends memberships and revokes invites. Differs from design.md "explicit deletes".
 - Follow-ups for later: revoke grants/disable workload identities and mcp clients on org delete; add explicit `org_id = $1` to the invites/secrets statements in delete_org.
 - Next: group 4 (members and invites), sonnet. macOS job on #605 failed with exit 100 earlier (could not rerun: 403); the push reruns CI.
+
+## 2026-11-22 worker (harriet) ci-fix
+- Task: PR #605 red `rust` job - ci-fix
+- Verified: `cargo deny check advisories` -> ok, `just quick` -> pass
+- Notes for next session: failure was cargo-deny RUSTSEC-2026-0592 (`url` 2.5.8), not macOS; bumped to 2.5.9 in Cargo.lock. Main has the same advisory, so other PRs will hit it until this merges. Group 4 (members and invites) is next.

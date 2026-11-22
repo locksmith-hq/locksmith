@@ -364,6 +364,161 @@ test("org audit: outcome filter narrows to denied and redaction_failed events", 
   expect(screen.queryByText("relay.denied")).toBeNull();
 });
 
+// ---- Control-plane Projects, Environments, Secrets (t3-console-mvp 5.1, 5.2) ----
+const P = (id: string, name: string) => ({ id, name, description: "", created_at: "t", updated_at: "t" });
+const E = (id: string, name: string) => ({ id, name, project_id: "p1", description: "", created_at: "t", updated_at: "t" });
+const S = (id: string, name: string, n = 2) => ({ id, name, project_id: "p1", environment_id: "e1", description: "db url", version_count: n, created_at: "t", updated_at: "t2" });
+const cpClient = (over: Record<string, unknown> = {}) => {
+  const c = {
+    listProjects: vi.fn().mockResolvedValue([P("p1", "alpha")]),
+    createProject: vi.fn().mockResolvedValue(P("p2", "beta")),
+    updateProject: vi.fn().mockResolvedValue(P("p1", "renamed")),
+    deleteProject: vi.fn().mockResolvedValue(undefined),
+    listEnvironments: vi.fn().mockResolvedValue([E("e1", "dev")]),
+    createEnvironment: vi.fn().mockResolvedValue(E("e2", "prod")),
+    updateEnvironment: vi.fn().mockResolvedValue(E("e1", "staging")),
+    deleteEnvironment: vi.fn().mockResolvedValue(undefined),
+    listSecrets: vi.fn().mockResolvedValue([S("s1", "DATABASE_URL")]),
+    getSecret: vi.fn().mockResolvedValue(S("s1", "DATABASE_URL")),
+    listSecretVersions: vi.fn().mockResolvedValue([{ version: 1, key_id: "gateway:v1", created_at: "t" }, { version: 2, key_id: "gateway:v1", created_at: "t2" }]),
+    listAgents: vi.fn().mockResolvedValue([]),
+    ...over,
+  };
+  m.agentsClient.mockReturnValue(c as never);
+  return c;
+};
+
+test("projects: lists, creates, renames, deletes with confirm, and manages environments", async () => {
+  const c = cpClient();
+  render(<App />);
+  await nav("Projects");
+  expect(await screen.findByRole("button", { name: "alpha" })).toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("project name"), "beta");
+  await userEvent.click(screen.getByRole("button", { name: "Create project" }));
+  expect(c.createProject).toHaveBeenCalledWith({ name: "beta" });
+  await userEvent.click(screen.getByRole("button", { name: "Rename alpha" }));
+  const box = screen.getByLabelText("New name for alpha");
+  await userEvent.clear(box);
+  await userEvent.type(box, "renamed");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(c.updateProject).toHaveBeenCalledWith("p1", { name: "renamed" });
+  await userEvent.click(screen.getByRole("button", { name: "alpha" }));
+  expect(await screen.findByText("dev")).toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("environment name"), "prod");
+  await userEvent.click(screen.getByRole("button", { name: "Create environment" }));
+  expect(c.createEnvironment).toHaveBeenCalledWith("p1", { name: "prod" });
+  await userEvent.click(screen.getByRole("button", { name: "Rename dev" }));
+  await userEvent.clear(screen.getByLabelText("New name for dev"));
+  await userEvent.type(screen.getByLabelText("New name for dev"), "staging");
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(c.updateEnvironment).toHaveBeenCalledWith("p1", "e1", { name: "staging" });
+  await userEvent.click(screen.getByRole("button", { name: "Delete dev" }));
+  expect(c.deleteEnvironment).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+  expect(c.deleteEnvironment).toHaveBeenCalledWith("p1", "e1");
+  await userEvent.click(screen.getByRole("button", { name: "Delete alpha" }));
+  await userEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+  expect(c.deleteProject).toHaveBeenCalledWith("p1");
+});
+
+test("projects: empty states for no projects and no environments", async () => {
+  const c = cpClient({ listProjects: vi.fn().mockResolvedValue([]) });
+  render(<App />);
+  await nav("Projects");
+  expect(await screen.findByText("No projects yet.")).toBeInTheDocument();
+  c.listProjects.mockResolvedValue([P("p1", "alpha")]);
+  c.listEnvironments.mockResolvedValue([]);
+  await userEvent.type(screen.getByLabelText("project name"), "alpha");
+  await userEvent.click(screen.getByRole("button", { name: "Create project" }));
+  await userEvent.click(await screen.findByRole("button", { name: "alpha" }));
+  expect(await screen.findByText("No environments yet.")).toBeInTheDocument();
+});
+
+test("projects: 403 and 409 are shown in words and the input is kept", async () => {
+  const { ApiError } = await import("@locksmith/control-plane-client");
+  const c = cpClient({
+    createProject: vi.fn().mockRejectedValueOnce(new ApiError(403, "forbidden")).mockRejectedValueOnce(new ApiError(409, "name taken")),
+  });
+  render(<App />);
+  await nav("Projects");
+  await screen.findByRole("button", { name: "alpha" });
+  await userEvent.type(screen.getByLabelText("project name"), "dup");
+  await userEvent.click(screen.getByRole("button", { name: "Create project" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Not allowed");
+  expect(screen.getByLabelText("project name")).toHaveValue("dup");
+  await userEvent.click(screen.getByRole("button", { name: "Create project" }));
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Conflict: name taken"));
+  c.deleteProject.mockRejectedValueOnce(new ApiError(409, "has environments"));
+  await userEvent.click(screen.getByRole("button", { name: "Delete alpha" }));
+  await userEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Conflict: has environments"));
+});
+
+test("projects: without a control plane org it asks to connect and calls nothing", async () => {
+  m.agentsClient.mockReturnValue(null);
+  render(<App />);
+  await nav("Projects");
+  expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
+});
+
+test("overview shows control-plane project and agent counts", async () => {
+  cpClient({ listProjects: vi.fn().mockResolvedValue([P("p1", "a"), P("p2", "b")]), listAgents: vi.fn().mockResolvedValue([{ id: "a1" }]) });
+  render(<App />);
+  expect(await screen.findByTestId("count-projects")).toHaveTextContent("2");
+  expect(screen.getByTestId("count-agents")).toHaveTextContent("1");
+});
+
+test("overview counts show n/a when the control plane fails", async () => {
+  cpClient({ listProjects: vi.fn().mockRejectedValue(new Error("down")) });
+  render(<App />);
+  expect(await screen.findByTestId("count-projects")).toHaveTextContent("n/a");
+  expect(screen.getByTestId("count-agents")).toHaveTextContent("0");
+});
+
+test("secrets: metadata and versions only, and no value or material request is ever made", async () => {
+  const c = cpClient();
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  render(<App />);
+  await nav("Secrets");
+  await userEvent.click(await screen.findByRole("button", { name: "DATABASE_URL" }));
+  expect(await screen.findAllByText("gateway:v1")).toHaveLength(2);
+  expect(c.listSecrets).toHaveBeenCalledWith("p1", "e1");
+  expect(c.getSecret).toHaveBeenCalledWith("p1", "e1", "s1");
+  expect(c.listSecretVersions).toHaveBeenCalledWith("p1", "e1", "s1");
+  // Only metadata methods exist on the client the view uses, and nothing else was invoked.
+  const used = Object.entries(c).filter(([, f]) => (f as ReturnType<typeof vi.fn>).mock.calls.length > 0).map(([k]) => k);
+  expect(used.every((k) => /^(listProjects|listEnvironments|listSecrets|getSecret|listSecretVersions|listAgents)$/.test(k))).toBe(true);
+  expect(used.some((k) => /value|material/i.test(k))).toBe(false);
+  expect(fetchSpy.mock.calls.some(([u]) => /value|material/i.test(String(u)))).toBe(false);
+  fetchSpy.mockRestore();
+});
+
+test("secrets: empty states and 403", async () => {
+  const { ApiError } = await import("@locksmith/control-plane-client");
+  cpClient({ listSecrets: vi.fn().mockResolvedValue([]) });
+  render(<App />);
+  await nav("Secrets");
+  expect(await screen.findByText("No secrets in this environment.")).toBeInTheDocument();
+  cpClient({ listProjects: vi.fn().mockResolvedValue([]) });
+  await nav("Overview");
+  await nav("Secrets");
+  expect(await screen.findByText("No projects yet, so no secrets.")).toBeInTheDocument();
+  cpClient({ listSecrets: vi.fn().mockRejectedValue(new ApiError(403, "nope")) });
+  await nav("Overview");
+  await nav("Secrets");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Not allowed");
+  expect(screen.queryByText("No secrets in this environment.")).toBeNull();
+  // A failed first load offers Retry instead of the empty message, and Retry reloads.
+  const listSecrets = vi.fn().mockRejectedValueOnce(new ApiError(500, "boom")).mockResolvedValue([]);
+  cpClient({ listSecrets });
+  await nav("Overview");
+  await nav("Secrets");
+  await screen.findByRole("alert");
+  expect(screen.queryByText("No secrets in this environment.")).toBeNull();
+  await userEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("No secrets in this environment.")).toBeInTheDocument();
+});
+
 test("workload identities: list, prefix warning, create, delete with confirm, no secret rendered or requested", async () => {
   const wl = { id: "w1", name: "ci-deploy", agent_id: "a1", audience: "https://cp.example", issuer_kind: "github", issuer: "https://token.actions.githubusercontent.com",
     handle: "lsw_abc", conditions: [{ claim: "repository", pattern: "acme/api" }, { claim: "ref", pattern: "refs/heads/release-*" }], last_used_at: null };

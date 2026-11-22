@@ -32,3 +32,10 @@
 - Task: CI fix (rust/macos red) - ci-fix
 - Verified: cargo test -p ls-control-plane --test agents -> grants_lifecycle passes; full nextest: only Postgres/stack-dependent tests fail locally (a0-spikes rls, ls-e2e), none touched by this change; just quick clean
 - Notes for next session: 2.2 added `revoked_jtis`/`agents_paused` to the grant-set response, breaking the key assertion in tests/agents.rs:675 (fixed). Merged main in cleanly. Next: 3.1 gateway enforcement.
+
+## 2026-11-22 worker
+- Task: 3.1 gateway enforcement - implemented, NOT ticked (pg part pending)
+- Verified: cargo nextest run -p ls-gateway sessions -> 13 passed (9 sessions_revoke); cargo nextest run -p ls-gateway -> 159 passed; just quick clean. Evaluator PASS.
+- Done: new services/gateway/src/sessions.rs (registry + 5 s watcher, reports open/heartbeat/close); `Relay::admit()` before binding/material/decrypt on relay, git, /v1/grants, /mcp; live sessions closed on revoke/pause/refresh-failure within one TTL.
+- Not done: `SessionKind::Pg` exists but no pg relay (d3-db-relay unmerged) enters it, so the pg half of 3.1 is open: when d3 lands, enter the registry and race the relay loop against `closed()`. Tick 3.1 then. Binding slugs are fixed labels (relay/git/mcp) until gateway config has binding slugs. Parallel `cargo test -p ls-gateway` fails 8 git::fixture_tests (pre-existing); use nextest.
+- Next: 3.2 adversarial cases (revoked replay, request during pause), then 4.1 web.

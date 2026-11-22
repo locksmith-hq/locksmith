@@ -34,6 +34,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/smith-cli` | Rust bin | `just test smith-cli` | no | `just test-rust` | `smith` CLI; some db tests skip without Postgres |
 | `services/control-plane` | Rust service (axum) | `just test control-plane` | yes (Postgres integration tests) | `just test-e2e` (partial) | Package `ls-control-plane` |
 | `services/gateway` | Rust service (axum) | `just test gateway` | yes (`audit_pg`) | `just relay-smoke`, `just connector-smoke` | Package `ls-gateway` |
+| `apps/api` | npm NestJS API (change b1-nestjs-api) | `just test api` | no | `just test-web` | Runs `npm test --workspace apps/api`; for now it checks `route-table.json` against the frozen `openapi.json` |
 | `apps/desktop` | Tauri app (npm + Rust) | `just test desktop` | no | `just apps-build` | Runs `just desktop-test` (fmt, clippy, cargo test) plus `npm test`; not in the root Cargo workspace |
 | `apps/docs` | npm static site | `just test docs` | no | `just test-web` | No tests of its own; `npm run build` in `just test-web` builds it |
 | `apps/web` | npm web console | `just test web` | no | `just test-web` | Runs `npm test --workspace apps/web` |

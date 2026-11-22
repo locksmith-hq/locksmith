@@ -1,0 +1,265 @@
+{
+  "$comment": "Owner of every API path: rust or nest. Flip a path only when `just api-contract` passes (change b1-nestjs-api). Source: services/control-plane/openapi.json.",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/.well-known/jwks.json",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/v1/agents/{agent_id}/grants",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v1/audit/events",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v1/mcp/agent-calls",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v1/mcp/agent-clients",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/v1/mcp/agent-tool-settings",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/v1/mcp/revoked-agent-clients",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/v1/secrets/{secret_id}/versions/{version}/material",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agent-tokens",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents",
+      "owner": "rust"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/agents/{agent_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/{agent_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/{agent_id}/enrollment-secret",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/{agent_id}/grants",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/agents/{agent_id}/grants",
+      "owner": "rust"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/agents/{agent_id}/grants/{grant_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/audit/events",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/audit/status",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/sign-in",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/auth/sign-out",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mcp/clients",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/mcp/clients/{client_row_id}/revoke",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/mcp/tools",
+      "owner": "rust"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/mcp/tools/{layer}/{tool}",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/orgs",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/orgs/current",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/orgs/{org_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects",
+      "owner": "rust"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{project_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/{project_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/environments",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{project_id}/environments",
+      "owner": "rust"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets",
+      "owner": "rust"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workload-identities",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workload-identities",
+      "owner": "rust"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/workload-identities/{id}",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workload-identities/{id}",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workload-tokens",
+      "owner": "rust"
+    }
+  ]
+}

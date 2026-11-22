@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, MemoryRouter } from "react-router";
 import { Shell } from "./Shell";
+import { Loader } from "./Loader";
 import { createClient, type Client } from "@locksmith/control-plane-client";
 import { withUnauthorizedHandler } from "./api/client";
 import { Logo, VaultMark } from "@locksmith/ui";
@@ -27,7 +28,7 @@ function AuthGate({ auth }: { auth: AuthService }) {
   // A 401 from the API means the session is gone: sign out, which returns to the sign-in screen.
   const client = useMemo(() => withUnauthorizedHandler(createClient("", "", () => auth.token()), () => void auth.signOut()), [auth]);
 
-  if (state.status === "loading") return <main><p>Signing in…</p></main>;
+  if (state.status === "loading") return <Loader fill label="Signing in" />;
   if (state.status === "signed-out") return <SignIn auth={auth} notice={state.notice} />;
   return <Shell client={client} user={state.user.email ?? state.user.name ?? "Signed in"} onSignOut={() => void auth.signOut()} />;
 }

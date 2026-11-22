@@ -38,3 +38,15 @@
 .login-choices { width: 100%; display: flex; flex-direction: column; gap: 10px; }
 .login-choices .btn { width: 100%; gap: 10px; font-family: var(--sans); height: 42px; justify-content: center; font-size: 14px; border-radius: 11px; }
 .login-foot { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+
+/* Loader: the vault dial from the mockup, faded in after a beat so quick loads do not flash it. */
+.loader { display: grid; place-items: center; padding: 48px 0; color: var(--text); opacity: 0; animation: loader-in 240ms var(--ease) 160ms forwards; }
+.loader-fill { min-height: 100vh; padding: 0; background: var(--bg); }
+.loader .vault-mark { display: block; overflow: visible; }
+.loader .vault-mark .vm-ring { transition: none; animation: loader-dial 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+.loader .vault-mark .vm-bolt { transition: none; animation: loader-bolt 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+@keyframes loader-in { to { opacity: 1; } }
+@keyframes loader-dial { 0%, 8% { transform: rotate(0deg); } 46%, 58% { transform: rotate(30deg); } 96%, 100% { transform: rotate(60deg); } }
+@keyframes loader-bolt { 0%, 8% { transform: scaleX(1); } 42%, 62% { transform: scaleX(0.3); } 96%, 100% { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .loader { opacity: 1; } }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

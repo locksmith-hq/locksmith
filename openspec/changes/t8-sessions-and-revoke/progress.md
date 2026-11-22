@@ -27,3 +27,8 @@
 - Task: 2.2 revoke-one, revoke-all, pause, resume + grant-set `revoked_jtis`/`agents_paused` - done
 - Verified: cargo nextest run -p ls-control-plane sessions -> 15 passed (incl. sessions_admin, canary, org isolation, idempotency); openapi 3 passed; control-plane-client 14 passed; ls-gateway builds; just quick clean. Evaluator PASS. `just audit-verify` not run (needs `just up`).
 - Notes for next session: 403 comes only from OrgBinding's unverified-email check (same as existing revoke routes); actor is DEV_AUTH_ACTOR. revoke_all revokes every unrevoked row, so its count can include stale rows (description says "live"): tidy in 4.1 or reword. revoked_jtis window 30 min (token TTL 15 min). Next: 3.1 gateway enforcement.
+
+## 2026-11-22 worker
+- Task: CI fix (rust/macos red) - ci-fix
+- Verified: cargo test -p ls-control-plane --test agents -> grants_lifecycle passes; full nextest: only Postgres/stack-dependent tests fail locally (a0-spikes rls, ls-e2e), none touched by this change; just quick clean
+- Notes for next session: 2.2 added `revoked_jtis`/`agents_paused` to the grant-set response, breaking the key assertion in tests/agents.rs:675 (fixed). Merged main in cleanly. Next: 3.1 gateway enforcement.

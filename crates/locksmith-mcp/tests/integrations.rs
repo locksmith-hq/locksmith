@@ -48,11 +48,15 @@ fn shipped_mcp_entries_name_locksmith_mcp_and_the_server_handshakes() {
         ("gemini-cli/settings.json", "mcpServers", "gemini"),
         ("copilot/mcp.json", "servers", "copilot"),
         ("cursor/mcp.json", "mcpServers", "cursor-agent"),
+        ("generic-mcp/mcp.json", "mcpServers", ""),
     ] {
         let e = entry(file, key);
         assert_eq!(e["command"], "locksmith-mcp", "{file}");
         assert_eq!(e["args"], json!([]), "{file}: no secrets or arguments");
         assert!(e.get("env").is_none(), "{file}: no env values");
+        if live.is_empty() {
+            continue; // generic client: there is no agent CLI to run live
+        }
         let on_path = std::env::var_os("PATH")
             .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(live).is_file()));
         if !on_path {

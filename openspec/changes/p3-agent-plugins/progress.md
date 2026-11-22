@@ -28,3 +28,8 @@
 - Task: 5.1-5.4 - done (windsurf generated but labelled "unknown, not protected": no hook handler until a Devin Desktop fixture exists; cline script generated, executable, replayed against recorded fixtures); merged origin/main (clean)
 - Verified: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents`; `cargo test -p smith-cli --test integrations` 5 passed; `just test windsurf` and `just test cline`
 - Notes for next session: next is task 6 (generic-mcp) then 7; 2.1 still open (doc-derived fixtures). d2-aws-sts and d3-db-relay remain parked on the t3 bindings page (#489).
+
+## 2026-11-22 worker (alfie)
+- Task: 6.1-6.3 - done (generated `integrations/generic-mcp/mcp.json` via the drift test; README gets the stdio section with the lost protections; handshake test covers the snippet; testing.md row)
+- Verified: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` 14 passed; `cargo test -p locksmith-mcp --test integrations` passed; `just quick`/`just test generic-mcp` below
+- Notes for next session: next is task 7 (install table in docs, leak scan) then 8; 2.1 still open (doc-derived fixtures).

@@ -32,9 +32,9 @@
 - [x] 5.4 Verify: `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents` then `just test windsurf && just test cline`.
 
 ## 6. Generic MCP setup [haiku]
-- [ ] 6.1 `integrations/generic-mcp/README.md` and a generated `mcp.json` snippet (stdio `locksmith-mcp`, no secrets), noting that no hook protection applies and which protections are lost.
-- [ ] 6.2 Smoke test (snippet parses, handshake succeeds) and `docs/testing.md` row.
-- [ ] 6.3 Verify: `just test generic-mcp`.
+- [x] 6.1 `integrations/generic-mcp/README.md` and a generated `mcp.json` snippet (stdio `locksmith-mcp`, no secrets), noting that no hook protection applies and which protections are lost.
+- [x] 6.2 Smoke test (snippet parses, handshake succeeds) and `docs/testing.md` row.
+- [x] 6.3 Verify: `just test generic-mcp`.
 
 ## 7. Docs and leak safety [haiku]
 - [ ] 7.1 Update `integrations/README.md` (generated file list, regenerate command) and add an install table to the docs for all supported agents with their protection labels.

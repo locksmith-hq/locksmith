@@ -826,6 +826,11 @@ mod tests {
             merge_mcp(Agent::ClaudeCode, None).unwrap(),
         );
         check("cursor/mcp.json", merge_mcp(Agent::Cursor, None).unwrap());
+        // Any MCP client: the plain `mcpServers` stdio snippet, no hook and no secrets.
+        check(
+            "generic-mcp/mcp.json",
+            merge_mcp(Agent::ClaudeCode, None).unwrap(),
+        );
         check(
             "gemini-cli/settings.json",
             merge_mcp(

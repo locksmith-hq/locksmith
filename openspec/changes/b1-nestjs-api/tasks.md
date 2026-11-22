@@ -2,7 +2,7 @@
 
 ## 1. Contract and spikes [sonnet]
 - [x] 1.1 Spike: a throwaway Nest 12 app (controller, decorator metadata injection, zod pipe, vitest test) compiled with TypeScript 7.0.2, then with 6.x; record in `docs/research/nestjs-typescript7.md` which build works, build time and any flag needed (source URLs and dates).
-- [ ] 1.2 [haiku] Spike: run oxlint, oxfmt and knip over `apps/web`, `apps/desktop`, `packages/*`; record findings and the config each needs in the same note.
+- [x] 1.2 [haiku] Spike: run oxlint, oxfmt and knip over `apps/web`, `apps/desktop`, `packages/*`; record findings and the config each needs in the same note.
 - [ ] 1.3 Contract: freeze `services/control-plane/openapi.json` as the API contract (already protected by the oasdiff check) and list every path with its owner (`rust` or `nest`) in `apps/api/route-table.json`, all `rust`.
 - [ ] 1.4 Contract: `scripts/api-record.sh` replays the Rust integration tests' HTTP calls and stores requests and responses under `tests/api-contract/recordings/` with ids, timestamps and tokens normalised.
 - [ ] 1.5 Contract: `scripts/api-contract.sh <base-url>` replays the recordings against any server and reports the first differing field per path; `just api-contract`.

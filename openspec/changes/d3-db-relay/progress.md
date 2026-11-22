@@ -117,3 +117,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix - blocked (cause not reproducible locally)
 - Verified: just quick -> OK; tree-check, task guard, public-check OK; gitleaks on origin/main..HEAD -> no leaks; cargo test -p ls-gateway -> git::fixture_tests flake (different tests each run, same on clean main in this VM)
 - Notes for next session: PR #485 hygiene/macos failures (head bef3784) had no readable annotations (macos exit 100 looks like a runner/install issue). Merged main in and pushed; re-check CI on the new head before more work.
+
+## 2026-11-22 worker
+- Task: ci-fix (PR #485 hygiene red) - ci-fix
+- Verified: just tree-check task-guard public-check, just quick -> pass locally after merging origin/main
+- Notes for next session: hygiene failure was not reproducible locally; likely stale vs main. Merged main and pushed; check CI result on 6c6e434+. Gitleaks full-history scan shows 3 known hits in ls-envelope seal-key-sig-v1.json vectors (on main, not this branch).

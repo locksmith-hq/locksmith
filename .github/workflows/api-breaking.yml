@@ -1,0 +1,47 @@
+name: api-breaking
+
+# Fails a PR that makes a breaking change to the control-plane OpenAPI spec (removed paths or fields,
+# narrowed types, new required parameters...) unless the PR carries the `breaking-api` label, which is
+# the reviewer-visible way to say the break is intended. oasdiff is pinned and checksum-verified.
+
+on:
+  pull_request:
+    paths:
+      - services/control-plane/openapi.json
+      - .github/workflows/api-breaking.yml
+
+permissions:
+  contents: read
+
+env:
+  OASDIFF_VERSION: "1.39.0"
+  OASDIFF_SHA256: 71a85930728f367a2086077b7ae1411319421549d18473a3e8258b6451520433
+
+jobs:
+  breaking:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install oasdiff
+        run: |
+          f="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$f" "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/$f"
+          echo "${OASDIFF_SHA256}  $f" | sha256sum -c -
+          tar -xzf "$f" oasdiff
+      - name: Breaking changes against the base branch
+        env:
+          BASE: ${{ github.base_ref }}
+          INTENDED: ${{ contains(github.event.pull_request.labels.*.name, 'breaking-api') }}
+        run: |
+          git show "origin/${BASE}:services/control-plane/openapi.json" > "$RUNNER_TEMP/base.json"
+          if ./oasdiff breaking "$RUNNER_TEMP/base.json" services/control-plane/openapi.json --fail-on ERR; then
+            echo "No breaking API changes."
+          elif [ "$INTENDED" = "true" ]; then
+            echo "::warning::Breaking API changes, accepted by the breaking-api label."
+          else
+            echo "::error::Breaking API changes. Fix them, or add the 'breaking-api' label if the break is intended."
+            exit 1
+          fi

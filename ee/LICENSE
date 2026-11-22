@@ -1,0 +1,17 @@
+The Locksmith Enterprise License (the "Enterprise License")
+
+Copyright (c) 2026 locksmith-hq
+
+This license covers everything under the "ee/" directory of this repository (the "EE Software"). Everything outside "ee/" is licensed as described in the top-level LICENSING.md.
+
+1. Development and testing. You may copy and modify the EE Software to develop and test it, without a subscription.
+
+2. Production use. You may use the EE Software in production only if you hold a valid Locksmith Enterprise subscription, or another written agreement with the Locksmith maintainers that covers your use, for the number of users and identities you run.
+
+3. Patches. You may publish patches to the EE Software. A patch may be used, copied or modified only by someone who holds a valid subscription under section 2.
+
+4. Restrictions. You may not distribute, sublicense or sell the EE Software, and you may not remove, disable or circumvent license-key or entitlement checks in it.
+
+5. No effect on core. This license does not restrict the open-source parts of Locksmith. Unlocking, reading, writing and exporting your own secrets never depends on this license or on a subscription.
+
+6. No warranty. THE EE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE EE SOFTWARE OR ITS USE.

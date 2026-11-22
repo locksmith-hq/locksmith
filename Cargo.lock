@@ -2816,6 +2816,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ls-ee-license"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "ls-entitlements",
+ "minisign",
+ "minisign-verify",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ls-entitlements"
+version = "0.0.1-alpha.4"
+
+[[package]]
 name = "ls-envelope"
 version = "0.0.1-alpha.4"
 dependencies = [

@@ -1,5 +1,7 @@
 # Locksmith Roadmap (v2, 2026-11-16)
 
+Open-source plan only. The hosted SaaS (AWS environments, hosting, billing, SOC2) is planned in the private `locksmith-roadmap` and `locksmith-cloud` repos (owner decision 2026-11-22).
+
 Replaces roadmap v6. The v6 OpenSpec is preserved under git tag `openspec-v6`.
 
 **Product:** an open-source secrets platform whose core is agent access. A coding agent uses
@@ -20,7 +22,7 @@ Building blocks: [research/oss-building-blocks.md](research/oss-building-blocks.
    - `ls-crypto` (AEAD, KDF)
    - `ls-vault` (audit hash chain)
    - `smith-cli`, `locksmith-mcp`, `ls-hooks` (agent connector and hooks)
-5. **Local, then cloud.** AWS `dev` arrives in phase 2, right after sign-in (P1; owner decision H1-3). Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, moto for S3, STS and Cognito APIs, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
+5. **Local, then cloud.** AWS `dev` arrives in phase 2, right after sign-in (P1; owner decision H1-3). Every AWS service has a local stand-in: `postgres:18` for Aurora, OpenBao for KMS, Floci (floci-io/floci) for S3, STS, Cognito and every other AWS API, Keycloak for OIDC. `dev` is capped at $5/month and is switched on only for test sessions (A0 decisions 14–18).
 6. **Apps are built every change.** The web console and the desktop app (Tauri) grow with each slice
    instead of arriving at the end. Every change's Local verification runs `just apps-build`; the last
    change of each phase also runs the manual `ci-platforms` workflow on macOS and Linux (Windows parity is
@@ -65,7 +67,6 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
 | T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). | - | ☑ |
-| P1 | `p1-aws-dev-env` | OpenTofu `dev` account under $5/month: a **base** stack (IAM, KMS, S3, ECR, Aurora Serverless v2 auto-paused, Cognito) and an on-demand **session** stack (Fargate) via `just aws-up` / `just aws-down`. Budget action plus SCP guardrails. Applied from GitHub Actions OIDC. Claude inspects it through the AWS MCP Server and makes owner-approved changes, each after a change brief (A0 decisions 16–18). | - | ◐ |
 | T3 | `t3-console-mvp` | React console shell on the real API, built from the mockup in `apps/web/src/mockup`: hub home, projects, environments, secret names and versions, agents, grants and activity. Design tokens move to `packages/ui`. No secret value entry yet. Playwright e2e. | t1-human-auth:contract | ☑ |
 | T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. | t1-human-auth:contract, t3-console-mvp | ☐ |
 | T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. | t3-console-mvp | ☐ |
@@ -81,7 +82,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
 | D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - | ☑ |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on moto first. | t3-console-mvp | ◐ |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on Floci first. | t3-console-mvp | ◐ |
 | D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - | ◐ |
 | D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract | ☑ |
 
@@ -91,13 +92,12 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 |---|---|---|---|---|
 | P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ◐ |
 | P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - | ◐ |
-| P5 | `p5-saas-hosting` | The hosted SaaS: the control plane, gateway and web console run in an AWS `prod` stack built from the P1 modules, behind our domain with TLS, Cognito sign-up open to the public, a release pipeline from main, backups and a status check. Individuals and teams sign up and use Locksmith without self-hosting. Starts with a cost brief the owner approves (money), like P1. | p1-aws-dev-env | ☐ |
 | P4 | `p4-sdks` | SDKs generated from OpenAPI, and the plugins switched to the remote Agent MCP where it helps. | m1-remote-mcp:contract | ☑ |
 
 ## Phase 5: Parity and beyond (ordered later, by demand)
 
 Rotation and dynamic secrets (run in the gateway), syncs, the Terraform provider and k8s operator,
-SAML and SCIM, passkeys (moved out of T1 to keep it small), billing, SOC2 programme, local-only mode for solo developers.
+SAML and SCIM, passkeys (moved out of T1 to keep it small), local-only mode for solo developers.
 
 ## Product direction (not committed)
 

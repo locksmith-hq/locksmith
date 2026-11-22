@@ -23,3 +23,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.1 research note - done
 - Verified: `bash scripts/public-check.sh`, `openspec validate t7-secret-write --strict`; evaluator PASS
 - Notes for next session: hpke 0.15.1 needs getrandom 0.4 (`wasm_js`), workspace crates still on 0.2 (`js`): settle in 1.2/3.1. Pinning source proposed in the note (compiled-in key, or `LS_GATEWAY_VERIFYING_KEY`). Next: 1.2 (HPKE DEK format in ls-envelope) is [opus].
+
+## 2026-11-22 worker alfie
+- Task: 1.2 HPKE-wrapped DEK format - done
+- Verified: `cargo nextest run -p ls-envelope` (56 pass, 13 hpke), clippy/fmt clean, cargo deny ok; Opus evaluator PASS; KATs from an independent RFC 9180 implementation
+- Notes for next session: alg_id 2, 100-byte form; hpke built without its getrandom feature (seed via getrandom 0.2 `SecretKey32::random`), so wasm32 (3.1) needs the 0.2 `js` feature only. Next: 1.3 (OpenAPI and mock data, sonnet-sized), then 1.4.

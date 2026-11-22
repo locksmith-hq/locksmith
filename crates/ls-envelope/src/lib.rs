@@ -7,6 +7,9 @@
 //!   encryption per DEK keeps the random-nonce collision bound irrelevant.
 //! - [`KeyWrapper`]: wraps each DEK with a KMS key into a `dek-wrap` blob ([`WrappedDek`]);
 //!   [`OpenBaoTransit`] implements it over OpenBao transit (design decision 3).
+//! - [`seal_dek_hpke`] / [`open_dek_hpke`]: a DEK sealed with HPKE (RFC 9180) to an environment
+//!   seal key, header `alg_id` 2 (t7 design decision 1). The private half is a
+//!   [`SealPrivateKey`].
 //!
 //! The DEK and plaintext live only in `ls-crypto`'s [`SecretKey32`] / [`SecretBytes`]
 //! (zeroized on drop) or in [`DataKey`] / [`SealedVersion`], which wrap them. None of these
@@ -17,11 +20,15 @@
 //! plane yields ciphertext and KMS-wrapped DEKs, not values.
 
 pub mod header;
+mod hpke_wrap;
 mod openbao;
 mod version;
 mod wrap;
 
 pub use header::{Binding, FormatField, Header, KeyId, Purpose};
+pub use hpke_wrap::{
+    HPKE_ENC_LEN, HPKE_WRAPPED_DEK_LEN, SealPrivateKey, SealPublicKey, open_dek_hpke, seal_dek_hpke,
+};
 pub use ls_crypto::{SecretBytes, SecretKey32};
 pub use openbao::{BaoToken, OpenBaoTransit, TransitSignature, TransitSigner};
 pub use version::{DataKey, SealedVersion, open_version, seal_version};
@@ -34,7 +41,7 @@ pub enum EnvelopeError {
     Truncated,
     /// The first two bytes are not `"LS"`.
     BadMagic,
-    /// Unknown `format_ver` or `alg_id`.
+    /// Unknown `format_ver` or `alg_id`, or an `alg_id` the called opener does not handle.
     UnsupportedFormat { field: FormatField, value: u8 },
     /// The blob's `key_id` is not the id of the data key offered to open it.
     UnknownKeyId,
@@ -42,8 +49,10 @@ pub enum EnvelopeError {
     /// header byte differs from sealing time, the key is wrong, or the nonce, ciphertext or
     /// tag was changed.
     Integrity,
-    /// Sealing failed (random source or AEAD error).
+    /// Sealing failed (random source, AEAD error, or an invalid recipient public key).
     Seal,
+    /// The binding's purpose does not fit the format (an HPKE-wrapped DEK needs `dek-wrap`).
+    Purpose,
 }
 
 impl std::fmt::Display for EnvelopeError {
@@ -65,6 +74,7 @@ impl std::fmt::Display for EnvelopeError {
                 "integrity check failed: AAD (org_id, secret_id, version, purpose), header, key or ciphertext do not authenticate",
             ),
             EnvelopeError::Seal => f.write_str("sealing failed"),
+            EnvelopeError::Purpose => f.write_str("binding purpose does not match the format"),
         }
     }
 }

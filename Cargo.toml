@@ -10,12 +10,16 @@ version = "0.0.1-alpha.4"
 license = "Apache-2.0"
 publish = false
 
-# Test tooling (dev-dependencies only; crates opt in with `dep = { workspace = true }`).
+# Shared pins. Test tooling here is for dev-dependencies only; crates opt in with
+# `dep = { workspace = true }`.
 [workspace.dependencies]
 insta = { version = "1.49", features = ["json"] }
 wiremock = "0.6.5"
 testcontainers = "0.28"
 proptest = "1.12"
+# RFC 9180 HPKE for the browser-sealed DEK (t7 design decision 1). No default features: the
+# default set pulls ML-KEM and ChaCha, which the format does not use and which grow the wasm.
+hpke = { version = "=0.15.1", default-features = false, features = ["alloc", "x25519", "aes"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

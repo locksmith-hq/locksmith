@@ -15,7 +15,11 @@ use ls_crypto::aead::Aad;
 
 pub const MAGIC: [u8; 2] = *b"LS";
 pub const FORMAT_V1: u8 = 1;
+/// AES-256-GCM under a 256-bit key: payloads, and DEKs wrapped by a KMS key ([`crate::WrappedDek`]).
 pub const ALG_AES_256_GCM: u8 = 1;
+/// A DEK sealed with HPKE base mode (RFC 9180): DHKEM(X25519, HKDF-SHA256), HKDF-SHA256,
+/// AES-256-GCM, to an environment seal key ([`crate::seal_dek_hpke`]). t7 design decision 1.
+pub const ALG_HPKE_X25519_SHA256_AES256GCM: u8 = 2;
 pub const HEADER_LEN: usize = 20;
 pub const NONCE_LEN: usize = 12;
 pub const TAG_LEN: usize = 16;
@@ -79,6 +83,15 @@ impl Header {
         }
     }
 
+    /// The header of an HPKE-wrapped DEK; `key_id` names the environment seal key.
+    pub fn hpke_dek(key_id: KeyId) -> Self {
+        Self {
+            format_ver: FORMAT_V1,
+            alg_id: ALG_HPKE_X25519_SHA256_AES256GCM,
+            key_id,
+        }
+    }
+
     pub fn encode(&self) -> [u8; HEADER_LEN] {
         let mut h = [0u8; HEADER_LEN];
         h[..2].copy_from_slice(&MAGIC);
@@ -88,7 +101,9 @@ impl Header {
         h
     }
 
-    /// Parse and validate the header (no key needed), e.g. to find which key to fetch.
+    /// Parse and validate the header (no key needed), e.g. to find which key to fetch, or which
+    /// wrapped-DEK format (`alg_id`) a stored row uses. Accepts every known `alg_id`; each opener
+    /// then refuses an `alg_id` that is not its own.
     pub fn parse(blob: &[u8]) -> Result<Self, EnvelopeError> {
         if blob.len() < HEADER_LEN {
             return Err(EnvelopeError::Truncated);
@@ -102,7 +117,7 @@ impl Header {
                 value: blob[2],
             });
         }
-        if blob[3] != ALG_AES_256_GCM {
+        if blob[3] != ALG_AES_256_GCM && blob[3] != ALG_HPKE_X25519_SHA256_AES256GCM {
             return Err(EnvelopeError::UnsupportedFormat {
                 field: FormatField::Algorithm,
                 value: blob[3],
@@ -110,7 +125,23 @@ impl Header {
         }
         let mut key_id = [0u8; 16];
         key_id.copy_from_slice(&blob[4..HEADER_LEN]);
-        Ok(Self::v1(KeyId(key_id)))
+        Ok(Self {
+            format_ver: FORMAT_V1,
+            alg_id: blob[3],
+            key_id: KeyId(key_id),
+        })
+    }
+
+    /// Refuse a header whose `alg_id` is not `alg`.
+    pub(crate) fn require_alg(&self, alg: u8) -> Result<(), EnvelopeError> {
+        if self.alg_id == alg {
+            Ok(())
+        } else {
+            Err(EnvelopeError::UnsupportedFormat {
+                field: FormatField::Algorithm,
+                value: self.alg_id,
+            })
+        }
     }
 }
 
@@ -143,6 +174,22 @@ mod tests {
         let h = Header::v1(KeyId([0x11; 16])).encode();
         assert_eq!(hex::encode(h), "4c53010111111111111111111111111111111111");
         assert_eq!(Header::parse(&h), Ok(Header::v1(KeyId([0x11; 16]))));
+    }
+
+    #[test]
+    fn hpke_header_layout_and_unknown_alg() {
+        let h = Header::hpke_dek(KeyId([0x22; 16])).encode();
+        assert_eq!(hex::encode(h), "4c53010222222222222222222222222222222222");
+        assert_eq!(Header::parse(&h), Ok(Header::hpke_dek(KeyId([0x22; 16]))));
+        let mut bad = h;
+        bad[3] = 3;
+        assert_eq!(
+            Header::parse(&bad),
+            Err(EnvelopeError::UnsupportedFormat {
+                field: FormatField::Algorithm,
+                value: 3
+            })
+        );
     }
 
     #[test]

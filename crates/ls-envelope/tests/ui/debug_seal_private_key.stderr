@@ -1,0 +1,11 @@
+error[E0277]: `SealPrivateKey` doesn't implement `Debug`
+ --> tests/ui/debug_seal_private_key.rs:4:16
+  |
+4 |     requires::<ls_envelope::SealPrivateKey>();
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Debug` is not implemented for `SealPrivateKey`
+  |
+note: required by a bound in `requires`
+ --> tests/ui/debug_seal_private_key.rs:1:16
+  |
+1 | fn requires<T: std::fmt::Debug>() {}
+  |                ^^^^^^^^^^^^^^^ required by this bound in `requires`

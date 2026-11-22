@@ -118,9 +118,13 @@ pub struct WrappedDek {
 }
 
 impl WrappedDek {
-    /// Validate a stored blob: exact length, A0-7 v1 header and a well-formed KMS key id.
+    /// Validate a stored blob: A0-7 v1 header with `alg_id` 1 (an HPKE-wrapped DEK, `alg_id` 2,
+    /// is opened with [`crate::open_dek_hpke`] instead), exact length and a well-formed KMS key id.
     pub fn from_bytes(blob: Vec<u8>) -> Result<Self, WrapError> {
         let header = Header::parse(&blob).map_err(WrapError::Format)?;
+        header
+            .require_alg(header::ALG_AES_256_GCM)
+            .map_err(WrapError::Format)?;
         if blob.len() != WRAPPED_DEK_LEN {
             return Err(WrapError::Format(EnvelopeError::Truncated));
         }

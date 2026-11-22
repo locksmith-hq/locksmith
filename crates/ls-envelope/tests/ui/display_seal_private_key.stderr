@@ -1,0 +1,11 @@
+error[E0277]: `SealPrivateKey` doesn't implement `std::fmt::Display`
+ --> tests/ui/display_seal_private_key.rs:4:16
+  |
+4 |     requires::<ls_envelope::SealPrivateKey>();
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `std::fmt::Display` is not implemented for `SealPrivateKey`
+  |
+note: required by a bound in `requires`
+ --> tests/ui/display_seal_private_key.rs:1:16
+  |
+1 | fn requires<T: std::fmt::Display>() {}
+  |                ^^^^^^^^^^^^^^^^^ required by this bound in `requires`

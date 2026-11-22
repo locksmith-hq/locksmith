@@ -1,0 +1,11 @@
+error[E0277]: the trait bound `SealPrivateKey: Clone` is not satisfied
+ --> tests/ui/clone_seal_private_key.rs:4:16
+  |
+4 |     requires::<ls_envelope::SealPrivateKey>();
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Clone` is not implemented for `SealPrivateKey`
+  |
+note: required by a bound in `requires`
+ --> tests/ui/clone_seal_private_key.rs:1:16
+  |
+1 | fn requires<T: Clone>() {}
+  |                ^^^^^ required by this bound in `requires`

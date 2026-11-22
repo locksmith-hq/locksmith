@@ -89,6 +89,7 @@ pub fn open_version(
     blob: &[u8],
 ) -> Result<SecretBytes, EnvelopeError> {
     let header = Header::parse(blob)?;
+    header.require_alg(header::ALG_AES_256_GCM)?;
     if blob.len() < MIN_LEN {
         return Err(EnvelopeError::Truncated);
     }

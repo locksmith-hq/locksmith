@@ -380,6 +380,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the gateway's bindings (non-secret fields only) */
+        get: operations["list_bindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/mcp/clients": {
         parameters: {
             query?: never;
@@ -895,6 +912,55 @@ export interface components {
              */
             truncated_at?: number | null;
         };
+        /**
+         * @description What a binding lets the gateway do.
+         * @enum {string}
+         */
+        BindingKind: "http" | "git" | "pg" | "aws";
+        /** @description Every binding the gateway reports for the org. */
+        BindingList: {
+            items: components["schemas"]["BindingSummary"][];
+        };
+        /** @description One gateway binding, non-secret fields only. Which optional fields are set depends on `kind`. */
+        BindingSummary: {
+            /** @description `pg`: the bound database. */
+            database?: string | null;
+            /** @description `http`: the header the secret is injected into (never its value or template). */
+            header?: string | null;
+            /** @description `pg`, `git`: the upstream host. */
+            host?: string | null;
+            kind: components["schemas"]["BindingKind"];
+            /**
+             * Format: int32
+             * @description `aws`: the longest vended session, in seconds.
+             */
+            max_duration_secs?: number | null;
+            /** @description Display name: the database name (`pg`), the origin or host (`http`, `git`), the role (`aws`). */
+            name: string;
+            /** @description `http`: the exact upstream origin. */
+            origin?: string | null;
+            /**
+             * Format: int32
+             * @description `pg`: the upstream port.
+             */
+            port?: number | null;
+            /** @description `aws`: the region. */
+            region?: string | null;
+            /** @description `git`: `owner` or `owner/repo`. */
+            repo?: string | null;
+            /** @description `aws`: the role ARN. */
+            role?: string | null;
+            tls?: components["schemas"]["BindingTls"] | null;
+            /** @description `pg`: the bound database user. */
+            user?: string | null;
+            /** @description `aws`: whether short-lived credentials may be vended. */
+            vend?: boolean | null;
+        };
+        /**
+         * @description How the gateway reaches a Postgres upstream.
+         * @enum {string}
+         */
+        BindingTls: "require" | "verify-full" | "disable";
         /** @description One claim test as shown to callers: `pattern` ends in `*` for a prefix match. */
         ConditionView: {
             claim: string;
@@ -2849,6 +2915,62 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_bindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The org's bindings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingList"];
+                };
             };
             /** @description Missing or invalid org binding */
             401: {

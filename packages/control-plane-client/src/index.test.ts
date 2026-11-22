@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, createClient } from "./index";
+import { bindingSummaries } from "./fixtures";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -56,5 +57,13 @@ describe("console client", () => {
     const err = await createClient("o").createProject({ name: "a" }).catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 409, message: "name taken" });
+  });
+
+  it("lists bindings with a GET and the fixtures carry no secret fields", async () => {
+    const f = stub(json({ items: bindingSummaries }));
+    const got = await createClient("org").listBindings();
+    expect(got.map((b) => b.kind)).toEqual(["http", "git", "pg", "aws"]);
+    expect(`${(f.mock.calls[0]![1] as RequestInit).method} ${f.mock.calls[0]![0]}`).toBe("GET /v1/bindings");
+    expect(JSON.stringify(bindingSummaries)).not.toMatch(/password|template|secret|token|key/i);
   });
 });

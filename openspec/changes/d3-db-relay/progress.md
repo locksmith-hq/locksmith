@@ -96,3 +96,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: rescue for 6.1. Cause: the task assumed a Bindings page and a binding data source, and neither exists, because bindings live only in the gateway's bindings file. Fix: decision D3-1 (#611). d3 group 6 builds the page: 6.1 is the contract in `packages/control-plane-client`, 6.2 is the gateway inventory push (`PUT /internal/v1/gateway/bindings`) and `GET /v1/bindings`, 6.3 is the page and 6.4 is verification.
 - Verified: `openspec validate d3-db-relay` is valid, and `just tree-check task-guard` passes on the planning branch.
 - Notes for next session: merge main once #611 lands, then start 6.1 against fixtures. 7.2 stays last.
+
+## 2026-11-22 worker (alfie, third entry)
+- Task: contract slice for new 6.1 (rescue #610, D3-1); not ticked because #611 (new numbering) has not merged and the branch's 6.1 text is still the old one.
+- Done: `GET /v1/bindings` + `BindingSummary`/`BindingList` in the control-plane OpenAPI (`api/bindings.rs`, handler returns an empty list until 6.2 stores snapshots), regenerated `openapi.json` and `packages/sdk/src/schema.d.ts`, `listBindings()` and `bindingSummaries` fixtures (http, git, pg, aws) in `packages/control-plane-client`.
+- Verified: `cargo test -p ls-control-plane --test openapi` 8 passed; `npm test` and `npm run lint --workspace packages/control-plane-client` pass (14 tests).
+- Notes for next session: after #611 merges, merge main and tick new 6.1 (verified as above). Then 6.2 (gateway push, control-plane storage; fills the empty list), 6.3 page, 6.4, 7.2.

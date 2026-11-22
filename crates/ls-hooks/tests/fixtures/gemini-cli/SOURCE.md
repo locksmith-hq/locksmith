@@ -11,3 +11,7 @@ Search keys are an allowlist (decision P3-2, #594): `grep_search` reads `dir_pat
 reads `include` (plus `exclude`, `recursive`, `useDefaultExcludes`, `file_filtering_options`) and
 checks every entry. Any other key, such as `path` or `include`, denies (`search-wrong-*-key`,
 `read-many-wrong-key`).
+
+Bounded P3-2 rule (design.md row 7): a tool event whose name or input is not under the expected
+keys denies (`*-shape-mismatch-*`), and every string in a known tool's input except its content
+keys is checked against the protected-path policy (`*-decoy-key-*`).

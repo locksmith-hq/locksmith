@@ -17,3 +17,7 @@ Search keys are an allowlist: `grep` (and Claude-style `Grep`) reads `path` and 
 (`grep-wrong-path-key`, `pascal-grep-wrong-key`). The `PreToolUse` casing fails closed the same
 way as `preToolUse` (`pascal-*-wrong-key`, `pascal-read-no-input`) and also reads Copilot's own
 lowercase tool names (`pascal-view-env-deny`).
+
+Bounded P3-2 rule (design.md row 7): a tool event whose name or input is not under the expected
+keys denies (`*-shape-mismatch-*`), and every string in a known tool's input except its content
+keys is checked against the protected-path policy (`*-decoy-key-*`).

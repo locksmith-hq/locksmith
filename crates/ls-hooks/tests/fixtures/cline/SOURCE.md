@@ -8,3 +8,7 @@ the SDK/CLI runner shape. Replace with recordings when an agent is available. Ca
 
 `search_files` keys are an allowlist (`path`, `regex`, `file_pattern`); any other key cancels
 (`search-wrong-path-key`, `search-wrong-glob-key`).
+
+Bounded P3-2 rule (design.md row 7): a tool event whose name or input is not under the expected
+keys denies (`*-shape-mismatch-*`), and every string in a known tool's input except its content
+keys is checked against the protected-path policy (`*-decoy-key-*`).

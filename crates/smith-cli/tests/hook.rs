@@ -336,3 +336,44 @@ fn cline_cancels_and_malformed_cancels() {
     assert_eq!(bad.status.code(), Some(0));
     assert_eq!(out_json(&bad)["cancel"], true);
 }
+
+/// Decision P3-2, bounded: a tool event under an unexpected naming, or a secret path under a
+/// decoy key beside the parsed one, never allows.
+#[test]
+fn doc_derived_adapters_fail_closed_on_shape_and_decoy_keys() {
+    let h = Home::new();
+    let w = work(&h);
+    let gemini = |input: Value| {
+        let o = hook(&h, "gemini-cli", "BeforeTool", &input);
+        assert_eq!(o.status.code(), Some(2), "{input}");
+    };
+    gemini(json!({"cwd": w, "toolName": "read_file", "tool_input": {"file_path": ".env"}}));
+    gemini(json!({"cwd": w, "tool_name": "read_file",
+        "tool_input": {"file_path": "README.md", "absolute_path": ".env"}}));
+    let copilot = |event: &str, input: Value| {
+        let o = hook(&h, "copilot", event, &input);
+        let denied = o.status.code() == Some(2)
+            || (o.status.code() == Some(0) && out_json(&o)["permissionDecision"] == "deny");
+        assert!(denied, "{event} {input}");
+    };
+    copilot(
+        "preToolUse",
+        json!({"cwd": w, "tool_name": "view", "tool_input": {"path": ".env"}}),
+    );
+    copilot(
+        "PreToolUse",
+        json!({"cwd": w, "toolName": "bash", "toolArgs": {"command": "cat .env"}}),
+    );
+    copilot(
+        "preToolUse",
+        json!({"cwd": w, "toolName": "view", "toolArgs": {"path": "README.md", "file": ".env"}}),
+    );
+    let o = hook(
+        &h,
+        "cline",
+        "PreToolUse",
+        &json!({"workspaceRoots": [w], "preToolUse": {"toolName": "read_file",
+        "parameters": {"path": "README.md", "paths": [".env"]}}}),
+    );
+    assert_eq!(out_json(&o)["cancel"], true);
+}

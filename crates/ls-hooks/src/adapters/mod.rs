@@ -97,6 +97,7 @@ pub fn target_of(ev: &Event) -> String {
             .or_else(|| glob.clone())
             .unwrap_or_default(),
         Event::Prompt { .. } => "prompt".into(),
+        Event::Arg { arg, .. } => arg.clone(),
     }
 }
 
@@ -130,17 +131,21 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
     let Ok(json) = serde_json::from_str::<Value>(input) else {
         return Some(bad_in());
     };
-    if !json.is_object() || unreadable(agent, event, &json) {
+    if !json.is_object() {
         return Some(bad_in());
     }
-    // A tool that reads several files at once yields one event per file; the first one that is
-    // not allowed decides.
-    let events = match agent {
-        "gemini-cli" => gemini_cli::parse_many(event, &json),
-        _ => None,
-    }
-    .or_else(|| parse(event, &json).map(|e| vec![e]))
-    .unwrap_or_default();
+    // A tool call may yield several events (several files, or every string in its input); the
+    // first one that is not allowed decides.
+    let events = match guard(agent).map(|g| ((g.call)(event, &json), g)) {
+        Some((Call::Unrecognised, _)) => return Some(bad_in()),
+        Some((Call::Tool { name, input, cwd }, g)) => {
+            match guarded_events(&g, &name, &input, cwd) {
+                Some(events) => events,
+                None => return Some(bad_in()),
+            }
+        }
+        Some((Call::NotTool, _)) | None => parse(event, &json).into_iter().collect(),
+    };
     let mut first = None;
     for ev in &events {
         let decision = decide(ev, v);
@@ -160,12 +165,96 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
     })
 }
 
-/// Payloads of the newer adapters that look like a tool call but cannot be read: deny them.
-fn unreadable(agent: &str, event: &str, v: &Value) -> bool {
-    match agent {
-        "gemini-cli" => gemini_cli::unreadable(event, v),
-        "copilot" => copilot::unreadable(event, v),
-        "cline" => cline::unreadable(event, v),
-        _ => false,
+/// A pre-tool payload of a doc-derived adapter (Gemini CLI, Copilot, Cline; decision P3-2),
+/// reduced to the tool name and its input.
+pub(crate) enum Call {
+    /// Not a tool event (a prompt event): the adapter's `parse` handles it.
+    NotTool,
+    /// A tool event whose tool name or input object is not under the expected keys, or that
+    /// carries two namings at once. Always denies: a tool that cannot be identified never
+    /// passes as an unknown one.
+    Unrecognised,
+    /// `input` is always a JSON object.
+    Tool {
+        name: String,
+        input: Value,
+        cwd: PathBuf,
+    },
+}
+
+/// A tool input as a JSON object: an object, or a string holding one; anything else is `None`.
+pub(crate) fn input_object(v: Option<&Value>) -> Option<Value> {
+    let v = match v? {
+        Value::String(s) => serde_json::from_str::<Value>(s).ok()?,
+        o => o.clone(),
+    };
+    v.is_object().then_some(v)
+}
+
+/// The fail-closed checks of a doc-derived adapter.
+struct Guard {
+    call: fn(&str, &Value) -> Call,
+    /// Tools whose input is checked; any other tool name passes as unknown.
+    known: &'static [&'static str],
+    /// The events of a known tool's primary arguments, or `None` (deny) when they do not parse.
+    primary: fn(&str, &Value, PathBuf) -> Option<Vec<Event>>,
+    /// Keys of a known tool that hold content, a command or a search pattern, not a file name
+    /// (shell commands go through the shell analysis in `primary`).
+    content: fn(&str) -> &'static [&'static str],
+}
+
+fn guard(agent: &str) -> Option<Guard> {
+    Some(match agent {
+        "gemini-cli" => Guard {
+            call: gemini_cli::call,
+            known: gemini_cli::KNOWN_TOOLS,
+            primary: gemini_cli::primary,
+            content: gemini_cli::content_keys,
+        },
+        "copilot" => Guard {
+            call: copilot::call,
+            known: copilot::KNOWN_TOOLS,
+            primary: copilot::primary,
+            content: copilot::content_keys,
+        },
+        "cline" => Guard {
+            call: cline::call,
+            known: cline::KNOWN_TOOLS,
+            primary: cline::primary,
+            content: cline::content_keys,
+        },
+        _ => return None,
+    })
+}
+
+/// Every non-empty string in a tool input at any depth (arrays included), except those held
+/// directly by a `content` key (an array's items count as held by the array's key).
+fn input_strings<'a>(v: &'a Value, key: Option<&str>, content: &[&str], out: &mut Vec<&'a str>) {
+    match v {
+        Value::String(s) if !s.is_empty() && !key.is_some_and(|k| content.contains(&k)) => {
+            out.push(s);
+        }
+        Value::Array(a) => a.iter().for_each(|e| input_strings(e, key, content, out)),
+        Value::Object(o) => o
+            .iter()
+            .for_each(|(k, e)| input_strings(e, Some(k), content, out)),
+        _ => {}
     }
+}
+
+/// The events of a doc-derived tool call: its primary arguments, plus every other string in the
+/// input judged as a path or glob, so a path under a misnamed key beside a decoy one still meets
+/// the protected-path policy (decision P3-2). `None` denies.
+fn guarded_events(g: &Guard, name: &str, input: &Value, cwd: PathBuf) -> Option<Vec<Event>> {
+    if !g.known.contains(&name) {
+        return Some(Vec::new());
+    }
+    let mut events = (g.primary)(name, input, cwd.clone())?;
+    let mut strings = Vec::new();
+    input_strings(input, None, (g.content)(name), &mut strings);
+    events.extend(strings.into_iter().map(|s| Event::Arg {
+        arg: s.to_string(),
+        cwd: cwd.clone(),
+    }));
+    Some(events)
 }

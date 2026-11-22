@@ -672,7 +672,10 @@ async fn grants_lifecycle_and_internal_lookup() {
     }
     let r = internal(&f.app, &lookup_uri, f.a.org, Some(SERVICE_TOKEN)).await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
-    assert_eq!(keys(&r.body), ["agent_id", "items"]);
+    assert_eq!(
+        keys(&r.body),
+        ["agent_id", "agents_paused", "items", "revoked_jtis"]
+    );
     let items = r.body["items"].as_array().unwrap();
     assert_eq!(items.len(), 1, "expired grants are not served: {}", r.raw);
     assert_eq!(

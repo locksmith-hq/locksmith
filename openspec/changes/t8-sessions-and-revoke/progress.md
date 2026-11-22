@@ -59,3 +59,8 @@
 - Task: 1.0 - ci-fix
 - Verified: just quick -> ok; cargo test -p ls-gateway -> git_redact tests flaked under load, pass alone
 - Notes for next session: macos check failed with exit 100 (infra, main passes); merged origin/main (12 behind) and pushed to rerun CI. If macos is red again, read annotations. Then finish-pr (auto-merge) once green.
+
+## 2026-11-22 15:53 worker
+- Task: ci-fix - done (PR #588 hygiene failed: task-edit guard, commits without App identity; moved to squashed branch claude/change-t8-sessions-and-revoke-r2, PR #630)
+- Verified: just quick -> ok; ls-gateway sessions tests 13 pass (evaluator); check-task-edits -> OK
+- Notes for next session: continue on claude/change-t8-sessions-and-revoke-r2 (not the old branch). 5 tasks unticked. macos job failed with exit 100 on #588 (cause unknown, annotations unhelpful); recheck on #630.

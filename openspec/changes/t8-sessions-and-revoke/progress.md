@@ -39,3 +39,8 @@
 - Done: new services/gateway/src/sessions.rs (registry + 5 s watcher, reports open/heartbeat/close); `Relay::admit()` before binding/material/decrypt on relay, git, /v1/grants, /mcp; live sessions closed on revoke/pause/refresh-failure within one TTL.
 - Not done: `SessionKind::Pg` exists but no pg relay (d3-db-relay unmerged) enters it, so the pg half of 3.1 is open: when d3 lands, enter the registry and race the relay loop against `closed()`. Tick 3.1 then. Binding slugs are fixed labels (relay/git/mcp) until gateway config has binding slugs. Parallel `cargo test -p ls-gateway` fails 8 git::fixture_tests (pre-existing); use nextest.
 - Next: 3.2 adversarial cases (revoked replay, request during pause), then 4.1 web.
+
+## 2026-11-22 worker
+- Task: ci-fix (merge conflict with main) - done
+- Verified: npm test --workspace packages/control-plane-client -> 18 passed; cargo nextest run -p ls-gateway -> 159 passed; just quick clean
+- Notes for next session: main restyled control-plane-client index.test.ts (describe/it) and moved MCP tests to mcp.test.ts; session tests now live in src/sessions.test.ts. Needed `npm ci` (new @locksmith/sdk package). Still open: 3.1 pg half (needs d3), 3.2 adversarial, 4.1, 4.2, 5.1.

@@ -42,7 +42,7 @@ Never raise one for progress or retryable failures.
 - **PRs.** Open non-draft (`-F draft=false`), labelled `in-progress`. Touch only PRs you opened (`finish-pr`); never approve or merge directly.
 - **Before pushing,** confirm the branch's PR is still open; if not, branch anew from origin/main.
 - **tasks.md.** Only flip checkboxes, and only after the task is verified. Never edit task text; `scripts/check-task-edits.sh` enforces this.
-- **Agent-system files** (`docs/agents`, `.claude/skills`, agent scripts) change only in the weekly `claude/harness-release-<YYYY-WW>` PR (optimizer) or a `claude/hotfix-<date>` branch for red main, a security fix or every run failing. Put any other finding on the `harness-backlog` issue. Agent branches never change the trust root: `common.md`, `merge.md`, `routing.json`, `AGENTS.md`, `CLAUDE.md`, `openspec/config.yaml`, workflows, `.claude/settings*`, the merge-review skill, and the guard, gate and routing scripts.
+- **Agent-system files** (`docs/agents`, `.claude/skills`, agent scripts) change only in a `claude/harness-release-<YYYY-WW>-<topic>` PR (optimizer, any day) or a `claude/hotfix-<date>` branch for red main, a security fix or every run failing. Put any other finding on the `harness-backlog` issue. Agent branches never change the trust root: `common.md`, `merge.md`, `routing.json`, `AGENTS.md`, `CLAUDE.md`, `openspec/config.yaml`, workflows, `.claude/settings*`, the merge-review skill, and the guard, gate and routing scripts.
 
 - **Schedules.** Never create, change or delete routines or schedules. Propose schedule changes to the owner instead.
 - **Secrets and settings.** Never write secret values anywhere. Never change repository, Actions or account settings.

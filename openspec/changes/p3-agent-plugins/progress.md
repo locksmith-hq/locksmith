@@ -63,3 +63,10 @@
 - Task: 8.2 - done (PR checks all green on head 5513ed8: hygiene, rust, web, desktop, macos, windows-check, adversarial; `just apps-build` rc=0 locally)
 - Verified: check-runs on 5513ed8; `just quick` below
 - Notes for next session: only 2.1 is open (recorded payloads need real Gemini/Copilot/Cline CLIs; fixtures stay doc-derived). Opened a `Decision:` needs-rescue so the lead can accept doc-derived fixtures or split 2.1 out. Do not enable auto-merge until then.
+
+## 2026-11-22 lead (rescue #594)
+- Task: 2.1 - NOT ticked (rescue-attempt; two Opus evaluations FAIL)
+- Decision: accept doc-derived fixtures (design.md row 7, decisions.md P3-2) on condition that a wrong assumed key fails closed.
+- Fix (d50ab8d): `unreadable()` in gemini_cli/copilot/cline denies a known tool whose input does not parse; `*-missing-path` fixtures. `cargo nextest run -p ls-hooks` 16/16, `-p smith-cli --test hook` 9/9, `just quick` OK.
+- Still failing: search tools (`grep_search`, `grep`, `search_files`) parse with path and glob both optional, so wrong keys allow (evaluator reproduced with `target/debug/smith`: gemini `grep_search` with `path:<dir>/.env` exit 0). Also: copilot SOURCE.md lacks a version; fixture path differs from task text (ls-hooks convention).
+- Next: deny (or ask) a known search tool whose args yield neither path nor glob, add `*-search-missing-*` fixtures, re-evaluate; then tick 2.1. Escalated on #594.

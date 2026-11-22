@@ -49,7 +49,10 @@ fn read(p: &Path) -> Option<String> {
     std::fs::read_to_string(p).ok()
 }
 
-fn build(root: &Path) -> Result<Plan, Fail> {
+fn build(root: &Path, hub: Option<&str>) -> Result<Plan, Fail> {
+    let hub_url = hub
+        .map(|h| agents::hub_mcp_url(h).map_err(usage))
+        .transpose()?;
     let mut p = Plan {
         import: None,
         changes: vec![],
@@ -173,7 +176,23 @@ fn build(root: &Path) -> Result<Plan, Fail> {
             let mb = read(&m);
             let ma = agents::merge_mcp(a, mb.as_deref())
                 .map_err(|e| usage(format!("{}: {e}", m.display())))?;
-            files.push((m, mb, Some(ma)));
+            files.push((m.clone(), mb, Some(ma)));
+        }
+        if let Some(url) = &hub_url {
+            if !a.remote_mcp() {
+                p.notes.push(format!(
+                    "no remote Hub MCP entry for {}: remote MCP with OAuth is not verified for it",
+                    a.id()
+                ));
+            } else if a == agents::Agent::Codex {
+                after = agents::merge_hub_mcp(a, Some(&after), url)
+                    .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+            } else {
+                let last = files.last_mut().expect("mcp file");
+                let merged = agents::merge_hub_mcp(a, last.2.as_deref(), url)
+                    .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+                last.2 = Some(merged);
+            }
         }
         files[0].2 = Some(after);
         for (f, before, after) in files {
@@ -256,18 +275,28 @@ fn preview(p: &Plan) -> String {
     s
 }
 
-pub fn run(o: &Opts, binding_only: bool, yes: bool) -> Result<ExitCode, Fail> {
+pub fn run(
+    o: &Opts,
+    binding_only: bool,
+    yes: bool,
+    hub: Option<&str>,
+    dry_run: bool,
+) -> Result<ExitCode, Fail> {
     if binding_only {
         return crate::run_cmd::init(true);
     }
     let root = repo_root()?;
-    let plan = build(&root)?;
+    let plan = build(&root, hub)?;
     if plan.import.is_none() && plan.changes.is_empty() {
         print!("{}", preview(&plan));
         println!("already set up");
         return Ok(ExitCode::Ok);
     }
     print!("{}", preview(&plan));
+    if dry_run {
+        println!("dry run: nothing changed");
+        return Ok(ExitCode::Ok);
+    }
     if !yes {
         if !std::io::stdin().is_terminal() {
             return Err(usage(

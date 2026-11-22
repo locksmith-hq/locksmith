@@ -106,3 +106,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: d3-db-relay planning PR #611 - ci-fix
 - Verified: `just tree-check task-guard` -> OK on both branches; #611 diff now only `openspec/changes/d3-db-relay/`
 - Notes for next session: #611 `merge-ready` failed in the review pre-check because the PR also touched `openspec/decisions.md`, which voids the planning-only exemption (all files under `openspec/changes/`). Planning PRs must never touch `decisions.md`; the D3-1 line moved to #612.
+
+## 2026-11-22 worker (alfie, fourth entry)
+- Task: 6.1 contract (D3-1) - done, ticked
+- Verified: `cargo test -p ls-control-plane --test openapi` (8 passed); `npm test` and `npm run lint --workspace packages/control-plane-client` (14 tests, tsc clean) after `npm ci`
+- Notes for next session: merged main (conflict in progress.md only, kept both). Next: 6.2 (gateway inventory push `PUT /internal/v1/gateway/bindings`, control-plane storage fills the empty `GET /v1/bindings`), then 6.3 page, 6.4, 7.2.

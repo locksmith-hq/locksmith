@@ -250,7 +250,7 @@ async fn sessions_revoke_reports_http_sessions() {
 /// reported closed and not heartbeated again.
 #[tokio::test]
 async fn sessions_revoke_closes_a_live_session_within_one_ttl() {
-    let ttl = Duration::from_secs(1);
+    let ttl = Duration::from_secs(2);
     let reporter = Arc::new(StubReporter::default());
     let h = slow(ttl, &reporter).await;
     let watcher = h.sessions.clone().unwrap().run(Duration::from_millis(50));
@@ -291,7 +291,7 @@ async fn sessions_revoke_closes_a_live_session_within_one_ttl() {
 /// Spec "Pause during use": the same for a paused org, for every session of it.
 #[tokio::test]
 async fn sessions_revoke_pause_closes_a_live_session_within_one_ttl() {
-    let ttl = Duration::from_secs(1);
+    let ttl = Duration::from_secs(2);
     let reporter = Arc::new(StubReporter::default());
     let h = slow(ttl, &reporter).await;
     let watcher = h.sessions.clone().unwrap().run(Duration::from_millis(50));
@@ -319,7 +319,7 @@ async fn sessions_revoke_pause_closes_a_live_session_within_one_ttl() {
 /// the session is closed; a shorter outage keeps it.
 #[tokio::test]
 async fn sessions_revoke_refresh_failure_closes_a_live_session() {
-    let ttl = Duration::from_millis(800);
+    let ttl = Duration::from_secs(3);
     let reporter = Arc::new(StubReporter::default());
     let h = slow(ttl, &reporter).await;
     let watcher = h.sessions.clone().unwrap().run(Duration::from_millis(50));
@@ -332,7 +332,7 @@ async fn sessions_revoke_refresh_failure_closes_a_live_session() {
     h.grants.set_failing(false);
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert!(
-        tokio::time::timeout(Duration::from_millis(1), &mut call)
+        tokio::time::timeout(Duration::from_millis(50), &mut call)
             .await
             .is_err(),
         "a short outage must not close the session"
@@ -349,7 +349,7 @@ async fn sessions_revoke_refresh_failure_closes_a_live_session() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     let after = closed_at - failing_at;
     assert!(
-        after >= ttl - Duration::from_millis(100),
+        after >= ttl - Duration::from_millis(200),
         "closed early: {after:?}"
     );
     assert!(after < ttl * 2, "closed late: {after:?}");

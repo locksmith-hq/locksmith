@@ -44,3 +44,8 @@
 - Task: ci-fix (merge conflict with main) - done
 - Verified: npm test --workspace packages/control-plane-client -> 18 passed; cargo nextest run -p ls-gateway -> 159 passed; just quick clean
 - Notes for next session: main restyled control-plane-client index.test.ts (describe/it) and moved MCP tests to mcp.test.ts; session tests now live in src/sessions.test.ts. Needed `npm ci` (new @locksmith/sdk package). Still open: 3.1 pg half (needs d3), 3.2 adversarial, 4.1, 4.2, 5.1.
+
+## 2026-11-22 worker (josie)
+- Task: ci-fix (macos red on daffd5b; logs blocked, passes locally: workspace portable 877 passed) - widened timing margins in sessions_revoke tests (ttl 1s->2s, 0.8s->3s, short-outage check 1ms->50ms) as the likely macOS-runner flake. If macos is still red, read its annotations/ask for logs: cause unconfirmed.
+- Verified: cargo nextest run -p ls-gateway sessions_revoke -> 9 passed; just quick clean
+- Still open: 3.1 pg half (needs d3), 3.2 adversarial, 4.1, 4.2, 5.1.

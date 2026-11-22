@@ -28,14 +28,9 @@ done < <(for w in .github/workflows/*.yml; do
     j && /^    timeout-minutes:/{t=1} END{if (job && !t) print f": "job}' "$w"
 done)
 
-# infra/tofu holds only the three root modules and the plan policy.
-if [ -d infra/tofu ]; then
-  for d in infra/tofu/*/; do
-    case "$(basename "$d")" in
-      base|session|policy) ;;
-      *) echo "tree-check: unexpected infra/tofu directory (allowed: base, session, policy): $d" >&2; fail=1 ;;
-    esac
-  done
+# AWS infrastructure code lives in the private locksmith-cloud repo (owner 2026-11-22).
+if [ -e infra/tofu ]; then
+  echo "tree-check: infra/tofu belongs in the private locksmith-cloud repo, not here" >&2; fail=1
 fi
 
 # docs/testing.md must have a row per component directory.

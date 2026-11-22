@@ -25,8 +25,12 @@ resource "aws_cognito_user_pool_domain" "main" {
 }
 
 locals {
+  web_origin = "https://${aws_cloudfront_distribution.web.domain_name}"
   cognito_clients = {
-    "locksmith-web"     = { callbacks = var.web_callback_urls, logouts = var.web_logout_urls }
+    "locksmith-web" = {
+      callbacks = concat(var.web_callback_urls, ["${local.web_origin}/auth/callback"])
+      logouts   = concat(var.web_logout_urls, ["${local.web_origin}/"])
+    }
     "locksmith-desktop" = { callbacks = var.desktop_callback_urls, logouts = var.desktop_logout_urls }
     "smith-cli"         = { callbacks = var.cli_callback_urls, logouts = [] }
   }

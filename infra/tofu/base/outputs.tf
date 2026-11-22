@@ -17,3 +17,7 @@ output "cognito_hosted_domain" { value = "https://${aws_cognito_user_pool_domain
 output "cognito_client_ids" { value = { for k, c in aws_cognito_user_pool_client.this : k => c.id } }
 
 output "github_apply_role_arn" { value = aws_iam_role.github_apply.arn }
+
+output "web_url" { value = "https://${aws_cloudfront_distribution.web.domain_name}" }
+output "web_bucket" { value = aws_s3_bucket.web.id }
+output "web_distribution_id" { value = aws_cloudfront_distribution.web.id }

@@ -2,6 +2,12 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "ManageWebCdn",
+      "Effect": "Allow",
+      "Action": ["cloudfront:*"],
+      "Resource": "*"
+    },
+    {
       "Sid": "ManageBaseStack",
       "Effect": "Allow",
       "Action": [

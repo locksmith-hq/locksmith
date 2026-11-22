@@ -139,6 +139,15 @@ pub struct ActiveGrant {
 pub struct AgentGrantSet {
     pub agent_id: Uuid,
     pub items: Vec<ActiveGrant>,
+    /// `jti`s of revoked agent tokens of the org that may still be unexpired; the gateway refuses
+    /// a token whose `jti` is listed (t8). Gateway-only: no human route returns it. Absent from
+    /// an older control plane, which the gateway reads as none.
+    #[serde(default)]
+    pub revoked_jtis: Vec<Uuid>,
+    /// While true the gateway refuses every agent request of the org (t8). Absent from an older
+    /// control plane, which the gateway reads as false.
+    #[serde(default)]
+    pub agents_paused: bool,
 }
 
 #[utoipa::path(
@@ -147,7 +156,7 @@ pub struct AgentGrantSet {
     operation_id = "get_internal_agent_grants",
     tag = "internal",
     summary = "List an agent's unexpired grants (gateway only)",
-    description = "The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`.",
+    description = "The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`. Also carries the org's `agents_paused` flag and the `jti`s of its revoked agent tokens that may still be unexpired (t8); neither is ever returned by a human route.",
     params(
         ("agent_id" = Uuid, Path, description = "Agent id (the token's `sub`)"),
         ("X-Locksmith-Org" = Uuid, Header, description = "The agent's org (the token's `org`)"),
@@ -163,7 +172,7 @@ pub async fn agent_grants(
     org: ServiceOrgBinding,
     ApiPath(agent_id): ApiPath<Uuid>,
 ) -> Result<Json<AgentGrantSet>, ApiError> {
-    let items = state
+    let (items, revoked_jtis, agents_paused) = state
         .db()
         .with_org(org.org_id, move |c| {
             Box::pin(async move {
@@ -180,9 +189,9 @@ pub async fn agent_grants(
                      ORDER BY g.id"
                 ))
                 .bind(agent_id)
-                .fetch_all(c)
+                .fetch_all(&mut *c)
                 .await?;
-                all(&rows, |r| {
+                let items = all(&rows, |r| {
                     Ok(ActiveGrant {
                         grant_id: r.try_get("id")?,
                         secret_id: r.try_get("secret_id")?,
@@ -190,12 +199,23 @@ pub async fn agent_grants(
                         mode: GrantMode::parse(r.try_get::<&str, _>("mode")?)?,
                         expires_at: optional_utc(r, "expires_at")?,
                     })
-                })
+                })?;
+                let revoked_jtis = super::sessions::revoked_jtis(&mut *c).await?;
+                let agents_paused: bool =
+                    sql::query_scalar("SELECT agents_paused FROM orgs WHERE id = current_org_id()")
+                        .fetch_one(c)
+                        .await?;
+                Ok::<_, ApiError>((items, revoked_jtis, agents_paused))
             })
         })
         .await?;
     tracing::info!(agent.id = %agent_id, grants = items.len(), "agent grants served");
-    Ok(Json(AgentGrantSet { agent_id, items }))
+    Ok(Json(AgentGrantSet {
+        agent_id,
+        items,
+        revoked_jtis,
+        agents_paused,
+    }))
 }
 
 /// The kind of a relay event.

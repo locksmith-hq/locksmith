@@ -9,7 +9,7 @@
 //! a revoked grant stops working within that time; `/v1/relay` checks [`allows_relay`] before any
 //! material fetch or unwrap (S4 task 2.2).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -79,33 +79,89 @@ impl GrantError {
     }
 }
 
-/// Reads an agent's unexpired grants.
+/// What the control plane says about one agent right now (t8 design decision 2): its unexpired
+/// grants, the `jti`s of revoked agent tokens, and whether the org's agents are paused. Ids and
+/// flags only, never a value.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GrantSet {
+    pub items: Vec<Grant>,
+    pub revoked_jtis: HashSet<Uuid>,
+    pub agents_paused: bool,
+}
+
+impl GrantSet {
+    /// Whether every request and live session of the caller must be refused: the org is paused,
+    /// or the caller's token (`jti`) is revoked. A caller without a `jti` (a short-lived
+    /// credential) is only refused by a pause.
+    pub fn refuses(&self, jti: Option<Uuid>) -> bool {
+        self.agents_paused || jti.is_some_and(|j| self.revoked_jtis.contains(&j))
+    }
+}
+
+impl From<Vec<Grant>> for GrantSet {
+    fn from(items: Vec<Grant>) -> Self {
+        Self {
+            items,
+            ..Self::default()
+        }
+    }
+}
+
+/// Reads an agent's unexpired grants and the org's revoke and pause state.
 pub trait GrantSource: Send + Sync {
-    fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>>;
+    /// The agent's grants plus the revoke and pause state (possibly served from a cache).
+    fn grant_set(&self, agent_id: Uuid) -> BoxFuture<'_, Result<GrantSet, GrantError>>;
+
+    /// Only the unexpired grants.
+    fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+        Box::pin(async move { Ok(self.grant_set(agent_id).await?.items) })
+    }
+
+    /// Like [`Self::grant_set`] but never older than this call: the session watcher uses it so a
+    /// revoke is seen within one tick, not one tick plus a cache TTL. A cache also stores the
+    /// answer.
+    fn refresh(&self, agent_id: Uuid) -> BoxFuture<'_, Result<GrantSet, GrantError>> {
+        self.grant_set(agent_id)
+    }
 }
 
 #[derive(Deserialize)]
 struct GrantSetJson {
     agent_id: Uuid,
     items: Vec<Grant>,
+    // Absent from an older control plane: not revoked, not paused (t8 migration plan). Other
+    // unknown fields are ignored.
+    #[serde(default)]
+    revoked_jtis: Vec<Uuid>,
+    #[serde(default)]
+    agents_paused: bool,
 }
 
 /// Parse the internal endpoint's answer and check it is for `agent_id`.
-pub fn parse_grants(body: &[u8], agent_id: Uuid) -> Result<Vec<Grant>, GrantError> {
+pub fn parse_grant_set(body: &[u8], agent_id: Uuid) -> Result<GrantSet, GrantError> {
     let set: GrantSetJson = serde_json::from_slice(body).map_err(|_| GrantError::BadResponse)?;
     if set.agent_id != agent_id {
         return Err(GrantError::BadResponse);
     }
-    Ok(set.items)
+    Ok(GrantSet {
+        items: set.items,
+        revoked_jtis: set.revoked_jtis.into_iter().collect(),
+        agents_paused: set.agents_paused,
+    })
+}
+
+/// Parse the internal endpoint's answer and check it is for `agent_id`; the grants only.
+pub fn parse_grants(body: &[u8], agent_id: Uuid) -> Result<Vec<Grant>, GrantError> {
+    parse_grant_set(body, agent_id).map(|s| s.items)
 }
 
 impl ControlPlane {
-    async fn agent_grants(&self, agent_id: Uuid) -> Result<Vec<Grant>, GrantError> {
+    async fn agent_grant_set(&self, agent_id: Uuid) -> Result<GrantSet, GrantError> {
         let path = format!("internal/v1/agents/{agent_id}/grants");
         match self.internal_get(&path, MAX_GRANTS_RESPONSE).await {
-            Ok(body) => parse_grants(&body, agent_id),
+            Ok(body) => parse_grant_set(&body, agent_id),
             // The agent was deleted (or never existed in this org): it holds no grants.
-            Err(Internal::NotFound) => Ok(Vec::new()),
+            Err(Internal::NotFound) => Ok(GrantSet::default()),
             Err(Internal::Denied) => Err(GrantError::Denied),
             Err(Internal::Unavailable) => Err(GrantError::Unavailable),
             Err(Internal::BadResponse) => Err(GrantError::BadResponse),
@@ -114,8 +170,8 @@ impl ControlPlane {
 }
 
 impl GrantSource for ControlPlane {
-    fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
-        Box::pin(self.agent_grants(agent_id))
+    fn grant_set(&self, agent_id: Uuid) -> BoxFuture<'_, Result<GrantSet, GrantError>> {
+        Box::pin(self.agent_grant_set(agent_id))
     }
 }
 
@@ -137,7 +193,7 @@ impl Default for GrantCacheSettings {
 }
 
 struct CachedSet {
-    grants: Vec<Grant>,
+    set: GrantSet,
     fetched: Instant,
 }
 
@@ -175,10 +231,10 @@ impl GrantCache {
         now.saturating_duration_since(e.fetched) < self.settings.ttl
     }
 
-    fn get_at(&self, agent_id: Uuid, now: Instant) -> Option<Vec<Grant>> {
+    fn get_at(&self, agent_id: Uuid, now: Instant) -> Option<GrantSet> {
         let mut map = self.lock();
         match map.get(&agent_id) {
-            Some(e) if self.fresh(e, now) => Some(e.grants.clone()),
+            Some(e) if self.fresh(e, now) => Some(e.set.clone()),
             Some(_) => {
                 map.remove(&agent_id);
                 None
@@ -187,7 +243,7 @@ impl GrantCache {
         }
     }
 
-    fn insert_at(&self, agent_id: Uuid, grants: Vec<Grant>, now: Instant) {
+    fn insert_at(&self, agent_id: Uuid, set: GrantSet, now: Instant) {
         if self.settings.max_entries == 0 || self.settings.ttl.is_zero() {
             return;
         }
@@ -209,31 +265,34 @@ impl GrantCache {
                 None => break,
             }
         }
-        map.insert(
-            agent_id,
-            CachedSet {
-                grants,
-                fetched: now,
-            },
-        );
+        map.insert(agent_id, CachedSet { set, fetched: now });
     }
 
-    async fn read(&self, agent_id: Uuid) -> Result<Vec<Grant>, GrantError> {
+    async fn read(&self, agent_id: Uuid) -> Result<GrantSet, GrantError> {
         if let Some(g) = self.get_at(agent_id, Instant::now()) {
             return Ok(g);
         }
+        self.fetch(agent_id).await
+    }
+
+    /// Ask the source and store the answer, whatever the cache holds.
+    async fn fetch(&self, agent_id: Uuid) -> Result<GrantSet, GrantError> {
         // Stamp the entry with the time the fetch started, so it never outlives the TTL
         // measured from when the control plane was asked.
         let started = Instant::now();
-        let grants = self.source.grants(agent_id).await?;
-        self.insert_at(agent_id, grants.clone(), started);
-        Ok(grants)
+        let set = self.source.grant_set(agent_id).await?;
+        self.insert_at(agent_id, set.clone(), started);
+        Ok(set)
     }
 }
 
 impl GrantSource for GrantCache {
-    fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+    fn grant_set(&self, agent_id: Uuid) -> BoxFuture<'_, Result<GrantSet, GrantError>> {
         Box::pin(self.read(agent_id))
+    }
+
+    fn refresh(&self, agent_id: Uuid) -> BoxFuture<'_, Result<GrantSet, GrantError>> {
+        Box::pin(self.fetch(agent_id))
     }
 }
 
@@ -290,15 +349,16 @@ async fn list(relay: &Relay, headers: &HeaderMap, request_id: &str) -> Response 
         request_id = %request_id,
         agent.id = %agent.agent_id
     );
-    let read = relay
-        .grants()
-        .grants(agent.agent_id)
-        .instrument(span.clone())
-        .await;
+    let read = relay.admit(&agent).instrument(span.clone()).await;
     let _entered = span.enter();
     let grants = match read {
-        Ok(g) => g,
-        Err(e) => {
+        Ok(set) => set.items,
+        // Paused org or revoked token (t8): the same refusal as the relay.
+        Err(crate::relay::Refused::Paused) => {
+            tracing::info!(reason = "paused_or_revoked", "agent grants refused");
+            return error(StatusCode::FORBIDDEN, "denied", request_id);
+        }
+        Err(crate::relay::Refused::Unreadable(e)) => {
             tracing::warn!(reason = e.as_str(), "agent grants could not be read");
             return error(StatusCode::BAD_GATEWAY, "grants_unavailable", request_id);
         }
@@ -335,12 +395,16 @@ pub mod testkit {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    /// Grants by agent; `fail` makes every read fail.
+    /// Grants by agent; `fail` makes every read fail. The revoke and pause state (t8) is the
+    /// same for every agent; `fail_reads` can be flipped at any time.
     #[derive(Default)]
     pub struct StubGrants {
         pub by_agent: Mutex<HashMap<Uuid, Vec<Grant>>>,
         pub fail: bool,
         pub calls: AtomicUsize,
+        pub revoked_jtis: Mutex<HashSet<Uuid>>,
+        pub paused: std::sync::atomic::AtomicBool,
+        pub fail_reads: std::sync::atomic::AtomicBool,
     }
 
     impl StubGrants {
@@ -351,21 +415,37 @@ pub mod testkit {
         pub fn calls(&self) -> usize {
             self.calls.load(Ordering::SeqCst)
         }
+
+        pub fn revoke(&self, jti: Uuid) {
+            self.revoked_jtis.lock().unwrap().insert(jti);
+        }
+
+        pub fn set_paused(&self, paused: bool) {
+            self.paused.store(paused, Ordering::SeqCst);
+        }
+
+        pub fn set_failing(&self, failing: bool) {
+            self.fail_reads.store(failing, Ordering::SeqCst);
+        }
     }
 
     impl GrantSource for StubGrants {
-        fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+        fn grant_set(&self, agent_id: Uuid) -> BoxFuture<'_, Result<GrantSet, GrantError>> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            let r = if self.fail {
+            let r = if self.fail || self.fail_reads.load(Ordering::SeqCst) {
                 Err(GrantError::Unavailable)
             } else {
-                Ok(self
-                    .by_agent
-                    .lock()
-                    .unwrap()
-                    .get(&agent_id)
-                    .cloned()
-                    .unwrap_or_default())
+                Ok(GrantSet {
+                    items: self
+                        .by_agent
+                        .lock()
+                        .unwrap()
+                        .get(&agent_id)
+                        .cloned()
+                        .unwrap_or_default(),
+                    revoked_jtis: self.revoked_jtis.lock().unwrap().clone(),
+                    agents_paused: self.paused.load(Ordering::SeqCst),
+                })
             };
             Box::pin(async move { r })
         }
@@ -485,7 +565,7 @@ mod tests {
             GrantCacheSettings::default(),
         );
         let t0 = Instant::now();
-        let set = vec![grant(Uuid::now_v7(), "relay", None)];
+        let set = GrantSet::from(vec![grant(Uuid::now_v7(), "relay", None)]);
         c.insert_at(AGENT, set.clone(), t0);
         assert_eq!(
             c.get_at(AGENT, t0 + Duration::from_millis(9_999)),
@@ -506,9 +586,9 @@ mod tests {
         );
         let t0 = Instant::now();
         let (a, b, d) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-        c.insert_at(a, Vec::new(), t0);
-        c.insert_at(b, Vec::new(), t0 + Duration::from_millis(1));
-        c.insert_at(d, Vec::new(), t0 + Duration::from_millis(2));
+        c.insert_at(a, GrantSet::default(), t0);
+        c.insert_at(b, GrantSet::default(), t0 + Duration::from_millis(1));
+        c.insert_at(d, GrantSet::default(), t0 + Duration::from_millis(2));
         let now = t0 + Duration::from_millis(3);
         assert_eq!(c.get_at(a, now), None, "oldest evicted");
         assert!(c.get_at(b, now).is_some() && c.get_at(d, now).is_some());
@@ -530,21 +610,21 @@ mod tests {
             Uuid::now_v7(),
             Uuid::now_v7(),
         );
-        c.insert_at(a, Vec::new(), t0);
-        c.insert_at(b, Vec::new(), t0 + Duration::from_secs(5));
+        c.insert_at(a, GrantSet::default(), t0);
+        c.insert_at(b, GrantSet::default(), t0 + Duration::from_secs(5));
         // `a` is stale but the map is below the bound: no sweep, and it is never served.
         let later = t0 + MAX_CACHE_TTL + Duration::from_secs(1);
-        c.insert_at(d, Vec::new(), later);
+        c.insert_at(d, GrantSet::default(), later);
         assert_eq!(c.lock().len(), 3, "no sweep below the bound");
         // Full: the sweep drops only the stale `a`; the fresh `b` and `d` survive.
-        c.insert_at(e, Vec::new(), later);
+        c.insert_at(e, GrantSet::default(), later);
         assert_eq!(c.lock().len(), 3);
         assert!(!c.lock().contains_key(&a), "stale entry swept");
         for k in [b, d, e] {
             assert!(c.get_at(k, later).is_some());
         }
         // Refreshing an agent already in a full map evicts nothing.
-        c.insert_at(e, Vec::new(), later);
+        c.insert_at(e, GrantSet::default(), later);
         assert_eq!(c.lock().len(), 3);
     }
 

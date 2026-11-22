@@ -17,6 +17,7 @@ use ls_gateway::mcp_clients::ClientsCache;
 use ls_gateway::mcp_endpoint::McpEndpoint;
 use ls_gateway::mcp_settings::SettingsCache;
 use ls_gateway::relay::{Relay, RelayOptions};
+use ls_gateway::sessions::{self, SessionSettings, Sessions};
 use ls_gateway::ttl::MAX_CACHE_TTL;
 use secrecy::ExposeSecret;
 use tracing_subscriber::EnvFilter;
@@ -133,6 +134,14 @@ async fn main() -> ExitCode {
     // Agent MCP clients and their revoke (task 4.2): recorded on initialize, the revoked set
     // read on every `/mcp` request through a cache of at most 10 s, failing closed.
     let clients = Arc::new(ClientsCache::new(control_plane.clone(), MAX_CACHE_TTL));
+    // Live sessions (t8 task 3.1): reported to the control plane every 5 s, and closed on a revoke
+    // or pause or when the state cannot be read for a whole TTL.
+    let sessions = Arc::new(Sessions::new(
+        grants.clone(),
+        control_plane.clone(),
+        SessionSettings::default(),
+    ));
+    let session_watcher = sessions.clone().run(sessions::HEARTBEAT);
     let audit = Arc::new(HttpAudit::new(control_plane));
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)
@@ -149,7 +158,8 @@ async fn main() -> ExitCode {
         RelayOptions::default(),
     )
     // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
-    .with_revoked_agents(clients);
+    .with_revoked_agents(clients)
+    .with_sessions(sessions);
 
     let router = app::build(
         AppState::new(readiness)
@@ -172,6 +182,7 @@ async fn main() -> ExitCode {
         .await;
     probe.abort();
     sweeper.abort();
+    session_watcher.abort();
     database.close().await;
     let _ = tokio::task::spawn_blocking(move || telemetry.shutdown()).await;
     match served {

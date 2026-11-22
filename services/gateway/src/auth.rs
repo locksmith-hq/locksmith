@@ -48,6 +48,9 @@ const MAX_KEYS: usize = 32;
 pub struct AgentIdentity {
     pub agent_id: Uuid,
     pub org_id: Uuid,
+    /// The `jti` of the agent token the caller presented (t8): what a revoke of one session
+    /// refuses. `None` for a caller that holds no agent token, a short-lived credential.
+    pub jti: Option<Uuid>,
 }
 
 /// Why a caller was refused. Every variant is a `401`; none carries token text.
@@ -302,6 +305,7 @@ impl AgentAuth {
         Ok(AgentIdentity {
             agent_id: claims.sub,
             org_id: claims.org,
+            jti: Some(claims.jti),
         })
     }
 
@@ -410,6 +414,7 @@ mod tests {
             sub: AGENT,
             org,
             aud: aud.to_owned(),
+            jti: Uuid::now_v7(),
             iat: now,
             exp: now + exp_in,
         }
@@ -442,13 +447,8 @@ mod tests {
                 .authenticate(&bearer(&format!("{scheme} {t}")))
                 .await
                 .unwrap();
-            assert_eq!(
-                id,
-                AgentIdentity {
-                    agent_id: AGENT,
-                    org_id: ORG
-                }
-            );
+            assert_eq!((id.agent_id, id.org_id), (AGENT, ORG));
+            assert!(id.jti.is_some(), "the token's jti is carried");
         }
         assert_eq!(
             a.authenticate(&HeaderMap::new()).await,

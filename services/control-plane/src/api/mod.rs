@@ -19,6 +19,7 @@ pub(crate) mod projects;
 mod responses;
 pub(crate) mod secrets;
 mod session;
+mod sessions;
 pub(crate) mod versions;
 mod workload_identities;
 mod workload_tokens;
@@ -88,6 +89,12 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(mcp::update_tool))
         .routes(routes!(mcp::list_clients))
         .routes(routes!(mcp::revoke_client))
+        .routes(routes!(sessions::list))
+        .routes(routes!(sessions::revoke_all))
+        .routes(routes!(sessions::revoke_one))
+        .routes(routes!(sessions::pause))
+        .routes(routes!(sessions::resume))
+        .routes(routes!(sessions::report))
         .routes(routes!(internal::material))
         .routes(routes!(internal::agent_grants))
         .routes(routes!(internal::agent_tool_settings))

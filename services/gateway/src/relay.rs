@@ -6,6 +6,9 @@
 //! 1. agent token ([`crate::auth`]: JWKS signature, audience, expiry, org) -> `401`, nothing
 //!    else happens and nothing is audited;
 //! 2. request shape -> `400`;
+//!    Right after it (t8, [`Relay::admit`]) a paused org or revoked token `jti` -> `403 denied`
+//!    and state that cannot be read -> `502 grants_unavailable`; a live call is also closed
+//!    mid-flight when its session is revoked ([`crate::sessions`]);
 //! 3. grant (S4 task 2.2): the agent's grants (cached at most 10 s, [`crate::grants::GrantCache`])
 //!    must hold an unexpired `relay` grant for the secret -> `403 no_grant`; grants that cannot
 //!    be read -> `502 grants_unavailable` (fail closed);
@@ -58,7 +61,7 @@ use crate::auth::AgentAuth;
 use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
 use crate::egress::{self, EgressError, Resolver};
-use crate::grants::{GrantSource, allows_relay};
+use crate::grants::{Grant, GrantError, GrantSet, GrantSource, allows_relay};
 
 /// Label in redaction markers: `[REDACTED:SECRET]`.
 pub const REDACTION_LABEL: &str = "SECRET";
@@ -136,6 +139,18 @@ pub struct Relay {
     /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
     /// honoured so a revoke takes effect here without waiting for `/mcp` traffic.
     revoked_agents: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
+    /// Live session registry and watcher (t8 task 3.1); none means sessions are not tracked
+    /// (revoke and pause are still enforced on every request through the grant set).
+    sessions: Option<Arc<crate::sessions::Sessions>>,
+}
+
+/// Why [`Relay::admit`] refused a caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Refused {
+    /// The org is paused or the caller's token is revoked.
+    Paused,
+    /// The revoke and pause state could not be read (fail closed).
+    Unreadable(GrantError),
 }
 
 impl Relay {
@@ -160,7 +175,38 @@ impl Relay {
             git: crate::git::GitState::default(),
             short_lived: crate::short_lived::ShortLivedStore::default(),
             revoked_agents: None,
+            sessions: None,
         }
+    }
+
+    /// Track live sessions and close them on revoke or pause (t8 task 3.1).
+    pub fn with_sessions(mut self, sessions: Arc<crate::sessions::Sessions>) -> Self {
+        self.sessions = Some(sessions);
+        self
+    }
+
+    pub(crate) fn sessions(&self) -> Option<&Arc<crate::sessions::Sessions>> {
+        self.sessions.as_ref()
+    }
+
+    /// Whether `agent` may use the gateway at all right now, read right after the token is
+    /// verified and before the binding, the grant, the egress check or any decrypt (t8 design
+    /// decision 2). The answer is the grant set the control plane reported, at most one cache TTL
+    /// old: a paused org and a revoked `jti` are refused, and a set that cannot be read is
+    /// refused too (fail closed). On success the set is returned so the grant check reuses it.
+    pub(crate) async fn admit(
+        &self,
+        agent: &crate::auth::AgentIdentity,
+    ) -> Result<GrantSet, Refused> {
+        let set = self
+            .grants
+            .grant_set(agent.agent_id)
+            .await
+            .map_err(Refused::Unreadable)?;
+        if set.refuses(agent.jti) {
+            return Err(Refused::Paused);
+        }
+        Ok(set)
     }
 
     /// Check short-lived credentials against the agent MCP client registry (task 4.2): a
@@ -470,12 +516,13 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
                 let agent = crate::auth::AgentIdentity {
                     agent_id: s.agent_id,
                     org_id: s.org_id,
+                    jti: None,
                 };
                 let only = Only {
                     secret_id: s.secret_id,
                     credential_id: s.credential_id,
                 };
-                handle_scoped(relay, agent, Some(only), request_id, body).await
+                handle_scoped(relay, agent, Some(only), false, request_id, body).await
             }
             None => {
                 tracing::info!(
@@ -493,7 +540,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
             return error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id);
         }
     };
-    handle_as(relay, agent, request_id, body).await
+    handle_scoped(relay, agent, None, true, request_id, body).await
 }
 
 /// The relay for an already authenticated agent: every check, the audit events and the
@@ -505,7 +552,7 @@ pub(crate) async fn handle_as(
     request_id: String,
     body: Bytes,
 ) -> Response {
-    handle_scoped(relay, agent, None, request_id, body).await
+    handle_scoped(relay, agent, None, false, request_id, body).await
 }
 
 /// A short-lived credential's restriction: the one secret it may relay.
@@ -515,10 +562,13 @@ struct Only {
     credential_id: Uuid,
 }
 
+/// `track`: the call is its own session (`/v1/relay`), not part of an MCP session that is
+/// already tracked.
 async fn handle_scoped(
     relay: Arc<Relay>,
     agent: crate::auth::AgentIdentity,
     only: Option<Only>,
+    track: bool,
     request_id: String,
     body: Bytes,
 ) -> Response {
@@ -553,7 +603,7 @@ async fn handle_scoped(
 
     async move {
         let mut attempt = None;
-        let result = run(&relay, &call, &mut attempt, req, only).await;
+        let result = run(&relay, &call, &mut attempt, req, only, &agent, track).await;
         let span = tracing::Span::current();
         let (outcome, status) = match &result {
             Ok(resp) => (Outcome::Ok, Some(resp.status)),
@@ -640,22 +690,56 @@ async fn run(
     attempt: &mut Option<Uuid>,
     req: Parsed,
     only: Option<Only>,
+    agent: &crate::auth::AgentIdentity,
+    track: bool,
 ) -> Result<RelayResponse, Failure> {
-    let agent_id = call.agent_id;
     // A short-lived credential relays its one secret and nothing else (before any lookup).
     if only.is_some_and(|o| o.secret_id != req.secret_id) {
         return Err(denied());
     }
-    // 3. Grant and its expiry: refused before the binding lookup, DNS, fetch or unwrap. The
-    // expiry is re-checked here because the set may come from the cache.
-    let grants = relay.grants.grants(agent_id).await.map_err(|e| {
-        tracing::warn!(reason = e.as_str(), "agent grants could not be read");
-        Failure::new(
-            Outcome::GrantsUnavailable,
-            StatusCode::BAD_GATEWAY,
-            "grants_unavailable",
-        )
+    // 3. Paused org, revoked token or unreadable state (t8): refused right after authentication,
+    // before the grant, the binding, DNS, the material fetch or any decrypt. Then the grant and
+    // its expiry, from the same set; the expiry is re-checked because the set may be cached.
+    let set = relay.admit(agent).await.map_err(|e| match e {
+        Refused::Paused => {
+            tracing::info!(reason = "paused_or_revoked", "relay refused");
+            denied()
+        }
+        Refused::Unreadable(e) => {
+            tracing::warn!(reason = e.as_str(), "agent grants could not be read");
+            Failure::new(
+                Outcome::GrantsUnavailable,
+                StatusCode::BAD_GATEWAY,
+                "grants_unavailable",
+            )
+        }
     })?;
+    // The call is a live session from here on; a revoke or pause closes it mid-flight.
+    let session = relay
+        .sessions
+        .as_ref()
+        .filter(|_| track)
+        .and_then(|s| s.enter(agent, crate::sessions::SessionKind::Http, "relay"));
+    let rest = run_admitted(relay, call, attempt, req, set.items);
+    match session {
+        Some(h) => tokio::select! {
+            r = rest => r,
+            () = h.closed() => {
+                tracing::info!(reason = "session_closed", "relay refused");
+                Err(denied())
+            }
+        },
+        None => rest.await,
+    }
+}
+
+async fn run_admitted(
+    relay: &Relay,
+    call: &CallAudit,
+    attempt: &mut Option<Uuid>,
+    req: Parsed,
+    grants: Vec<Grant>,
+) -> Result<RelayResponse, Failure> {
     if !allows_relay(&grants, req.secret_id, time::OffsetDateTime::now_utc()) {
         return Err(Failure::new(
             Outcome::NoGrant,
@@ -970,6 +1054,9 @@ mod tests {
     /// Task 3.4 of m1-remote-mcp: per-org tool switches and the per-call `mcp.call` event.
     mod mcp_settings;
 
+    /// Task 3.1 of t8-sessions-and-revoke: paused org, revoked token and live sessions.
+    mod sessions_revoke;
+
     fn grant(secret_id: Uuid, name: &str, expires_at: Option<time::OffsetDateTime>) -> Grant {
         Grant {
             grant_id: Uuid::now_v7(),
@@ -990,6 +1077,7 @@ mod tests {
             sub: AGENT,
             org,
             aud: aud.to_owned(),
+            jti: Uuid::now_v7(),
             iat: now,
             exp: now + exp_in,
         }
@@ -1063,6 +1151,10 @@ mod tests {
         signer: AgentTokenSigner,
         /// A valid agent token for [`AGENT`] in [`ORG`].
         token: String,
+        /// The `jti` of [`Self::token`].
+        jti: Uuid,
+        /// The live session registry, when the setup asked for one (t8 task 3.1).
+        sessions: Option<Arc<crate::sessions::Sessions>>,
     }
 
     struct Setup {
@@ -1086,6 +1178,9 @@ mod tests {
         settings_source: Option<Arc<dyn crate::mcp_settings::ToolSettingsSource>>,
         /// The agent-layer client registry (task 4.2); none means nobody is revoked.
         clients: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
+        /// Track live sessions and report them here (t8 task 3.1). The registry's fail-closed
+        /// TTL is [`Self::grant_ttl`]; nothing ticks it unless the test does.
+        reporter: Option<Arc<dyn crate::sessions::SessionReporter>>,
     }
 
     impl Default for Setup {
@@ -1101,6 +1196,7 @@ mod tests {
                 mcp_tools: Vec::new(),
                 settings_source: None,
                 clients: None,
+                reporter: None,
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
@@ -1200,7 +1296,9 @@ mod tests {
             Arc::new(StubJwks::with(vec![signer.jwk().clone()])),
             JwksSettings::default(),
         ));
-        let token = signer.sign(&agent_claims(ORG, AUDIENCE, 600)).unwrap();
+        let claims = agent_claims(ORG, AUDIENCE, 600);
+        let jti = claims.jti;
+        let token = signer.sign(&claims).unwrap();
         // By default the agent may relay every test secret; tests that need fewer replace the set
         // before their first call.
         let grants = Arc::new(StubGrants::default());
@@ -1211,13 +1309,23 @@ mod tests {
                 .map(|id| grant(id, "TEST", None))
                 .collect(),
         );
-        let cache = GrantCache::new(
+        let cache = Arc::new(GrantCache::new(
             grants.clone(),
             GrantCacheSettings {
                 ttl: setup.grant_ttl,
                 ..GrantCacheSettings::default()
             },
-        );
+        ));
+        let sessions = setup.reporter.map(|reporter| {
+            Arc::new(crate::sessions::Sessions::new(
+                cache.clone(),
+                reporter,
+                crate::sessions::SessionSettings {
+                    ttl: setup.grant_ttl,
+                    ..crate::sessions::SessionSettings::default()
+                },
+            ))
+        });
         let sink: Arc<dyn AuditSink> = match setup.audit {
             Some(a) => a,
             None => audit.clone(),
@@ -1239,7 +1347,7 @@ mod tests {
         }
         let mut relay = Relay::new(
             auth,
-            Arc::new(cache),
+            cache,
             bindings,
             decryptor,
             resolver.clone(),
@@ -1248,6 +1356,9 @@ mod tests {
         );
         if let Some(clients) = setup.clients {
             relay = relay.with_revoked_agents(clients);
+        }
+        if let Some(sessions) = &sessions {
+            relay = relay.with_sessions(sessions.clone());
         }
         let relay = Arc::new(relay);
         let app = app::build(
@@ -1267,6 +1378,8 @@ mod tests {
             dead_port,
             signer,
             token,
+            jti,
+            sessions,
         }
     }
 

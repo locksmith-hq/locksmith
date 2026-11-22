@@ -4,7 +4,7 @@
 //! Modules: [`config`], [`auth`] (agent tokens verified through the control plane's JWKS),
 //! [`grants`] (`GET /v1/grants`), [`decrypt`] (material fetch, DEK unwrap and cache, open), [`egress`]
 //! (host allowlist, address guard, pinned client), [`relay`] (`POST /v1/relay`: inject, call,
-//! redact), [`mcp_endpoint`] (`/mcp`, the agent MCP server), [`short_lived`] (the MCP short-lived credentials `/v1/relay` accepts), [`audit`] (relay events in the org's audit ledger), [`app`] (the router).
+//! redact), [`mcp_endpoint`] (`/mcp`, the agent MCP server), [`short_lived`] (the MCP short-lived credentials `/v1/relay` accepts), [`sessions`] (live session reports, closed on revoke or pause), [`audit`] (relay events in the org's audit ledger), [`app`] (the router).
 
 pub mod app;
 pub mod audit;
@@ -20,5 +20,6 @@ pub mod mcp_endpoint;
 pub mod mcp_settings;
 mod mcp_tools;
 pub mod relay;
+pub mod sessions;
 pub mod short_lived;
 pub mod ttl;

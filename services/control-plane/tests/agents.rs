@@ -418,7 +418,10 @@ async fn token_exchange_mints_a_short_lived_gateway_token() {
     assert_eq!(claims.exp - claims.iat, 15 * 60);
     let now = OffsetDateTime::now_utc().unix_timestamp();
     assert!((claims.iat - now).abs() < 60);
-    assert_eq!(keys(&payload(token)), ["aud", "exp", "iat", "org", "sub"]);
+    assert_eq!(
+        keys(&payload(token)),
+        ["aud", "exp", "iat", "jti", "org", "sub"]
+    );
 }
 
 /// Scenario "expired or forged token" (verifier side): an expired token, a wrong audience and a
@@ -437,6 +440,7 @@ async fn expired_wrong_audience_and_forged_tokens_fail_verification() {
         sub: agent,
         org: f.a.org,
         aud: aud.to_owned(),
+        jti: Uuid::now_v7(),
         iat: exp - 900,
         exp,
     };
@@ -668,7 +672,10 @@ async fn grants_lifecycle_and_internal_lookup() {
     }
     let r = internal(&f.app, &lookup_uri, f.a.org, Some(SERVICE_TOKEN)).await;
     assert_eq!(r.status, StatusCode::OK, "{}", r.raw);
-    assert_eq!(keys(&r.body), ["agent_id", "items"]);
+    assert_eq!(
+        keys(&r.body),
+        ["agent_id", "agents_paused", "items", "revoked_jtis"]
+    );
     let items = r.body["items"].as_array().unwrap();
     assert_eq!(items.len(), 1, "expired grants are not served: {}", r.raw);
     assert_eq!(

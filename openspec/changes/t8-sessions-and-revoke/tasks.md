@@ -1,12 +1,12 @@
 # Tasks: T8 live sessions, revoke and pause
 
 ## 1. Contract [sonnet]
-- [ ] 1.0 Add a unique `jti` claim to `AgentClaims` at issuance and expose it in the verified claims the gateway reads. Verify: `cargo nextest run -p ls-control-plane agent_token`.
-- [ ] 1.1 Add the migration (`agent_sessions`, `orgs.agents_paused`), OpenAPI paths for list, revoke-one, revoke-all, pause and resume, and the `session.revoked`, `agents.paused`, `agents.resumed` ledger kinds in `ls-audit`; mock data and TS client methods in `packages/control-plane-client`. Verify: `cargo nextest run -p ls-control-plane openapi` and `npm test --workspace packages/control-plane-client`.
+- [x] 1.0 Add a unique `jti` claim to `AgentClaims` at issuance and expose it in the verified claims the gateway reads. Verify: `cargo nextest run -p ls-control-plane agent_token`.
+- [x] 1.1 Add the migration (`agent_sessions`, `orgs.agents_paused`), OpenAPI paths for list, revoke-one, revoke-all, pause and resume, and the `session.revoked`, `agents.paused`, `agents.resumed` ledger kinds in `ls-audit`; mock data and TS client methods in `packages/control-plane-client`. Verify: `cargo nextest run -p ls-control-plane openapi` and `npm test --workspace packages/control-plane-client`.
 
 ## 2. Control plane [sonnet]
-- [ ] 2.1 Internal session report endpoint (open, heartbeat, close) and the list endpoint with the 15 s liveness rule; no token or address in any response. Verify: `cargo nextest run -p ls-control-plane sessions` including a canary leak assertion.
-- [ ] 2.2 Revoke-one, revoke-all, pause and resume, authorized as the existing revoke routes (org member, `403` otherwise), each with its ledger event; extend the grant-set response with `revoked_jtis` and `agents_paused`. Verify: `cargo nextest run -p ls-control-plane sessions_admin` (403 for a non-member, events present, `just audit-verify`).
+- [x] 2.1 Internal session report endpoint (open, heartbeat, close) and the list endpoint with the 15 s liveness rule; no token or address in any response. Verify: `cargo nextest run -p ls-control-plane sessions` including a canary leak assertion.
+- [x] 2.2 Revoke-one, revoke-all, pause and resume, authorized as the existing revoke routes (org member, `403` otherwise), each with its ledger event; extend the grant-set response with `revoked_jtis` and `agents_paused`. Verify: `cargo nextest run -p ls-control-plane sessions_admin` (403 for a non-member, events present, `just audit-verify`).
 
 ## 3. Gateway [sonnet]
 - [ ] 3.1 Report sessions (http, pg, mcp) with a 5 s heartbeat; check revoked and paused before decrypt; close live sessions (reuse the d3 watcher) and deny on refresh failure. Verify: `cargo nextest run -p ls-gateway sessions_revoke` showing no decrypt call after pause and a close within one TTL.

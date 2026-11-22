@@ -25,6 +25,10 @@ export type WorkloadCondition = components["schemas"]["ConditionView"];
 export type McpLayer = components["schemas"]["McpLayer"];
 export type McpToolSetting = components["schemas"]["McpToolSetting"];
 export type McpClient = components["schemas"]["McpClient"];
+export type AgentSession = components["schemas"]["AgentSession"];
+export type SessionKind = components["schemas"]["SessionKind"];
+export type SessionsRevoked = components["schemas"]["SessionsRevoked"];
+export type AgentsPauseState = components["schemas"]["AgentsPauseState"];
 export type Problem = components["schemas"]["Problem"];
 
 /** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
@@ -108,6 +112,16 @@ export interface Client {
   listMcpClients(): Promise<McpClient[]>;
   /** Revoke a client by its row `id` (not the OAuth `client_id`). Idempotent. */
   revokeMcpClient(id: string): Promise<McpClient>;
+  /** The org's agent sessions with a `live` flag (reported within 15 s and not revoked). Never carries a token. */
+  listSessions(): Promise<AgentSession[]>;
+  /** Revoke one session by its `id`; the gateway enforces it within 10 s. */
+  revokeSession(id: string): Promise<AgentSession>;
+  /** Revoke every live session of the org. */
+  revokeAllSessions(): Promise<SessionsRevoked>;
+  /** Pause every agent of the org. Idempotent. */
+  pauseAgents(): Promise<AgentsPauseState>;
+  /** Resume the agents of the org. Idempotent. */
+  resumeAgents(): Promise<AgentsPauseState>;
 }
 
 /**
@@ -217,5 +231,10 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     listMcpClients: () => all((cursor) => run(c.GET("/v1/mcp/clients", { params: { query: q(cursor) } }))),
     revokeMcpClient: (client_row_id) =>
       run(c.POST("/v1/mcp/clients/{client_row_id}/revoke", { params: { path: { client_row_id } } })),
+    listSessions: () => all((cursor) => run(c.GET("/v1/sessions", { params: { query: q(cursor) } }))),
+    revokeSession: (session_id) => run(c.POST("/v1/sessions/{session_id}/revoke", { params: { path: { session_id } } })),
+    revokeAllSessions: () => run(c.POST("/v1/sessions/revoke-all")),
+    pauseAgents: () => run(c.POST("/v1/orgs/current/agents/pause")),
+    resumeAgents: () => run(c.POST("/v1/orgs/current/agents/resume")),
   };
 }

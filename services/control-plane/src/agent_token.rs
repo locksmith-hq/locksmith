@@ -3,7 +3,7 @@
 //! JWKS.
 //!
 //! A token carries only the agent id (`sub`), the org id (`org`), the audience (`aud`, always
-//! [`AUDIENCE`]) and its issue and expiry times. It never carries a secret, a grant or a name.
+//! [`AUDIENCE`]), a unique token id (`jti`) and its issue and expiry times. It never carries a secret, a grant or a name.
 //! Honest label: containment, not prevention. A stolen token works until it expires
 //! ([`DEFAULT_TTL`]); grants are checked on every relay call, so revoking a grant stops it
 //! sooner.
@@ -44,6 +44,8 @@ pub struct AgentClaims {
     pub org: Uuid,
     /// Always [`AUDIENCE`].
     pub aud: String,
+    /// Unique token id, so one token can be revoked (T8).
+    pub jti: Uuid,
     /// Issued at (seconds since the Unix epoch).
     pub iat: i64,
     /// Expiry (seconds since the Unix epoch).
@@ -237,6 +239,7 @@ impl AgentTokenSigner {
             sub: agent_id,
             org: org_id,
             aud: AUDIENCE.to_owned(),
+            jti: Uuid::now_v7(),
             iat,
             exp,
         })?;
@@ -275,6 +278,17 @@ mod tests {
             (s.jwk().kty.as_str(), s.jwk().crv.as_str()),
             ("OKP", "Ed25519")
         );
+    }
+
+    #[test]
+    fn every_minted_token_has_a_unique_jti() {
+        let s = signer();
+        let (agent, org) = (Uuid::now_v7(), Uuid::now_v7());
+        let now = OffsetDateTime::now_utc();
+        let key = s.jwk().decoding_key().unwrap();
+        let a = verify(&s.mint(agent, org, now).unwrap().token, &key).unwrap();
+        let b = verify(&s.mint(agent, org, now).unwrap().token, &key).unwrap();
+        assert_ne!(a.jti, b.jti);
     }
 
     #[test]
@@ -317,6 +331,7 @@ mod tests {
             sub: Uuid::now_v7(),
             org: Uuid::now_v7(),
             aud: aud.to_owned(),
+            jti: Uuid::now_v7(),
             iat: exp - 900,
             exp,
         };

@@ -274,6 +274,49 @@ pub fn grant_revoked(actor: Actor, grant_id: Uuid, agent_id: Uuid) -> Event {
     )
 }
 
+/// `session.revoked` for one session: the actor revoked `session_id` of `agent_id`. The token
+/// and its `jti` are never recorded.
+pub fn session_revoked(actor: Actor, org_id: Uuid, session_id: Uuid, agent_id: Uuid) -> Event {
+    admin(
+        kind::SESSION_REVOKED,
+        actor,
+        Target::Org(org_id),
+        Attrs::new()
+            .id(attr::SESSION_ID, session_id)
+            .id(attr::AGENT_ID, agent_id),
+    )
+}
+
+/// `session.revoked` for revoke-all: records how many sessions were revoked.
+pub fn sessions_revoked_all(actor: Actor, org_id: Uuid, count: i64) -> Event {
+    admin(
+        kind::SESSION_REVOKED,
+        actor,
+        Target::Org(org_id),
+        Attrs::new().int(attr::SESSIONS_REVOKED, count),
+    )
+}
+
+/// `agents.paused`.
+pub fn agents_paused(actor: Actor, org_id: Uuid) -> Event {
+    admin(
+        kind::AGENTS_PAUSED,
+        actor,
+        Target::Org(org_id),
+        Attrs::new(),
+    )
+}
+
+/// `agents.resumed`.
+pub fn agents_resumed(actor: Actor, org_id: Uuid) -> Event {
+    admin(
+        kind::AGENTS_RESUMED,
+        actor,
+        Target::Org(org_id),
+        Attrs::new(),
+    )
+}
+
 /// `mcp.call`: one remote MCP tool call by `user` in `org_id`. Only the layer, the tool name
 /// (a registry name, or `unknown`), the outcome and a static `reason` are recorded: never the
 /// call's arguments or result.

@@ -65,6 +65,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "workload_identities",
         include_str!("../migrations/0013_workload_identities.sql"),
     ),
+    (
+        14,
+        "agent_sessions",
+        include_str!("../migrations/0014_agent_sessions.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

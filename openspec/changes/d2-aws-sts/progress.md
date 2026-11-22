@@ -116,3 +116,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - resolved PR #480 conflicts (merged origin/main, no file conflicts; p4-sdks and others landed)
 - Verified: `just quick`; no migration number clash (0014 is still last)
 - Notes for next session: 5.1/5.2 still wait on t3-console-mvp (#489); binding-list contract in `packages/api-types` first.
+
+## 2026-11-22 worker
+- Task: PR conflicts - ci-fix
+- Verified: `cargo test -p ls-gateway --lib -- --test-threads=1` -> 165 passed; `just quick` -> ok
+- Notes for next session: merged main (audit.rs conflict: kept main's `append_to`, dropped the branch's `send`). `git::fixture_tests` fail when run in parallel under plain `cargo test` but pass serially (fixture contention, not a regression). Next task: 1.2 spike onward; check tasks.md for the first unticked task.

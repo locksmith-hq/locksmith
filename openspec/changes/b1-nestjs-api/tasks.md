@@ -4,9 +4,9 @@
 - [x] 1.1 Spike: a throwaway Nest 12 app (controller, decorator metadata injection, zod pipe, vitest test) compiled with TypeScript 7.0.2, then with 6.x; record in `docs/research/nestjs-typescript7.md` which build works, build time and any flag needed (source URLs and dates).
 - [ ] 1.2 [haiku] Spike: run oxlint, oxfmt and knip over `apps/web`, `apps/desktop`, `packages/*`; record findings and the config each needs in the same note.
 - [ ] 1.3 Contract: freeze `services/control-plane/openapi.json` as the API contract (already protected by the oasdiff check) and list every path with its owner (`rust` or `nest`) in `apps/api/route-table.json`, all `rust`.
-- [ ] 1.4 Contract: `scripts/api-record.sh` replays the Rust integration tests' HTTP calls and stores requests and responses under `tests/api-contract/recordings/` with ids, timestamps and tokens normalised.
-- [ ] 1.5 Contract: `scripts/api-contract.sh <base-url>` replays the recordings against any server and reports the first differing field per path; `just api-contract`.
-- [ ] 1.6 Verify: `just api-contract http://127.0.0.1:<rust-port>` passes against the Rust control plane (it must pass against itself).
+- [ ] 1.4 Contract: a scenario suite `tests/api-contract` (vitest and `fetch`, no framework coupling) with one data-driven scenario file per resource: for every path in `openapi.json` a success case, a validation error, a missing-token 401, and a cross-tenant 404 or 403; ids, timestamps and tokens are normalised in the recorded transcript. (Replaces "record the Rust integration tests": they call the router in-process with `tower::oneshot` from about 17 separate helpers, so there is no single place to record without editing every test file or adding recording code to the production router.)
+- [ ] 1.5 Contract: `scripts/api-contract.sh <base-url>` runs the suite against any server and writes the normalised transcript; `scripts/api-contract.sh --diff <url-a> <url-b>` runs both and reports the first differing status, header or body field per path; `just api-contract`.
+- [ ] 1.6 Verify: `just api-contract http://127.0.0.1:<rust-port>` passes against the Rust control plane from `just up`, and a second run produces the identical normalised transcript (the suite is deterministic).
 
 ## 2. Skeleton `apps/api` [sonnet]
 - [ ] 2.1 `scripts/tree-check.sh` and `docs/testing.md` learn `apps/api`; `apps/api/package.json` (private, ESM, AGPL-3.0-only), `tsconfig` extending a shared base, Turborepo tasks `build`, `test`, `typecheck`.

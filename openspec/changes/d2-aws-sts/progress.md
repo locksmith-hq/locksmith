@@ -126,3 +126,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 5.1 - blocked
 - Verified: merged origin/main (already up to date); PR #480 checks green on rust/web/desktop/macos/windows/adversarial/hygiene
 - Notes for next session: only 5.1/5.2 remain; the console shell (t3-console-mvp, #489) is still open and `apps/web/src` has no bindings page, so nothing to extend yet. Take them after #489 lands.
+
+## 2026-11-22 worker (alfie)
+- Task: 5.1 - done (Bindings page in web and desktop on fixtures; `BindingView` contract in ls-ipc/api-types; evaluator PASS); 5.2 stays open
+- Verified: `npm test --workspace apps/web` (57) and `apps/desktop` (38) passed, `cargo test -p ls-ipc` BindingView secret-material test, `just quick` -> ok
+- Notes for next session: 5.2 = `npm test` + `just apps-build` (implementer ran apps-build ok; re-run and tick). Real read-only bindings endpoint not built: page reads fixtures via `apps/web/src/api/bindings.ts` and desktop `api.listBindings`; d3-db-relay 6.1 adds the db kind as a new BindingView variant.

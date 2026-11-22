@@ -22,7 +22,7 @@
 - [x] 4.3 Verify: `cargo nextest run -p smith-cli aws`.
 
 ## 5. Console and desktop [sonnet]
-- [ ] 5.1 Show AWS bindings (role, region, allowed actions, `vend`, max duration) on the bindings page in `apps/web` and `apps/desktop` with Vitest tests; no credentials displayed.
+- [x] 5.1 Show AWS bindings (role, region, allowed actions, `vend`, max duration) on the bindings page in `apps/web` and `apps/desktop` with Vitest tests; no credentials displayed.
 - [ ] 5.2 Verify: `npm test --workspace apps/web` and `just apps-build`.
 
 ## 6. Adversarial and audit [sonnet]

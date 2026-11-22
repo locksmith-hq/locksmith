@@ -9,6 +9,7 @@ use ls_envelope::{BaoToken, OpenBaoTransit, WrapKeyId};
 use ls_gateway::app::{self, AppState};
 use ls_gateway::audit::HttpAudit;
 use ls_gateway::auth::{AgentAuth, HttpJwks, JwksSettings};
+use ls_gateway::bindings_publish;
 use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
@@ -134,12 +135,15 @@ async fn main() -> ExitCode {
     // Agent MCP clients and their revoke (task 4.2): recorded on initialize, the revoked set
     // read on every `/mcp` request through a cache of at most 10 s, failing closed.
     let clients = Arc::new(ClientsCache::new(control_plane.clone(), MAX_CACHE_TTL));
-    let audit = Arc::new(HttpAudit::new(control_plane));
+    let audit = Arc::new(HttpAudit::new(control_plane.clone()));
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)
         .with_settings_source(tool_settings)
         .with_clients(clients.clone());
     let binding_count = config.bindings.bindings.len();
+    // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
+    // only logs and never blocks the relay.
+    bindings_publish::spawn_publish(control_plane, bindings_publish::summaries(&config.bindings));
     let relay = Relay::new(
         auth,
         grants,

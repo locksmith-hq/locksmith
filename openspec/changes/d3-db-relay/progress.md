@@ -122,3 +122,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (PR #485 hygiene red) - ci-fix
 - Verified: just tree-check task-guard public-check, just quick -> pass locally after merging origin/main
 - Notes for next session: hygiene failure was not reproducible locally; likely stale vs main. Merged main and pushed; check CI result on 6c6e434+. Gitleaks full-history scan shows 3 known hits in ls-envelope seal-key-sig-v1.json vectors (on main, not this branch).
+
+## 2026-11-22 worker (josie)
+- Task: 6.2 - done, ticked (control-plane `gateway_bindings` table (migration 0014, FORCE RLS), `PUT /internal/v1/gateway/bindings`, `GET /v1/bindings` reads it; gateway `bindings_publish` publishes at startup with retry, never blocks the relay)
+- Verified: `cargo nextest run -p ls-control-plane bindings` (4 passed), `cargo nextest run -p ls-gateway bindings_publish` (4 passed), tenancy/openapi/tenant_lint tests, clippy -D warnings, fmt, `just quick`, migration guard; independent evaluator PASS
+- Notes for next session: `aws` bindings are not published yet (d2-aws-sts 5.1 adds them). Next: 6.3 (Bindings page in apps/web and apps/desktop on the 6.1 fixtures then the real client), 6.4, 7.2.

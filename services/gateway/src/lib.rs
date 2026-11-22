@@ -9,6 +9,7 @@
 pub mod app;
 pub mod audit;
 pub mod auth;
+pub mod bindings_publish;
 pub mod config;
 pub mod decrypt;
 pub mod egress;

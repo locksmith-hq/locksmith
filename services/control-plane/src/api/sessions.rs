@@ -8,13 +8,16 @@
 //! an MCP client (design decision 5). No schema here carries a token, its `jti`, an address or a
 //! secret value: ids, a kind, a binding slug and times only.
 //!
-//! The list (task 2.1) and the gateway's internal report endpoint, `POST /internal/v1/sessions`
-//! (open, heartbeat, close; service token only), are implemented. Revoke and pause land in task
-//! 2.2; until then those handlers answer `501` with a problem body rather than an empty or fake
-//! success, and the OpenAPI description of each route says so.
+//! The list, revoke, revoke-all, pause and resume routes and the gateway's internal report
+//! endpoint, `POST /internal/v1/sessions` (open, heartbeat, close; service token only), are
+//! implemented. Every state change appends its ledger event in the same transaction as the
+//! change (as revoking a grant does), attributed to the dev actor until human sessions carry a
+//! user. A change that changes nothing (revoking an already revoked session, pausing a paused
+//! org) appends no event, so the ledger records each transition once.
 //!
-//! `token_jti` is written by the report endpoint and read only by the revoke path (task 2.2); no
-//! response here selects or returns it.
+//! `token_jti` is written by the report endpoint and read only by [`revoked_jtis`], which feeds
+//! the gateway's grant-set response (`/internal/v1/agents/{id}/grants`); no response of the
+//! human API selects or returns it.
 
 use axum::Json;
 use axum::extract::State;
@@ -29,9 +32,10 @@ use super::extract::{ApiJson, ApiPath, ApiQuery};
 use super::responses::{InternalWriteErrors, ListErrors, WriteErrors};
 use super::{Page, PageParams, Paged, all, exists_or_404};
 use crate::app::AppState;
+use crate::audit::{self, DEV_AUTH_ACTOR};
 use crate::auth::{OrgBinding, ServiceOrgBinding};
 use crate::db::sql::{self, Row};
-use crate::problem::{ApiError, Problem};
+use crate::problem::ApiError;
 
 /// A session is live while the gateway reported it within this many seconds: three heartbeats at
 /// the gateway's 5 s interval (design decision 1).
@@ -113,8 +117,44 @@ pub struct AgentsPauseState {
     pub agents_paused: bool,
 }
 
-/// The `501` the revoke and pause handlers return until task 2.2.
-const NOT_IMPLEMENTED_DESC: &str = "Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2).";
+/// Revoked sessions started within this many seconds are reported to the gateway as revoked
+/// `jti`s. An agent token lives at most 15 minutes from its issue, and a session starts after its
+/// token was issued, so by this time the token is expired and its `jti` no longer needs listing.
+const REVOKED_JTI_WINDOW_SECS: i64 = 30 * 60;
+
+/// The revoked `jti`s the gateway must refuse for `org_id` (decision 2): sessions revoked whose
+/// token can still be unexpired. Runs on an org-bound connection. Internal use only.
+pub async fn revoked_jtis(c: &mut sql::PgConnection) -> sql::Result<Vec<Uuid>> {
+    sql::query_scalar(
+        "SELECT DISTINCT token_jti FROM agent_sessions \
+         WHERE revoked_at IS NOT NULL \
+           AND started_at > now() - make_interval(secs => $1) \
+         ORDER BY token_jti",
+    )
+    .bind(REVOKED_JTI_WINDOW_SECS as f64)
+    .fetch_all(c)
+    .await
+}
+
+const SESSION_COLS: &str = "id, agent_id, kind, slug, started_at, last_seen_at, \
+     revoked_at IS NOT NULL AS revoked, now() AS db_now";
+
+fn session_from_row(r: &sql::PgRow) -> sql::Result<AgentSession> {
+    let utc = |col: &str| -> sql::Result<OffsetDateTime> {
+        Ok(r.try_get::<OffsetDateTime, _>(col)?
+            .to_offset(time::UtcOffset::UTC))
+    };
+    let last_seen_at = utc("last_seen_at")?;
+    Ok(AgentSession {
+        id: r.try_get("id")?,
+        agent_id: r.try_get("agent_id")?,
+        kind: SessionKind::parse(r.try_get::<&str, _>("kind")?)?,
+        slug: r.try_get("slug")?,
+        started_at: utc("started_at")?,
+        last_seen_at,
+        live: is_live(utc("db_now")?, last_seen_at, r.try_get("revoked")?),
+    })
+}
 
 #[utoipa::path(
     get,
@@ -143,36 +183,19 @@ pub async fn list(
             Box::pin(async move {
                 // Never selects `token_jti`. `now()` comes from the database so the liveness rule
                 // and the stored `last_seen_at` share one clock.
-                let rows = sql::query(
-                    "SELECT id, agent_id, kind, slug, started_at, last_seen_at, \
-                     revoked_at IS NOT NULL AS revoked, now() AS db_now \
-                     FROM agent_sessions \
+                let rows = sql::query(sqlx_core::sql_str::AssertSqlSafe(format!(
+                    "SELECT {SESSION_COLS} FROM agent_sessions \
                      WHERE org_id = $1 AND ($2::uuid IS NULL OR id > $2) \
                        AND last_seen_at > now() - make_interval(secs => $3) \
-                     ORDER BY id LIMIT $4",
-                )
+                     ORDER BY id LIMIT $4"
+                )))
                 .bind(org_id)
                 .bind(page.after)
                 .bind(LIST_WINDOW_SECS as f64)
                 .bind(page.fetch())
                 .fetch_all(c)
                 .await?;
-                all(&rows, |r| {
-                    let utc = |col: &str| -> sql::Result<OffsetDateTime> {
-                        Ok(r.try_get::<OffsetDateTime, _>(col)?
-                            .to_offset(time::UtcOffset::UTC))
-                    };
-                    let last_seen_at = utc("last_seen_at")?;
-                    Ok(AgentSession {
-                        id: r.try_get("id")?,
-                        agent_id: r.try_get("agent_id")?,
-                        kind: SessionKind::parse(r.try_get::<&str, _>("kind")?)?,
-                        slug: r.try_get("slug")?,
-                        started_at: utc("started_at")?,
-                        last_seen_at,
-                        live: is_live(utc("db_now")?, last_seen_at, r.try_get("revoked")?),
-                    })
-                })
+                all(&rows, session_from_row)
             })
         })
         .await?;
@@ -185,21 +208,54 @@ pub async fn list(
     operation_id = "revoke_agent_session",
     tag = "sessions",
     summary = "Revoke one agent session",
-    description = "Marks the session's agent token revoked; the gateway closes the session and refuses that token within 10 seconds. Appends a `session.revoked` ledger event. Not implemented yet: answers `501` until t8 task 2.2.",
+    description = "Marks the session's agent token revoked; the gateway closes the session and refuses that token within 10 seconds. Appends a `session.revoked` ledger event.",
     params(("session_id" = Uuid, Path, description = "Session id from the list")),
     responses(
         (status = 200, description = "The revoked session", body = AgentSession),
-        (status = 501, description = NOT_IMPLEMENTED_DESC, body = Problem, content_type = "application/problem+json"),
         WriteErrors,
     ),
     security(("dev_org" = []))
 )]
 pub async fn revoke_one(
-    State(_state): State<AppState>,
-    _org: OrgBinding,
-    ApiPath(_session_id): ApiPath<Uuid>,
+    State(state): State<AppState>,
+    org: OrgBinding,
+    ApiPath(session_id): ApiPath<Uuid>,
 ) -> Result<Json<AgentSession>, ApiError> {
-    Err(ApiError::not_implemented())
+    let org_id = org.org_id;
+    let session = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                // Lock the row so two concurrent revokes append one event.
+                let row = sql::query(sqlx_core::sql_str::AssertSqlSafe(format!(
+                    "SELECT {SESSION_COLS} FROM agent_sessions WHERE id = $1 FOR UPDATE"
+                )))
+                .bind(session_id)
+                .fetch_optional(&mut *c)
+                .await?
+                .ok_or_else(ApiError::not_found)?;
+                let was_revoked: bool = row.try_get("revoked")?;
+                if !was_revoked {
+                    sql::query("UPDATE agent_sessions SET revoked_at = now() WHERE id = $1")
+                        .bind(session_id)
+                        .execute(&mut *c)
+                        .await?;
+                    let agent_id: Uuid = row.try_get("agent_id")?;
+                    audit::append(
+                        c,
+                        org_id,
+                        &audit::session_revoked(DEV_AUTH_ACTOR, org_id, session_id, agent_id),
+                    )
+                    .await?;
+                }
+                let mut session = session_from_row(&row)?;
+                session.live = false;
+                Ok::<_, ApiError>(session)
+            })
+        })
+        .await?;
+    tracing::info!(session.id = %session_id, "agent session revoked");
+    Ok(Json(session))
 }
 
 #[utoipa::path(
@@ -208,19 +264,44 @@ pub async fn revoke_one(
     operation_id = "revoke_all_agent_sessions",
     tag = "sessions",
     summary = "Revoke every live agent session of the org",
-    description = "Every live session closes within 10 seconds; new sessions from the same agents still work if their grants do. Appends a `session.revoked` ledger event with the count. Not implemented yet: answers `501` until t8 task 2.2.",
+    description = "Every live session closes within 10 seconds; new sessions from the same agents still work if their grants do. Appends a `session.revoked` ledger event with the count.",
     responses(
         (status = 200, description = "How many sessions were revoked", body = SessionsRevoked),
-        (status = 501, description = NOT_IMPLEMENTED_DESC, body = Problem, content_type = "application/problem+json"),
         WriteErrors,
     ),
     security(("dev_org" = []))
 )]
 pub async fn revoke_all(
-    State(_state): State<AppState>,
-    _org: OrgBinding,
+    State(state): State<AppState>,
+    org: OrgBinding,
 ) -> Result<Json<SessionsRevoked>, ApiError> {
-    Err(ApiError::not_implemented())
+    let org_id = org.org_id;
+    let revoked = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let n = sql::query(
+                    "UPDATE agent_sessions SET revoked_at = now() \
+                     WHERE org_id = $1 AND revoked_at IS NULL",
+                )
+                .bind(org_id)
+                .execute(&mut *c)
+                .await?
+                .rows_affected();
+                let n = i64::try_from(n).unwrap_or(i64::MAX);
+                // Always recorded, even with a count of 0: the action itself is auditable.
+                audit::append(
+                    c,
+                    org_id,
+                    &audit::sessions_revoked_all(DEV_AUTH_ACTOR, org_id, n),
+                )
+                .await?;
+                Ok::<_, ApiError>(u32::try_from(n).unwrap_or(u32::MAX))
+            })
+        })
+        .await?;
+    tracing::info!(sessions.revoked = revoked, "agent sessions revoked");
+    Ok(Json(SessionsRevoked { revoked }))
 }
 
 #[utoipa::path(
@@ -229,19 +310,18 @@ pub async fn revoke_all(
     operation_id = "pause_agents",
     tag = "sessions",
     summary = "Pause every agent of the org",
-    description = "Sets the org's `agents_paused` flag: the gateway refuses every agent request and closes live sessions within 10 seconds, before any decrypt. Idempotent. Appends an `agents.paused` ledger event. Not implemented yet: answers `501` until t8 task 2.2.",
+    description = "Sets the org's `agents_paused` flag: the gateway refuses every agent request and closes live sessions within 10 seconds, before any decrypt. Idempotent. Appends an `agents.paused` ledger event.",
     responses(
         (status = 200, description = "The org's pause state", body = AgentsPauseState),
-        (status = 501, description = NOT_IMPLEMENTED_DESC, body = Problem, content_type = "application/problem+json"),
         WriteErrors,
     ),
     security(("dev_org" = []))
 )]
 pub async fn pause(
-    State(_state): State<AppState>,
-    _org: OrgBinding,
+    State(state): State<AppState>,
+    org: OrgBinding,
 ) -> Result<Json<AgentsPauseState>, ApiError> {
-    Err(ApiError::not_implemented())
+    set_paused(&state, org.org_id, true).await
 }
 
 #[utoipa::path(
@@ -250,19 +330,55 @@ pub async fn pause(
     operation_id = "resume_agents",
     tag = "sessions",
     summary = "Resume the agents of the org",
-    description = "Clears the org's `agents_paused` flag; requests with valid grants succeed again without re-enrolment. Idempotent. Appends an `agents.resumed` ledger event. Not implemented yet: answers `501` until t8 task 2.2.",
+    description = "Clears the org's `agents_paused` flag; requests with valid grants succeed again without re-enrolment. Idempotent. Appends an `agents.resumed` ledger event.",
     responses(
         (status = 200, description = "The org's pause state", body = AgentsPauseState),
-        (status = 501, description = NOT_IMPLEMENTED_DESC, body = Problem, content_type = "application/problem+json"),
         WriteErrors,
     ),
     security(("dev_org" = []))
 )]
 pub async fn resume(
-    State(_state): State<AppState>,
-    _org: OrgBinding,
+    State(state): State<AppState>,
+    org: OrgBinding,
 ) -> Result<Json<AgentsPauseState>, ApiError> {
-    Err(ApiError::not_implemented())
+    set_paused(&state, org.org_id, false).await
+}
+
+/// Set the org's pause flag. Idempotent: the ledger event is appended only when the flag changes,
+/// in the same transaction.
+async fn set_paused(
+    state: &AppState,
+    org_id: Uuid,
+    paused: bool,
+) -> Result<Json<AgentsPauseState>, ApiError> {
+    state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let n = sql::query(
+                    "UPDATE orgs SET agents_paused = $2 WHERE id = $1 AND agents_paused <> $2",
+                )
+                .bind(org_id)
+                .bind(paused)
+                .execute(&mut *c)
+                .await?
+                .rows_affected();
+                if n > 0 {
+                    let event = if paused {
+                        audit::agents_paused(DEV_AUTH_ACTOR, org_id)
+                    } else {
+                        audit::agents_resumed(DEV_AUTH_ACTOR, org_id)
+                    };
+                    audit::append(c, org_id, &event).await?;
+                }
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await?;
+    tracing::info!(org.id = %org_id, agents.paused = paused, "agents pause state set");
+    Ok(Json(AgentsPauseState {
+        agents_paused: paused,
+    }))
 }
 
 /// A gateway report about one agent session. Ids, a kind and a binding slug only: there is no

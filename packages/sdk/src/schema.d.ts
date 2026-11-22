@@ -50,7 +50,7 @@ export interface paths {
         };
         /**
          * List an agent's unexpired grants (gateway only)
-         * @description The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`.
+         * @description The gateway calls this with the agent id and org id from a verified agent token. An agent that does not exist in the org (deleted, or another org's) is a `404`. Also carries the org's `agents_paused` flag and the `jti`s of its revoked agent tokens that may still be unexpired (t8); neither is ever returned by a human route.
          */
         get: operations["get_internal_agent_grants"];
         put?: never;
@@ -519,7 +519,7 @@ export interface paths {
         put?: never;
         /**
          * Pause every agent of the org
-         * @description Sets the org's `agents_paused` flag: the gateway refuses every agent request and closes live sessions within 10 seconds, before any decrypt. Idempotent. Appends an `agents.paused` ledger event. Not implemented yet: answers `501` until t8 task 2.2.
+         * @description Sets the org's `agents_paused` flag: the gateway refuses every agent request and closes live sessions within 10 seconds, before any decrypt. Idempotent. Appends an `agents.paused` ledger event.
          */
         post: operations["pause_agents"];
         delete?: never;
@@ -539,7 +539,7 @@ export interface paths {
         put?: never;
         /**
          * Resume the agents of the org
-         * @description Clears the org's `agents_paused` flag; requests with valid grants succeed again without re-enrolment. Idempotent. Appends an `agents.resumed` ledger event. Not implemented yet: answers `501` until t8 task 2.2.
+         * @description Clears the org's `agents_paused` flag; requests with valid grants succeed again without re-enrolment. Idempotent. Appends an `agents.resumed` ledger event.
          */
         post: operations["resume_agents"];
         delete?: never;
@@ -725,7 +725,7 @@ export interface paths {
         put?: never;
         /**
          * Revoke every live agent session of the org
-         * @description Every live session closes within 10 seconds; new sessions from the same agents still work if their grants do. Appends a `session.revoked` ledger event with the count. Not implemented yet: answers `501` until t8 task 2.2.
+         * @description Every live session closes within 10 seconds; new sessions from the same agents still work if their grants do. Appends a `session.revoked` ledger event with the count.
          */
         post: operations["revoke_all_agent_sessions"];
         delete?: never;
@@ -745,7 +745,7 @@ export interface paths {
         put?: never;
         /**
          * Revoke one agent session
-         * @description Marks the session's agent token revoked; the gateway closes the session and refuses that token within 10 seconds. Appends a `session.revoked` ledger event. Not implemented yet: answers `501` until t8 task 2.2.
+         * @description Marks the session's agent token revoked; the gateway closes the session and refuses that token within 10 seconds. Appends a `session.revoked` ledger event.
          */
         post: operations["revoke_agent_session"];
         delete?: never;
@@ -878,7 +878,18 @@ export interface components {
         AgentGrantSet: {
             /** Format: uuid */
             agent_id: string;
+            /**
+             * @description While true the gateway refuses every agent request of the org (t8). Absent from an older
+             *     control plane, which the gateway reads as false.
+             */
+            agents_paused?: boolean;
             items: components["schemas"]["ActiveGrant"][];
+            /**
+             * @description `jti`s of revoked agent tokens of the org that may still be unexpired; the gateway refuses
+             *     a token whose `jti` is listed (t8). Gateway-only: no human route returns it. Absent from
+             *     an older control plane, which the gateway reads as none.
+             */
+            revoked_jtis?: string[];
         };
         /** @description The agent-layer `mcp_clients` row after the upsert. */
         AgentMcpClientState: {
@@ -3626,15 +3637,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Service unavailable */
             503: {
                 headers: {
@@ -3702,15 +3704,6 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5173,15 +5166,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Service unavailable */
             503: {
                 headers: {
@@ -5252,15 +5236,6 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not implemented yet: the route is part of the contract and answers `501` until the control-plane behaviour lands (t8 task 2.2). */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

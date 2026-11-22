@@ -87,6 +87,8 @@ pub trait GrantSource: Send + Sync {
 struct GrantSetJson {
     agent_id: Uuid,
     items: Vec<Grant>,
+    // `revoked_jtis` and `agents_paused` are also in the answer (t8); enforcing them is task 3.1.
+    // Unknown fields are ignored here, so an older or newer control plane interoperates.
 }
 
 /// Parse the internal endpoint's answer and check it is for `agent_id`.

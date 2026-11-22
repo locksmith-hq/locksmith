@@ -1,0 +1,27 @@
+/* Console shell, on the shared tokens from @locksmith/ui. */
+.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; }
+.shell-side { display: flex; flex-direction: column; gap: 12px; padding: 16px 12px; background: var(--side); border-right: 1px solid var(--border); }
+.shell-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.shell-org { padding: 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); font-weight: 600; overflow-wrap: anywhere; }
+.shell-side nav { display: flex; flex-direction: column; gap: 2px; }
+.shell-side nav a { display: flex; align-items: center; height: 34px; padding: 0 10px; border-radius: 9px; color: var(--muted); font-weight: 500; text-decoration: none; }
+.shell-side nav a:hover { background: var(--hover); color: var(--text); }
+.shell-side nav a[aria-current="page"] { background: var(--selected); color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border); }
+.shell-signout { display: block; margin-top: 8px; }
+.shell-top { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.shell-top .shell-org { width: auto; padding: 6px 12px; }
+.shell-main { padding: 24px; min-width: 0; }
+@media (max-width: 720px) { .shell { grid-template-columns: 1fr; } .shell-side { border-right: 0; border-bottom: 1px solid var(--border); } }
+.shell-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.shell-nav-h { margin: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.shell-user { margin-top: auto; padding: 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); overflow-wrap: anywhere; font-size: 13px; }
+/* Kit rows in the live pages hold a link, optional text and actions (no leading icon). */
+.shell-main .list .row { grid-template-columns: minmax(0, 1fr) auto auto; }
+.shell-main .grid { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.shell-main .state[role="alert"] { color: var(--danger-text); border-color: var(--danger-border); background: var(--danger-weak); }
+.shell-main .panel { margin-bottom: 16px; }
+.shell-main .panel > h2 { margin-bottom: 8px; }
+.shell-main .shell-top { margin-bottom: 16px; }
+.shell-org button, .shell-signout { font: 600 13px var(--sans); color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px; padding: 4px 10px; cursor: pointer; }
+.shell-org ul { position: absolute; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); }
+.shell-org { position: relative; }

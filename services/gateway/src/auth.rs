@@ -106,7 +106,7 @@ impl HttpJwks {
     }
 
     async fn get(&self) -> Result<Vec<Jwk>, JwksError> {
-        let mut resp = self
+        let resp = self
             .client
             .get(self.url.clone())
             .send()
@@ -115,13 +115,9 @@ impl HttpJwks {
         if !resp.status().is_success() {
             return Err(JwksError);
         }
-        let mut body = Vec::new();
-        while let Some(chunk) = resp.chunk().await.map_err(|_| JwksError)? {
-            if body.len() + chunk.len() > MAX_JWKS_RESPONSE {
-                return Err(JwksError);
-            }
-            body.extend_from_slice(&chunk);
-        }
+        let body = ls_http::read_capped(resp, MAX_JWKS_RESPONSE)
+            .await
+            .map_err(|_| JwksError)?;
         parse_jwks(&body)
     }
 }
@@ -646,6 +642,28 @@ mod tests {
             .await;
         let src = HttpJwks::new(&down.uri().parse().unwrap()).unwrap();
         assert_eq!(src.fetch().await, Err(JwksError));
+
+        // Valid JWKS JSON padded past the cap is refused; the same body at the cap parses.
+        let padded = |len: usize| {
+            let head = r#"{"keys":[],"pad":""#;
+            let tail = r#""}"#;
+            format!("{head}{}{tail}", "a".repeat(len - head.len() - tail.len()))
+        };
+        let big = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/over/.well-known/jwks.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(padded(MAX_JWKS_RESPONSE + 1)))
+            .mount(&big)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/at/.well-known/jwks.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(padded(MAX_JWKS_RESPONSE)))
+            .mount(&big)
+            .await;
+        let over = HttpJwks::new(&format!("{}/over/", big.uri()).parse().unwrap()).unwrap();
+        assert_eq!(over.fetch().await, Err(JwksError));
+        let at = HttpJwks::new(&format!("{}/at/", big.uri()).parse().unwrap()).unwrap();
+        assert_eq!(at.fetch().await, Ok(vec![]));
     }
 
     #[test]

@@ -38,3 +38,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: CI fix - ci-fix (cargo-deny failed on RUSTSEC-2026-0592, url 2.5.8)
 - Verified: cargo deny check -> ok; cargo check --workspace -> ok; just quick -> ok
 - Notes for next session: bumped url to 2.5.9 in Cargo.lock only; main will hit the same advisory until it merges a bump.
+
+## 2026-11-22 worker alfie
+- Task: 1.4 seal-key signature contract and KATs - done
+- Verified: `cargo nextest run -p ls-control-plane openapi`, `cargo nextest run -p ls-envelope seal_key_sig` (3 vectors from an independent pyca Ed25519 script, substituted-key refusal), `npm test --workspace packages/control-plane-client`, `just quick`; Sonnet evaluator PASS
+- Notes for next session: `ls-envelope` only verifies (`verify_seal_key`, `seal_key_message`); signing is the gateway's (2.6). SealKey now has `signature` and `signing_key_id`. Next: 2.1 migration, then 2.2.

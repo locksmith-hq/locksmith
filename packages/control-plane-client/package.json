@@ -11,11 +11,13 @@
   },
   "scripts": {
     "lint": "tsc --noEmit -p .",
-    "test": "vitest run",
-    "gen:types": "openapi-typescript ../../services/control-plane/openapi.json -o src/schema.d.ts"
+    "test": "vitest run"
   },
   "devDependencies": {
     "openapi-typescript": "^7.13.0",
     "vitest": "^4.1.12"
+  },
+  "dependencies": {
+    "@locksmith/sdk": "*"
   }
 }

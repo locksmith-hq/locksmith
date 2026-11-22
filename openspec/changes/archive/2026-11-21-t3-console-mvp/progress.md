@@ -130,3 +130,8 @@
 - Task: review findings on #489 - done
 - Verified: npm test --workspace apps/web -> 55 passed; tsc clean
 - Notes for next session: Agents and Grants now use useQuery + QueryState, Activity has Retry, with a 5xx test per page; Copy button on the enrollment secret. API gap logged for the lead: no endpoint returns the caller's org id (no /v1/me, and the token is not assumed to carry it), so the Overview and org switcher cannot show the personal org name; the spec scenario was amended to match. Follow-up: add `/v1/me` (or an org claim) and call `client.getOrg`.
+
+## 2026-11-22 04:30Z · lead · merge main (p4-sdks)
+- Cause: #561 (p4-sdks) moved `control-plane-client` onto `@locksmith/sdk` (openapi-fetch), so this PR's hand-written `req()` additions conflicted.
+- Fix: kept main's SDK transport and re-added the org, project, environment and secret-metadata methods as typed `c.GET/POST/PATCH/DELETE` calls; main's MCP tests live in `mcp.test.ts`, the console tests stay in `index.test.ts`; `gen:types` dropped (schema now in `packages/sdk`); `DOM.Iterable` added to the client tsconfig for `Object.fromEntries(headers)`.
+- Verified: client vitest 13/13 and `tsc` clean; `apps/web` vitest 55/55 and `tsc` clean; `apps/desktop` `tsc` clean.

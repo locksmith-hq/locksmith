@@ -156,7 +156,7 @@ impl JwksCache {
     }
 
     async fn fetch(&self) -> Result<HashMap<String, Arc<VerificationKey>>, &'static str> {
-        let mut response = self
+        let response = self
             .client
             .get(&self.url)
             .header(reqwest::header::ACCEPT, "application/json")
@@ -172,19 +172,12 @@ impl JwksCache {
         if !response.status().is_success() {
             return Err("status");
         }
-        if response
-            .content_length()
-            .is_some_and(|n| n > MAX_BODY_BYTES as u64)
-        {
-            return Err("too_large");
-        }
-        let mut body = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| "transport")? {
-            if body.len() + chunk.len() > MAX_BODY_BYTES {
-                return Err("too_large");
-            }
-            body.extend_from_slice(&chunk);
-        }
+        let body = ls_http::read_capped(response, MAX_BODY_BYTES)
+            .await
+            .map_err(|e| match e {
+                ls_http::CapError::TooLarge => "too_large",
+                ls_http::CapError::Transport => "transport",
+            })?;
         parse_jwks(&body).ok_or("malformed")
     }
 }

@@ -276,3 +276,56 @@ fn preview_is_shown_and_no_terminal_without_yes_refuses() {
     assert_eq!(before, tree(&r.0), "nothing written");
     assert_eq!(s(&o.stdout), include_str!("fixtures/init_preview.txt"));
 }
+
+/// `smith init --hub`: Claude Code and Codex get the remote Hub entry (URL and public client id
+/// only), Cursor gets none, a second run changes nothing and no secret lands in any file.
+#[test]
+fn init_hub_writes_remote_mcp_idempotently() {
+    let (h, r) = setup();
+    for d in [".claude", ".cursor", ".codex"] {
+        std::fs::create_dir_all(r.0.join(d)).unwrap();
+    }
+    let url = "https://hub.example";
+    let o = h.smith_in(&r.0, &["init", "--hub", url, "--dry-run"]);
+    assert!(o.status.success(), "{}{}", s(&o.stdout), s(&o.stderr));
+    assert!(s(&o.stdout).contains("locksmith-hub"), "{}", s(&o.stdout));
+    assert!(!r.0.join(".mcp.json").exists(), "dry run wrote a file");
+
+    let o = h.smith_in(&r.0, &["init", "--hub", url, "--yes"]);
+    assert!(o.status.success(), "{}{}", s(&o.stdout), s(&o.stderr));
+    let mcp = std::fs::read_to_string(r.0.join(".mcp.json")).unwrap();
+    assert!(
+        mcp.contains("https://hub.example/mcp") && mcp.contains("\"clientId\": \"locksmith-mcp\"")
+    );
+    let codex = std::fs::read_to_string(r.0.join(".codex/config.toml")).unwrap();
+    assert!(codex.contains("[mcp_servers.locksmith-hub]") && codex.contains("client_id"));
+    let cursor = std::fs::read_to_string(r.0.join(".cursor/mcp.json")).unwrap();
+    assert!(!cursor.contains("locksmith-hub"));
+    assert!(s(&o.stdout).contains("note: no remote Hub MCP entry for cursor"));
+
+    let files = [
+        ".mcp.json",
+        ".codex/config.toml",
+        ".cursor/mcp.json",
+        ".claude/settings.json",
+    ];
+    let before: Vec<String> = files
+        .iter()
+        .map(|f| std::fs::read_to_string(r.0.join(f)).unwrap())
+        .collect();
+    let o = h.smith_in(&r.0, &["init", "--hub", url, "--yes"]);
+    assert!(o.status.success(), "{}{}", s(&o.stdout), s(&o.stderr));
+    assert!(s(&o.stdout).contains("already set up"), "{}", s(&o.stdout));
+    for (f, b) in files.iter().zip(&before) {
+        assert_eq!(
+            &std::fs::read_to_string(r.0.join(f)).unwrap(),
+            b,
+            "{f} changed"
+        );
+        for needle in [SECRET, "Bearer ", "client_secret", "clientSecret", "canary"] {
+            assert!(!b.contains(needle), "{f} contains {needle}");
+        }
+    }
+    let o = h.smith_in(&r.0, &["init", "--hub", "http://hub.example", "--yes"]);
+    assert!(!o.status.success(), "plain http hub must be refused");
+}

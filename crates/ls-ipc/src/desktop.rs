@@ -77,6 +77,32 @@ pub struct CommandError {
     pub message: String,
 }
 
+/// One entry of the read-only binding list (D2-1): which secret may be used where, with the
+/// kind-specific, non-secret fields only. It never carries a secret value, an injection template,
+/// an external id or a credential; `secret_id` is an identifier, not material. Later kinds (a
+/// Postgres binding in D3) add a variant.
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum BindingView {
+    /// A `[[binding]]`: the secret is injected into one header for one upstream origin.
+    Http {
+        secret_id: String,
+        origin: String,
+        header: String,
+    },
+    /// An `[[aws_binding]]`: STS credentials may be vended for this role.
+    Aws {
+        secret_id: String,
+        role_arn: String,
+        region: String,
+        /// Actions the grants on this binding allow (names only; sorted, de-duplicated).
+        allowed_actions: Vec<String>,
+        vend: bool,
+        max_duration_secs: u32,
+    },
+}
+
 /// `cargo test -p ls-ipc --features ts export_bindings` regenerates `packages/api-types/src`.
 #[cfg(all(test, feature = "ts"))]
 mod export {
@@ -111,7 +137,8 @@ mod export {
             RelayInfo,
             SecureOutcome,
             CommandError,
-            CommandErrorCode
+            CommandErrorCode,
+            BindingView
         );
         std::fs::write(dir.join("index.ts"), index).unwrap();
     }

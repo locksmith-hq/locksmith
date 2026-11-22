@@ -789,6 +789,14 @@ mod tests {
                 ca_hosts: vec!["api.stripe.com".into()],
             }),
             Value::serialized(&SecureOutcome::Submitted),
+            Value::serialized(&BindingView::Aws {
+                secret_id: "00000000-0000-4000-8000-000000000001".into(),
+                role_arn: "arn:aws:iam::123456789012:role/dev".into(),
+                region: "us-east-1".into(),
+                allowed_actions: vec!["s3:GetObject".into()],
+                vend: true,
+                max_duration_secs: 900,
+            }),
             Value::serialized(&CommandError {
                 code: CommandErrorCode::Unavailable,
                 message: "m".into(),

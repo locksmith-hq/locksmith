@@ -12,3 +12,4 @@ export type { RelayInfo } from "./RelayInfo";
 export type { SecureOutcome } from "./SecureOutcome";
 export type { CommandError } from "./CommandError";
 export type { CommandErrorCode } from "./CommandErrorCode";
+export type { BindingView } from "./BindingView";

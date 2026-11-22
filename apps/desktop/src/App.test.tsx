@@ -636,3 +636,17 @@ test("mcp clients: lists, revokes an active client, and shows 403 and empty stat
   await nav("MCP clients");
   expect(await screen.findByText(/No MCP clients have signed in yet/)).toBeInTheDocument();
 });
+
+test("bindings: AWS rows show role, region, actions, vend and max duration; no credential fields", async () => {
+  const aws = { kind: "aws" as const, secret_id: "s1", role_arn: "arn:aws:iam::1:role/dev", region: "us-east-1", allowed_actions: ["s3:GetObject", "s3:ListBucket"], vend: true, max_duration_secs: 900 };
+  // A leaky payload must not leak: only the declared fields are rendered.
+  const leaky = { ...aws, secret_id: "s2", role_arn: "arn:aws:iam::1:role/ro", vend: false, external_id: "EXT-VALUE", secret_access_key: "SAK-VALUE", session_token: "TOKEN-VALUE" };
+  m.listBindings.mockResolvedValue([aws, leaky as never, { kind: "http", secret_id: "s3", origin: "https://api.example.com", header: "Authorization" }]);
+  const { container } = render(<App />);
+  await nav("Bindings");
+  const dev = (await screen.findByText("arn:aws:iam::1:role/dev")).closest("tr")!;
+  for (const t of ["us-east-1", "s3:GetObject, s3:ListBucket", "On", "900 s"]) expect(dev).toHaveTextContent(t);
+  expect(screen.getByText("arn:aws:iam::1:role/ro").closest("tr")).toHaveTextContent("Off");
+  expect(screen.getByText(/api\.example\.com/)).toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
+});

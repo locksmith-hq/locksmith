@@ -12,14 +12,16 @@ repository. This page says what goes where and how the checks enforce it.
 - All AWS infrastructure code (OpenTofu stacks, apply and session scripts, runbooks, cost docs),
   production and billing infrastructure, tenant data and customer names. It lives in `locksmith-cloud`
   (owner decision 2026-11-22).
-- Premium or hosted-only code. Premium features plug into public traits or interfaces;
-  their implementation lives in the private repository and this repository never imports it.
+- The hosted service's own code and operations: the license server, billing, the plan catalog and SaaS-only
+  features. Paid self-host features are different: they live in `ee/` (see below).
 - Owner or staff personal email addresses.
 
 Examples in code and docs use AWS's documented fake IDs (`123456789012`, `111122223333`).
 
 ## What may stay here
 
+- Paid self-host features as source-available code under `ee/` (see `LICENSING.md`, `ee/README.md`), reached only
+  through the `ls-entitlements` trait. Core never depends on `ee/` (`deny.toml`).
 - Design docs and decisions that describe behaviour, not identifiers.
 
 ## How the checks enforce it

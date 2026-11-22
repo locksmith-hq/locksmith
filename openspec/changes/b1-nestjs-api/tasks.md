@@ -33,14 +33,14 @@
 - [ ] 4.5 Verify: `just api-contract http://127.0.0.1:<nest-port>` for the auth and error recordings.
 
 ## 5. Gate: the Rust core boundary
-- [ ] 5.1 Gate: the owner confirms what stays in Rust behind the internal core API. Default: audit append and checkpoint signing, agent and workload token mint and verify, DEK wrap and unwrap through KMS. Alternatives: also keep authorization decisions in Rust (policy engine, T2), or keep only the gateway and crypto crates.
+- [x] 5.1 Gate: the owner confirms what stays in Rust behind the internal core API. Default: audit append and checkpoint signing, agent and workload token mint and verify, DEK wrap and unwrap through KMS. Alternatives: also keep authorization decisions in Rust (policy engine, T2), or keep only the gateway and crypto crates.
 - [ ] 5.2 Core API contract: `services/core/openapi.json` (internal only) for the operations chosen at the gate, in the Rust workspace; a generated TypeScript client in `packages/core-client`.
 - [ ] 5.3 Rust binary `ls-core` implementing it on top of the existing crates (`ls-audit`, `ls-envelope`, KMS code moved out of the control plane, no behaviour change); contract tests.
 - [ ] 5.4 NestJS audit interceptor and token services call the core client; a failing core fails the request closed (never silently skip an audit append).
 - [ ] 5.5 Verify: leak scan with canaries (`just leak-scan`) after the API and core suites; `cargo nextest run -p ls-core`.
 
 ## 6. Gate: existing endpoints
-- [ ] 6.1 Gate: the owner decides whether the existing Rust endpoints are ported (strangler, module by module) or only new endpoints go to NestJS, and how the in-flight changes t6, t7 and t8 land (finish in Rust first, or port after).
+- [x] 6.1 Gate: the owner decides whether the existing Rust endpoints are ported (strangler, module by module) or only new endpoints go to NestJS, and how the in-flight changes t6, t7 and t8 land (finish in Rust first, or port after).
 - [ ] 6.2 Port `orgs` and `memberships` (module, controller, service, store, in-memory tests); flip its paths in the route table only when `just api-contract` passes.
 - [ ] 6.3 Port `projects` and `environments` likewise.
 - [ ] 6.4 Port `users` and `agents` likewise (agent token issuance calls the core).

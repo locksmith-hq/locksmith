@@ -17,6 +17,14 @@ export type WorkloadCondition = components["schemas"]["ConditionView"];
 export type McpLayer = components["schemas"]["McpLayer"];
 export type McpToolSetting = components["schemas"]["McpToolSetting"];
 export type McpClient = components["schemas"]["McpClient"];
+export type OrgRole = components["schemas"]["OrgRole"];
+export type MyOrg = components["schemas"]["MyOrg"];
+export type Member = components["schemas"]["Member"];
+export type MemberList = components["schemas"]["MemberList"];
+export type Invite = components["schemas"]["Invite"];
+export type InviteCreated = components["schemas"]["InviteCreated"];
+export type NewInvite = components["schemas"]["NewInvite"];
+export type AcceptedInvite = components["schemas"]["AcceptedInvite"];
 export type Problem = components["schemas"]["Problem"];
 
 /** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
@@ -87,6 +95,19 @@ export interface Client {
   listMcpClients(): Promise<McpClient[]>;
   /** Revoke a client by its row `id` (not the OAuth `client_id`). Idempotent. */
   revokeMcpClient(id: string): Promise<McpClient>;
+  /** Orgs the caller belongs to, with the caller's role in each. */
+  listOrgs(): Promise<MyOrg[]>;
+  /** Members of the bound org (see `X-Locksmith-Org`) and the caller's own role in it. */
+  listMembers(): Promise<MemberList>;
+  changeMemberRole(userId: string, role: OrgRole): Promise<Member>;
+  /** Remove a member, or leave the org when `userId` is the caller. */
+  removeMember(userId: string): Promise<void>;
+  listInvites(): Promise<Invite[]>;
+  /** The returned `token` is shown once: keep it out of caches, storage and logs. */
+  createInvite(body: NewInvite): Promise<InviteCreated>;
+  revokeInvite(inviteId: string): Promise<void>;
+  /** The token goes in the body, never in a URL. */
+  acceptInvite(token: string): Promise<AcceptedInvite>;
 }
 
 /**
@@ -161,5 +182,15 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     listMcpClients: () => all((cursor) => run(c.GET("/v1/mcp/clients", { params: { query: q(cursor) } }))),
     revokeMcpClient: (client_row_id) =>
       run(c.POST("/v1/mcp/clients/{client_row_id}/revoke", { params: { path: { client_row_id } } })),
+    listOrgs: async () => (await run(c.GET("/v1/orgs"))).items,
+    listMembers: () => run(c.GET("/v1/orgs/current/members")),
+    changeMemberRole: (user_id, role) =>
+      run(c.PATCH("/v1/orgs/current/members/{user_id}", { params: { path: { user_id } }, body: { role } })),
+    removeMember: (user_id) => run(c.DELETE("/v1/orgs/current/members/{user_id}", { params: { path: { user_id } } })),
+    listInvites: async () => (await run(c.GET("/v1/orgs/current/invites"))).items,
+    createInvite: (body) => run(c.POST("/v1/orgs/current/invites", { body })),
+    revokeInvite: (invite_id) =>
+      run(c.DELETE("/v1/orgs/current/invites/{invite_id}", { params: { path: { invite_id } } })),
+    acceptInvite: (token) => run(c.POST("/v1/invites/accept", { body: { token } })),
   };
 }

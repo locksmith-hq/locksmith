@@ -24,6 +24,7 @@ pub enum Kind {
     Conflict,
     PayloadTooLarge,
     UnsupportedMediaType,
+    NotImplemented,
     Unavailable,
     Internal,
 }
@@ -39,6 +40,7 @@ impl Kind {
             Kind::Conflict => StatusCode::CONFLICT,
             Kind::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Kind::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Kind::NotImplemented => StatusCode::NOT_IMPLEMENTED,
             Kind::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
             Kind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -55,6 +57,7 @@ impl Kind {
             Kind::Conflict => "conflict",
             Kind::PayloadTooLarge => "payload-too-large",
             Kind::UnsupportedMediaType => "unsupported-media-type",
+            Kind::NotImplemented => "not-implemented",
             Kind::Unavailable => "unavailable",
             Kind::Internal => "internal",
         }
@@ -70,6 +73,7 @@ impl Kind {
             Kind::Conflict => "Conflict",
             Kind::PayloadTooLarge => "Request body too large",
             Kind::UnsupportedMediaType => "Unsupported media type",
+            Kind::NotImplemented => "Not implemented",
             Kind::Unavailable => "Service unavailable",
             Kind::Internal => "Internal error",
         }
@@ -124,6 +128,11 @@ impl ApiError {
 
     pub fn not_found() -> Self {
         Self::bare(Kind::NotFound)
+    }
+
+    /// `501`: a route that is in the contract but not built yet (T6 contract stubs).
+    pub fn not_implemented() -> Self {
+        Self::bare(Kind::NotImplemented)
     }
 
     pub fn unauthenticated() -> Self {

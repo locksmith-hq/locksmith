@@ -1,9 +1,9 @@
 # Tasks: T6 organizations and members
 
 ## 1. Contract [sonnet]
-- [ ] 1.1 Add the `OrgRole` enum and the orgs, members and invites request and response types to the OpenAPI schema (utoipa) and regenerate `packages/control-plane-client`; stubs return `501`.
-- [ ] 1.2 Fixture data for every new route in `apps/web/src/api/fixtures.ts` (members of two roles, a pending invite, an org list of two).
-- [ ] 1.3 Verify: `cargo nextest run -p ls-control-plane openapi` and `npm test --workspace packages/control-plane-client`.
+- [x] 1.1 Add the `OrgRole` enum and the orgs, members and invites request and response types to the OpenAPI schema (utoipa) and regenerate `packages/control-plane-client`; stubs return `501`.
+- [x] 1.2 Fixture data for every new route in `apps/web/src/api/fixtures.ts` (members of two roles, a pending invite, an org list of two).
+- [x] 1.3 Verify: `cargo nextest run -p ls-control-plane openapi` and `npm test --workspace packages/control-plane-client`.
 
 ## 2. Schema and tenancy [sonnet]
 - [ ] 2.1 Migration `0014_memberships.sql`: `memberships` and `invites` with forced RLS and grants as in design.md; backfill one `owner` membership per existing user.

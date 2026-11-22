@@ -381,3 +381,52 @@ pub enum TokenErrors {
     )]
     Unavailable(Problem),
 }
+
+/// Org, member and invite routes (T6): every failure the contract allows. `404` is uniform
+/// (non-member, wrong org, bad invite token), `409` is the last-owner and non-empty-org rule.
+#[derive(Debug, IntoResponses)]
+#[allow(dead_code)] // OpenAPI description only; never constructed.
+pub enum MemberErrors {
+    #[response(
+        status = 400,
+        description = "Invalid request",
+        content_type = "application/problem+json"
+    )]
+    Invalid(Problem),
+    #[response(
+        status = 401,
+        description = "Missing or invalid org binding",
+        content_type = "application/problem+json"
+    )]
+    Unauthenticated(Problem),
+    #[response(
+        status = 403,
+        description = "Email verification required",
+        content_type = "application/problem+json"
+    )]
+    EmailNotVerified(Problem),
+    #[response(
+        status = 404,
+        description = "Not found (also: not a member, or an invalid invite)",
+        content_type = "application/problem+json"
+    )]
+    NotFound(Problem),
+    #[response(
+        status = 409,
+        description = "Conflict (last owner, or org still has secrets)",
+        content_type = "application/problem+json"
+    )]
+    Conflict(Problem),
+    #[response(
+        status = 501,
+        description = "Not implemented yet",
+        content_type = "application/problem+json"
+    )]
+    NotImplemented(Problem),
+    #[response(
+        status = 503,
+        description = "Service unavailable",
+        content_type = "application/problem+json"
+    )]
+    Unavailable(Problem),
+}

@@ -257,6 +257,7 @@ fn no_secret_field_in_any_response_schema() {
         "AgentGrantSet",
         "ActiveGrant",
         "AgentToken",
+        "InviteCreated",
         "JwkSet",
         "Jwk",
     ] {
@@ -274,9 +275,11 @@ fn no_secret_field_in_any_response_schema() {
         );
     }
 
-    const ALLOWED: [(&str, &str); 2] = [
+    // `InviteCreated.token` is the T6 invite link token: shown once, only its hash is stored.
+    const ALLOWED: [(&str, &str); 3] = [
         ("AgentEnrollment", "enrollment_secret"),
         ("AgentToken", "access_token"),
+        ("InviteCreated", "token"),
     ];
     // Names that match the patterns below but carry no credential.
     const BENIGN: [(&str, &str); 1] = [("AgentToken", "token_type")];

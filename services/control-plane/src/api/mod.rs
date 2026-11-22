@@ -14,6 +14,7 @@ pub(crate) mod environments;
 pub(crate) mod extract;
 mod internal;
 mod mcp;
+mod members;
 mod orgs;
 pub(crate) mod projects;
 mod responses;
@@ -46,9 +47,18 @@ pub const MAX_PAGE_LIMIT: u32 = 100;
 /// The `/v1` routes (without layers or state), with their OpenAPI path items.
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
-        .routes(routes!(orgs::create))
+        .routes(routes!(orgs::create, members::list_orgs))
         .routes(routes!(orgs::get_current))
-        .routes(routes!(orgs::get_one))
+        .routes(routes!(
+            orgs::get_one,
+            members::patch_org,
+            members::delete_org
+        ))
+        .routes(routes!(members::list_members))
+        .routes(routes!(members::patch_member, members::remove_member))
+        .routes(routes!(members::create_invite, members::list_invites))
+        .routes(routes!(members::revoke_invite))
+        .routes(routes!(members::accept_invite))
         .routes(routes!(projects::create, projects::list))
         .routes(routes!(
             projects::get_one,

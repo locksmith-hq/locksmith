@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { createClient } from "./index";
-import { mcpClients, mcpToolSettings } from "./fixtures";
+import { invites, mcpClients, mcpToolSettings, memberList, myOrgs } from "./fixtures";
 
 const B = "http://cp.test";
 const json = (body: unknown, status = 200) =>
@@ -93,4 +93,29 @@ test("a relative base URL fetches the path on the page's own origin", async () =
   vi.stubGlobal("fetch", f);
   await createClient("org1").listMcpClients();
   expect(f.mock.calls[0]?.[0]).toBe("/v1/mcp/clients");
+});
+
+test("listOrgs and listMembers unwrap the T6 fixtures", async () => {
+  const f = vi.fn().mockReturnValueOnce(json({ items: myOrgs })).mockReturnValueOnce(json(memberList));
+  vi.stubGlobal("fetch", f);
+  const c = createClient("org1", B);
+  expect(await c.listOrgs()).toEqual(myOrgs);
+  expect((await c.listMembers()).caller_role).toBe("owner");
+  expect((f.mock.calls[1] as [string])[0]).toBe(`${B}/v1/orgs/current/members`);
+});
+
+test("invites: the token goes in the body only, and a 409 surfaces as ApiError", async () => {
+  const f = vi
+    .fn()
+    .mockReturnValueOnce(json({ items: invites }))
+    .mockReturnValueOnce(json({ org_id: "o", role: "member" }))
+    .mockReturnValueOnce(json({ type: "urn:locksmith:problem:conflict", title: "Conflict", status: 409, detail: "last owner" }, 409));
+  vi.stubGlobal("fetch", f);
+  const c = createClient("org1", B);
+  expect(await c.listInvites()).toEqual(invites);
+  await c.acceptInvite("tok");
+  const [url, init] = f.mock.calls[1] as [string, RequestInit];
+  expect(url).toBe(`${B}/v1/invites/accept`);
+  expect(init.body).toBe(JSON.stringify({ token: "tok" }));
+  await expect(c.removeMember("u1")).rejects.toMatchObject({ status: 409 });
 });

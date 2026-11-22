@@ -32,7 +32,7 @@
 .login-card .vault-mark { color: var(--text); }
 .login-card .vault-mark .vm-bolt { stroke: var(--accent); }
 .login-title { margin: 4px 0 0; }
-.login-title .wordmark { font-family: "Unbounded", var(--sans); font-weight: 500; font-size: 28px; }
+.login-title .wordmark { font-family: "Unbounded", var(--sans); font-weight: 600; font-size: 22px; letter-spacing: 0.13em; text-transform: uppercase; }
 .login-tag { margin: 0 0 6px; color: var(--muted); font-size: 15px; line-height: 22px; }
 .login-notice { margin: 0; width: 100%; padding: 8px 12px; border: 1px solid var(--danger-border); border-radius: 10px; background: var(--danger-weak); color: var(--danger-text); }
 .login-choices { width: 100%; display: flex; flex-direction: column; gap: 10px; }

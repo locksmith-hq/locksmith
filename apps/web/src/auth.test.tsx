@@ -189,3 +189,11 @@ test("Cognito mode uses the hosted-UI endpoints, identity_provider and the logou
   expect(out.searchParams.get("client_id")).toBe("locksmith-web");
   expect(out.searchParams.get("logout_uri")).toBe("http://localhost:3000/");
 });
+
+test("UI: Cognito deployments offer Google and email only", async () => {
+  const auth = createAuth({ issuer: ISS, clientId: "locksmith-web", redirectUri: "http://localhost:3000/", hostedDomain: "https://x.auth.us-east-1.amazoncognito.com", navigate: (u) => nav.push(u) });
+  render(<App auth={auth} />);
+  expect(await screen.findByText("Continue with Google")).toBeInTheDocument();
+  expect(screen.getByText("Continue with email")).toBeInTheDocument();
+  expect(screen.queryByText("Continue with GitHub")).toBeNull();
+});

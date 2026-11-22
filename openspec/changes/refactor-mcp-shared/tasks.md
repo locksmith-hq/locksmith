@@ -24,4 +24,4 @@
 
 ## 5. Local verification [haiku]
 - [x] 5.1 `git diff origin/main --stat -- ':!openspec'` touches only the files named in the proposal's Impact; `cargo nextest run -p ls-mcp-server -p ls-gateway -p ls-control-plane` passes with no assertion edited in `services/gateway/src/relay/tests/mcp*.rs` or `services/control-plane/tests/mcp*.rs` (`git diff` on those paths shows no changed `assert`).
-- [ ] 5.2 `just up`, then the MCP smoke test (call `/mcp` on the hub and the gateway without a token and with a bad one; compare the `WWW-Authenticate` headers with `origin/main`), `just apps-build`, then `just quick`.
+- [x] 5.2 `just up`, then the MCP smoke test (call `/mcp` on the hub and the gateway without a token and with a bad one; compare the `WWW-Authenticate` headers with `origin/main`), `just apps-build`, then `just quick`.

@@ -25,3 +25,8 @@
 - Task: CI fix - macos `ci-platforms` failure
 - Cause: the new `mcp_store` test binary needs Postgres (testcontainers) and was not in the `portable` nextest skip list (`.config/nextest.toml`); added it.
 - Notes for next session: 5.2 (smoke test and `just apps-build`) still pending; leave unticked.
+
+## 2026-11-22 worker (alfie, third entry)
+- Task: 5.2 - done
+- Verified: `just up`; built the hub from this branch and from origin/main and called `/mcp` with no token and with a bad token on both: identical 401 and `WWW-Authenticate` (only the port differs). Gateway `/mcp` was not started live (needs a bindings file); covered by `cargo nextest run -p ls-gateway -E 'test(mcp) | test(ttl) | test(bearer)'` 54 passed. `just apps-build` exit 0, `just quick` exit 0.
+- Notes for next session: every task is ticked; archive the change in this PR, then finish it.

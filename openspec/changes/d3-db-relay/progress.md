@@ -112,3 +112,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 6.1 contract (D3-1) - done, ticked
 - Verified: `cargo test -p ls-control-plane --test openapi` (8 passed); `npm test` and `npm run lint --workspace packages/control-plane-client` (14 tests, tsc clean) after `npm ci`
 - Notes for next session: merged main (conflict in progress.md only, kept both). Next: 6.2 (gateway inventory push `PUT /internal/v1/gateway/bindings`, control-plane storage fills the empty `GET /v1/bindings`), then 6.3 page, 6.4, 7.2.
+
+## 2026-11-22 worker
+- Task: ci-fix - blocked (cause not reproducible locally)
+- Verified: just quick -> OK; tree-check, task guard, public-check OK; gitleaks on origin/main..HEAD -> no leaks; cargo test -p ls-gateway -> git::fixture_tests flake (different tests each run, same on clean main in this VM)
+- Notes for next session: PR #485 hygiene/macos failures (head bef3784) had no readable annotations (macos exit 100 looks like a runner/install issue). Merged main in and pushed; re-check CI on the new head before more work.

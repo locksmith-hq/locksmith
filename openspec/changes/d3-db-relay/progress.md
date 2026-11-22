@@ -12,6 +12,11 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Verified: openspec validate d3-db-relay --strict -> valid
 - Notes for next session: merge-review FAIL on spec.md:74 fixed (agent.json excepted, before/after home snapshot); gate 4 CI was still running; re-add ready-to-merge label if gate passes.
 
+## 2026-11-22 08:35 lead
+- Task: d3-db-relay planning PR #611 - ci-fix
+- Verified: `just tree-check task-guard` -> OK on both branches; #611 diff now only `openspec/changes/d3-db-relay/`
+- Notes for next session: #611 `merge-ready` failed in the review pre-check because the PR also touched `openspec/decisions.md`, which voids the planning-only exemption (all files under `openspec/changes/`). Planning PRs must never touch `decisions.md`; the D3-1 line moved to #612.
+
 ## 2026-11-20 worker
 - Task: 1.1-1.4 - done
 - Verified: `cargo nextest run -p ls-gateway pg_config` 2 passed; `cargo nextest run -p ls-proxy db` 18 passed (M6 behaviour unchanged); `just ci` exit 0.
@@ -102,10 +107,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Done: `GET /v1/bindings` + `BindingSummary`/`BindingList` in the control-plane OpenAPI (`api/bindings.rs`, handler returns an empty list until 6.2 stores snapshots), regenerated `openapi.json` and `packages/sdk/src/schema.d.ts`, `listBindings()` and `bindingSummaries` fixtures (http, git, pg, aws) in `packages/control-plane-client`.
 - Verified: `cargo test -p ls-control-plane --test openapi` 8 passed; `npm test` and `npm run lint --workspace packages/control-plane-client` pass (14 tests).
 - Notes for next session: after #611 merges, merge main and tick new 6.1 (verified as above). Then 6.2 (gateway push, control-plane storage; fills the empty list), 6.3 page, 6.4, 7.2.
-## 2026-11-22 08:35 lead
-- Task: d3-db-relay planning PR #611 - ci-fix
-- Verified: `just tree-check task-guard` -> OK on both branches; #611 diff now only `openspec/changes/d3-db-relay/`
-- Notes for next session: #611 `merge-ready` failed in the review pre-check because the PR also touched `openspec/decisions.md`, which voids the planning-only exemption (all files under `openspec/changes/`). Planning PRs must never touch `decisions.md`; the D3-1 line moved to #612.
 
 ## 2026-11-22 worker (alfie, fourth entry)
 - Task: 6.1 contract (D3-1) - done, ticked

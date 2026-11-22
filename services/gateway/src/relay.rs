@@ -990,6 +990,7 @@ mod tests {
             sub: AGENT,
             org,
             aud: aud.to_owned(),
+            jti: Uuid::now_v7(),
             iat: now,
             exp: now + exp_in,
         }

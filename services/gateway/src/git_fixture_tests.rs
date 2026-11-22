@@ -391,6 +391,7 @@ async fn start_gateway_with(
             sub: AGENT,
             org: ORG,
             aud: AUDIENCE.to_owned(),
+            jti: Uuid::now_v7(),
             iat: now,
             exp: now + 600,
         })

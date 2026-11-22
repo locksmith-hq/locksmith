@@ -405,7 +405,7 @@ async fn workload_exchange_mints_a_gateway_verifiable_agent_token() {
     assert_eq!((claims.sub, claims.org), (f.agent, f.org));
     assert_eq!(claims.aud, AUDIENCE);
     assert_eq!(claims.exp - claims.iat, 15 * 60);
-    assert_eq!(keys(&payload(token)), ["aud", "exp", "iat", "org", "sub"]);
+    assert_eq!(keys(&payload(token)), ["aud", "exp", "iat", "jti", "org", "sub"]);
     assert!(!r.raw.contains("canary-actor-name"));
 
     // The agent's grants (not the token) decide what it can do: unchanged.

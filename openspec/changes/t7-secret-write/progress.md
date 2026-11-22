@@ -18,3 +18,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: review-fix on #591 - done
 - Verified: openspec validate t7-secret-write -> valid
 - Notes for next session: replaced REMOVED "Values are write-only" with MODIFIED keeping no-leak and cross-org rules; awaiting re-review.
+
+## 2026-11-22 worker alfie
+- Task: 1.1 research note - done
+- Verified: `bash scripts/public-check.sh`, `openspec validate t7-secret-write --strict`; evaluator PASS
+- Notes for next session: hpke 0.15.1 needs getrandom 0.4 (`wasm_js`), workspace crates still on 0.2 (`js`): settle in 1.2/3.1. Pinning source proposed in the note (compiled-in key, or `LS_GATEWAY_VERIFYING_KEY`). Next: 1.2 (HPKE DEK format in ls-envelope) is [opus].

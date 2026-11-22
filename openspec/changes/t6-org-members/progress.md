@@ -23,3 +23,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.1-1.3, 2.1-2.3 - done
 - Verified: `cargo test` openapi/tenancy/memberships/tenant_lint, `npm test --workspace packages/control-plane-client`, `just quick` -> pass
 - Notes for next session: group 3 is `[opus]`; start there. See the group 2 note about `orgs` and `users` read slices.
+
+## 2026-11-22 08:53 worker
+- Task: PR #605 conflict + red macos - ci-fix
+- Verified: vitest + tsc in packages/control-plane-client, just quick -> pass
+- Notes for next session: merged main (index.test.ts conflict: kept main's describe/it plus T6 tests). macos job failed with exit 100 before; no annotation detail, check whether it recurs on the new head.

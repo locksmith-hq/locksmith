@@ -86,3 +86,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: none - conflict fix on PR #485 (merge main)
 - Verified: `cargo check -p ls-gateway --all-targets`, `cargo test -p ls-gateway pg` (30 passed)
 - Notes for next session: main renamed `MAX_GRANT_TTL` to `ttl::MAX_CACHE_TTL` and dropped `MAX_SETTINGS_TTL`; fixed in `pg/listener.rs` and `main.rs`. The branch already holds pg listener/upstream code and tests, but no tasks are ticked yet; verify each against `tasks.md` before ticking.
+
+## 2026-11-22 worker (alfie, second entry)
+- Task: none - parked; opened needs-rescue for 6.1 (no bindings page exists in apps/web or apps/desktop even after t3 archived); merged origin/main (already up to date)
+- Verified: nothing new run; no code changed
+- Notes for next session: wait for the lead's answer on the rescue issue; 6.1/6.2 then 7.2 remain.

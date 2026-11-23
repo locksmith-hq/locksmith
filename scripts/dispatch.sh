@@ -34,7 +34,8 @@ decide() {
     "#\tworkers free \($free|length)/\($c.workers|length), room \([$room, 0]|max), items \(.items|length), fired \($r.out|length)"'
 }
 
-ledger_find() { gh api "repos/$repo/issues?labels=dispatch-ledger&state=open&per_page=1" -q '.[0].number // empty'; }
+# The oldest open ledger wins, so a duplicate made by a race (the issues list lags a create) is ignored.
+ledger_find() { gh api "repos/$repo/issues?labels=dispatch-ledger&state=open&sort=created&direction=asc&per_page=1" -q '.[0].number // empty'; }
 ledger() { # the open dispatch-ledger issue number, created on first use
   local n; n=$(ledger_find)
   [ -n "$n" ] || n=$(gh api "repos/$repo/issues" -f title="Dispatch ledger" -f "labels[]=dispatch-ledger" \
@@ -44,7 +45,7 @@ One comment per worker fire by scripts/dispatch.sh (and event wakes of workers).
 }
 
 record() { # <role> <reason> [would]
-  gh api "repos/$repo/issues/$(ledger)/comments" -f body="<!-- agent -->
+  gh api "repos/$repo/issues/${LEDGER:-$(ledger)}/comments" -f body="<!-- agent -->
 ${3:-fire} $1: $2" >/dev/null
 }
 
@@ -73,6 +74,7 @@ run() {
   shadow=$(jq -r '.dispatch.shadow' "$cfg")
   plan=$(state | decide) || { echo "::error::dispatch: could not read state"; return 1; }
   echo "$plan"
+  grep -qv '^#' <<<"$plan" && LEDGER=$(ledger)  # once per run: two creates in one run made two ledgers (#659, #660)
   while IFS=$'\t' read -r role why; do
     [ "$role" = "#" ] && { echo "::notice title=dispatch::$why"; continue; }
     if [ "$shadow" = true ]; then record "$role" "$why" would

@@ -51,7 +51,7 @@ if git rev-parse -q --verify origin/main >/dev/null; then
     # A cloud session's commits carry its App identity. One without it acts as the owner (pre-persona sessions, #573).
     case "$branch" in *harness-release-*|*hotfix-*) ;; *)
       bad=$(git log --no-merges --since=2026-11-22T06:00:00Z --format='%h|%an|%(trailers:key=Claude-Session,valueonly,separator=%x20)' "$ob"..HEAD |
-        awk -F'|' '$3!="" && $2 !~ /^locksmith-[a-z]+\[bot\]$/{print $1" by "$2}')
+        awk -F'|' '$3!="" && $2 !~ /^(locksmith-[a-z]+|[a-z]+(-[a-z]+)*-locksmith)\[bot\]$/{print $1" by "$2}')
       if [ -n "$bad" ]; then
         echo "task-edit guard: commits from a session without its App identity (archive that session):"; echo "$bad"
         protected_fail=1

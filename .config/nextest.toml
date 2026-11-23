@@ -23,3 +23,6 @@ not (
   | (package(ls-gateway) & test(/^relay::tests::(relay_events_land_in_the_ledger|outcome_resend_is_idempotent|mcp_short_lived::mcp_short_lived_issue_lands_in_the_ledger_without_value_or_credential)$/))
 )
 """
+
+[profile.portable.junit]
+path = "junit.xml"

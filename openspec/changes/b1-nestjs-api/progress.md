@@ -29,3 +29,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (PR #640) - done (merged main to clear red hygiene)
 - Verified: tree-check, check-task-edits, public-check, migration-guard, just quick -> OK locally
 - Notes for next session: macos failure was locksmithd test agent_session_start_grants_only_inside_policy (not from this change); recheck after push. hygiene logs unreadable, likely fixed by check-task-edits.sh update on main.
+
+## 2026-11-23 worker-b (second pass)
+- Task: ci-fix (PR #640) - done
+- Verified: macos failure was locksmithd test agent_session_start_grants_only_inside_policy; passes locally (flaky, unrelated). Merged origin/main again; just quick -> OK.
+- Notes for next session: recheck macos on #640 after push; 39 tasks still open, no task work done this run.

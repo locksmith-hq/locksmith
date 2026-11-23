@@ -3,16 +3,16 @@ import { agents, createStore, NOW, MIN, HOUR, DAY } from "../kit";
 
 export type Sev = "Critical" | "High" | "Low";
 export type Status = "Open" | "Resolved" | "Not a secret";
-export type SrcKind = "Repository" | "CI log" | "Agent transcript";
+type SrcKind = "Repository" | "CI log" | "Agent transcript";
 export type Group = "Repositories" | "CI logs" | "Agent transcripts";
-export type Line = [n: number, text: string, hit?: boolean];
+type Line = [n: number, text: string, hit?: boolean];
 export interface Finding {
   id: string; kind: string; rule: string; secret?: string; src: SrcKind; srcId: string; srcName: string; spot: string; file?: string;
   first: number; sev: Sev; rotated: boolean; rotationOpened: boolean; status: Status; who: string; lines: Line[]; reason?: string;
 }
 export interface Source { id: string; name: string; group: Group; last: number | null; on: boolean }
-export interface Detector { id: string; name: string; about: string; on: boolean }
-export const START_SETTINGS = { onPush: true, blockMerge: true, transcripts: true, autoRotate: false };
+interface Detector { id: string; name: string; about: string; on: boolean }
+const START_SETTINGS = { onPush: true, blockMerge: true, transcripts: true, autoRotate: false };
 export type Settings = typeof START_SETTINGS;
 export interface World { findings: Finding[]; sources: Source[]; det: Detector[]; paths: string[]; settings: Settings; seq: number }
 
@@ -80,8 +80,9 @@ export const offReason = (s: Source, st: Settings): string | null =>
   s.group === "Agent transcripts" && !st.transcripts ? "Off because Scan agent transcripts is off in Settings." : s.on ? null : "Scanning is off for this source.";
 
 /** Glob such as `tests/fixtures/**` or `**` + `/*.snap` against a file path. */
-export const globMatch = (glob: string, path: string) => {
+const globMatch = (glob: string, path: string) => {
   try {
+    // oxlint-disable-next-line no-control-regex -- \u0000 and \u0001 are deliberate private placeholders for ** handling
     const re = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*\//g, "\u0000").replace(/\*\*/g, "\u0001").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]").replace(/\u0000/g, "(?:.*/)?").replace(/\u0001/g, ".*");
     return new RegExp(`^${re}$`).test(path);
   } catch { return false; }

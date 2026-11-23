@@ -177,7 +177,7 @@ test("Cognito mode uses the hosted-UI endpoints, identity_provider and the logou
   expect(url.origin + url.pathname).toBe(`${HOST}/oauth2/authorize`);
   expect(url.searchParams.get("identity_provider")).toBe("Google");
   expect(url.searchParams.has("kc_idp_hint")).toBe(false);
-  fetchMock.mockImplementation(async (u: string, init?: RequestInit) =>
+  fetchMock.mockImplementation(async (u: string, _init?: RequestInit) =>
     u === `${HOST}/oauth2/token` ? json({
       access_token: TOKEN, token_type: "Bearer", expires_in: 300, scope: "openid email profile",
       id_token: jwt({ iss: ISS, aud: "locksmith-web", sub: "u1", exp: Math.floor(Date.now() / 1000) + 300, iat: Math.floor(Date.now() / 1000), email: "ada@example.com" }),

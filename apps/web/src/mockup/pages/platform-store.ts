@@ -25,7 +25,7 @@ export const useNotices = createStore<Notice[]>([
 ]);
 
 export type ChannelId = "inapp" | "slack" | "email" | "webhook";
-export interface Sent { channel: ChannelId; to: string; ok: boolean; note: string }
+interface Sent { channel: ChannelId; to: string; ok: boolean; note: string }
 const okTo = (channel: ChannelId, to: string): Sent => ({ channel, to, ok: true, note: "Delivered" });
 const failTo = (channel: ChannelId, to: string, note: string): Sent => ({ channel, to, ok: false, note });
 

@@ -2,7 +2,7 @@
 import { createStore, secrets, projects, members, MIN, HOUR, DAY, NOW } from "../kit";
 import { projectMembers } from "../data";
 
-export const ME = "Tomer Levy"; // organization owner
+const ME = "Tomer Levy"; // organization owner
 export type Kind = "GitHub Actions" | "Kubernetes" | "Token";
 export interface Mach { name: string; kind: Kind; cond: [string, string][]; envs: string[]; last: number | null; tail: string }
 /** `who` asked for `agent` to use a secret; they are the same name when an agent asks for itself. */
@@ -12,7 +12,7 @@ export interface Req {
 }
 interface Grant { secretId: string; agent: string; expires: number | null }
 
-export const envsOf = (p: string) => projects.find((x) => x.id === p)?.envs ?? ["development", "staging", "production"];
+const envsOf = (p: string) => projects.find((x) => x.id === p)?.envs ?? ["development", "staging", "production"];
 
 function perProject<T>(seed: (p: string) => T) {
   const use = createStore<Record<string, T>>({});

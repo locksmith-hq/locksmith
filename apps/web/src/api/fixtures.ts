@@ -11,7 +11,7 @@ export interface FixtureOptions {
   empty?: boolean;
 }
 
-export function createFixtures(opts: FixtureOptions = {}) {
+function createFixtures(opts: FixtureOptions = {}) {
   const projects = opts.empty ? [] : [{ id: id(1), name: "payments", description: "", created_at: now, updated_at: now }];
   const envs = opts.empty ? [] : [{ id: id(10), project_id: id(1), name: "dev", description: "", created_at: now, updated_at: now }];
   const secrets = opts.empty

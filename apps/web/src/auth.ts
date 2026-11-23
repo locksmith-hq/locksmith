@@ -25,7 +25,7 @@ export type AuthState =
   | { status: "loading" }
   | { status: "signed-out"; notice?: string }
   | { status: "signed-in"; user: SignedInUser };
-export interface SignedInUser { accessToken: string; email?: string; name?: string }
+interface SignedInUser { accessToken: string; email?: string; name?: string }
 
 export interface AuthService {
   /** Sign-in choices this deployment offers; all three when omitted. Cognito has no GitHub provider. */

@@ -2,7 +2,7 @@
 import { createStore, NOW, MIN, HOUR, DAY, plural, projects, secrets, agents, type IconName } from "../kit";
 import { connections, type Connection } from "../data";
 
-export const ME = "Tomer Levy";
+const ME = "Tomer Levy";
 export const pid = (p?: string) => p ?? "acme-api";
 export const envsOf = (p: string) => projects.find((x) => x.id === p)?.envs ?? ["production"];
 export const conn = (name: string) => connections.find((c) => c.name === name);
@@ -30,12 +30,12 @@ const ROLLABLE: Act[] = ["Added", "New version", "Grant given", "Grant revoked",
 const SYNC_ACTS: Act[] = ["Added", "New version", "Deleted", "Rolled back"];
 export interface Entry { id: string; at: number; who: string; act: Act; name: string; env: string; note: string; after: string; undone?: boolean; mut?: boolean }
 export interface Def { id: string; name: string; conn: string; what: string; ttl: number }
-export interface Lease { id: string; def: string; who: string; kind: "Agent" | "Machine"; created: number; expires: number }
+interface Lease { id: string; def: string; who: string; kind: "Agent" | "Machine"; created: number; expires: number }
 export interface Rule { sid: string; mode: "auto" | "manual"; via: string; every: number }
 export interface Sync { id: string; env: string; c: Connection; target: string; on: boolean; fail?: string; at: number; okAt: number }
 export interface P { defs: Def[]; leases: Lease[]; hist: Entry[]; rules: Rule[]; syncs: Sync[] }
 
-export const kindOf = (name: string): "Agent" | "Machine" => (agents.some((a) => a.name === name) ? "Agent" : "Machine");
+const kindOf = (name: string): "Agent" | "Machine" => (agents.some((a) => a.name === name) ? "Agent" : "Machine");
 
 /* ---------- Seeds ---------- */
 const DEFS: Record<string, Def[]> = {
@@ -141,9 +141,9 @@ export function useP(p: string) {
 }
 
 /* ---------- Derived ---------- */
-export const secretOf = (p: string, sid: string) => secrets.find((x) => x.project === p && x.id === sid);
+const secretOf = (p: string, sid: string) => secrets.find((x) => x.project === p && x.id === sid);
 /** Current version: the sample version plus every version added in this session. */
-export const ver = (s: P, p: string, name: string, env: string) =>
+const ver = (s: P, p: string, name: string, env: string) =>
   (secrets.find((x) => x.project === p && x.name === name && x.env === env)?.version ?? 1) +
   s.hist.filter((h) => h.mut && h.name === name && h.env === env && (h.act === "New version" || h.act === "Rolled back")).length;
 const mine = (s: P, name: string, env: string) => s.hist.filter((h) => h.name === name && h.env === env);

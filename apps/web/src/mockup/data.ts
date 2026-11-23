@@ -4,11 +4,11 @@ import { NOW, type IconName } from "@locksmith/ui";
 const m = 60, h = 3600, d = 86400;
 
 export interface Project { id: string; description: string; envs: string[] }
-export interface Grant { agent: string; expires: number | null }
+interface Grant { agent: string; expires: number | null }
 export interface Secret { id: string; project: string; env: string; name: string; version: number; updated: number; lastUsed: number | null; grants: Grant[] }
 export interface Agent { name: string; description: string; icon: IconName; machine: string; enrolled: number; lastSeen: number }
 export interface Session { id: string; agent: string; project: string; env: string; secrets: string[]; started: number; expires: number; state: "active" | "revoked" | "expired"; endedAt?: number }
-export type Outcome = "ok" | "denied" | "redaction_failed";
+type Outcome = "ok" | "denied" | "redaction_failed";
 export interface Event { seq: number; at: number; label: string; target: string; actor: string; outcome: Outcome; digest: string }
 
 export const projects: Project[] = [

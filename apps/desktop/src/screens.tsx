@@ -30,7 +30,7 @@ const stamp = (ts: number) => {
 const left = (s: number) =>
   s <= 0 ? "expired" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 /** The agent is the basename of the session command's first word: "/opt/homebrew/bin/codex exec" is "codex". */
-export const agent = (command: string) => command.trim().split(/\s+/)[0]!.split("/").pop() || command;
+const agent = (command: string) => command.trim().split(/\s+/)[0]!.split("/").pop() || command;
 const nowSecs = () => Math.floor(Date.now() / 1000);
 const isBad = (e: AuditEvent) => e.decision.toUpperCase() === "DENY" || e.action === "BLOCKED" || e.action === "HOOK_DENY";
 const kind = (e: AuditEvent) => isBad(e) ? "blocked" : e.action === "REVOKE" || e.action === "TOKEN_REVOKE" ? "revoked" : "allowed";

@@ -47,7 +47,7 @@ test("revokeMcpClient POSTs to the revoke path; a 403 surfaces as ApiError", asy
   const c = createClient("org1", B);
   expect((await c.revokeMcpClient("abc")).revoked_at).toBeDefined();
   expect(f.mock.calls[0]?.[0]).toBe(`${B}/v1/mcp/clients/abc/revoke`);
-  expect((f.mock.calls[0]?.[1] as RequestInit).method).toBe("POST");
+  expect((f.mock.calls[0]![1] as RequestInit).method).toBe("POST");
   await expect(c.revokeMcpClient("abc")).rejects.toMatchObject({ name: "ApiError", status: 403, message: "no" });
 });
 
@@ -61,7 +61,7 @@ test("a bearer token replaces the dev org header", async () => {
   const f = vi.fn().mockReturnValue(json({ items: [] }));
   vi.stubGlobal("fetch", f);
   await createClient("org1", B, () => "tok").listMcpTools();
-  const h = (f.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
+  const h = (f.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
   expect(h.authorization).toBe("Bearer tok");
   expect(h["x-locksmith-dev-org"]).toBeUndefined();
 });

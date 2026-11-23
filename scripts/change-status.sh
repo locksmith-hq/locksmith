@@ -102,7 +102,7 @@ for id in $ids; do
       done
     fi
     if [ "$state" = ready ] || [ "$state" = stackable ] && [ "${OFFLINE:-0}" != 1 ]; then
-      h=$(bash scripts/run-lock.sh holder "status-check" "$id" 2>/dev/null)
+      h=$(bash scripts/run-lock.sh holder "status-check" "$id" 2>/dev/null) || h="lock state unknown"  # fail closed
       [ -n "$h" ] && { state=claimed; detail="$h"; }
     fi
     if { [ "$state" = ready ] || [ "$state" = stackable ]; } && [ "${OFFLINE:-0}" != 1 ]; then

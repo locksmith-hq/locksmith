@@ -713,3 +713,149 @@ async fn members_two_owners_acting_at_once_never_leave_zero_owners() {
         assert_eq!(env.owners(&team).await, 1, "round {round}");
     }
 }
+
+/// Adversarial (`tests/adversarial/cases/T6.sh`): an admin of another org, or a non-member
+/// naming this org, cannot read, change or revoke anything in it. Every probe is the same 404.
+/// When `MEMBERS_ABUSE_ARTIFACT_DIR` is set the responses and a dump of the invite rows and the
+/// ledger are written there, and the plaintext invite token must not appear in any of them.
+#[tokio::test]
+async fn members_abuse_cross_org_and_token_probes_are_uniform_404() {
+    let env = Env::start().await;
+    let acme = env.create_org("alice", "Acme").await;
+    let evil = env.create_org("mallory", "Evil").await;
+    env.add_member(&acme, "mia", "member").await;
+    let mia = env.user_id("mia").await;
+    let (status, body) = env
+        .invite(&acme, "alice", "bob@example.com", "member")
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let token = body["token"].as_str().unwrap().to_owned();
+    let invite_id = body["invite"]["id"].as_str().unwrap().to_owned();
+
+    let mut transcript = Vec::new();
+    // Mallory (owner of her own org) names Acme: not a member, so everything is a 404.
+    let probes: Vec<(&str, String, Option<Value>)> = vec![
+        ("GET", "/v1/orgs/current/members".into(), None),
+        ("GET", "/v1/orgs/current/invites".into(), None),
+        (
+            "POST",
+            "/v1/orgs/current/invites".into(),
+            Some(json!({"email": "x@example.com", "role": "owner"})),
+        ),
+        (
+            "DELETE",
+            format!("/v1/orgs/current/invites/{invite_id}"),
+            None,
+        ),
+        (
+            "PATCH",
+            format!("/v1/orgs/current/members/{mia}"),
+            Some(json!({"role": "owner"})),
+        ),
+        ("DELETE", format!("/v1/orgs/current/members/{mia}"), None),
+    ];
+    for (m, uri, b) in &probes {
+        let (s, body) = env.call(m, uri, "mallory", Some(&acme), b.clone()).await;
+        assert_404(s, &body);
+        transcript.push(format!("{m} {uri} -> {s} {body}"));
+    }
+    // Her own org's invite id and member id are not reachable through Acme's id either way.
+    let (s, body) = env
+        .call(
+            "DELETE",
+            &format!("/v1/orgs/current/invites/{invite_id}"),
+            "mallory",
+            Some(&evil),
+            None,
+        )
+        .await;
+    assert_404(s, &body);
+    let (s, body) = env
+        .call(
+            "DELETE",
+            &format!("/v1/orgs/current/members/{mia}"),
+            "mallory",
+            Some(&evil),
+            None,
+        )
+        .await;
+    assert_404(s, &body);
+    // Acme is untouched.
+    assert_eq!(env.owners(&acme).await, 1);
+    let (_, members) = env
+        .get("/v1/orgs/current/members", "alice", Some(&acme))
+        .await;
+    assert_eq!(members["items"].as_array().unwrap().len(), 2, "{members}");
+
+    // Token guessing: near-misses and other-length strings are all the same 404 as an unknown one.
+    let mut flipped = token.clone().into_bytes();
+    flipped[0] = if flipped[0] == b'A' { b'B' } else { b'A' };
+    let mut guesses: Vec<String> = vec![
+        String::from_utf8(flipped).unwrap(),
+        token[..42].to_owned(),
+        format!("{token}A"),
+        token.to_lowercase(),
+        "%00".repeat(10),
+    ];
+    guesses.extend((0..20).map(|i| format!("{i:0>43}")));
+    let (s0, first) = env.accept("bob", &guesses[0]).await;
+    assert_404(s0, &first);
+    for g in &guesses {
+        let (s, b) = env.accept("bob", g).await;
+        assert_404(s, &b);
+        assert_eq!(b, first, "every guess looks the same");
+    }
+    // Mallory presenting the real token (leaked) with her own verified email is also refused,
+    // and the refusal does not burn the invite for its owner.
+    let (s, b) = env.accept("mallory", &token).await;
+    assert_404(s, &b);
+    transcript.push(format!("accept(other email) -> {s} {b}"));
+    let (s, b) = env.accept("bob", &token).await;
+    assert_eq!(s, StatusCode::OK, "{b}");
+    // Replay after use, by the owner and by Mallory.
+    for who in ["bob", "mallory"] {
+        let (s, b) = env.accept(who, &token).await;
+        assert_404(s, &b);
+        transcript.push(format!("replay({who}) -> {s} {b}"));
+    }
+    // A revoked invite stays dead even with the right email.
+    let (_, inv) = env
+        .invite(&acme, "alice", "carol@example.com", "admin")
+        .await;
+    let revoked = inv["token"].as_str().unwrap().to_owned();
+    let rid = inv["invite"]["id"].as_str().unwrap().to_owned();
+    let (s, _) = env
+        .call(
+            "DELETE",
+            &format!("/v1/orgs/current/invites/{rid}"),
+            "alice",
+            Some(&acme),
+            None,
+        )
+        .await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    let (s, b) = env.accept("carol", &revoked).await;
+    assert_404(s, &b);
+
+    if let Ok(dir) = std::env::var("MEMBERS_ABUSE_ARTIFACT_DIR") {
+        let mut admin = env.pg.admin().await;
+        let rows: Vec<String> = sql::query_scalar("SELECT i::text FROM invites i")
+            .fetch_all(&mut admin)
+            .await
+            .unwrap();
+        let ledger: Vec<String> = sql::query_scalar("SELECT e::text FROM audit_events e")
+            .fetch_all(&mut admin)
+            .await
+            .unwrap();
+        for (name, text) in [
+            ("members-abuse.transcript", transcript.join("\n")),
+            ("members-abuse.invites", rows.join("\n")),
+            ("members-abuse.ledger", ledger.join("\n")),
+        ] {
+            for t in [&token, &revoked] {
+                assert!(!text.contains(t.as_str()), "{name} holds an invite token");
+            }
+            std::fs::write(std::path::Path::new(&dir).join(name), text).unwrap();
+        }
+    }
+}

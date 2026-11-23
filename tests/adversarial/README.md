@@ -55,6 +55,11 @@ forged `iss` at an attacker host (the attacker's server sees no request), `jku`,
 same 401), and a canary in the external token's claims. The tests write the captured logs with spans,
 the ledger and a dump of every table to `ARTIFACT_DIR`, and the oracle scans them.
 
+T6 (`cases/T6.sh`) attacks invites and memberships by running the `members_abuse` cargo test (throwaway
+Postgres; skips without Docker): another org's owner naming this org, guessed, near-miss, replayed,
+revoked and other-email invite tokens all get the same 404, and the plaintext token appears in no
+invite row, ledger row or response transcript (all written to `ARTIFACT_DIR` for the oracle).
+
 Fixtures. `fixtures/git_upstream.py` is A1's Git upstream. `fixtures/http_upstream.py` is A3b's
 reflecting API, run once as the provider and once as the attacker's host; everything the
 attacker's host receives is logged into `ARTIFACT_DIR`.

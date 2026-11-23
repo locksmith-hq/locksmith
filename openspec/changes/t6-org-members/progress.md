@@ -62,3 +62,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Cause: the new Postgres-backed binaries `members`, `memberships`, `orgs` were not in the nextest `portable` skip filter, so they panicked on the Docker-less macOS runner (`ls-pg-test` start). Added them to `.config/nextest.toml`.
 - Verified: `just quick` -> pass; pushed once to rerun checks.
 - Next: 4.4 and 4.5, then groups 5-7. PR #605 not auto-merge armed (tasks unticked).
+
+## 2026-11-23 worker-c
+- Task: 4.4 - done. Added `members_abuse_cross_org_and_token_probes_are_uniform_404` (members.rs) and adversarial case `tests/adversarial/cases/T6.sh` (README documented).
+- Verified: `cargo test -p ls-control-plane --test members --test memberships` (11 passed), `bash tests/adversarial/run.sh T6` PASS, merged main (hygiene scripts pass), `just quick`.
+- Not done: 4.5 stays open: `just leak-scan` and `just audit-verify` need the local stack (`just up`), not run here. Groups 5-7 (web, desktop, e2e) remain.
+- Earlier red `hygiene` on #605 cleared by merging main (task-edit guard changed on main).

@@ -525,7 +525,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/BindingSummary"
+              "$ref": "#/components/schemas/PublishedBinding"
             },
             "maxItems": 1000,
             "type": "array"
@@ -540,6 +540,16 @@
         "additionalProperties": false,
         "description": "One gateway binding, non-secret fields only. Which optional fields are set depends on `kind`.",
         "properties": {
+          "allowed_actions": {
+            "description": "`aws`: the IAM actions the org's unexpired `delegate` grants on this binding allow\n(sorted, de-duplicated; names only, never resources). Computed on read, never published.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "database": {
             "description": "`pg`: the bound database.",
             "type": [
@@ -1855,6 +1865,124 @@
         ],
         "type": "object"
       },
+      "PublishedBinding": {
+        "additionalProperties": false,
+        "description": "One binding as the gateway publishes it: the [`BindingSummary`] fields plus, for `aws` only,\nthe binding's base-credential secret id. That id is stored as the join key to the org's\n`delegate` grants (d2 design decision 8) and is never served.",
+        "properties": {
+          "database": {
+            "description": "`pg`: the bound database.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "header": {
+            "description": "`http`: the header the secret is injected into (never its value or template).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "host": {
+            "description": "`pg`, `git`: the upstream host.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BindingKind"
+          },
+          "max_duration_secs": {
+            "description": "`aws`: the longest vended session, in seconds.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Display name: the database name (`pg`), the origin or host (`http`, `git`), the role (`aws`).",
+            "type": "string"
+          },
+          "origin": {
+            "description": "`http`: the exact upstream origin.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "port": {
+            "description": "`pg`: the upstream port.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "region": {
+            "description": "`aws`: the region.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repo": {
+            "description": "`git`: `owner` or `owner/repo`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "description": "`aws`: the role ARN.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "secret_id": {
+            "description": "`aws`: the base-credential secret id (an id, never a value). Refused on other kinds.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tls": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BindingTls",
+                "description": "`pg`: the upstream TLS mode."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "description": "`pg`: the bound database user.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vend": {
+            "description": "`aws`: whether short-lived credentials may be vended.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "type": "object"
+      },
       "RelayEventKind": {
         "description": "The kind of a relay event.",
         "enum": [
@@ -2441,7 +2569,7 @@
     },
     "/internal/v1/gateway/bindings": {
       "put": {
-        "description": "The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, secret id or any unknown field is a `400`.",
+        "description": "The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, a `secret_id` on any kind but `aws`, or any unknown field is a `400`; the `aws` secret id is stored as the join key to `delegate` grants and never served.",
         "operationId": "put_gateway_bindings",
         "parameters": [
           {

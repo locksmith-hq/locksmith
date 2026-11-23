@@ -135,6 +135,20 @@ test("bindings: AWS rows show role, region, vend and max duration (d2-aws-sts)",
   open("/bindings");
   const row = (await screen.findAllByText("arn:aws:iam::123456789012:role/deploy"))[0]!.closest("tr")!;
   expect(row).toHaveTextContent("AWS");
-  expect(row).toHaveTextContent("Role: arn:aws:iam::123456789012:role/deploy · Region: eu-west-1 · Vend credentials: yes · Max duration: 900s");
+  expect(row).toHaveTextContent("Role: arn:aws:iam::123456789012:role/deploy · Region: eu-west-1 · Vend credentials: yes · Max duration: 900s · Allowed actions: s3:GetObject, s3:PutObject");
   expect(row.textContent).not.toMatch(/external|secret|token|AKIA/i);
+});
+
+test("bindings: a credential-shaped field injected into an AWS row never renders (d2-aws-sts 5.1)", async () => {
+  installFixtureFetch();
+  const client = createClient("o");
+  const leaky = {
+    kind: "aws" as const, name: "arn:aws:iam::1:role/dev", role: "arn:aws:iam::1:role/dev", region: "us-east-1", vend: true, max_duration_secs: 900,
+    allowed_actions: ["s3:ListBucket"], secret_id: "SECRET-ID-VALUE", external_id: "EXT-VALUE", secret_access_key: "SAK-VALUE", session_token: "TOKEN-VALUE",
+  };
+  client.listBindings = async () => [leaky];
+  const { container } = render(<App client={client} initialPath="/bindings" />);
+  const row = (await screen.findAllByText("arn:aws:iam::1:role/dev"))[0]!.closest("tr")!;
+  expect(row).toHaveTextContent("Allowed actions: s3:ListBucket");
+  expect(container.textContent).not.toMatch(/SECRET-ID-VALUE|EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
 });

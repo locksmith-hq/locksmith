@@ -665,14 +665,14 @@ test("bindings: lists non-secret fields, shows errors, empty and not-connected s
   expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
 });
 
-test("bindings: AWS rows show role, region, vend and max duration; undeclared fields never render", async () => {
+test("bindings: AWS rows show role, region, vend, max duration and allowed actions; undeclared fields never render", async () => {
   const aws = { kind: "aws", name: "arn:aws:iam::1:role/dev", role: "arn:aws:iam::1:role/dev", region: "us-east-1", vend: false, max_duration_secs: 1800 };
   // A leaky payload must not leak: only the fields bindingDetails declares are rendered.
-  const leaky = { ...aws, external_id: "EXT-VALUE", secret_access_key: "SAK-VALUE", session_token: "TOKEN-VALUE" };
+  const leaky = { ...aws, allowed_actions: ["s3:GetObject", "sts:GetCallerIdentity"], secret_id: "SECRET-ID-VALUE", external_id: "EXT-VALUE", secret_access_key: "SAK-VALUE", session_token: "TOKEN-VALUE" };
   m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockResolvedValue([leaky]) } as never);
   const { container } = render(<App />);
   await nav("Bindings");
   const row = (await screen.findAllByText("arn:aws:iam::1:role/dev"))[0]!.closest("tr")!;
-  expect(row).toHaveTextContent("Region: us-east-1 · Vend credentials: no · Max duration: 1800s");
-  expect(container.textContent).not.toMatch(/EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
+  expect(row).toHaveTextContent("Region: us-east-1 · Vend credentials: no · Max duration: 1800s · Allowed actions: s3:GetObject, sts:GetCallerIdentity");
+  expect(container.textContent).not.toMatch(/SECRET-ID-VALUE|EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
 });

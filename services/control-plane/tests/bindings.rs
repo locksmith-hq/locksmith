@@ -235,3 +235,166 @@ async fn bindings_oversized_or_nameless_snapshot_is_refused() {
     let (status, _) = put(&app, org, Some(TOKEN), json!({"items": [pg_item(&long)]})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+/// `POST` as the org's dev principal; returns the created object's `id`.
+async fn create(app: &Router, org: Uuid, uri: &str, body: Value) -> Uuid {
+    let req = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("x-locksmith-dev-org", org.to_string())
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let (status, text) = send(app, req).await;
+    assert_eq!(status, StatusCode::CREATED, "{uri}: {text}");
+    let v: Value = serde_json::from_str(&text).unwrap();
+    let id = if v["agent"].is_object() {
+        &v["agent"]["id"]
+    } else {
+        &v["id"]
+    };
+    id.as_str().unwrap().parse().unwrap()
+}
+
+/// An org's secrets (by name) under one project and environment.
+async fn secrets(app: &Router, org: Uuid, names: &[&str]) -> Vec<Uuid> {
+    let p = create(app, org, "/v1/projects", json!({"name": "p"})).await;
+    let e = create(
+        app,
+        org,
+        &format!("/v1/projects/{p}/environments"),
+        json!({"name": "dev"}),
+    )
+    .await;
+    let mut out = Vec::new();
+    for n in names {
+        let uri = format!("/v1/projects/{p}/environments/{e}/secrets");
+        out.push(create(app, org, &uri, json!({ "name": n })).await);
+    }
+    out
+}
+
+async fn delegate(app: &Router, org: Uuid, agent: Uuid, secret: Uuid, actions: &[&str]) {
+    let body = json!({
+        "secret_id": secret, "mode": "delegate",
+        "scope": {"actions": actions, "resources": ["arn:aws:s3:::planted-resource-bucket/*"]}
+    });
+    create(app, org, &format!("/v1/agents/{agent}/grants"), body).await;
+}
+
+fn aws_item(role: &str, secret: Uuid) -> Value {
+    json!({
+        "kind": "aws", "name": role, "role": role, "region": "eu-west-1",
+        "vend": true, "max_duration_secs": 900, "secret_id": secret
+    })
+}
+
+/// d2 task 5.1 (design decision 8): an AWS row shows the action names of the org's unexpired
+/// delegate grants on its secret; relay and expired grants, other orgs' grants, resources and
+/// the secret id never appear, and non-AWS rows carry no actions.
+#[tokio::test]
+async fn bindings_aws_rows_show_allowed_actions_of_the_orgs_delegate_grants_only() {
+    let pg = common::Pg::migrated().await;
+    let app = app_with(pg.app_db(PoolSettings::default()));
+    let org_a = new_org(&app, "a").await;
+    let org_b = new_org(&app, "b").await;
+    let a = secrets(&app, org_a, &["AWS_DEPLOY", "AWS_IDLE", "UPSTREAM"]).await;
+    let b = secrets(&app, org_b, &["AWS_B"]).await;
+    let (deploy, idle, upstream, b_secret) = (a[0], a[1], a[2], b[0]);
+
+    let ci = create(&app, org_a, "/v1/agents", json!({"name": "ci"})).await;
+    let ops = create(&app, org_a, "/v1/agents", json!({"name": "ops"})).await;
+    delegate(&app, org_a, ci, deploy, &["s3:PutObject", "s3:GetObject"]).await;
+    delegate(
+        &app,
+        org_a,
+        ops,
+        deploy,
+        &["s3:GetObject", "sts:GetCallerIdentity"],
+    )
+    .await;
+    create(
+        &app,
+        org_a,
+        &format!("/v1/agents/{ci}/grants"),
+        json!({"secret_id": upstream, "mode": "relay"}),
+    )
+    .await;
+    let b_agent = create(&app, org_b, "/v1/agents", json!({"name": "b"})).await;
+    delegate(&app, org_b, b_agent, b_secret, &["ec2:OrgBOnly"]).await;
+
+    // An expired delegate grant on the idle binding does not count.
+    let mut admin = pg.admin().await;
+    sql::query(
+        "INSERT INTO agent_grants (org_id, agent_id, secret_id, mode, scope, expires_at) \
+         VALUES ($1, $2, $3, 'delegate', \
+                 '{\"actions\": [\"iam:ExpiredOnly\"], \"resources\": [\"*\"]}'::jsonb, \
+                 now() - interval '1 second')",
+    )
+    .bind(org_a)
+    .bind(ops)
+    .bind(idle)
+    .execute(&mut admin)
+    .await
+    .unwrap();
+    admin.close().await.unwrap();
+
+    // Org A's snapshot even names org B's secret: RLS keeps org B's grants out.
+    let snapshot = json!({"items": [
+        aws_item("arn:aws:iam::1:role/deploy", deploy),
+        aws_item("arn:aws:iam::1:role/idle", idle),
+        aws_item("arn:aws:iam::1:role/foreign", b_secret),
+        pg_item("db"),
+        http_item(),
+        json!({"kind": "aws", "name": "arn:aws:iam::1:role/old-gateway", "region": "eu-west-1"}),
+    ]});
+    let (status, body) = put(&app, org_a, Some(TOKEN), snapshot).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (status, body) = list(&app, org_a).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let items = serde_json::from_str::<Value>(&body).unwrap()["items"].clone();
+    assert_eq!(
+        items[0]["allowed_actions"],
+        json!(["s3:GetObject", "s3:PutObject", "sts:GetCallerIdentity"])
+    );
+    assert_eq!(items[1]["allowed_actions"], json!([]));
+    assert_eq!(items[2]["allowed_actions"], json!([]));
+    assert!(items[3].get("allowed_actions").is_none(), "{body}");
+    assert!(items[4].get("allowed_actions").is_none(), "{body}");
+    // An AWS row from an older gateway (no secret id): unknown, not "none".
+    assert!(items[5].get("allowed_actions").is_none(), "{body}");
+    for absent in [
+        "secret_id",
+        &deploy.to_string(),
+        &b_secret.to_string(),
+        "ec2:OrgBOnly",
+        "iam:ExpiredOnly",
+        "planted-resource-bucket",
+        "resources",
+    ] {
+        assert!(!body.contains(absent), "{absent} in {body}");
+    }
+
+    // Org B sees its own grant on its own binding.
+    let (status, body) = put(
+        &app,
+        org_b,
+        Some(TOKEN),
+        json!({"items": [aws_item("arn:aws:iam::2:role/b", b_secret)]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (_, body) = list(&app, org_b).await;
+    let v: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["items"][0]["allowed_actions"], json!(["ec2:OrgBOnly"]));
+
+    // The gateway cannot publish actions itself, nor a secret id on a non-AWS row.
+    let mut forged = aws_item("arn:aws:iam::1:role/deploy", deploy);
+    forged["allowed_actions"] = json!(["*"]);
+    let (status, _) = put(&app, org_a, Some(TOKEN), json!({"items": [forged]})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let mut http = http_item();
+    http["secret_id"] = json!(upstream);
+    let (status, _) = put(&app, org_a, Some(TOKEN), json!({"items": [http]})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

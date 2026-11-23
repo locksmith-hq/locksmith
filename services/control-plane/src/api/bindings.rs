@@ -9,13 +9,21 @@
 //! `PUT /internal/v1/gateway/bindings` (service token, D3-1). The control plane keeps the latest
 //! snapshot per org, replaced whole, and `GET /v1/bindings` serves it; until a snapshot exists
 //! the list is empty. The snapshot type refuses unknown fields, so a gateway cannot store a
-//! password, template, secret id or any other field this contract does not name.
+//! password, template or any other field this contract does not name.
+//!
+//! d2 task 5.1 (d2 design decision 8): an `aws` row is published with its base-credential secret
+//! id, the join key to the org's `delegate` grants. `GET /v1/bindings` never serves that id; it
+//! serves `allowed_actions` instead, the action names of the org's unexpired delegate grants on
+//! that secret (no resources, no policy).
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use super::extract::ApiJson;
 use super::responses::{InternalWriteErrors, ReadErrors};
@@ -95,6 +103,83 @@ pub struct BindingSummary {
     /// `aws`: the longest vended session, in seconds.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_duration_secs: Option<u32>,
+    /// `aws`: the IAM actions the org's unexpired `delegate` grants on this binding allow
+    /// (sorted, de-duplicated; names only, never resources). Computed on read, never published.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_actions: Option<Vec<String>>,
+}
+
+/// One binding as the gateway publishes it: the [`BindingSummary`] fields plus, for `aws` only,
+/// the binding's base-credential secret id. That id is stored as the join key to the org's
+/// `delegate` grants (d2 design decision 8) and is never served.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PublishedBinding {
+    pub kind: BindingKind,
+    /// Display name: the database name (`pg`), the origin or host (`http`, `git`), the role (`aws`).
+    pub name: String,
+    /// `http`: the exact upstream origin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    /// `http`: the header the secret is injected into (never its value or template).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+    /// `git`: `owner` or `owner/repo`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// `pg`, `git`: the upstream host.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    /// `pg`: the upstream port.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    /// `pg`: the bound database user.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    /// `pg`: the bound database.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database: Option<String>,
+    /// `pg`: the upstream TLS mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<BindingTls>,
+    /// `aws`: the role ARN.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// `aws`: the region.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    /// `aws`: whether short-lived credentials may be vended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vend: Option<bool>,
+    /// `aws`: the longest vended session, in seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_duration_secs: Option<u32>,
+    /// `aws`: the base-credential secret id (an id, never a value). Refused on other kinds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_id: Option<Uuid>,
+}
+
+impl PublishedBinding {
+    /// The served summary, without the secret id.
+    fn summary(self, allowed_actions: Option<Vec<String>>) -> BindingSummary {
+        BindingSummary {
+            kind: self.kind,
+            name: self.name,
+            origin: self.origin,
+            header: self.header,
+            repo: self.repo,
+            host: self.host,
+            port: self.port,
+            user: self.user,
+            database: self.database,
+            tls: self.tls,
+            role: self.role,
+            region: self.region,
+            vend: self.vend,
+            max_duration_secs: self.max_duration_secs,
+            allowed_actions,
+        }
+    }
 }
 
 /// Every binding the gateway reports for the org.
@@ -120,24 +205,56 @@ pub async fn list(
     org: OrgBinding,
 ) -> Result<Json<BindingList>, ApiError> {
     let org_id = org.org_id;
-    let stored: Option<String> = state
+    let (stored, actions) = state
         .db()
         .with_org(org_id, move |c| {
             Box::pin(async move {
                 let row = sql::query("SELECT items::text AS items FROM gateway_bindings")
-                    .fetch_optional(c)
+                    .fetch_optional(&mut *c)
                     .await?;
-                Ok::<_, ApiError>(match row {
-                    Some(r) => Some(r.try_get::<String, _>("items")?),
-                    None => None,
-                })
+                let Some(row) = row else {
+                    return Ok::<_, ApiError>((None, BTreeMap::new()));
+                };
+                let stored: String = row.try_get("items")?;
+                // Actions of the org's unexpired delegate grants, by secret (RLS keeps this org's).
+                let rows = sql::query(
+                    "SELECT g.secret_id, a.action FROM agent_grants g \
+                     CROSS JOIN LATERAL jsonb_array_elements_text(g.scope -> 'actions') AS a(action) \
+                     WHERE g.mode = 'delegate' AND (g.expires_at IS NULL OR g.expires_at > now())",
+                )
+                .fetch_all(c)
+                .await?;
+                let mut actions: BTreeMap<Uuid, BTreeSet<String>> = BTreeMap::new();
+                for r in &rows {
+                    actions
+                        .entry(r.try_get("secret_id")?)
+                        .or_default()
+                        .insert(r.try_get("action")?);
+                }
+                Ok((Some(stored), actions))
             })
         })
         .await?;
-    let items = match stored {
+    let published: Vec<PublishedBinding> = match stored {
         Some(text) => serde_json::from_str(&text).map_err(|_| ApiError::bare(Kind::Internal))?,
         None => Vec::new(),
     };
+    let items = published
+        .into_iter()
+        .map(|b| {
+            // No secret id (a snapshot from an older gateway): unknown, so no field, not "none".
+            let allowed = b
+                .secret_id
+                .filter(|_| b.kind == BindingKind::Aws)
+                .map(|id| {
+                    actions
+                        .get(&id)
+                        .map(|a| a.iter().cloned().collect())
+                        .unwrap_or_default()
+                });
+            b.summary(allowed)
+        })
+        .collect();
     Ok(Json(BindingList { items }))
 }
 
@@ -146,7 +263,7 @@ pub async fn list(
 #[serde(deny_unknown_fields)]
 pub struct BindingSnapshot {
     #[schema(max_items = 1000)]
-    pub items: Vec<BindingSummary>,
+    pub items: Vec<PublishedBinding>,
 }
 
 impl BindingSnapshot {
@@ -172,6 +289,11 @@ impl BindingSnapshot {
             if texts.iter().flatten().any(|t| t.len() > MAX_TEXT) {
                 return Err(ApiError::validation("a binding field is too long"));
             }
+            if b.secret_id.is_some() && b.kind != BindingKind::Aws {
+                return Err(ApiError::validation(
+                    "only an `aws` binding carries a `secret_id`",
+                ));
+            }
         }
         Ok(())
     }
@@ -183,7 +305,7 @@ impl BindingSnapshot {
     operation_id = "put_gateway_bindings",
     tag = "internal",
     summary = "Replace the org's binding inventory (gateway only)",
-    description = "The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, secret id or any unknown field is a `400`.",
+    description = "The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, a `secret_id` on any kind but `aws`, or any unknown field is a `400`; the `aws` secret id is stored as the join key to `delegate` grants and never served.",
     params(
         ("X-Locksmith-Org" = Uuid, Header, description = "The org the gateway acts for (the token's `org`)"),
     ),

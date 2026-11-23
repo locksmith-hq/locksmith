@@ -5,7 +5,9 @@
 //! list them. The wire type [`BindingSummary`] has no field for a secret id, a header template, a
 //! password or a version: [`summaries`] copies only names, hosts, ports, users, databases, TLS
 //! modes, header names, Git repository prefixes and AWS role, region, `vend` and maximum duration
-//! (never the external id). A failure is retried a few times, then
+//! (never the external id). An AWS row alone also carries its base-credential secret id (an id,
+//! never a value): the control plane's join key to the org's `delegate` grants, stored and never
+//! served (d2 design decision 8). A failure is retried a few times, then
 //! logged (status class only, never a body); it never blocks or fails the relay.
 
 use std::sync::Arc;
@@ -81,6 +83,9 @@ pub struct BindingSummary {
     pub vend: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_duration_secs: Option<u32>,
+    /// `aws` only: the base-credential secret id, the join key to delegate grants.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret_id: Option<uuid::Uuid>,
 }
 
 impl BindingSummary {
@@ -100,6 +105,7 @@ impl BindingSummary {
             region: None,
             vend: None,
             max_duration_secs: None,
+            secret_id: None,
         }
     }
 }
@@ -139,6 +145,7 @@ pub fn summaries(bindings: &Bindings) -> Vec<BindingSummary> {
         s.region = Some(a.region.clone());
         s.vend = Some(a.vend);
         s.max_duration_secs = Some(a.max_duration_secs);
+        s.secret_id = Some(a.secret_id);
         out.push(s);
     }
     out
@@ -268,6 +275,8 @@ max_duration_secs = 1800
     fn bindings_publish_summaries_carry_non_secret_fields_only() {
         let items = summaries(&config());
         let text = serde_json::to_string(&Snapshot { items: &items }).unwrap();
+        // Only the AWS row carries a secret id (the grant join key); judge the rest without it.
+        let non_aws = serde_json::to_string(&items[..3]).unwrap();
         for secret in [
             SECRET_ID,
             TEMPLATE,
@@ -276,7 +285,16 @@ max_duration_secs = 1800
             "secret_id",
             "password",
             "version",
-            AWS_SECRET_ID,
+            EXTERNAL_ID,
+            "external_id",
+        ] {
+            assert!(!non_aws.contains(secret), "{secret} in {non_aws}");
+        }
+        for secret in [
+            TEMPLATE,
+            "{secret}",
+            "password",
+            "version",
             EXTERNAL_ID,
             "external_id",
         ] {
@@ -293,7 +311,7 @@ max_duration_secs = 1800
                  "user": "svc", "database": "appdb", "tls": "verify-full"},
                 {"kind": "aws", "name": "arn:aws:iam::123456789012:role/deploy",
                  "role": "arn:aws:iam::123456789012:role/deploy", "region": "eu-west-1",
-                 "vend": true, "max_duration_secs": 1800},
+                 "vend": true, "max_duration_secs": 1800, "secret_id": AWS_SECRET_ID},
             ])
         );
     }

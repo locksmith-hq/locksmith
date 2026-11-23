@@ -91,7 +91,7 @@ export interface paths {
         get?: never;
         /**
          * Replace the org's binding inventory (gateway only)
-         * @description The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, secret id or any unknown field is a `400`.
+         * @description The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, a `secret_id` on any kind but `aws`, or any unknown field is a `400`; the `aws` secret id is stored as the join key to `delegate` grants and never served.
          */
         put: operations["put_gateway_bindings"];
         post?: never;
@@ -945,10 +945,15 @@ export interface components {
         };
         /** @description The gateway's full inventory. It replaces the org's previous snapshot. */
         BindingSnapshot: {
-            items: components["schemas"]["BindingSummary"][];
+            items: components["schemas"]["PublishedBinding"][];
         };
         /** @description One gateway binding, non-secret fields only. Which optional fields are set depends on `kind`. */
         BindingSummary: {
+            /**
+             * @description `aws`: the IAM actions the org's unexpired `delegate` grants on this binding allow
+             *     (sorted, de-duplicated; names only, never resources). Computed on read, never published.
+             */
+            allowed_actions?: string[] | null;
             /** @description `pg`: the bound database. */
             database?: string | null;
             /** @description `http`: the header the secret is injected into (never its value or template). */
@@ -1431,6 +1436,50 @@ export interface components {
             name: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /**
+         * @description One binding as the gateway publishes it: the [`BindingSummary`] fields plus, for `aws` only,
+         *     the binding's base-credential secret id. That id is stored as the join key to the org's
+         *     `delegate` grants (d2 design decision 8) and is never served.
+         */
+        PublishedBinding: {
+            /** @description `pg`: the bound database. */
+            database?: string | null;
+            /** @description `http`: the header the secret is injected into (never its value or template). */
+            header?: string | null;
+            /** @description `pg`, `git`: the upstream host. */
+            host?: string | null;
+            kind: components["schemas"]["BindingKind"];
+            /**
+             * Format: int32
+             * @description `aws`: the longest vended session, in seconds.
+             */
+            max_duration_secs?: number | null;
+            /** @description Display name: the database name (`pg`), the origin or host (`http`, `git`), the role (`aws`). */
+            name: string;
+            /** @description `http`: the exact upstream origin. */
+            origin?: string | null;
+            /**
+             * Format: int32
+             * @description `pg`: the upstream port.
+             */
+            port?: number | null;
+            /** @description `aws`: the region. */
+            region?: string | null;
+            /** @description `git`: `owner` or `owner/repo`. */
+            repo?: string | null;
+            /** @description `aws`: the role ARN. */
+            role?: string | null;
+            /**
+             * Format: uuid
+             * @description `aws`: the base-credential secret id (an id, never a value). Refused on other kinds.
+             */
+            secret_id?: string | null;
+            tls?: components["schemas"]["BindingTls"] | null;
+            /** @description `pg`: the bound database user. */
+            user?: string | null;
+            /** @description `aws`: whether short-lived credentials may be vended. */
+            vend?: boolean | null;
         };
         /**
          * @description The kind of a relay event.

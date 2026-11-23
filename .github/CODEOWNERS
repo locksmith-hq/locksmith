@@ -33,7 +33,6 @@
 /crates/ls-ipc/ @tomer555
 /crates/ls-broker/ @tomer555
 /crates/ls-update/ @tomer555
-/crates/ls-license/ @tomer555
 
 # Licensing: the source-available layer and the licensing statement (the maintainers own the license terms).
 /ee/ @tomer555

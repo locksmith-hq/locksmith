@@ -1,6 +1,5 @@
 //! Single source of truth for wiring Locksmith hooks into agents. Used by `smith init`, doctor
 //! and the `integrations/` files (a test keeps those in sync).
-#![allow(dead_code)] // consumed by init/doctor
 
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -37,14 +36,6 @@ impl Agent {
             ],
         }
     }
-
-    fn binaries(self) -> &'static [&'static str] {
-        match self {
-            Agent::ClaudeCode => &["claude"],
-            Agent::Cursor => &["cursor-agent", "cursor"],
-            Agent::Codex => &["codex"],
-        }
-    }
 }
 
 fn marker(a: Agent, event: &str) -> String {
@@ -67,15 +58,6 @@ pub fn wrapper(a: Agent, event: &str) -> String {
         }
         _ => format!("{test} {{ echo '{MISSING}' >&2; exit 2; }}; {run}"),
     }
-}
-
-fn on_path(bin: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(bin).is_file()))
-}
-
-pub fn binary_on_path(a: Agent) -> bool {
-    a.binaries().iter().any(|b| on_path(b))
 }
 
 /// Agents the repo shows signs of using.
@@ -119,6 +101,7 @@ fn json_entry(a: Agent, event: &str) -> Value {
 }
 
 /// Hooks object for Claude Code (plugin and settings) and Cursor.
+#[cfg(test)]
 pub fn hooks_json(a: Agent) -> Value {
     let hooks: serde_json::Map<String, Value> = a
         .events()

@@ -34,3 +34,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (PR #640) - done
 - Verified: macos failure was locksmithd test agent_session_start_grants_only_inside_policy; passes locally (flaky, unrelated). Merged origin/main again; just quick -> OK.
 - Notes for next session: recheck macos on #640 after push; 39 tasks still open, no task work done this run.
+
+## 2026-11-23 worker
+- Task: ci-fix - done
+- Verified: npx vitest run src/route-table.test.ts -> 2 passed
+- Notes for next session: web CI failed because route-table.json lacked GET /v1/bindings and PUT /internal/v1/gateway/bindings (added by d3 to openapi.json). 39 tasks still unticked; PR #640 not ready for auto-merge.

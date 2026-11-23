@@ -83,3 +83,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: t6 PR #605 hygiene - blocked
 - Verified: tree-check OK; check-task-edits fails on commits 7650f18 and 417d694 (authored "Claude", no App identity); main CI green; branch up to date with main
 - Notes for next session: no code fix possible without rewriting history; waiting on lead answer to needs-rescue #666 (likely: new branch with the net diff re-committed under an App identity). Pushed nothing.
+
+## 2026-11-23 08:02 worker
+- Task: ci-fix (hygiene) - blocked
+- Verified: bash scripts/check-task-edits.sh -> fails on 2 pre-persona commits by "Claude" (417d694, 7650f18); tree-check and public-check OK
+- Notes for next session: only fix is archiving that session or a lead-side exemption; needs-rescue #666 is open and wake-lead. Do not rewrite history.

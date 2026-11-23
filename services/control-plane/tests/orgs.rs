@@ -238,7 +238,7 @@ async fn org_select_old_user_defaults_to_the_personal_org_as_owner() {
     let pg = common::Pg::start().await;
     let mut admin = pg.admin().await;
     migrate::migrator()
-        .run_to(13, &mut admin)
+        .run_to(14, &mut admin)
         .await
         .expect("migrations to 0013");
     let personal = Uuid::now_v7();

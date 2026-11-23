@@ -17,7 +17,7 @@ async fn migration_backfills_one_owner_membership_per_existing_user() {
     // Apply 0001..=0013, add users, then apply 0014 on top.
     let mut c = pg.admin().await;
     migrate::migrator()
-        .run_to(13, &mut c)
+        .run_to(14, &mut c)
         .await
         .expect("migrations to 0013");
     let (a, b) = (Uuid::now_v7(), Uuid::now_v7());

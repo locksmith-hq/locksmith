@@ -1,6 +1,6 @@
 // Fixture data for the MCP tool switches and clients, shaped like the control-plane responses.
 // Test and story data only: ids and names, never a token or a secret value.
-import type { Invite, Member, MemberList, MyOrg, McpClient, McpToolSetting } from "./index";
+import type { BindingSummary, Invite, Member, MemberList, MyOrg, McpClient, McpToolSetting } from "./index";
 
 export const mcpToolSettings: McpToolSetting[] = [
   { layer: "hub", tool: "list_projects", description: "Projects in your org.", default_enabled: true, enabled: true, overridden: false },
@@ -53,4 +53,12 @@ export const invites: Invite[] = [
     invited_by: "0192f0a0-0000-7000-8000-0000000000c1",
     expires_at: "2026-01-10T00:00:00Z",
   },
+];
+
+/** One binding of every kind, shaped like `GET /v1/bindings`. Non-secret fields only. */
+export const bindingSummaries: BindingSummary[] = [
+  { kind: "http", name: "https://api.example.com", origin: "https://api.example.com", header: "Authorization" },
+  { kind: "git", name: "github.com/acme", host: "github.com", repo: "acme" },
+  { kind: "pg", name: "appdb", host: "db.internal.example.com", port: 5432, user: "app", database: "appdb", tls: "verify-full" },
+  { kind: "aws", name: "arn:aws:iam::123456789012:role/deploy", role: "arn:aws:iam::123456789012:role/deploy", region: "eu-west-1", vend: true, max_duration_secs: 900 },
 ];

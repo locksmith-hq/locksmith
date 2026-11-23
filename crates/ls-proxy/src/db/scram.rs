@@ -11,6 +11,7 @@ use zeroize::Zeroizing;
 /// Iteration counts above this are refused (a hostile upstream could stall the relay).
 const MAX_ITERATIONS: u32 = 10_000_000;
 
+/// Sans-IO SCRAM-SHA-256 client (RFC 7677); the caller moves the bytes. Shared with the gateway (D3).
 pub struct Client {
     first_bare: String,
     nonce: String,

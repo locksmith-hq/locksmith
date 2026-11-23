@@ -24,7 +24,7 @@ The listener SHALL require TLS before the startup message and SHALL authenticate
 
 #### Scenario: Invalid agent token
 - **WHEN** a client completes TLS and sends an expired agent token as its password
-- **THEN** the gateway answers SQLSTATE `28P01`, makes no upstream call and no decrypt call, and records a denied ledger event
+- **THEN** the gateway answers SQLSTATE `28P01`, makes no upstream call and no decrypt call, and logs the refusal by slug only, with no ledger event since no agent identity exists
 
 ### Requirement: Binding and grant limit the target
 A Postgres password SHALL be decrypted and used only for a binding that exists in the gateway configuration, only for an agent holding an unexpired relay grant for that binding's secret, and only to the binding's fixed host, port, user and database. A client-supplied `user`, `options` or other startup parameter SHALL NOT change the upstream user, host or database. The upstream address SHALL pass the gateway's address guard (private and loopback addresses only when the binding allows them).

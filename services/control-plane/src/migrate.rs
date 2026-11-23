@@ -67,18 +67,23 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     ),
     (
         14,
-        "memberships",
-        include_str!("../migrations/0014_memberships.sql"),
+        "gateway bindings",
+        include_str!("../migrations/0014_gateway_bindings.sql"),
     ),
     (
         15,
-        "org member read",
-        include_str!("../migrations/0015_org_member_read.sql"),
+        "memberships",
+        include_str!("../migrations/0015_memberships.sql"),
     ),
     (
         16,
+        "org member read",
+        include_str!("../migrations/0016_org_member_read.sql"),
+    ),
+    (
+        17,
         "member emails",
-        include_str!("../migrations/0016_member_emails.sql"),
+        include_str!("../migrations/0017_member_emails.sql"),
     ),
 ];
 

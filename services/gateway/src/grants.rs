@@ -82,6 +82,12 @@ impl GrantError {
 /// Reads an agent's unexpired grants.
 pub trait GrantSource: Send + Sync {
     fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>>;
+
+    /// The same read, never served from a cache. Long-lived sessions use it to re-check a grant,
+    /// so a revocation is seen on the next check and not one cache TTL later.
+    fn grants_uncached(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+        self.grants(agent_id)
+    }
 }
 
 #[derive(Deserialize)]
@@ -229,11 +235,24 @@ impl GrantCache {
         self.insert_at(agent_id, grants.clone(), started);
         Ok(grants)
     }
+
+    /// Fetch from the source and refresh the cached entry, so one revoked grant is not served
+    /// to other callers either.
+    async fn read_uncached(&self, agent_id: Uuid) -> Result<Vec<Grant>, GrantError> {
+        let started = Instant::now();
+        let grants = self.source.grants(agent_id).await?;
+        self.insert_at(agent_id, grants.clone(), started);
+        Ok(grants)
+    }
 }
 
 impl GrantSource for GrantCache {
     fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
         Box::pin(self.read(agent_id))
+    }
+
+    fn grants_uncached(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+        Box::pin(self.read_uncached(agent_id))
     }
 }
 
@@ -546,6 +565,19 @@ mod tests {
         // Refreshing an agent already in a full map evicts nothing.
         c.insert_at(e, Vec::new(), later);
         assert_eq!(c.lock().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn uncached_read_sees_a_revocation_the_cache_still_hides() {
+        let src = Arc::new(testkit::StubGrants::default());
+        let secret = Uuid::now_v7();
+        src.set(AGENT, vec![grant(secret, "relay", None)]);
+        let c = GrantCache::new(src.clone(), GrantCacheSettings::default());
+        assert_eq!(c.grants(AGENT).await.unwrap().len(), 1);
+        src.set(AGENT, Vec::new());
+        assert_eq!(c.grants(AGENT).await.unwrap().len(), 1, "cache is stale");
+        assert!(c.grants_uncached(AGENT).await.unwrap().is_empty());
+        assert!(c.grants(AGENT).await.unwrap().is_empty(), "cache refreshed");
     }
 
     #[tokio::test]

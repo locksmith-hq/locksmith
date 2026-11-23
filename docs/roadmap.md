@@ -91,7 +91,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
-| P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ◐ |
+| P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ☑ |
 | P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - | ◐ |
 | P4 | `p4-sdks` | SDKs generated from OpenAPI, and the plugins switched to the remote Agent MCP where it helps. | m1-remote-mcp:contract | ☑ |
 

@@ -1,0 +1,5 @@
+{
+  "code": 2,
+  "stderr": "Locksmith cannot verify this command (`eval` runs code that cannot be checked in advance); approve only if you trust it",
+  "stdout": null
+}

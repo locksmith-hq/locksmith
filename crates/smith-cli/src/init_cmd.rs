@@ -163,20 +163,44 @@ fn build(root: &Path, hub: Option<&str>) -> Result<Plan, Fail> {
 
     // 5. agent hooks and the MCP server. Codex keeps both in one file, so its text is chained.
     for a in agents::detect(root) {
+        // Only Windsurf (Devin Desktop) is still gated: wiring its hooks now would install a hook
+        // that exits 2 on every call. Say so instead of skipping silently.
+        if !agents::hook_handler_ready(a) {
+            p.notes.push(format!(
+                "{}: detected but not wired (no hook handler for its format yet), so it is not protected{}",
+                a.id(),
+                agents::mcp_user_hint(a).map_or(String::new(), |h| format!(
+                    "; add the locksmith MCP server by hand to {h} (command `locksmith-mcp`)"
+                ))
+            ));
+            continue;
+        }
         let f = agents::config_path(a, root);
         let before = read(&f);
         let mut after = agents::merge_hooks(a, before.as_deref())
             .map_err(|e| usage(format!("{}: {e}", f.display())))?;
         let mut files = vec![(f, before, None)];
-        let m = agents::mcp_path(a, root);
-        if a == agents::Agent::Codex {
-            after = agents::merge_mcp(a, Some(&after))
-                .map_err(|e| usage(format!("{}: {e}", m.display())))?;
-        } else {
-            let mb = read(&m);
-            let ma = agents::merge_mcp(a, mb.as_deref())
-                .map_err(|e| usage(format!("{}: {e}", m.display())))?;
-            files.push((m.clone(), mb, Some(ma)));
+        let mcp = agents::mcp_path(a, root);
+        let m = mcp.clone().unwrap_or_default();
+        match mcp {
+            Some(mp) if mp == files[0].0 => {
+                after = agents::merge_mcp(a, Some(&after))
+                    .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+            }
+            Some(mp) => {
+                let mb = read(&mp);
+                let ma = agents::merge_mcp(a, mb.as_deref())
+                    .map_err(|e| usage(format!("{}: {e}", m.display())))?;
+                files.push((mp, mb, Some(ma)));
+            }
+            None => {
+                if let Some(h) = agents::mcp_user_hint(a) {
+                    p.notes.push(format!(
+                        "{}: add the locksmith MCP server by hand to {h} (command `locksmith-mcp`)",
+                        a.id()
+                    ));
+                }
+            }
         }
         if let Some(url) = &hub_url {
             if !a.remote_mcp() {
@@ -203,7 +227,7 @@ fn build(root: &Path, hub: Option<&str>) -> Result<Plan, Fail> {
                     path,
                     before,
                     after,
-                    exec: false,
+                    exec: a == agents::Agent::Cline && f.ends_with("PreToolUse"),
                 });
             }
         }

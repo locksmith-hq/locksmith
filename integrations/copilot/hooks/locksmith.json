@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "preToolUse": [
+      {
+        "bash": "command -v smith >/dev/null 2>&1 || { echo 'Locksmith hook unavailable: run smith doctor' >&2; exit 2; }; smith hook copilot preToolUse",
+        "timeoutSec": 10,
+        "type": "command"
+      }
+    ]
+  },
+  "version": 1
+}

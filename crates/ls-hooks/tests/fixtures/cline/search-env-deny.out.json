@@ -1,0 +1,7 @@
+{
+  "code": 0,
+  "stdout": {
+    "cancel": true,
+    "errorMessage": "Blocked by Locksmith: the search pattern `.env` targets secret-bearing files. Instead: use `smith ls` to see key names, or `smith run -- <command>` to give a command the values"
+  }
+}

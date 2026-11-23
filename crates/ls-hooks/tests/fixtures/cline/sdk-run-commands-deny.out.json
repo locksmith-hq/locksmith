@@ -1,0 +1,7 @@
+{
+  "code": 0,
+  "stdout": {
+    "cancel": true,
+    "errorMessage": "Blocked by Locksmith: `cat` would read .env, which holds secrets. Instead: use `smith ls` to see key names, or `smith run -- <command>` to give a command the values"
+  }
+}

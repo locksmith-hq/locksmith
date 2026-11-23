@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Policy decisions come from one in-process Cedar engine
-The control plane and the gateway SHALL decide every authorization question through the `ls-policy` crate, which evaluates Cedar policies in-process against one schema and returns allow or deny together with the ids of the deciding policies. A request no policy permits SHALL be denied.
+The NestJS API (`apps/api`, decision OC-9 G1) SHALL decide every authorization question through its policy module, which evaluates Cedar policies in-process (`@cedar-policy/cedar-wasm`) against one schema and returns allow or deny together with the ids of the deciding policies. The gateway SHALL act only on grants the API has already decided. A request no policy permits SHALL be denied.
 
 #### Scenario: Default deny
-- **WHEN** `ls-policy` evaluates a request that no policy permits
+- **WHEN** the policy module evaluates a request that no policy permits
 - **THEN** the decision is deny and lists no permitting policy
 
 #### Scenario: Decision names its policies
@@ -12,7 +12,7 @@ The control plane and the gateway SHALL decide every authorization question thro
 - **THEN** the decision is allow and names the built-in `member` policy
 
 ### Requirement: Built-in role policies enforce owner, admin and member
-The system SHALL ship fixed Cedar policies for the T6 roles: members read metadata and use what they are granted; admins also manage projects, environments, secrets, agents and grants; owners also manage the org and its policies. Every mutating or secret-reading control-plane route SHALL be authorized by these policies.
+The system SHALL ship fixed Cedar policies for the T6 roles: members read metadata and use what they are granted; admins also manage projects, environments, secrets, agents and grants; owners also manage the org and its policies. Every mutating or secret-reading API route SHALL be authorized by these policies.
 
 #### Scenario: Member cannot create a grant
 - **WHEN** a `member` calls `POST /v1/agents/{id}/grants`

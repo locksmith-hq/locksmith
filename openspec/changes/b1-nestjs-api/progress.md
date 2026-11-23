@@ -45,3 +45,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Verified: `tsc --noEmit` clean, `vitest run` 2 passed, tree-check OK.
 - Notes for next session: 38 tasks open; next is 2.2 (Nest bootstrap). Tasks 1.4 to 1.6 are sized for several runs. PR #640 not ready for auto-merge.
 - Evaluator FAIL on 2.1 (so left unticked): everything is done except an explicit `apps/api` rule in `scripts/tree-check.sh`; the script covers it only indirectly through `test-recipes-check.sh`. `tree-check.sh` is a guard script (trust root), so agent branches may not edit it: needs the lead or owner to say whether the indirect coverage satisfies 2.1, or to make that edit. Everything else in 2.1 is pushed.
+
+## 2026-11-23 17:40 worker
+- Task: 1.3 route table / 2.1 slice - ci-fix
+- Verified: `just task-guard` (clean env) -> OK; `npm test --workspace apps/api` -> 2 pass; evaluator PASS
+- Notes for next session: PR #640's hygiene job failed because commit 621ebd1 had no App identity (task-edit guard); history can't be rewritten, so the work moved to branch `claude/change-b1-nestjs-api-r2`, PR #674 (#640 closed). Use `-r2` as the change branch now. Local `just task-guard` fails in cloud VMs only because AGENT_APP_KEY_* vars are set; unset them to reproduce CI.

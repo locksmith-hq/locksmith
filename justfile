@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check task-guard public-check migration-guard
+ci: fmt lint test-rust test-web tree-check task-guard public-check migration-guard api-types-check
 
 # Fast local check: fmt + lint only for files committed on this branch since `base`.
 # The full `just ci` runs in GitHub Actions on every PR.
@@ -61,9 +61,20 @@ apps-build: desktop-test
 apps-build-test:
     scripts/apps-build.test.sh
 
+# Regenerate generated TypeScript types: packages/api-types (ts-rs) and apps/api/src/db/types.ts.
+api-types: api-types-ipc api-types-db
+
 # Regenerate packages/api-types from crates/ls-ipc (ts-rs).
-api-types:
+api-types-ipc:
     cargo test -p ls-ipc --features ts export_bindings
+
+# Regenerate apps/api/src/db/types.ts: throwaway Postgres (docker), the Rust `locksmith-migrate`, kysely-codegen.
+api-types-db:
+    scripts/api-types.sh
+
+# Fail if apps/api/src/db/types.ts differs from the migrated schema (needs docker).
+api-types-check:
+    scripts/api-types.sh --check
 
 tree-check:
     scripts/tree-check.sh

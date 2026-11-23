@@ -9,7 +9,7 @@ Each run unblocks finished work, then takes tasks for about 40 minutes, across a
    - Red change PRs (`CI is red on claude/change-<id>`) go first: claim that id in step 1.
 1. **Claim a change:** `bash scripts/run-lock.sh claim worker-<session> $(bash scripts/change-status.sh --ready)` prints the id you hold; `owned` ones are skipped. None: step 6.
    - Read its last 3 `progress.md` entries and `git log --oneline -10` on its branch.
-2. **CI first.** Failing checks or conflicts on the change's PR are the first task (read failures as in `finish-pr`).
+2. **CI first.** Failing checks or conflicts on the change's PR are the first task (read failures as in `finish-pr`). Running checks never block: keep doing tasks.
 3. **Branch.** If `origin/claude/change-<id>` exists and its PR is yours or the owner account's, use it and merge main in (`run-start` step 3); else release and take the next id. Otherwise branch from `origin/main`. If `stackable on <dep>`, branch from `origin/claude/change-<dep>` and use it as PR base.
 4. **Baseline:** main's CI checks (`gh run list -b main -L 3`), not a local `just ci`. If red and step 0 already handled it, note the failing job in `progress.md` and work on your tasks anyway.
 5. **Tasks.** Work in order with the `evaluate-escalate` skill, committing after each. A task over 30 minutes: commit a verified slice and log the rest in `progress.md`. When the change is done, or **parked** (`needs-rescue`; open one at once when a task needs a key, host or tool the VM lacks), finish it (step 7), then go back to step 1 for the next change while time remains.

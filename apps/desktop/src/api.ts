@@ -31,7 +31,7 @@ export const relayInfo = () => call<RelayInfo>("relay_info");
 // CORS preflight for Tauri origins only). The URL and org id are not
 // secrets; the enrollment secret is returned to the screen and never stored.
 export { type WorkloadIdentity, type WorkloadPreset } from "@locksmith/control-plane-client";
-export { type Agent, type AgentGrant, type AuditEvent as OrgAuditEvent, type AuditStatus, type Client as AgentsClient, type McpClient, type McpToolSetting } from "@locksmith/control-plane-client";
+export { type Agent, type AgentGrant, type AuditEvent as OrgAuditEvent, type AuditStatus, type Client as AgentsClient, type BindingSummary, type McpClient, type McpToolSetting } from "@locksmith/control-plane-client";
 const CP_URL = "locksmith.controlPlane";
 const CP_ORG = "locksmith.org";
 const store = {

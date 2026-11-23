@@ -10,6 +10,8 @@ on:
     - cron: '7,22,37,52 * * * *'
   issue_comment:
     types: [created]
+  push:
+    branches: [main]  # backstop: GitHub skips some scheduled runs, and merges land many times a day
   workflow_dispatch: {}
 
 concurrency:

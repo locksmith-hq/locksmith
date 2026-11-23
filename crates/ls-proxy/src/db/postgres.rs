@@ -238,7 +238,8 @@ fn authenticate(
 }
 
 /// `"md5" + hex(md5(hex(md5(password + user)) + salt))` with a trailing NUL.
-fn md5_password(pw: &[u8], user: &str, salt: &[u8]) -> Zeroizing<Vec<u8>> {
+/// Sans-IO helper shared with the gateway (D3).
+pub fn md5_password(pw: &[u8], user: &str, salt: &[u8]) -> Zeroizing<Vec<u8>> {
     use md5::{Digest, Md5};
     let mut h = Md5::new();
     h.update(pw);

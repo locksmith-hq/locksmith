@@ -5,8 +5,24 @@ import { App } from "./App";
 import { createClient } from "@locksmith/control-plane-client";
 
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status });
-const tool = (layer: string, name: string, def: boolean, enabled: boolean) => ({ layer, tool: name, description: `${name} desc`, default_enabled: def, enabled, overridden: def !== enabled });
-const cl = (id: string, name: string, revoked?: string) => ({ id, layer: "hub", client_id: `cid-${id}`, principal: "user-1", client_name: name, first_seen_at: "2026-01-01T00:00:00Z", last_seen_at: "2026-01-02T00:00:00Z", revoked_at: revoked ?? null });
+const tool = (layer: string, name: string, def: boolean, enabled: boolean) => ({
+  layer,
+  tool: name,
+  description: `${name} desc`,
+  default_enabled: def,
+  enabled,
+  overridden: def !== enabled,
+});
+const cl = (id: string, name: string, revoked?: string) => ({
+  id,
+  layer: "hub",
+  client_id: `cid-${id}`,
+  principal: "user-1",
+  client_name: name,
+  first_seen_at: "2026-01-01T00:00:00Z",
+  last_seen_at: "2026-01-02T00:00:00Z",
+  revoked_at: revoked ?? null,
+});
 
 let tools: unknown[];
 let clients: unknown[];
@@ -14,7 +30,11 @@ let status: number;
 const fetchMock = vi.fn();
 
 beforeEach(() => {
-  tools = [tool("hub", "list_projects", true, true), tool("hub", "revoke_grant", false, false), tool("agent", "relay_http_request", true, true)];
+  tools = [
+    tool("hub", "list_projects", true, true),
+    tool("hub", "revoke_grant", false, false),
+    tool("agent", "relay_http_request", true, true),
+  ];
   clients = [cl("c1", "Claude"), cl("c2", "", "2026-01-03T00:00:00Z")];
   status = 200;
   fetchMock.mockReset();

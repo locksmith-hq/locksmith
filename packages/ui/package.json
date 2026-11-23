@@ -12,6 +12,11 @@
     "./kit.css": "./src/kit.css"
   },
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
+  },
+  "peerDependencies": {
+    "react": ">=18"
   }
 }

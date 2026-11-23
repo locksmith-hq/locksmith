@@ -71,14 +71,25 @@ flowchart LR
 
 ## Built by AI, used by AI
 
-Locksmith is developed by a team of AI agents, each with its own GitHub App identity, working through issues and pull requests in this repository. A human owner sets direction and makes the calls the agents escalate.
+Locksmith is developed by a team of AI agents, each with its own GitHub App identity, working through issues and pull requests in this repository. A human owner sets direction and makes the calls the agents escalate. This team is the Avengers (names and avatars live in [`docs/agents/routing.json`](docs/agents/routing.json)).
 
-| | Role | What it does |
-|---|---|---|
-| <img src="docs/agents/avatars/walt.png" width="40" alt=""> | **Walt**, PM (Opus) | Owns the end goal, roadmap order, priorities and the board |
-| <img src="docs/agents/avatars/linus.png" width="40" alt=""> | **Linus**, Lead (Opus) | Owns code quality and architecture, reviews merged work, rescues stuck tasks |
-| <img src="docs/agents/avatars/alfie.png" width="40" alt=""> <img src="docs/agents/avatars/josie.png" width="40" alt=""> <img src="docs/agents/avatars/harriet.png" width="40" alt=""> | **Alfie, Josie, Harriet**, Workers (Sonnet) | Implement [OpenSpec](openspec/) tasks around the clock, each on its own change and PR, checked by an independent evaluator |
-| | **Research** and **Optimizer** | Answer questions from primary sources; tune how the team runs |
+<!-- team:start -->
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/agents/avatars/iron-man.png" width="120" alt="Iron Man"><br><b>Iron Man</b><br>Lead<br><sub>Owns code quality and architecture, reviews merged work, rescues stuck tasks</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/nick-fury.png" width="120" alt="Nick Fury"><br><b>Nick Fury</b><br>PM<br><sub>Owns the end goal, roadmap order, priorities and the board</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/hulk.png" width="120" alt="Hulk"><br><b>Hulk</b><br>Research<br><sub>Smashes hard questions with primary sources</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/doctor-strange.png" width="120" alt="Doctor Strange"><br><b>Doctor Strange</b><br>Optimizer<br><sub>Bends the team's schedules and prompts toward more shipped work</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="25%"><img src="docs/agents/avatars/captain-america.png" width="120" alt="Captain America"><br><b>Captain America</b><br>Worker A<br><sub>Implements OpenSpec tasks around the clock</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/spider-man.png" width="120" alt="Spider-Man"><br><b>Spider-Man</b><br>Worker B<br><sub>Implements OpenSpec tasks around the clock</sub></td>
+    <td align="center" width="25%"><img src="docs/agents/avatars/thor.png" width="120" alt="Thor"><br><b>Thor</b><br>Worker C<br><sub>Implements OpenSpec tasks around the clock</sub></td>
+  </tr>
+</table>
+<!-- team:end -->
+
+<sub>Persona artwork depicts Marvel characters for fun. Locksmith is not affiliated with or endorsed by Marvel or Disney.</sub>
 
 How the team works:
 
@@ -142,8 +153,9 @@ What an agent may do without your passphrase is set in a human-owned `agent-poli
 | Path | Contents |
 |---|---|
 | `crates/` | Rust libraries and binaries (`locksmithd`, `smith`, `locksmith-mcp`, crypto, gateway, audit) |
+| `ee/` | source-available enterprise layer (Rust), see [LICENSING.md](LICENSING.md) |
 | `services/` | axum backends (control plane, gateway) |
-| `apps/` | web console, docs, desktop (Tauri) |
+| `apps/` | web console, docs, desktop (Tauri), `api` (NestJS) |
 | `packages/` | shared TypeScript and the design system |
 | `integrations/` | thin agent plugins |
 | `infra/` | Docker Compose stack (Helm and OpenTofu to come) |
@@ -161,4 +173,4 @@ Product notes: [PRODUCT.md](PRODUCT.md).
 
 ## Contributing
 
-Humans and agents are both welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+If Locksmith is useful to you, a ⭐ helps other people find it. Humans and agents are both welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).

@@ -1,27 +1,43 @@
 #!/usr/bin/env bash
 # Runs a scheduled agent as its GitHub App persona instead of the owner's account (owner decision 2026-11-18).
-#   agent-identity.sh setup <persona>   git author, push credentials and a gh shim; on any failure undoes them, prints FAIL and exits 1
+#   agent-identity.sh setup <role>      git author, push credentials and a gh shim; on any failure undoes them, prints FAIL and exits 1
 #   agent-identity.sh token             prints a valid installation token (cached, re-minted after 50 minutes)
 #   agent-identity.sh credential get    git credential helper
 #   agent-identity.sh selftest          offline checks
-# The key comes from AGENT_APP_KEY_<PERSONA> (base64 of the PEM; in the cloud an environment variable of that
+# The key comes from AGENT_APP_KEY_<ROLE> (WORKER_A, LEAD, PM, RESEARCH; base64 of the PEM; in the cloud an environment variable of that
 # routine's own environment, owner decision 2026-11-20) or, on macOS, the login Keychain item
-# "locksmith-agent-<persona>" (same base64). A network secret cannot do it: the JWT that the token request needs
+# "locksmith-agent-<role>" (same base64). A network secret cannot do it: the JWT that the token request needs
 # expires within 10 minutes, so it is signed here on every mint. Never print the key or the token.
 set -uo pipefail
 repo=locksmith-hq/locksmith
 state="${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}"
 self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
+# A persona is a role (lead, pm, worker-a, worker-b, worker-c, research). The old first names still work as aliases,
+# so a routine prompt or an environment key set before the roles became the keys keeps working.
+role() { case "$1" in linus) echo lead ;; walt) echo pm ;; alfie) echo worker-a ;; josie) echo worker-b ;; harriet) echo worker-c ;; ada) echo research ;; *) echo "$1" ;; esac; }
+legacy() { case "$1" in lead) echo linus ;; pm) echo walt ;; worker-a) echo alfie ;; worker-b) echo josie ;; worker-c) echo harriet ;; research) echo ada ;; *) echo "$1" ;; esac; }
+up() { tr '[:lower:]-' '[:upper:]_' <<<"$1"; }
+keyvar() { # <persona> -> the key variable: AGENT_APP_KEY_<ROLE>, else the old AGENT_APP_KEY_<FIRSTNAME> if only that one is set
+  local r v; r=$(role "$1"); v="AGENT_APP_KEY_$(up "$r")"
+  [ -n "${!v:-}" ] && { echo "$v"; return; }
+  v="AGENT_APP_KEY_$(up "$(legacy "$r")")"; [ -n "${!v:-}" ] && { echo "$v"; return; }
+  echo "AGENT_APP_KEY_$(up "$r")"
+}
+slug() { # <persona> -> the live GitHub App slug, from docs/agents/routing.json (the one place a rename is written down)
+  local r s; r=$(role "$1")
+  s=$(jq -r --arg r "$r" '.roles[$r].app // empty' "$(dirname "$self")/../docs/agents/routing.json" 2>/dev/null)
+  echo "${s:-locksmith-$(legacy "$r")}"
+}
 ids() { # <persona> -> "app_id installation_id bot_user_id" (none of these is secret)
   [ -n "${AGENT_APP_IDS:-}" ] && { echo "$AGENT_APP_IDS"; return; }  # a new App (e.g. research) before it gets a row here
-  case "$1" in
-    linus) echo "5817262 183325623 358305577" ;;
-    alfie) echo "5817280 183325819 358306025" ;;
-    josie) echo "5817281 183325900 358306063" ;;
-    harriet) echo "5817284 183325994 358306137" ;;
-    walt) echo "5817292 183326090 358306238" ;;
-    ada) echo "5853454 184141394 359289580" ;;
+  case "$(role "$1")" in
+    lead) echo "5817262 183325623 358305577" ;;
+    worker-a) echo "5817280 183325819 358306025" ;;
+    worker-b) echo "5817281 183325900 358306063" ;;
+    worker-c) echo "5817284 183325994 358306137" ;;
+    pm) echo "5817292 183326090 358306238" ;;
+    research) echo "5853454 184141394 359289580" ;;
     *) return 1 ;;
   esac
 }
@@ -41,10 +57,10 @@ token() {
   fi
   row=$(ids "$persona") || return 1
   read -r app inst _ <<<"$row"
-  var="AGENT_APP_KEY_$(tr '[:lower:]' '[:upper:]' <<<"$persona")"
+  var=$(keyvar "$persona")
   # Each failure records its cause in $state/why, so the WARN line says what to fix.
   key="${!var:-}"
-  [ -n "$key" ] || ! command -v security >/dev/null || key=$(security find-generic-password -s "locksmith-agent-$persona" -w 2>/dev/null)
+  [ -n "$key" ] || ! command -v security >/dev/null || key=$(security find-generic-password -s "locksmith-agent-$persona" -w 2>/dev/null || security find-generic-password -s "locksmith-agent-$(legacy "$(role "$persona")")" -w 2>/dev/null)
   [ -n "$key" ] || { why "$var is not set in this environment"; return 1; }
   pem=$(umask 077 && mktemp) || return 1
   printf '%s' "$key" | openssl base64 -d -A >"$pem" 2>/dev/null
@@ -96,15 +112,15 @@ setup() {
 
   # git: commits and pushes as the app. Fetch keeps the remote the session came with.
   : >"$state/git"
-  git config --local user.name "locksmith-${persona}[bot]"
-  git config --local user.email "$uid+locksmith-${persona}[bot]@users.noreply.github.com"
+  git config --local user.name "$(slug "$persona")[bot]"
+  git config --local user.email "$uid+$(slug "$persona")[bot]@users.noreply.github.com"
   git config --local credential.https://github.com.helper ""
   git config --local --add credential.https://github.com.helper "!bash $self credential"
   git config --local remote.origin.pushurl "https://github.com/$repo.git"
   git config --local http.https://github.com/.proxy ""  # straight to GitHub with the app token, not the session proxy
   GIT_TERMINAL_PROMPT=0 git ls-remote --heads "https://github.com/$repo.git" main >/dev/null 2>&1 ||
     fail "git cannot reach github.com with the app token"
-  echo "OK identity: locksmith-${persona}[bot]"
+  echo "OK identity: $(slug "$persona")[bot]"
 }
 shim_text() { # <real gh> <checkout root>
   # shellcheck disable=SC2016  # the shim expands these at run time
@@ -122,10 +138,12 @@ selftest() {
   [ "$(pad "$p" | openssl base64 -d -A | jq -r .iss)" = 42 ] || { echo "selftest: bad payload"; exit 1; }
   pad "$s" | openssl base64 -d -A >"$d/sig"
   printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -verify "$d/k.pub" -signature "$d/sig" >/dev/null || { echo "selftest: bad signature"; exit 1; }
-  ids alfie >/dev/null || { echo "selftest: persona table"; exit 1; }
+  ids worker-a >/dev/null && [ "$(ids alfie)" = "$(ids worker-a)" ] || { echo "selftest: persona table"; exit 1; }
+  [ "$(AGENT_APP_KEY_ALFIE=x keyvar worker-a)" = AGENT_APP_KEY_ALFIE ] && [ "$(AGENT_APP_KEY_WORKER_A=x AGENT_APP_KEY_ALFIE=y keyvar alfie)" = AGENT_APP_KEY_WORKER_A ] || { echo "selftest: key variable"; exit 1; }
+  [ -n "$(slug worker-a)" ] || { echo "selftest: app slug"; exit 1; }
   if ids nobody >/dev/null 2>&1; then echo "selftest: unknown persona accepted"; exit 1; fi
-  state="$d/s"; mkdir "$state"; printf alfie >"$state/persona"
-  if (AGENT_APP_KEY_ALFIE=$(printf 'not a key' | openssl base64 -A) token >/dev/null 2>&1); then echo "selftest: token from a bad key"; exit 1; fi
+  state="$d/s"; mkdir "$state"; printf worker-a >"$state/persona"
+  if (AGENT_APP_KEY_WORKER_A=$(printf 'not a key' | openssl base64 -A) token >/dev/null 2>&1); then echo "selftest: token from a bad key"; exit 1; fi
   grep -q 'not the base64 of a private key' "$state/why" || { echo "selftest: bad-key cause not recorded"; exit 1; }
   # the shim adds the token only inside its checkout
   printf '%s' tok >"$state/token"; date +%s >"$state/minted"
@@ -139,9 +157,10 @@ selftest() {
 }
 
 case "${1:-}" in
-  setup) setup "${2:?usage: agent-identity.sh setup <persona>}" ;;
+  setup) setup "${2:?usage: agent-identity.sh setup <role>}" ;;
+  keyvar) keyvar "${2:?usage: agent-identity.sh keyvar <role>}" ;;
   token) token ;;
   credential) [ "${2:-}" = get ] && t=$(token) && printf 'username=x-access-token\npassword=%s\n' "$t" ;;
   selftest) selftest ;;
-  *) echo "usage: agent-identity.sh setup <persona> | token | credential get | selftest" >&2; exit 2 ;;
+  *) echo "usage: agent-identity.sh setup <role> | keyvar <role> | token | credential get | selftest" >&2; exit 2 ;;
 esac

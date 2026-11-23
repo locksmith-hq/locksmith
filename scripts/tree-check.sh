@@ -8,8 +8,8 @@ prune=( \( -name target -o -name node_modules -o -name .git -o -path ./.claude/w
 
 while IFS= read -r f; do
   case "$f" in
-    crates/*|services/*|apps/desktop/src-tauri/*|tests/e2e/*) ;;
-    *) echo "tree-check: Rust file outside crates/, services/, tests/e2e/ or apps/desktop/src-tauri/: $f" >&2; fail=1 ;;
+    crates/*|ee/crates/*|services/*|apps/desktop/src-tauri/*|tests/e2e/*) ;;
+    *) echo "tree-check: Rust file outside crates/, ee/crates/, services/, tests/e2e/ or apps/desktop/src-tauri/: $f" >&2; fail=1 ;;
   esac
 done < <(find . "${prune[@]}" -name '*.rs' -type f -print | sed 's|^\./||')
 
@@ -28,14 +28,9 @@ done < <(for w in .github/workflows/*.yml; do
     j && /^    timeout-minutes:/{t=1} END{if (job && !t) print f": "job}' "$w"
 done)
 
-# infra/tofu holds only the three root modules and the plan policy.
-if [ -d infra/tofu ]; then
-  for d in infra/tofu/*/; do
-    case "$(basename "$d")" in
-      base|session|policy) ;;
-      *) echo "tree-check: unexpected infra/tofu directory (allowed: base, session, policy): $d" >&2; fail=1 ;;
-    esac
-  done
+# AWS infrastructure code lives in the private locksmith-cloud repo (owner 2026-11-22).
+if [ -e infra/tofu ]; then
+  echo "tree-check: infra/tofu belongs in the private locksmith-cloud repo, not here" >&2; fail=1
 fi
 
 # docs/testing.md must have a row per component directory.

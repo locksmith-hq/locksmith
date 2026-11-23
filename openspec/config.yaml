@@ -7,18 +7,25 @@ context: |
   Competitive reference: docs/research/infisical.md. Building blocks: docs/research/oss-building-blocks.md.
 
   Monorepo layout (fixed; scripts/tree-check.sh enforces it):
-    crates/ Rust libs and binaries · services/ Rust (axum) backends · apps/ web, docs, console, desktop
-    packages/ shared TS · integrations/ thin agent/IDE/CI plugins · infra/ compose, helm, OpenTofu
-    tests/ e2e and adversarial · docs/ internal docs and research
+    crates/ Rust libs and binaries · ee/ source-available enterprise layer (Rust) · services/ Rust (axum)
+    backends · apps/ web, docs, desktop, and `apps/api` (the NestJS API, once change b1-nestjs-api lands)
+    packages/ shared TS · integrations/ thin agent/IDE/CI plugins · infra/ compose, helm (AWS and OpenTofu
+    live in the private locksmith-cloud repo) · tests/ e2e and adversarial · docs/ internal docs and research
 
-  Stack (decided): Rust for everything touching secrets, keys, proxies, auth and all services;
+  Stack (decided; decisions OC-8 and OC-9): Rust for everything touching plaintext secrets, keys and
+  proxies (gateway, ls-crypto, ls-envelope, KMS access, and audit signing and token mint and verify behind
+  an internal core API); the control-plane API is NestJS 12 on TypeScript (`apps/api`) and moves over from
+  the Rust control plane endpoint by endpoint (change b1-nestjs-api; until a path is ported, Rust serves it);
   Postgres as the only required datastore; React + TypeScript console; Tauri desktop; OpenTelemetry.
-  npm workspaces only, never pnpm or yarn. One task runner: `just`.
+  TypeScript tooling: oxlint, oxfmt, knip and Turborepo (`turbo.json`). npm workspaces only, never pnpm or
+  yarn. One task runner: `just`.
 
   Decided foundations: openspec/decisions.md (append-only, owner-approved). Read it before any proposal,
   design or task; never contradict a line there without a new owner decision.
 
-  Licence: AGPL-3.0 for server components, Apache-2.0 for SDKs, CLI, plugins and schemas. No `ee/`.
+  Licence: AGPL-3.0 for server components (including `apps/api`), Apache-2.0 for SDKs, CLI, plugins and
+  schemas. `ee/` is source-available under `ee/LICENSE` (see LICENSING.md); no open-source crate may depend
+  on it, and licensing never blocks unlock or export (decision OC-1).
 
   Non-negotiable security rules:
   - Never print, log, serialize or return a plaintext secret on any path an agent can read.

@@ -16,3 +16,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.1-4.3 - done; PR #689 open, 5.1 left
 - Verified: `npx turbo run lint format:check knip typecheck` -> 19/19 green; evaluator PASS
 - Notes for next session: do 5.1 (`just up`, `just apps-build`, `just quick`), tick it, then finish the PR with auto-merge. d2-aws-sts archive is PR #688 (auto-merge on).
+
+## 2026-11-23 worker (ci-fix)
+- Task: ci-fix + 5.1 - done
+- Verified: `just quick` green; `just apps-build` exit 0; test-recipes-check and tree-check OK
+- Notes for next session: hygiene failed because the TypeScript gates table in docs/testing.md used `lint`/`knip`/`typecheck` as first-column names, which test-recipes-check read as component rows (now `npm run <gate>`). The desktop api-types diff failed because ts-rs output is unformatted; `just api-types` now runs oxfmt@0.79.0 over it. `just up` not run (no service touched).

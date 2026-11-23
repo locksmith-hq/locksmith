@@ -21,4 +21,4 @@
 - [x] 4.3 Verify: plant an unused export in a scratch commit, `just lint` fails naming the file; remove it, `just lint` and `just quick` pass.
 
 ## 5. Local verification
-- [ ] 5.1 `just up`, `npx turbo run lint format:check knip typecheck`, `just apps-build`, then `just quick`.
+- [x] 5.1 `just up`, `npx turbo run lint format:check knip typecheck`, `just apps-build`, then `just quick`.

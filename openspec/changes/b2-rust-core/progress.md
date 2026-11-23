@@ -9,3 +9,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: 1.1-1.3 contract (services/core/openapi.json, packages/core-client with fixtures and drift test) - done
 - Verified: `npx turbo run build test --filter=@locksmith/core-client` (6 tests), tree-check, `just quick`; Sonnet evaluator PASS
 - Notes for next session: group 2 next (ls-core-service skeleton; docs/testing.md `services/core` row needs revising once the crate exists). Group 3 should tighten `AuditTarget` to the Rust enum (Org, Secret, Agent, Grant, WorkloadIdentity) and confirm `VerifyReason` extras (`unknown_key`, `not_trusted`) against `VerifyError`. wrapDek takes binding ids only; the core generates the DEK.
+
+## 2026-11-23 worker-a
+- Fixed red CI on PR #687: services/core has only openapi.json so the `services/*` workspace glob failed; excluded it in Cargo.toml until task 2.1 adds the crate (remove the exclude then).

@@ -3,6 +3,7 @@
   "tasks": {
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**"], "env": ["VITE_*"] },
     "lint": { "dependsOn": ["^build"] },
+    "typecheck": { "dependsOn": ["^build"] },
     "test": { "dependsOn": ["^build"] },
     "e2e": { "dependsOn": ["build"], "cache": false },
     "dev": { "cache": false, "persistent": true },

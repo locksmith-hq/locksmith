@@ -11,9 +11,11 @@ name: wake-agents
 # - each PR belongs to its author: a failed merge review (claude-review) or failing CI on a claude/* PR -> the worker
 #   or lead whose App opened it (owner PRs -> Worker A). A claude-review failure wakes the author only for a FAIL
 #   verdict; a run with no verdict (job error) goes on one `harness-blocker` issue per cause and wakes nobody;
-#   while a harness-blocker is labelled `hold-workers`, event wakes of workers are dropped; closing it wakes Worker A.
+#   closing a harness-blocker wakes Worker A.
+# Workers are fired by the AWS tooling dispatcher (webhook ingest, budget, slots); here only an owner tag fires one.
 # Batched (Opus) roles - lead, PM, research - are fired at once only for an owner tag. Their other wakes label the
-# issue or PR `wake-<role>`; the `tick` job fires each once every 2 h if anything waits (`route.sh tick`), so bursts
+# issue or PR `wake-<role>`; the `tick` job (workflow_dispatch, sent every 2 h by the
+# AWS tooling clock) fires each once if anything waits (`route.sh tick`), so bursts
 # and agent-to-agent tags cost one run (owner 2026-11-22).
 # The call is only a wake-up: the woken agent still decides from its own checks.
 # Secrets are the routines' API trigger tokens (web UI only); a new role adds its secret below.
@@ -25,8 +27,6 @@ on:
   workflow_run:
     workflows: [ci, claude-review]
     types: [completed]
-  schedule:
-    - cron: '17 */2 * * *'  # tick
   workflow_dispatch: {}
 
 permissions:
@@ -70,7 +70,6 @@ jobs:
         with:
           sparse-checkout: |
             scripts/route.sh
-            scripts/dispatch.sh
             docs/agents/routing.json
           sparse-checkout-cone-mode: false
       - env:
@@ -87,7 +86,7 @@ jobs:
           done
 
   tick:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -95,7 +94,6 @@ jobs:
         with:
           sparse-checkout: |
             scripts/route.sh
-            scripts/dispatch.sh
             docs/agents/routing.json
           sparse-checkout-cone-mode: false
       - env:

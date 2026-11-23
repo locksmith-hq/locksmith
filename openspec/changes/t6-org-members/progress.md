@@ -73,3 +73,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: t6 PR #605 merge-conflict and CI fix - blocked
 - Verified: cargo test -p ls-control-plane --test openapi -> 8 passed; control-plane-client tsc and vitest -> pass; tree-check OK
 - Notes for next session: merged main (migrations renumbered to 0015-0017, tenancy.rs expects 17 migrations and 20 policies). The hygiene guard still fails on 4 old commits authored "Claude" (no App identity); needs-rescue #666. DB integration tests not run locally (need Postgres); check CI.
+
+## 2026-11-23 worker (worker-c, wake-up needs-rescue #643 closed)
+- Task: t6 PR #605 conflicts - done (merge pushed); hygiene guard still open under #666
+- Verified: cargo test -p ls-control-plane --test tenancy --test memberships --test orgs --test tenant_lint --test openapi -> all passed; just quick -> ok
+- Notes for next session: resolved conflicts with main's 0014_gateway_bindings (t6 migrations now 0015-0017, 20 policies); regenerated openapi.json and sdk schema.d.ts. Check #605 CI for hygiene.

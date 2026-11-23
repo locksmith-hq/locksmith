@@ -70,6 +70,7 @@ jobs:
         with:
           sparse-checkout: |
             scripts/route.sh
+            scripts/dispatch.sh
             docs/agents/routing.json
           sparse-checkout-cone-mode: false
       - env:
@@ -94,6 +95,7 @@ jobs:
         with:
           sparse-checkout: |
             scripts/route.sh
+            scripts/dispatch.sh
             docs/agents/routing.json
           sparse-checkout-cone-mode: false
       - env:

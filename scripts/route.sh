@@ -3,6 +3,7 @@
 #   route.sh event <event.json>    roles to wake for a GitHub event, "role<TAB>reason" per line (wake-agents.yml)
 #   route.sh debate <issue>        debate guard: "wake <role> <why>" or "wait <why>"; agents act only on their own wake
 #   route.sh fire <role> <reason>  wake a role's routine; its token comes from the env var routing.json names
+#   route.sh role <login>          the agent role of a GitHub login (dispatch.sh)
 #   route.sh tick                  fire each batched (Opus) role once for its queue (wake-agents.yml, every 2 h)
 #   (role "blocker" in event output: no routine; fire records it on one harness-blocker issue per cause)
 #   route.sh selftest
@@ -219,6 +220,10 @@ fire() { # <role> <reason>
   [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
   if [ -z "$trig" ] || [ -z "$token" ]; then echo "::warning::$1 has no routine trigger or ${secret:-token} set; its schedule picks this up"; return 0; fi
+  # Event wakes of workers go on the dispatch ledger, so dispatch.sh sees the worker busy (dispatch fires are recorded there too).
+  if [[ "$1" == worker-* ]] && [ "$(cfgq '.dispatch.shadow // true')" = false ] && [ -z "${ROUTE_DRYRUN:-}" ]; then
+    bash "$here/dispatch.sh" record "$1" "$2" || echo "::warning::dispatch ledger not updated for $1"
+  fi
   curl -fsS -X POST "https://api.anthropic.com/v1/claude_code/routines/$trig/fire" \
     -H "Authorization: Bearer $token" -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
     -H "anthropic-version: 2023-06-01" -H "Content-Type: application/json" \
@@ -337,6 +342,7 @@ case "${1:-}" in
   event) event "${2:?event.json}" ;;
   debate) debate_input "${2:?issue}" | decide ;;
   fire) fire "${2:?role}" "${3:?reason}" ;;
+  role) role_of "${2-}" ;;
   tick) tick ;;
   selftest) selftest ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;

@@ -1,5 +1,20 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 120,
-  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/schema.d.ts", "**/*.css", "**/target/**", "**/package-lock.json", "**/*.json", "**/*.md"]
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/schema.d.ts",
+    "**/*.css",
+    "**/target/**",
+    "**/package-lock.json",
+    "**/*.json",
+    "**/*.md",
+    "**/*.toml",
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.html",
+    "**/*.sh",
+    "**/*.sql"
+  ]
 }

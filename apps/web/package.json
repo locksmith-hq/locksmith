@@ -7,11 +7,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && node build.mjs",
-    "lint": "oxlint .",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
     "test": "vitest run",
     "e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   },
   "dependencies": {
     "@fontsource/figtree": "^5.3.0",

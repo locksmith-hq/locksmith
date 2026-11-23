@@ -11,7 +11,7 @@
   },
   "scripts": {
     "export": "cargo test -p ls-ipc --features ts export_bindings",
-    "lint": "oxlint .",
-    "format:check": "oxfmt --check ."
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   }
 }

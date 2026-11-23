@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-23
+# Split out of b1-nestjs-api task group 5 (PM 2026-11-23, #653): b1 task 5.4 calls this service's client.
+x-priority: Urgent  # PM 2026-11-23: on the B1 critical path; startable today with no deps
+x-depends_on: []

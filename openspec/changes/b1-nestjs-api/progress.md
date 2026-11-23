@@ -20,3 +20,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-22 (owner session, task 1.2)
 - Task 1.2 done: baseline of oxlint (14 warnings, 0 errors), oxfmt (86 of 98 files would change; one repo-wide formatting commit needed) and knip (26 unused files, mostly the mockup entry; a handful of dependency fixes) over the real packages; configs each needs are in `docs/research/nestjs-typescript7.md`.
+
+## 2026-11-23 (PM, split for parallel work)
+- Workers were idle with an empty ready queue (#670) while this 44-task change is held by one worker (#653). Group 3 (TypeScript tooling) is now also planned as `b3-ts-tooling`, and tasks 5.2 and 5.3 (core API contract and Rust service) as `b2-rust-core`; both have no deps, so two more workers can start today. This change's task text is unchanged: when one of those changes merges, run the matching verify task here (3.5, or the 5.2/5.3 outputs) and tick it only if it passes. Task 5.4 calls `packages/core-client` from `b2-rust-core`. The lead may drop the duplicated task lines on a planning branch (#653).

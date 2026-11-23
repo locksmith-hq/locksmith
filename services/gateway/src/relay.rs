@@ -397,7 +397,12 @@ impl CallAudit {
         let host_ok = match kind {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
-            EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => true,
+            EventKind::GitFetch(_)
+            | EventKind::GitPush(_)
+            | EventKind::GitDenied(_)
+            | EventKind::DbDenied(_)
+            | EventKind::DbOpened
+            | EventKind::DbClosed(_) => true,
             EventKind::CredentialIssued => false,
         };
         RelayEvent {
@@ -1176,6 +1181,7 @@ mod tests {
                 binding(INTERNAL, format!("http://internal.test:{port}"), false),
                 binding(DEAD, format!("http://dead.test:{dead_port}"), true),
             ],
+            pg: Vec::new(),
             git_bindings: Vec::new(),
         };
         let control_plane =
@@ -1340,6 +1346,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_)
                     | EventKind::CredentialIssued => None,
                 })
                 .collect()
@@ -1364,6 +1373,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_)
                     | EventKind::CredentialIssued => {}
                 }
             }
@@ -1944,6 +1956,7 @@ mod tests {
             Bindings {
                 org_id: ORG,
                 bindings: Vec::new(),
+                pg: Vec::new(),
                 git_bindings: Vec::new(),
             },
             Decryptor::new(

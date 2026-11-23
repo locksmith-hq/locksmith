@@ -11,6 +11,7 @@
 /scripts/check-task-edits* @tomer555
 /scripts/check-agent-docs.sh @tomer555
 /scripts/route.sh @tomer555
+/scripts/review-tier.sh @tomer555
 /scripts/run-lock.sh @tomer555
 /scripts/worker-has-work.sh @tomer555
 /scripts/owner-replies.sh @tomer555

@@ -1,15 +1,17 @@
 ---
 name: finish-pr
-description: Finish and unblock your own Locksmith PRs through GitHub auto-merge (red main first, review FAIL, conflicts, threads). Workers act only on PRs they opened; the lead may also act on a worker's PR. Worker step 0.
+description: Finish and unblock your own Locksmith PRs through GitHub auto-merge (one attempt at red main, review FAIL, conflicts, threads). Workers act only on PRs they opened; the lead may also act on a worker's PR. Worker step 0.
 ---
 
 # Finish your PRs (GitHub merges; `docs/agents/merge.md`)
 
 ## Whose PR
-A PR belongs to the App that opened it; a `claude/change-*` PR the owner account opened belongs to that change's lock holder. Act only on your own: `gh pr list --author "locksmith-$AGENT_PERSONA[bot]"` (`@me` does not work with an App token). The lead may also fix or auto-merge a worker's PR. A worker never pushes to, labels or auto-merges another worker's PR or any PR the lead opened. Never approve, use `--admin` or call the merge API.
+A PR belongs to the App that opened it; a `claude/change-*` PR the owner account opened belongs to that change's lock holder. Act only on your own: PRs whose author is a line of `bash scripts/agent-identity.sh logins "$AGENT_PERSONA"`. The lead may also fix or auto-merge a worker's PR. A worker never pushes to, labels or auto-merges another worker's PR or any PR the lead opened. Never approve, use `--admin` or call the merge API.
 
-## Main first
-If the latest `ci` run on main failed, fix it first: `claude/fix-main-<date>`, the `evaluate-escalate` skill, then auto-merge it.
+## Main first (never a blocker)
+If the latest `ci` run on main failed, make one attempt, and only if nobody is on it yet: no open `claude/fix-main-*` or `claude/hotfix-*` PR and no open `needs-rescue` or `needs-owner` issue about it. Fix it on `claude/fix-main-<date>` with the `evaluate-escalate` skill, then auto-merge it.
+If the cause is something you may not or cannot change (trust-root files, a flaky job you cannot rerun, a secret-scan false positive), or someone is already on it: open a `needs-rescue` issue (or comment on the existing one) once, then carry on.
+Red main never stops you from taking and working on a change. Your change PR merges once main is green again.
 
 ## Finish a PR
 When the last task is ticked and verified, or a planning, archive or lead PR is done:

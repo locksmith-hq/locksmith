@@ -21,3 +21,4 @@ rustls-pki-types = "1.16"
 jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
 p256 = "0.14"
 base64 = "0.22"
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }

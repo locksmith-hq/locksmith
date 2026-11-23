@@ -14,7 +14,7 @@ branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 #    This binds every branch, owner sessions included; other findings go to the harness-backlog issue.
 # 2. Trust root: agents (claude/* branches) never change the gates, guards, routing, workflows or hard rules.
 trust=(.github/workflows .github/CODEOWNERS 'scripts/check-task-edits*' scripts/check-agent-docs.sh
-       scripts/route.sh docs/agents/routing.json docs/agents/common.md docs/agents/merge.md .claude/skills/merge-review
+       scripts/route.sh scripts/review-tier.sh docs/agents/routing.json docs/agents/common.md docs/agents/merge.md .claude/skills/merge-review
        AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents)
 harness=("${trust[@]}" docs/agents .claude/skills scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh
          scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh
@@ -49,9 +49,11 @@ if git rev-parse -q --verify origin/main >/dev/null; then
       protected_fail=1
     fi
     # A cloud session's commits carry its App identity. One without it acts as the owner (pre-persona sessions, #573).
+    # Logins come from main's routing.json (never the branch's copy), so an App rename there cannot break this (#645).
     case "$branch" in *harness-release-*|*hotfix-*) ;; *)
+      logins=$(git show origin/main:docs/agents/routing.json | jq -r '.roles|to_entries[]|select(.key != "owner")|.value.logins[]?')
       bad=$(git log --no-merges --since=2026-11-22T06:00:00Z --format='%h|%an|%(trailers:key=Claude-Session,valueonly,separator=%x20)' "$ob"..HEAD |
-        awk -F'|' '$3!="" && $2 !~ /^locksmith-[a-z]+\[bot\]$/{print $1" by "$2}')
+        awk -F'|' -v ok="$(tr "\n" " " <<<"$logins")" 'BEGIN{n=split(ok,a," "); for(i=1;i<=n;i++) bot[a[i]]=1} $3!="" && !($2 in bot){print $1" by "$2}')
       if [ -n "$bad" ]; then
         echo "task-edit guard: commits from a session without its App identity (archive that session):"; echo "$bad"
         protected_fail=1

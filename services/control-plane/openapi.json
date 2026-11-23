@@ -472,6 +472,167 @@
         ],
         "type": "object"
       },
+      "BindingKind": {
+        "description": "What a binding lets the gateway do.",
+        "enum": [
+          "http",
+          "git",
+          "pg",
+          "aws"
+        ],
+        "type": "string"
+      },
+      "BindingList": {
+        "description": "Every binding the gateway reports for the org.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BindingSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "BindingSnapshot": {
+        "additionalProperties": false,
+        "description": "The gateway's full inventory. It replaces the org's previous snapshot.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BindingSummary"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "BindingSummary": {
+        "additionalProperties": false,
+        "description": "One gateway binding, non-secret fields only. Which optional fields are set depends on `kind`.",
+        "properties": {
+          "database": {
+            "description": "`pg`: the bound database.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "header": {
+            "description": "`http`: the header the secret is injected into (never its value or template).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "host": {
+            "description": "`pg`, `git`: the upstream host.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BindingKind"
+          },
+          "max_duration_secs": {
+            "description": "`aws`: the longest vended session, in seconds.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Display name: the database name (`pg`), the origin or host (`http`, `git`), the role (`aws`).",
+            "type": "string"
+          },
+          "origin": {
+            "description": "`http`: the exact upstream origin.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "port": {
+            "description": "`pg`: the upstream port.",
+            "format": "int32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "region": {
+            "description": "`aws`: the region.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repo": {
+            "description": "`git`: `owner` or `owner/repo`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "description": "`aws`: the role ARN.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tls": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BindingTls",
+                "description": "`pg`: the upstream TLS mode."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "description": "`pg`: the bound database user.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vend": {
+            "description": "`aws`: whether short-lived credentials may be vended.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "type": "object"
+      },
+      "BindingTls": {
+        "description": "How the gateway reaches a Postgres upstream.",
+        "enum": [
+          "require",
+          "verify-full",
+          "disable"
+        ],
+        "type": "string"
+      },
       "ConditionView": {
         "description": "One claim test as shown to callers: `pattern` ends in `*` for a prefix match.",
         "properties": {
@@ -882,11 +1043,38 @@
               "null"
             ]
           },
+          "bytes_in": {
+            "description": "Bytes relayed client to upstream (`db.session.closed` only).",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bytes_out": {
+            "description": "Bytes relayed upstream to client (`db.session.closed` only).",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "credential_id": {
             "description": "The id of the short-lived credential (`credential.issued` only; never the credential).",
             "format": "uuid",
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "description": "Session length in milliseconds (`db.session.closed` only).",
+            "format": "int64",
+            "minimum": 0,
+            "type": [
+              "integer",
               "null"
             ]
           },
@@ -928,6 +1116,17 @@
             "type": [
               "integer",
               "null"
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SessionCloseReason",
+                "description": "Why the session ended; required for `db.session.closed`, refused elsewhere."
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "secret_id": {
@@ -1573,6 +1772,9 @@
           "git.fetch",
           "git.push",
           "git.denied",
+          "db.session.denied",
+          "db.session.opened",
+          "db.session.closed",
           "credential.issued"
         ],
         "type": "string"
@@ -1764,6 +1966,17 @@
           "wrapped_dek"
         ],
         "type": "object"
+      },
+      "SessionCloseReason": {
+        "description": "Why a relayed Postgres session ended (`db.session.closed`).",
+        "enum": [
+          "client_closed",
+          "upstream_closed",
+          "revoked",
+          "expired",
+          "error"
+        ],
+        "type": "string"
       },
       "WorkloadIdentity": {
         "description": "A trust policy. The `handle` is the non-secret routing value a workload sends to the\nexchange route.",
@@ -2127,6 +2340,108 @@
           }
         ],
         "summary": "Append a relay event to the org's audit ledger (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/gateway/bindings": {
+      "put": {
+        "description": "The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, secret id or any unknown field is a `400`.",
+        "operationId": "put_gateway_bindings",
+        "parameters": [
+          {
+            "description": "The org the gateway acts for (the token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingSnapshot"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Stored"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Replace the org's binding inventory (gateway only)",
         "tags": [
           "internal"
         ]
@@ -3758,6 +4073,72 @@
         "summary": "Record a sign-out in the audit ledger",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/v1/bindings": {
+      "get": {
+        "operationId": "list_bindings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingList"
+                }
+              }
+            },
+            "description": "The org's bindings"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid org binding"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "dev_org": []
+          }
+        ],
+        "summary": "List the gateway's bindings (non-secret fields only)",
+        "tags": [
+          "bindings"
         ]
       }
     },

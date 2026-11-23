@@ -49,9 +49,11 @@ if git rev-parse -q --verify origin/main >/dev/null; then
       protected_fail=1
     fi
     # A cloud session's commits carry its App identity. One without it acts as the owner (pre-persona sessions, #573).
+    # Logins come from main's routing.json (never the branch's copy), so an App rename there cannot break this (#645).
     case "$branch" in *harness-release-*|*hotfix-*) ;; *)
+      logins=$(git show origin/main:docs/agents/routing.json | jq -r '.roles|to_entries[]|select(.key != "owner")|.value.logins[]?')
       bad=$(git log --no-merges --since=2026-11-22T06:00:00Z --format='%h|%an|%(trailers:key=Claude-Session,valueonly,separator=%x20)' "$ob"..HEAD |
-        awk -F'|' '$3!="" && $2 !~ /^(locksmith-[a-z]+|[a-z]+(-[a-z]+)*-locksmith)\[bot\]$/{print $1" by "$2}')
+        awk -F'|' -v ok="$(tr "\n" " " <<<"$logins")" 'BEGIN{n=split(ok,a," "); for(i=1;i<=n;i++) bot[a[i]]=1} $3!="" && !($2 in bot){print $1" by "$2}')
       if [ -n "$bad" ]; then
         echo "task-edit guard: commits from a session without its App identity (archive that session):"; echo "$bad"
         protected_fail=1

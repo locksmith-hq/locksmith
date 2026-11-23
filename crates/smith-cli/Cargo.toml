@@ -36,6 +36,10 @@ ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
 ls-connector = { path = "../ls-connector" }
 secrecy = "0.10"
 url = "2"
+# `smith doctor` db.gateway: TLS probe of the Postgres gateway listener (same pins as ls-proxy).
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
+webpki-roots = "1"
 ls-hooks = { version = "0.0.1-alpha.4", path = "../ls-hooks" }
 ls-proxy = { version = "0.0.1-alpha.4", path = "../ls-proxy" }
 # Human sign-in (T1 6.3): RFC 8628 device grant (`oauth2`) and OS keystore (`keyring`), same

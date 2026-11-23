@@ -2,7 +2,7 @@
 //! `Upstream.insecure_http` test switch). The fake verifies every re-signed request with the
 //! upstream secret (`sigv4::verify`, plus `aws-chunked` chunk signatures) and checks that the
 //! dummy key and secret never arrive. Driven by raw signed requests, and by the real AWS CLI when
-//! installed. The `#[ignore]` LocalStack test covers STS, S3 (incl. a 200 MB `aws s3 cp`),
+//! installed. The `#[ignore]` Floci test covers STS, S3 (incl. a 200 MB `aws s3 cp`),
 //! DynamoDB, SQS, Lambda and SSM through the relay.
 
 use ls_proxy::Deny;
@@ -38,7 +38,7 @@ fn up_token() -> String {
 #[derive(Default)]
 struct Fake {
     records: Mutex<Vec<(String, bool, String)>>,
-    /// Allow-all for every key (LocalStack run).
+    /// Allow-all for every key (Floci run).
     open: bool,
     upstream_secret: String,
     upstream_key: String,
@@ -736,7 +736,7 @@ fn aws_cli_through_the_relay() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-// ---- LocalStack (run with `cargo test -p ls-proxy --test aws_relay -- --ignored`) ----
+// ---- Floci (run with `cargo test -p ls-proxy --test aws_relay -- --ignored`) ----
 
 struct Container(String);
 
@@ -754,18 +754,17 @@ fn free_port() -> u16 {
         .port()
 }
 
-/// `LOCALSTACK_URL` (e.g. `http://127.0.0.1:4566`), or a fresh `localstack/localstack` container.
-fn localstack() -> (SocketAddr, Option<Container>) {
-    if let Ok(u) = std::env::var("LOCALSTACK_URL") {
+/// `FLOCI_URL` (e.g. `http://127.0.0.1:4566`), or a fresh `floci/floci` container.
+fn floci() -> (SocketAddr, Option<Container>) {
+    if let Ok(u) = std::env::var("FLOCI_URL") {
         let a = u.trim_start_matches("http://").trim_end_matches('/');
-        return (a.parse().expect("LOCALSTACK_URL host:port"), None);
+        return (a.parse().expect("FLOCI_URL host:port"), None);
     }
-    let image = std::env::var("LOCALSTACK_IMAGE").unwrap_or("localstack/localstack:3.8".into());
+    let image = std::env::var("FLOCI_IMAGE").unwrap_or("floci/floci:2.5.0".into());
     let port = free_port();
     let o = Command::new("docker")
         .args(["run", "-d", "--rm", "-p"])
         .arg(format!("127.0.0.1:{port}:4566"))
-        .args(["-e", "SERVICES=sts,s3,dynamodb,sqs,lambda,ssm"])
         .arg(&image)
         .output()
         .expect("docker");
@@ -774,27 +773,25 @@ fn localstack() -> (SocketAddr, Option<Container>) {
     let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
     for _ in 0..120 {
         if let Ok(mut s) = TcpStream::connect(addr) {
-            let _ = s.write_all(
-                b"GET /_localstack/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-            );
+            let _ = s.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
             let mut out = String::new();
             let _ = s.read_to_string(&mut out);
-            if out.contains("\"s3\"") {
+            if out.starts_with("HTTP/1.") {
                 return (addr, Some(c));
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
-    panic!("LocalStack did not become healthy");
+    panic!("Floci did not become healthy");
 }
 
 #[test]
-#[ignore = "needs Docker (LocalStack) and the AWS CLI"]
-fn localstack_end_to_end() {
+#[ignore = "needs Docker (Floci) and the AWS CLI"]
+fn floci_end_to_end() {
     if !aws_cli() {
         return;
     }
-    let (ls, _container) = localstack();
+    let (ls, _container) = floci();
     let bucket = "locksmith-relay-e2e";
     let hosts: Vec<String> = ["sts", "s3", "dynamodb", "sqs", "lambda", "ssm"]
         .iter()
@@ -827,14 +824,14 @@ fn localstack_end_to_end() {
     let dir = std::env::temp_dir().join(format!("ls-aws-ls-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let small = dir.join("small.txt");
-    std::fs::write(&small, b"hello localstack").unwrap();
+    std::fs::write(&small, b"hello floci").unwrap();
     let s3 = |k: &str| format!("s3://{bucket}/{k}");
     run(&["s3", "mb", &format!("s3://{bucket}")]);
     run(&["s3", "cp", small.to_str().unwrap(), &s3("small.txt")]);
     assert!(run(&["s3", "ls", &format!("s3://{bucket}")]).contains("small.txt"));
     let back = dir.join("back.txt");
     run(&["s3", "cp", &s3("small.txt"), back.to_str().unwrap()]);
-    assert_eq!(std::fs::read(&back).unwrap(), b"hello localstack");
+    assert_eq!(std::fs::read(&back).unwrap(), b"hello floci");
 
     // 200 MB: multipart, streamed through the relay. `--debug` shows the payload mode.
     let big = dir.join("big.bin");

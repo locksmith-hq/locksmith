@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-22
+# Contract first: the Rust control plane's openapi.json is the contract the NestJS API must satisfy.
+x-priority: Urgent  # PM 2026-11-23: critical path of every phase-2 feature (OC-9)
+x-depends_on: []

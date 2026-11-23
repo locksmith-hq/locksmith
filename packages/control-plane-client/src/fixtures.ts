@@ -1,6 +1,13 @@
 // Fixture data for the MCP tool switches and clients, shaped like the control-plane responses.
 // Test and story data only: ids and names, never a token or a secret value.
-import type { McpClient, McpToolSetting, NewSealedSecretVersion, SealKey, SecretVersion } from "./index";
+import type {
+  BindingSummary,
+  McpClient,
+  McpToolSetting,
+  NewSealedSecretVersion,
+  SealKey,
+  SecretVersion,
+} from "./index";
 
 export const mcpToolSettings: McpToolSetting[] = [
   { layer: "hub", tool: "list_projects", description: "Projects in your org.", default_enabled: true, enabled: true, overridden: false },
@@ -59,3 +66,11 @@ export const sealProblems = {
   stale: { type: "about:blank", title: "Conflict", status: 409, detail: "`version` is not the secret's next version" },
   preparing: { type: "about:blank", title: "Service unavailable", status: 503, detail: "the environment seal key is not available yet" },
 };
+
+/** One binding of every kind, shaped like `GET /v1/bindings`. Non-secret fields only. */
+export const bindingSummaries: BindingSummary[] = [
+  { kind: "http", name: "https://api.example.com", origin: "https://api.example.com", header: "Authorization" },
+  { kind: "git", name: "github.com/acme", host: "github.com", repo: "acme" },
+  { kind: "pg", name: "appdb", host: "db.internal.example.com", port: 5432, user: "app", database: "appdb", tls: "verify-full" },
+  { kind: "aws", name: "arn:aws:iam::123456789012:role/deploy", role: "arn:aws:iam::123456789012:role/deploy", region: "eu-west-1", vend: true, max_duration_secs: 900 },
+];

@@ -1,0 +1,44 @@
+name: dispatch
+
+# Fires worker routines only when there is work, a free slot and budget left (scripts/dispatch.sh; limits in
+# docs/agents/routing.json `dispatch`). While `shadow` is true it only records what it would fire on the
+# dispatch-ledger issue, so it can be compared with the cron runs before the owner removes the worker crons.
+# Runs every 15 min (GitHub drops some scheduled runs, so several a hour) and when a worker posts its run log
+# on the agent-log issue, which frees that worker's slot.
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  issue_comment:
+    types: [created]
+  push:
+    branches: [main]  # backstop: GitHub skips some scheduled runs, and merges land many times a day
+  workflow_dispatch: {}
+
+concurrency:
+  group: dispatch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write         # the dispatch-ledger issue
+  pull-requests: read
+  actions: read         # main and PR CI state (worker-has-work.sh)
+
+jobs:
+  dispatch:
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.comment.user.type == 'Bot' && contains(github.event.issue.labels.*.name, 'agent-log') &&
+       contains(github.event.comment.body, 'run-metadata'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # change-status.sh reads change branches
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          WORKER_A_FIRE_TOKEN: ${{ secrets.WORKER_A_FIRE_TOKEN }}
+          WORKER_B_FIRE_TOKEN: ${{ secrets.WORKER_B_FIRE_TOKEN }}
+          WORKER_C_FIRE_TOKEN: ${{ secrets.WORKER_C_FIRE_TOKEN }}
+        run: scripts/dispatch.sh run

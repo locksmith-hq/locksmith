@@ -117,7 +117,7 @@ secret UUID, environment UUID, version and purpose. Names are mutable metadata.
 | Linux as a first-class platform, plus devcontainers and CI runners | M0 onwards |
 | Diagnostics: `smith doctor`, support bundles, structured redacted logs, opt-in telemetry and crash reports | M0 (skeleton), M11 (full) |
 | Auto-update delivery: signed TUF repository, channels, staged rollout, kill switch, rollback, daemon hot-swap | M0 (basic), M12 (full) |
-| Subscription and licensing: tiers, offline-verifiable licenses, Stripe, entitlements, the never-hostage rule | M13, [product/subscription-plans.md](product/subscription-plans.md) |
+| Subscription and licensing: tiers, offline-verifiable licenses, Stripe, entitlements, the never-hostage rule | M13, `product/subscription-plans.md` (private `locksmith-roadmap`) |
 | Team features: shared end-to-end encrypted vaults, policy as code, central audit | M15 |
 | Import and export (`.env`, 1Password, Doppler, direnv) for adoption | M2 / M14 |
 | A usable product every milestone instead of a 14-week waterfall | All |

@@ -11,6 +11,8 @@
 /scripts/check-task-edits* @tomer555
 /scripts/check-agent-docs.sh @tomer555
 /scripts/route.sh @tomer555
+/scripts/dispatch.sh @tomer555
+/scripts/review-tier.sh @tomer555
 /scripts/run-lock.sh @tomer555
 /scripts/worker-has-work.sh @tomer555
 /scripts/owner-replies.sh @tomer555
@@ -33,6 +35,11 @@
 /crates/ls-broker/ @tomer555
 /crates/ls-update/ @tomer555
 /crates/ls-license/ @tomer555
+
+# Licensing: the source-available layer and the licensing statement (the maintainers own the license terms).
+/ee/ @tomer555
+/LICENSING.md @tomer555
+/crates/ls-entitlements/ @tomer555
 
 # Agents append approved owner decisions here (merge-review checks each line's evidence).
 /docs/agents/owner.md

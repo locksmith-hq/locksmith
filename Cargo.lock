@@ -2963,10 +2963,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ls-license"
-version = "0.0.1-alpha.4"
-
-[[package]]
 name = "ls-mcp-server"
 version = "0.0.1-alpha.4"
 dependencies = [

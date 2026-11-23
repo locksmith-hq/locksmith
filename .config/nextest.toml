@@ -24,3 +24,6 @@ not (
   | (package(ls-gateway) & test(/^pg::upstream::pg_relay::pg_relay_(cancel_|md5_|options_|raise_|scram_|wrong_password)/))
 )
 """
+
+[profile.portable.junit]
+path = "junit.xml"

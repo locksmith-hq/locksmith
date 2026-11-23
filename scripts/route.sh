@@ -3,7 +3,9 @@
 #   route.sh event <event.json>    roles to wake for a GitHub event, "role<TAB>reason" per line (wake-agents.yml)
 #   route.sh debate <issue>        debate guard: "wake <role> <why>" or "wait <why>"; agents act only on their own wake
 #   route.sh fire <role> <reason>  wake a role's routine; its token comes from the env var routing.json names
+#   route.sh role <login>          the agent role of a GitHub login (dispatch.sh)
 #   route.sh tick                  fire each batched (Opus) role once for its queue (wake-agents.yml, every 2 h)
+#   (role "blocker" in event output: no routine; fire records it on one harness-blocker issue per cause)
 #   route.sh selftest
 # Roles come from GitHub logins, so an agent cannot speak for another role or skip the cap. Shortcut: while
 # identities are paused (#299) agents post as the owner and a role marker decides; drop it once they are live.
@@ -93,17 +95,53 @@ pr_worker() { # <pr number>; the author from GitHub (or $PR_AUTHOR in the selfte
   r=$(role_of "$who"); case "$r" in worker-*|lead) printf '%s' "$r" ;; *) cfgq .default_worker ;; esac
 }
 
+# A failed claude-review run wakes the author only for a real FAIL verdict. 30 event wakes (2026-11-20..22) went to
+# workers for verdict-less failures they could not fix: owner approval pending, unticked tasks, or the job erroring.
+review_route() { # <pr> <sha>; merge-ready's description from GitHub (or $REVIEW_STATUS in the selftest)
+  local d; d=${REVIEW_STATUS-$(gh api "repos/$repo/commits/$2/statuses" -q '[.[]|select(.context == "merge-ready")][0].description // ""' 2>/dev/null)}
+  case "$d" in
+    "Claude review FAIL"*) printf '%s\tmerge review failed on PR #%s\n' "$(pr_worker "$1")" "$1" ;;
+    "owned paths"*|"unchecked tasks"*) ;;  # waits on the owner or on unfinished tasks; a run cannot change that
+    *) printf 'blocker\tclaude-review gave no verdict: PR #%s (%s)\n' "$1" "${d:-no merge-ready status}" ;;
+  esac
+}
+
+# One open harness-blocker issue per cause ("<cause>: <detail>"); repeats add a comment instead of waking anyone.
+# A new one queues the lead. While one also carries `hold-workers`, event wakes of workers are dropped.
+blocker() { # <reason>
+  local cause=${1%%: *} n
+  n=$(gh api "repos/$repo/issues?labels=harness-blocker&state=open&per_page=100" 2>/dev/null | jq -r --arg t "Blocker: $cause" '.[]|select(.title == $t)|.number' | head -1)
+  if [ -n "$n" ]; then
+    gh api "repos/$repo/issues/$n/comments" -f body="<!-- agent -->
+again: $1" >/dev/null && echo "blocker #$n: $1"
+  else
+    n=$(gh api "repos/$repo/issues" -f title="Blocker: $cause" -f "labels[]=harness-blocker" -f body="<!-- agent -->
+<!-- raised-by: lead -->
+wake-agents saw a failure no worker run can fix, so it woke nobody.
+
+First: $1
+
+Fix the cause and close this issue; add \`hold-workers\` to stop worker event wakes while it is open." -q .number) || return 1
+    echo "blocker #$n opened: $1"; fire lead "harness-blocker #$n opened: $1"
+  fi
+}
+
+workers_held() { # an open harness-blocker issue labelled hold-workers (or $HOLD in the selftest)
+  [ -n "${HOLD+x}" ] && { [ "$HOLD" = 1 ]; return; }
+  [ "$(gh api "repos/$repo/issues?labels=harness-blocker,hold-workers&state=open&per_page=1" -q length 2>/dev/null)" = 1 ]
+}
+
 event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   local ev=$1 n labels l to who body
   case "${GITHUB_EVENT_NAME:?}" in
     workflow_run)
-      local wf concl br trig pr
-      read -r wf concl br trig pr < <(jq -r '.workflow_run|[.name, .conclusion, .head_branch, .event, (.pull_requests[0].number // "")]|@tsv' "$ev")
+      local wf concl br trig pr sha
+      read -r wf concl br trig pr sha < <(jq -r '.workflow_run|[.name, .conclusion, .head_branch, .event, (.pull_requests[0].number // ""), (.head_sha // "")]|@tsv' "$ev")
       if [ "$wf" = ci ] && [ "$concl" = failure ]; then
         if [ "$br" = main ]; then printf '%s\tCI failed on main\n' lead
         elif [ "$trig" = pull_request ] && [[ "$br" == claude/* ]]; then printf '%s\tCI failed on PR #%s (%s)\n' "$(pr_worker "$pr")" "${pr:-?}" "$br"; fi
       elif [ "$wf" = claude-review ] && [ "$trig" = pull_request ] && [ -n "$pr" ] && [ "$concl" = failure ]; then
-        printf '%s\tmerge review failed on PR #%s\n' "$(pr_worker "$pr")" "$pr"
+        review_route "$pr" "$sha"
       fi ;;
     issues)
       n=$(jq -r .issue.number "$ev"); labels=$(jq -r '.issue.labels[].name' "$ev")
@@ -175,11 +213,17 @@ tick() { # fire each batched role once for its queue, then clear the labels it w
 
 fire() { # <role> <reason>
   local trig secret token
+  [ "$1" = blocker ] && { blocker "$2"; return; }
+  if [[ "$1" == worker-* ]] && ! now_ok "$2" && workers_held; then echo "held: $1 not woken (open hold-workers blocker): $2"; return 0; fi
   if batched "$1" && ! now_ok "$2"; then queue_add "$1" "$2"; return; fi
   trig=$(cfgq --arg r "$1" '.roles[$r].trigger // ""'); secret=$(cfgq --arg r "$1" '.roles[$r].secret // ""')
   [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
   if [ -z "$trig" ] || [ -z "$token" ]; then echo "::warning::$1 has no routine trigger or ${secret:-token} set; its schedule picks this up"; return 0; fi
+  # Event wakes of workers go on the dispatch ledger, so dispatch.sh sees the worker busy (dispatch fires are recorded there too).
+  if [[ "$1" == worker-* ]] && [ "$(cfgq '.dispatch.shadow // true')" = false ] && [ -z "${ROUTE_DRYRUN:-}" ]; then
+    bash "$here/dispatch.sh" record "$1" "$2" || echo "::warning::dispatch ledger not updated for $1"
+  fi
   curl -fsS -X POST "https://api.anthropic.com/v1/claude_code/routines/$trig/fire" \
     -H "Authorization: Bearer $token" -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
     -H "anthropic-version: 2023-06-01" -H "Content-Type: application/json" \
@@ -261,9 +305,15 @@ no role marker"
   # each worker owns its PRs: CI failures and failed merge reviews wake the PR's author (a PASS needs no one); owner PRs go to default_worker
   PR_AUTHOR='locksmith-josie[bot]' ev 'worker-b\tCI failed on PR #12 (claude/change-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
   PR_AUTHOR='locksmith-harriet[bot]' ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
-  PR_AUTHOR=tomer555 ev 'worker-a\tmerge review failed on PR #13' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"owner/x","event":"pull_request","pull_requests":[{"number":13}]}}'
+  REVIEW_STATUS='Claude review FAIL: fix the findings and push' PR_AUTHOR=tomer555 ev 'worker-a\tmerge review failed on PR #13' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"owner/x","event":"pull_request","pull_requests":[{"number":13}]}}'
   PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tCI failed on PR #15 (claude/lead-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":15}]}}'
   PR_AUTHOR='locksmith-linus[bot]' ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
+  # verdict-less review failures wake nobody: owner gate or unticked tasks drop, a job error is a blocker
+  for rs in "owned paths need the owner's approval: x" "unchecked tasks in openspec/changes/x/tasks.md"; do
+    REVIEW_STATUS=$rs PR_AUTHOR='locksmith-alfie[bot]' ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":534}]}}'
+  done
+  REVIEW_STATUS='no review verdict for abc' ev 'blocker\tclaude-review gave no verdict: PR #534 (no review verdict for abc)' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":534}]}}'
+  REVIEW_STATUS='' ev 'blocker\tclaude-review gave no verdict: PR #534 (no merge-ready status)' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":534}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"skipped","head_branch":"x","event":"pull_request","pull_requests":[{"number":12}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"
@@ -274,7 +324,9 @@ no role marker"
     IFS='|' read -r r w on <<<"$rw"; got=$(ROUTE_DRYRUN=1 fire "$r" "$w")
     [ "$got" = "queued for $r${on:+ $on}: $w" ] && echo "ok: queued: $r $w" || { echo "FAIL: queued: $r $w got '$got'"; fail=1; }
   done
-  got=$(fire worker-a "CI failed on PR #12 (x)" | head -1); [ "$got" = "waking worker-a: CI failed on PR #12 (x)" ] && echo "ok: workers fire at once" || { echo "FAIL: worker got '$got'"; fail=1; }
+  got=$(HOLD=0 fire worker-a "CI failed on PR #12 (x)" | head -1); [ "$got" = "waking worker-a: CI failed on PR #12 (x)" ] && echo "ok: workers fire at once" || { echo "FAIL: worker got '$got'"; fail=1; }
+  got=$(HOLD=1 fire worker-a "CI failed on PR #12 (x)"); [ "$got" = "held: worker-a not woken (open hold-workers blocker): CI failed on PR #12 (x)" ] && echo "ok: hold-workers drops event wakes" || { echo "FAIL: held got '$got'"; fail=1; }
+  got=$(HOLD=1 fire worker-a "owner tagged you on #8: u" | head -1); [ "$got" = "waking worker-a: owner tagged you on #8: u" ] && echo "ok: owner tags pass a hold" || { echo "FAIL: hold+tag got '$got'"; fail=1; }
   qo() { # <role> <expected lines> <state json>
     printf '%s' "$3" >"$d/q.json"; got=$(QUEUE_JSON=$d/q.json NOW=2026-11-22T12:00:00Z queue_of "$1")
     [ "$got" = "$(printf '%b' "$2")" ] && echo "ok: $1 queue -> ${2:-empty}" || { echo "FAIL: $1 queue want '$2' got '$got'"; fail=1; }
@@ -290,6 +342,7 @@ case "${1:-}" in
   event) event "${2:?event.json}" ;;
   debate) debate_input "${2:?issue}" | decide ;;
   fire) fire "${2:?role}" "${3:?reason}" ;;
+  role) role_of "${2-}" ;;
   tick) tick ;;
   selftest) selftest ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;

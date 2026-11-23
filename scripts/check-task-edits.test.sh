@@ -3,9 +3,11 @@
 # planning branch skips, new change passes.
 set -euo pipefail
 guard="$(cd "$(dirname "$0")" && pwd)/check-task-edits.sh"
+routing="$(cd "$(dirname "$0")/.." && pwd)/docs/agents/routing.json"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"; git init -q -b main; git config user.email t@t; git config user.name t
-mkdir -p openspec/changes/c1; printf -- '- [ ] 1.1 Do A\n- [ ] 1.2 Do B\n' > openspec/changes/c1/tasks.md
+mkdir -p openspec/changes/c1 docs/agents; printf -- '- [ ] 1.1 Do A\n- [ ] 1.2 Do B\n' > openspec/changes/c1/tasks.md
+cp "$routing" docs/agents/routing.json
 git add -A; git commit -qm base; git update-ref refs/remotes/origin/main HEAD
 git switch -qc claude/change-c1
 
@@ -67,4 +69,10 @@ expect 0 claude/change-id1 "session commit with its App identity"
 git commit -qm bad --author 'Claude <noreply@anthropic.com>' --allow-empty -m 'Claude-Session: https://claude.ai/code/session_y'
 expect 1 claude/change-id1 "session commit without its App identity"
 expect 0 claude/harness-release-2026-47 "release branch: identity check skipped"
+# Contract: every agent login in routing.json passes, so renaming an App there never blocks its own commits.
+for l in $(jq -r '.roles|to_entries[]|select(.key != "owner")|.value.logins[]?' "$routing"); do
+  git checkout -q -f main; git branch -qD claude/change-id2 2>/dev/null || true; git switch -qc claude/change-id2
+  git commit -qm ok --author "$l <a@b>" --allow-empty -m 'Claude-Session: https://claude.ai/code/session_z'
+  expect 0 claude/change-id2 "routing.json login $l"
+done
 echo "check-task-edits: all tests passed"

@@ -3,6 +3,7 @@
 # It carries the change's lock (run-lock.sh) and its status page (change-sync.sh).
 #   scripts/change-issue.sh <id>          print the issue number, creating the issue if needed
 #   scripts/change-issue.sh <id> --find   print it only if it exists; exit 1 otherwise
+#   exit 3: the GitHub lookup failed (not the same as "no issue")
 set -uo pipefail
 repo=locksmith-hq/locksmith
 id="${1:?usage: change-issue.sh <id> [--find]}"
@@ -11,7 +12,7 @@ id="${1:?usage: change-issue.sh <id> [--find]}"
 lookup() { gh api "repos/$repo/issues?labels=change&state=all&per_page=100" \
   -q "[.[]|select(.title|startswith(\"$id:\"))|.number]|sort|.[0] // empty"; }
 
-n=$(lookup)
+n=$(lookup) || { echo "change-issue: GitHub API failed looking up '$id'" >&2; exit 3; }  # never read as "no issue"
 if [ -z "$n" ]; then
   [ "${2:-}" = --find ] && exit 1
   # A typo once created a bogus issue (#501): the id must be a change directory or a roadmap id.

@@ -52,3 +52,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Notes for next session: PR #640's hygiene job failed because commit 621ebd1 had no App identity (task-edit guard); history can't be rewritten, so the work moved to branch `claude/change-b1-nestjs-api-r2`, PR #674 (#640 closed). Use `-r2` as the change branch now. Local `just task-guard` fails in cloud VMs only because AGENT_APP_KEY_* vars are set; unset them to reproduce CI.
 ## 2026-11-23 (PM, split for parallel work)
 - Workers were idle with an empty ready queue (#670) while this 44-task change is held by one worker (#653). Group 3 (TypeScript tooling) is now also planned as `b3-ts-tooling`, and tasks 5.2 and 5.3 (core API contract and Rust service) as `b2-rust-core`; both have no deps, so two more workers can start today. This change's task text is unchanged: when one of those changes merges, run the matching verify task here (3.5, or the 5.2/5.3 outputs) and tick it only if it passes. Task 5.4 calls `packages/core-client` from `b2-rust-core`. The lead may drop the duplicated task lines on a planning branch (#653).
+
+## 2026-11-23 worker-b (task 2.2)
+- Task 2.2 done: Nest bootstrap in `apps/api/src` (zod env with no secret defaults, nestjs-pino with key-name redaction through formatters and req/res serializers, `/healthz`, `/readyz` via terminus). A first evaluator pass FAILED (x-api-token header leaked through pino-http, statusCode null); fixed and re-evaluated PASS.
+- Gotchas: vitest (oxc) emits no decorator metadata, so use explicit `@Inject(...)`; nestjs-pino keeps one module-level logger, so logging tests need their own test file; pino `redact` cannot match key fragments.
+- Verified: `tsc --noEmit` clean, `vitest run` 7 passed, `just quick` OK.
+- Notes for next session: 2.1 still waits on a lead/owner decision about the tree-check.sh rule (see earlier entry). Next task 2.3 (Kysely data layer).

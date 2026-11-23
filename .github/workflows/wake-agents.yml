@@ -32,7 +32,7 @@ on:
 permissions:
   contents: read  # sparse checkout of the router
   issues: write   # debate threads; wake-<role> queue labels
-  pull-requests: read  # the PR author picks its worker
+  pull-requests: write  # the PR author picks its worker; labelling a PR wake-<role> needs write (403 before 2026-11-23)
   actions: read   # tick: main CI state
 
 jobs:

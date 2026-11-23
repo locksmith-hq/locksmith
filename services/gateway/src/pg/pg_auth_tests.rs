@@ -66,6 +66,7 @@ fn grant(secret_id: Uuid) -> Grant {
         secret_name: "DB".to_owned(),
         mode: "relay".to_owned(),
         expires_at: None,
+        scope: None,
     }
 }
 
@@ -180,6 +181,7 @@ impl Harness {
         let bindings = Bindings {
             org_id: ORG,
             bindings: Vec::new(),
+            aws_bindings: Vec::new(),
             pg: vec![
                 pg("app", APP, "db.test", true),
                 pg("internal", INTERNAL, "internal.test", false),

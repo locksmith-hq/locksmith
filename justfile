@@ -295,6 +295,15 @@ db-smoke:
     cargo build -q -p smith-cli --bin smith
     cargo nextest run -p ls-e2e --test db_relay
 
+# D2 AWS vend smoke (P1 owns `aws-smoke`, the real-AWS session smoke; this one is local on Floci; needs `just up` for Floci and `just api`; `pip install awscli`): the real `aws` CLI
+# gets scoped, short-lived STS credentials from the gateway through `smith aws setup` and
+# `credential_process`; asserts the assumed-role identity, expiry and that the agent HOME holds no
+# key. Skips with a note without `aws` or Floci unless E2E_REQUIRE_AWS is set. Run `just leak-scan` after.
+aws-vend-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test aws_smoke --no-capture
+
 # D4 workload-identity smoke (needs `just up` and `just workload-smoke-api`): an in-process
 # GitHub-shaped OIDC stub issuer (TLS on loopback) and runner endpoint; `smith login --workload
 # github` exchanges its token, relays to the WireMock upstream and holds no secret; a non-matching

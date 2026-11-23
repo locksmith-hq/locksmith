@@ -37,6 +37,12 @@ pub enum Event {
     Prompt {
         text: String,
     },
+    /// Any other string in a tool's input that may name a file or a glob (decision P3-2: a path
+    /// under a misnamed key must still meet the protected-path policy).
+    Arg {
+        arg: String,
+        cwd: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,6 +145,27 @@ pub fn decide(ev: &Event, v: &dyn Vault) -> Decision {
             }
         }
         Event::Prompt { text } => prompt_decision(text, v),
+        Event::Arg { arg, cwd } => {
+            // A secret file by name (a glob is judged as a search pattern below, so `*` alone
+            // stays allowed), then the file's content and secret-naming globs.
+            if !arg.contains(['*', '?'])
+                && let Some(t) = secret_targets(cwd, arg).first()
+            {
+                return deny(
+                    "secret-file",
+                    format!("{} holds secrets", display(Path::new(t))),
+                    ALT_FILES,
+                );
+            }
+            decide(
+                &Event::Search {
+                    path: Some(PathBuf::from(arg)),
+                    glob: Some(arg.clone()),
+                    cwd: cwd.clone(),
+                },
+                v,
+            )
+        }
     }
 }
 

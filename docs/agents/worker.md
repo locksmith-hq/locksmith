@@ -3,7 +3,7 @@
 Each run unblocks finished work, then takes tasks for about 40 minutes, across as many changes as fit; a quick PR fix is never the whole run.
 
 0. **Start.**
-   - Run `bash scripts/worker-has-work.sh`. If it prints `idle` and you were not woken by an owner tag, run `bash scripts/request-work.sh` and stop.
+   - `bash scripts/worker-has-work.sh <role>`: if it prints `idle` and you were not woken by an owner tag, run `bash scripts/request-work.sh` and stop.
    - Use the `run-start` skill with `worker`.
    - Use the `finish-pr` skill: one attempt at red main (it never blocks your run), then unblock your own PRs.
    - Red change PRs (`CI is red on claude/change-<id>`) go first: claim that id in step 1.

@@ -60,6 +60,7 @@ getrandom = "0.2"
 sha2 = "0.10"
 
 [dev-dependencies]
+proptest = { workspace = true }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 wiremock = { workspace = true }

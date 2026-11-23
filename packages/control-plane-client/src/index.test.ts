@@ -73,5 +73,8 @@ describe("console client", () => {
     expect(by.http).toEqual([["Origin", "https://api.example.com"], ["Header", "Authorization"]]);
     expect(by.git).toEqual([["Host", "github.com"], ["Repo", "acme"]]);
     expect(by.aws).toContainEqual(["Max duration", "900s"]);
+    expect(by.aws).toContainEqual(["Allowed actions", "s3:GetObject, s3:PutObject"]);
+    expect(bindingDetails({ kind: "aws", name: "r", allowed_actions: [] })).toEqual([["Allowed actions", "none"]]);
+    expect(by.pg!.map(([l]) => l)).not.toContain("Allowed actions");
   });
 });

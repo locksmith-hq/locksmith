@@ -1,0 +1,7 @@
+{
+  "code": 0,
+  "stdout": {
+    "cancel": true,
+    "errorMessage": "Locksmith hook could not read the event; run `smith doctor`"
+  }
+}

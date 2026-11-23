@@ -162,7 +162,8 @@ gw_body() {
 # secret to ORIGIN (default the WireMock upstream, http://127.0.0.1:8089) in HEADER with TEMPLATE
 # (default `Authorization: Bearer {secret}`); start a gateway for the org; log the agent in with
 # `smith login --agent`. Sets GW_ORG, GW_PROJECT, GW_ENVIRONMENT, GW_SECRET_ID, GW_AGENT_ID,
-# GW_GRANT_ID, GW_ENROLLMENT_FILE, GW_BINDINGS, GW_GATEWAY_URL, GW_AGENT_HOME.
+# GW_GRANT_ID, GW_ENROLLMENT_FILE, GW_BINDINGS, GW_GATEWAY_URL, GW_AGENT_HOME. A case may set
+# GW_BIND_FN to its own function (same arguments) that writes GW_BINDINGS instead of gw_bind.
 gw_setup() {
   local origin="${1:-${E2E_WIREMOCK_URL:-http://127.0.0.1:8089}}"
   local header="${2:-Authorization}" template="${3:-}"
@@ -208,7 +209,7 @@ with open(sys.argv[3], "w") as fh:
   gw_post "/v1/agents/$GW_AGENT_ID/grants" "$(gw_body grant "{\"secret_id\":\"$GW_SECRET_ID\"}")" grant
   GW_GRANT_ID="$(gw_json "$GW_BODY" id)"
 
-  gw_bind "$origin" "$header" "$template"
+  "${GW_BIND_FN:-gw_bind}" "$origin" "$header" "$template"
   gw_start_gateway
   gw_login
 }

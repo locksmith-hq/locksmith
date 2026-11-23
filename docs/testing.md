@@ -21,7 +21,6 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-hooks` | Rust lib | `just test ls-hooks` | no | `just test-rust` |  |
 | `crates/ls-mcp-server` | Rust lib | `just test ls-mcp-server` | no | `just test-rust` | Shared Hub and Agent MCP tool registry, switch check and no-value schema test |
 | `crates/ls-ipc` | Rust lib | `just test ls-ipc` | no | `just test-rust` | `just api-types` regenerates `packages/api-types` from it |
-| `crates/ls-license` | Rust lib | `just test ls-license` | no | `just test-rust` |  |
 | `crates/ls-platform` | Rust lib | `just test ls-platform` | no | `just test-rust` |  |
 | `crates/ls-proxy` | Rust lib | `just test ls-proxy` | no | `just test-rust` |  |
 | `crates/ls-redact` | Rust lib | `just test ls-redact` | no | `just test-rust` |  |
@@ -45,10 +44,14 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `packages/tsconfig` | npm config | `just test tsconfig` | no | `just test-web` | Shared tsconfig, checked by `tsc --noEmit` in the app builds |
 | `packages/ui` | npm shared UI | `just test ui` | no | `just test-web` | Built by `npm run build`; no tests of its own |
 | `integrations/claude-code` | agent plugin (files) | `just test claude-code` | no | `tests/adversarial` | Thin plugin (hooks, skills and commands); real integration tests come with P3 |
+| `integrations/copilot` | agent plugin (files) | `just test copilot` | no | `crates/smith-cli` | Generated hook and MCP files; drift test `agents`, wrapper replay in `smith-cli --test integrations`, handshake in `locksmith-mcp --test integrations` |
+| `integrations/cline` | agent plugin (files) | `just test cline` | no | `crates/smith-cli` | Generated hook script; drift test `agents`, script replay of the recorded Cline fixtures in `smith-cli --test integrations` |
 | `integrations/codex` | agent plugin (files) | `just test codex` | no | `tests/adversarial` | Thin plugin (config only); real integration tests come with P3 |
 | `integrations/cursor` | agent plugin (files) | `just test cursor` | no | `tests/adversarial` | Thin plugin (hooks and MCP config); real integration tests come with P3 |
-| `integrations/generic-mcp` | agent plugin (files) | `just test generic-mcp` | no | `tests/adversarial` | Docs-only recipe for any MCP client; real integration tests come with P3 |
+| `integrations/gemini-cli` | agent plugin (files) | `just test gemini-cli` | no | `crates/smith-cli` | Generated hook and MCP files; drift test `agents`, wrapper replay in `smith-cli --test integrations`, handshake in `locksmith-mcp --test integrations` |
+| `integrations/generic-mcp` | agent plugin (files) | `just test generic-mcp` | no | `crates/smith-cli` | Generated `mcp.json` stdio snippet and docs for any MCP client; drift test `agents`, handshake in `locksmith-mcp --test integrations` |
 | `integrations/github-action` | CI action (composite, files) | `just test github-action` | no | `crates/smith-cli` | Thin composite action around `smith login --workload github`; login behaviour is tested by `cargo nextest run -p smith-cli workload` |
+| `integrations/windsurf` | agent plugin (files) | `just test windsurf` | no | `crates/smith-cli` | Generated legacy hook file, not protected until the Devin Desktop format is recorded; drift test `agents`, gating test in `smith-cli --test integrations` |
 | `tests/adversarial` | shell harness | `just test adversarial` | no | self | `run.sh selftest`; agent cases need `--agent`; `just adversarial-gate` runs the gateway cases against `just up` |
 | `tests/e2e` | Rust e2e (package `ls-e2e`) | `just test e2e` | yes | self | Needs `just up` and `just api`; `just relay-smoke`, `just connector-smoke`, `just audit-smoke` |
 | `tests/kit` | shell + python | `just test kit` | no | self | `leak_scan_test.sh` |

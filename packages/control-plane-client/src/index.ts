@@ -36,7 +36,7 @@ export function bindingDetails(b: BindingSummary): Array<[label: string, value: 
     b.kind === "pg" ? [["Host", b.host], ["Port", b.port], ["User", b.user], ["Database", b.database], ["TLS", b.tls]]
     : b.kind === "http" ? [["Origin", b.origin], ["Header", b.header]]
     : b.kind === "git" ? [["Host", b.host], ["Repo", b.repo]]
-    : [["Role", b.role], ["Region", b.region], ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"], ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`]];
+    : [["Role", b.role], ["Region", b.region], ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"], ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`], ["Allowed actions", b.allowed_actions == null ? null : b.allowed_actions.join(", ") || "none"]];
   return rows.filter((r): r is [string, string | number | boolean] => r[1] != null && r[1] !== "").map(([l, v]) => [l, String(v)]);
 }
 

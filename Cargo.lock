@@ -2839,15 +2839,19 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "base64 0.22.1",
  "jsonwebtoken",
+ "ls-proxy",
  "p256",
  "rcgen",
  "reqwest",
  "rustls",
  "rustls-pki-types",
  "serde_json",
+ "time",
  "tokio",
  "tokio-postgres",
  "tokio-rustls",
+ "ureq 3.5.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -2905,6 +2909,7 @@ dependencies = [
  "ls-proxy",
  "ls-redact",
  "pgwire",
+ "proptest",
  "rcgen",
  "reqwest",
  "rmcp",
@@ -2961,10 +2966,6 @@ dependencies = [
  "windows-sys 0.61.2",
  "zeroize",
 ]
-
-[[package]]
-name = "ls-license"
-version = "0.0.1-alpha.4"
 
 [[package]]
 name = "ls-mcp-server"

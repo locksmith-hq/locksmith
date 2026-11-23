@@ -5,7 +5,7 @@
 #   dispatch.sh plan              what run would fire now (read-only)
 #   dispatch.sh record <role> <reason>   add a fire to the ledger (route.sh fire, for event wakes of workers)
 #   dispatch.sh selftest
-# Config: routing.json `dispatch` {shadow, slots, max_5h, max_day, run_minutes, workers}.
+# Config: routing.json `dispatch` {shadow, since, slots, max_5h, max_day, run_minutes, workers}.
 # State: fires are comments on the `dispatch-ledger` issue; a worker's run ends when its App posts on the
 # `agent-log` issue (run-log skill: one run-metadata block per run). A worker is busy from its last fire until that post, or run_minutes.
 set -uo pipefail
@@ -17,7 +17,10 @@ cfg="${ROUTING:-$here/../docs/agents/routing.json}"
 decide() {
   jq -r '
     def t: fromdateiso8601;
-    (.now|t) as $n | .cfg as $c | .fires as $fires | .ends as $ends |
+    (.now|t) as $n | .cfg as $c |
+    # Budget starts at `since` (when dispatch went live), so cron runs from before it do not count.
+    (($c.since // "1970-01-01T00:00:00Z")|t) as $s0 |
+    [.fires[]|select((.at|t) >= $s0)] as $fires | [.ends[]|select((.at|t) >= $s0)] as $ends |
     def last_fire($w): [$fires[]|select(.role == $w)]|sort_by(.at|t)|last;
     def busy($w): last_fire($w) as $f |
       $f != null and ($n - ($f.at|t)) < $c.run_minutes * 60 and ([$ends[]|select(.role == $w and (.at|t) >= ($f.at|t))]|length) == 0;
@@ -100,6 +103,9 @@ selftest() {
   d 'worker-a\tCI is red on claude/change-x' "[$red]" '[{"role":"worker-b","at":"2026-11-23T11:50:00Z"}]' '[]'  # author busy: another worker
   six=$(for h in 8 9 10 10 11 11; do printf '{"role":"worker-c","at":"2026-11-23T%02d:05:00Z"},' "$h"; done | sed 's/,$//')
   d '' "[$rdy]" '[]' "[$six]"                                                # 5-hour budget used up
+  c=$(jq -c '.since = "2026-11-23T11:00:00Z"' <<<"$c")
+  d 'worker-a\td3 is ready' "[$rdy]" '[]' "[$six]"                           # runs before since don't count
+  c=$(jq -c 'del(.since)' <<<"$c")
   c=$(jq -c '.shadow = true' <<<"$c")
   d 'worker-a\td3 is ready' "[$rdy]" '[]' "[$six]"                           # shadow: cron runs don't use our budget
   d '' "[$rdy]" "[$(sed 's/"worker-c"/"worker-x"/g' <<<"$six")]" '[]'           # shadow: our own would-fires do

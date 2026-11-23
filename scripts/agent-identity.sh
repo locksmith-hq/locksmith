@@ -167,7 +167,7 @@ case "${1:-}" in
   setup) setup "${2:?usage: agent-identity.sh setup <role>}" ;;
   keyvar) keyvar "${2:?usage: agent-identity.sh keyvar <role>}" ;;
   role) role "${2:?usage: agent-identity.sh role <persona>}" ;;
-  logins) logins "${2:?usage: agent-identity.sh logins <persona>}" ;;
+  logins) p=${2:-$(cat "$state/persona" 2>/dev/null)}; logins "${p:?usage: agent-identity.sh logins <persona>}" ;;  # later shells lose $AGENT_PERSONA
   token) token ;;
   credential) [ "${2:-}" = get ] && t=$(token) && printf 'username=x-access-token\npassword=%s\n' "$t" ;;
   selftest) selftest ;;

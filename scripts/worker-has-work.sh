@@ -8,8 +8,9 @@ work=()
 # AWS tooling dispatcher, which runs this script per worker before it fires one.
 [ "$(gh api "repos/$repo/issues?labels=harness-blocker,hold-workers&state=open&per_page=1" -q length 2>/dev/null)" = 1 ] && { echo idle; exit 1; }
 git fetch -q origin 2>/dev/null
-# A worker acts only on PRs it opened (owner 2026-11-20); without a persona (identities paused) count every PR.
-AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
+# A worker acts only on PRs it opened (owner 2026-11-20); without a persona count every PR (2026-11-23: the PM's
+# review-failed #614 woke every worker that ran this before agent-start.sh).
+AGENT_PERSONA=${1:-${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}}  # $1 (worker.md step 0 runs before agent-start.sh records it)
 me=${AGENT_PERSONA:+$(bash "$(dirname "$0")/agent-identity.sh" logins "$AGENT_PERSONA")}  # one login per line
 # shellcheck disable=SC2016 # jq variables
 mine='select(env.me == "" or (.user.login as $l | env.me | split("\n") | index($l)))'; export me

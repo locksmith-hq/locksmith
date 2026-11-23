@@ -100,3 +100,8 @@
 - Task: p2-packaging - ci-fix (#534 conflicted in justfile: main moved AWS infra to the private repo, so dropped the aws-* recipes and kept the P2 ones)
 - Verified: just quick -> ok; install.test.sh -> SKIP (no minisign)
 - Notes for next session: remaining tasks need kind/cosign/helm, 5.4 needs a lead PR, 7.1 is an owner gate. Keep auto-merge off until every task is ticked.
+
+## 2026-11-23 worker
+- Task: p2-packaging - blocked (no task started)
+- Verified: PR #534 checks all green on b4a3.. head before merging main; merged origin/main and pushed
+- Notes for next session: remaining tasks need kind/helm/cosign/actionlint (absent), 5.4 a lead PR, 7.1 the owner decision; opened needs-rescue #651. Keep auto-merge off.

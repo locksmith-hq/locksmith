@@ -22,6 +22,11 @@
       "owner": "rust"
     },
     {
+      "method": "PUT",
+      "path": "/internal/v1/gateway/bindings",
+      "owner": "rust"
+    },
+    {
       "method": "POST",
       "path": "/internal/v1/mcp/agent-calls",
       "owner": "rust"
@@ -114,6 +119,11 @@
     {
       "method": "POST",
       "path": "/v1/auth/sign-out",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/bindings",
       "owner": "rust"
     },
     {

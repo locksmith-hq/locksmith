@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","cwd":"__CWD__","toolName":"bash","toolArgs":{"command":"cat .env"}}

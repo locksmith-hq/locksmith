@@ -205,6 +205,12 @@ impl State {
         ))
     }
 
+    /// The agent token as a secret, for `smith db connect --gateway`: the caller puts it in a
+    /// child process environment (`PGPASSWORD`) and nowhere else.
+    pub fn token_secret(&self) -> SecretString {
+        SecretString::from(self.token.expose_secret().to_owned())
+    }
+
     /// Redactor for this agent's own token.
     pub fn redactor(&self) -> Redactor {
         Redactor::new(&[Secret::new("TOKEN", self.token.expose_secret().as_bytes())])

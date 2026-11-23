@@ -258,3 +258,234 @@ fn claude_code_plugin_package_is_consistent() {
     }
     assert!(names.len() >= 7);
 }
+
+fn raw(h: &Home, agent: &str, event: &str, stdin: &[u8]) -> Output {
+    let mut c = h.cmd(&["hook", agent, event]).spawn().unwrap();
+    let _ = c.stdin.take().unwrap().write_all(stdin);
+    c.wait_with_output().unwrap()
+}
+
+#[test]
+fn gemini_cli_blocks_with_exit_2_and_allows_silently() {
+    let h = Home::new();
+    let w = work(&h);
+    let deny = hook(
+        &h,
+        "gemini-cli",
+        "BeforeTool",
+        &json!({"cwd": w, "hook_event_name": "BeforeTool", "tool_name": "run_shell_command",
+        "tool_input": {"command": "cat .env", "is_background": false}}),
+    );
+    assert_eq!(deny.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&deny.stderr).starts_with("Blocked by Locksmith"));
+    let ok = hook(
+        &h,
+        "gemini-cli",
+        "BeforeTool",
+        &json!({"cwd": w, "tool_name": "run_shell_command", "tool_input": {"command": "ls"}}),
+    );
+    assert!(ok.status.success() && ok.stdout.is_empty());
+    let bad = raw(&h, "gemini-cli", "BeforeTool", b"not json");
+    assert_eq!(bad.status.code(), Some(2));
+}
+
+#[test]
+fn copilot_denies_with_decision_json_and_malformed_exits_2() {
+    let h = Home::new();
+    let w = work(&h);
+    let o = hook(
+        &h,
+        "copilot",
+        "preToolUse",
+        &json!({"cwd": w, "toolName": "bash", "toolArgs": "{\"command\":\"cat .env\"}"}),
+    );
+    assert_eq!(o.status.code(), Some(0));
+    let v = out_json(&o);
+    assert_eq!(v["permissionDecision"], "deny");
+    assert!(
+        v["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .starts_with("Blocked by Locksmith")
+    );
+    let bad = raw(&h, "copilot", "preToolUse", b"not json");
+    assert_eq!(bad.status.code(), Some(2));
+}
+
+#[test]
+fn cline_cancels_and_malformed_cancels() {
+    let h = Home::new();
+    let w = work(&h);
+    let o = hook(
+        &h,
+        "cline",
+        "PreToolUse",
+        &json!({"workspaceRoots": [w], "preToolUse": {"toolName": "execute_command",
+        "parameters": {"command": "cat .env"}}}),
+    );
+    assert_eq!(o.status.code(), Some(0));
+    let v = out_json(&o);
+    assert_eq!(v["cancel"], true);
+    assert!(
+        v["errorMessage"]
+            .as_str()
+            .unwrap()
+            .starts_with("Blocked by Locksmith")
+    );
+    let bad = raw(&h, "cline", "PreToolUse", b"not json");
+    assert_eq!(bad.status.code(), Some(0));
+    assert_eq!(out_json(&bad)["cancel"], true);
+}
+
+/// Decision P3-2, bounded: a tool event under an unexpected naming, or a secret path under a
+/// decoy key beside the parsed one, never allows.
+#[test]
+fn doc_derived_adapters_fail_closed_on_shape_and_decoy_keys() {
+    let h = Home::new();
+    let w = work(&h);
+    let gemini = |input: Value| {
+        let o = hook(&h, "gemini-cli", "BeforeTool", &input);
+        assert_eq!(o.status.code(), Some(2), "{input}");
+    };
+    gemini(json!({"cwd": w, "toolName": "read_file", "tool_input": {"file_path": ".env"}}));
+    gemini(json!({"cwd": w, "tool_name": "read_file",
+        "tool_input": {"file_path": "README.md", "absolute_path": ".env"}}));
+    let copilot = |event: &str, input: Value| {
+        let o = hook(&h, "copilot", event, &input);
+        let denied = o.status.code() == Some(2)
+            || (o.status.code() == Some(0) && out_json(&o)["permissionDecision"] == "deny");
+        assert!(denied, "{event} {input}");
+    };
+    copilot(
+        "preToolUse",
+        json!({"cwd": w, "tool_name": "view", "tool_input": {"path": ".env"}}),
+    );
+    copilot(
+        "PreToolUse",
+        json!({"cwd": w, "toolName": "bash", "toolArgs": {"command": "cat .env"}}),
+    );
+    copilot(
+        "preToolUse",
+        json!({"cwd": w, "toolName": "view", "toolArgs": {"path": "README.md", "file": ".env"}}),
+    );
+    let o = hook(
+        &h,
+        "cline",
+        "PreToolUse",
+        &json!({"workspaceRoots": [w], "preToolUse": {"toolName": "read_file",
+        "parameters": {"path": "README.md", "paths": [".env"]}}}),
+    );
+    assert_eq!(out_json(&o)["cancel"], true);
+    // Every string under a shell key is shell-analysed; a key a shell tool does not use is
+    // path-checked and shell-analysed.
+    for input in [
+        json!({"name": "run_commands", "input": {"commands": ["ls"], "command": "cat .env"}}),
+        json!({"name": "run_commands", "input": {"commands": [{"command": "cat .env"}]}}),
+        json!({"name": "execute_command", "input": {"command": "ls", "commands": [".env"]}}),
+        json!({"name": "execute_command", "input": {"command": "ls", "commands": "cat .env"}}),
+    ] {
+        let o = hook(
+            &h,
+            "cline",
+            "PreToolUse",
+            &json!({"cwd": w, "tool_call": input}),
+        );
+        assert_eq!(out_json(&o)["cancel"], true, "{input}");
+    }
+}
+
+/// Spec "the denial is audited": a gemini-cli, copilot and cline denial reaches the audit log
+/// through a running, unlocked daemon (the hook itself never starts one).
+#[test]
+fn doc_derived_adapter_denials_are_audited() {
+    use common::PW;
+    let h = Home::new();
+    let w = work(&h);
+    let run = std::env::temp_dir().join(format!(
+        "lsh-{}",
+        h.0.file_name()
+            .unwrap()
+            .to_string_lossy()
+            .replace("smith-e2e-", "")
+    ));
+    let bin = Path::new(env!("CARGO_BIN_EXE_smith"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    if !bin.join("locksmithd").exists() {
+        let cargo = std::env::var("CARGO").unwrap_or("cargo".into());
+        assert!(
+            Command::new(cargo)
+                .args(["build", "-p", "locksmithd"])
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    h.ready();
+    let with_env = |mut c: Command| {
+        c.current_dir(&w).env("LOCKSMITH_RUNTIME_DIR", &run).env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        );
+        c
+    };
+    // A session start auto-starts and unlocks the daemon.
+    let mut c = with_env(h.cmd(&["--passphrase-stdin", "session", "start", "--", "true"]))
+        .spawn()
+        .unwrap();
+    c.stdin
+        .take()
+        .unwrap()
+        .write_all(format!("{PW}\n").as_bytes())
+        .unwrap();
+    let o = c.wait_with_output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+
+    let send = |agent: &str, event: &str, input: Value| {
+        let mut c = with_env(h.cmd(&["hook", agent, event])).spawn().unwrap();
+        let _ = c
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.to_string().as_bytes());
+        c.wait_with_output().unwrap()
+    };
+    send(
+        "gemini-cli",
+        "BeforeTool",
+        json!({"cwd": w, "tool_name": "run_shell_command", "tool_input": {"command": "cat .env"}}),
+    );
+    send(
+        "copilot",
+        "preToolUse",
+        json!({"cwd": w, "toolName": "bash", "toolArgs": "{\"command\":\"cat .env\"}"}),
+    );
+    send(
+        "cline",
+        "PreToolUse",
+        json!({"workspaceRoots": [w], "preToolUse": {"toolName": "execute_command",
+        "parameters": {"command": "cat .env"}}}),
+    );
+
+    let o = with_env(h.cmd(&["audit", "ls", "--json", "--limit", "100"]))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+    let ev = v["events"].as_array().unwrap();
+    for agent in ["gemini-cli", "copilot", "cline"] {
+        assert!(
+            ev.iter().any(|e| e["action"] == "HOOK_DENY"
+                && e["policy_rule"]
+                    .as_str()
+                    .unwrap_or("")
+                    .starts_with(&format!("{agent}/"))),
+            "no HOOK_DENY audit for {agent}: {ev:?}"
+        );
+    }
+    if let Ok(pid) = std::fs::read_to_string(run.join("locksmithd.lock")) {
+        let _ = Command::new("kill").args(["-KILL", pid.trim()]).status();
+    }
+    let _ = std::fs::remove_dir_all(&run);
+}

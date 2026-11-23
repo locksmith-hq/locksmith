@@ -1,0 +1,1 @@
+{"cwd":"__CWD__","hook_event_name":"BeforeTool","tool_name":"replace","tool_input":{"file_path":"README.md","old_string":"copy config/.env","new_string":"copy .env","instruction":"mention .env"}}

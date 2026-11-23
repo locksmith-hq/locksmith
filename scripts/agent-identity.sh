@@ -3,6 +3,7 @@
 #   agent-identity.sh setup <role>      git author, push credentials and a gh shim; on any failure undoes them, prints FAIL and exits 1
 #   agent-identity.sh token             prints a valid installation token (cached, re-minted after 50 minutes)
 #   agent-identity.sh credential get    git credential helper
+#   agent-identity.sh logins <persona>  the role's GitHub logins (routing.json), one per line; role <persona> maps an old first name
 #   agent-identity.sh selftest          offline checks
 # The key comes from AGENT_APP_KEY_<ROLE> (WORKER_A, LEAD, PM, RESEARCH; base64 of the PEM; in the cloud an environment variable of that
 # routine's own environment, owner decision 2026-11-20) or, on macOS, the login Keychain item
@@ -28,6 +29,9 @@ slug() { # <persona> -> the live GitHub App slug, from docs/agents/routing.json 
   local r s; r=$(role "$1")
   s=$(jq -r --arg r "$r" '.roles[$r].app // empty' "$(dirname "$self")/../docs/agents/routing.json" 2>/dev/null)
   echo "${s:-locksmith-$(legacy "$r")}"
+}
+logins() { # <persona> -> the role's GitHub logins, newest first (routing.json; a rename keeps the old ones)
+  jq -r --arg r "$(role "$1")" '.roles[$r].logins[]?' "$(dirname "$self")/../docs/agents/routing.json"
 }
 ids() { # <persona> -> "app_id installation_id bot_user_id" (none of these is secret)
   [ -n "${AGENT_APP_IDS:-}" ] && { echo "$AGENT_APP_IDS"; return; }  # a new App (e.g. research) before it gets a row here
@@ -139,6 +143,9 @@ selftest() {
   pad "$s" | openssl base64 -d -A >"$d/sig"
   printf '%s.%s' "$h" "$p" | openssl dgst -sha256 -verify "$d/k.pub" -signature "$d/sig" >/dev/null || { echo "selftest: bad signature"; exit 1; }
   ids worker-a >/dev/null && [ "$(ids alfie)" = "$(ids worker-a)" ] || { echo "selftest: persona table"; exit 1; }
+  for r in lead pm worker-a worker-b worker-c research; do  # the App slug's bot login must be one of the role's logins
+    logins "$r" | grep -qxF "$(slug "$r")[bot]" || { echo "selftest: $r logins lack $(slug "$r")[bot]"; exit 1; }
+  done; [ "$(logins alfie)" = "$(logins worker-a)" ] || { echo "selftest: legacy persona logins"; exit 1; }
   [ "$(AGENT_APP_KEY_ALFIE=x keyvar worker-a)" = AGENT_APP_KEY_ALFIE ] && [ "$(AGENT_APP_KEY_WORKER_A=x AGENT_APP_KEY_ALFIE=y keyvar alfie)" = AGENT_APP_KEY_WORKER_A ] || { echo "selftest: key variable"; exit 1; }
   [ -n "$(slug worker-a)" ] || { echo "selftest: app slug"; exit 1; }
   if ids nobody >/dev/null 2>&1; then echo "selftest: unknown persona accepted"; exit 1; fi
@@ -159,8 +166,10 @@ selftest() {
 case "${1:-}" in
   setup) setup "${2:?usage: agent-identity.sh setup <role>}" ;;
   keyvar) keyvar "${2:?usage: agent-identity.sh keyvar <role>}" ;;
+  role) role "${2:?usage: agent-identity.sh role <persona>}" ;;
+  logins) p=${2:-$(cat "$state/persona" 2>/dev/null)}; logins "${p:?usage: agent-identity.sh logins <persona>}" ;;  # later shells lose $AGENT_PERSONA
   token) token ;;
   credential) [ "${2:-}" = get ] && t=$(token) && printf 'username=x-access-token\npassword=%s\n' "$t" ;;
   selftest) selftest ;;
-  *) echo "usage: agent-identity.sh setup <role> | keyvar <role> | token | credential get | selftest" >&2; exit 2 ;;
+  *) echo "usage: agent-identity.sh setup <role> | keyvar <role> | role <persona> | logins <persona> | token | credential get | selftest" >&2; exit 2 ;;
 esac

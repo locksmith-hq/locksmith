@@ -69,7 +69,7 @@ blockers=""
 # rescue: both labels), rescue, or gate (needs-owner only).
 # shellcheck disable=SC2016 # jq variables
 AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
-me=${AGENT_PERSONA:+locksmith-$AGENT_PERSONA[bot]}
+me=${AGENT_PERSONA:+$(bash "$(dirname "$0")/agent-identity.sh" logins "$AGENT_PERSONA")}  # one login per line
 pr_authors=""; [ "${OFFLINE:-0}" = 1 ] || pr_authors=$(gh api "repos/$repo/pulls?state=open&per_page=100" -q '.[]|[.head.ref, .user.login]|@tsv' 2>/dev/null)
 [ "${OFFLINE:-0}" = 1 ] || blockers=$(gh api "repos/$repo/issues?state=open&per_page=100" \
   -q '.[]|select(any(.labels[]; .name=="needs-owner" or .name=="needs-rescue"))
@@ -102,12 +102,12 @@ for id in $ids; do
       done
     fi
     if [ "$state" = ready ] || [ "$state" = stackable ] && [ "${OFFLINE:-0}" != 1 ]; then
-      h=$(bash scripts/run-lock.sh holder "status-check" "$id" 2>/dev/null)
+      h=$(bash scripts/run-lock.sh holder "status-check" "$id" 2>/dev/null) || h="lock state unknown"  # fail closed
       [ -n "$h" ] && { state=claimed; detail="$h"; }
     fi
     if { [ "$state" = ready ] || [ "$state" = stackable ]; } && [ "${OFFLINE:-0}" != 1 ]; then
       a=$(awk -F'\t' -v b="claude/change-$id" '$1==b{print $2; exit}' <<<"$pr_authors")
-      [[ "$a" == *"[bot]" ]] && [ "$a" != "$me" ] && { state=owned; detail="$a"; }
+      [[ "$a" == *"[bot]" ]] && ! grep -qxF "$a" <<<"$me" && { state=owned; detail="$a"; }
     fi
   fi
   if [ "$only_ready" = 1 ]; then

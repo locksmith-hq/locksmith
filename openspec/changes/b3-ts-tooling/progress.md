@@ -11,3 +11,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - knip fixes: removed 19 unused exports and types (knip --fix), dropped the unused `openapi-typescript` devDependency of `control-plane-client`, added `typescript` where `tsc` is called and `react` as a `packages/ui` peer dependency. `packages/eslint-config` removed (no leftovers).
 - Planted-export check: an unused file in `packages/sdk` made `//:knip` fail naming it; removed, green.
 - Not done: 5.1 (`just up` and `just apps-build`); the CI workflow needs no edit because it calls `just lint`.
+
+## 2026-11-23 worker
+- Task: 1.1-4.3 - done; PR #689 open, 5.1 left
+- Verified: `npx turbo run lint format:check knip typecheck` -> 19/19 green; evaluator PASS
+- Notes for next session: do 5.1 (`just up`, `just apps-build`, `just quick`), tick it, then finish the PR with auto-merge. d2-aws-sts archive is PR #688 (auto-merge on).

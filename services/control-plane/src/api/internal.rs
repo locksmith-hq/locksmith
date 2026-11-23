@@ -220,6 +220,18 @@ pub enum RelayEventKind {
     /// A refused Git call; outcome `denied`, `grants_unavailable`, `no_grant` or `denied_address`.
     #[serde(rename = "git.denied")]
     GitDenied,
+    /// A refused Postgres session on the gateway's pg listener (D3); a denial outcome, or
+    /// `upstream_unreachable`, `material_error` or `decrypt_failed` (refused before any upstream
+    /// connect).
+    #[serde(rename = "db.session.denied")]
+    DbSessionDenied,
+    /// A relayed Postgres session was established (D3); outcome `ok`.
+    #[serde(rename = "db.session.opened")]
+    DbSessionOpened,
+    /// A relayed Postgres session ended (D3); outcome `ok`, with `reason`, `duration_ms`,
+    /// `bytes_in` and `bytes_out` (and `attempt_id`: the `db.session.opened` event's id).
+    #[serde(rename = "db.session.closed")]
+    DbSessionClosed,
     /// The gateway issued a short-lived credential scoped to the secret (m1-remote-mcp task 3.3,
     /// decision H1-2); outcome `ok`, with `credential_id` and `expires_at`. Written before the
     /// credential is usable, so a failed append means nothing was issued.
@@ -236,6 +248,9 @@ impl RelayEventKind {
             Self::GitFetch => kind::GIT_FETCH,
             Self::GitPush => kind::GIT_PUSH,
             Self::GitDenied => kind::GIT_DENIED,
+            Self::DbSessionDenied => kind::DB_SESSION_DENIED,
+            Self::DbSessionOpened => kind::DB_SESSION_OPENED,
+            Self::DbSessionClosed => kind::DB_SESSION_CLOSED,
             Self::CredentialIssued => kind::CREDENTIAL_ISSUED,
         }
     }
@@ -284,6 +299,34 @@ impl RelayOutcome {
             self,
             Self::Denied | Self::NoGrant | Self::GrantsUnavailable | Self::DeniedAddress
         )
+    }
+}
+
+/// Why a relayed Postgres session ended (`db.session.closed`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionCloseReason {
+    /// The client disconnected.
+    ClientClosed,
+    /// The upstream database closed the connection.
+    UpstreamClosed,
+    /// The grant behind the session was revoked or expired.
+    Revoked,
+    /// The agent token expired.
+    Expired,
+    /// The relay failed before or during the session.
+    Error,
+}
+
+impl SessionCloseReason {
+    fn code(self) -> Code {
+        match self {
+            Self::ClientClosed => Code::new("client_closed"),
+            Self::UpstreamClosed => Code::new("upstream_closed"),
+            Self::Revoked => Code::new("revoked"),
+            Self::Expired => Code::new("expired"),
+            Self::Error => Code::new("error"),
+        }
     }
 }
 
@@ -340,6 +383,14 @@ pub struct NewRelayEvent {
     /// append returned). Required for `relay.outcome`, and its idempotency key: an outcome
     /// resent for the same attempt returns the stored event instead of appending another.
     pub attempt_id: Option<Uuid>,
+    /// Why the session ended; required for `db.session.closed`, refused elsewhere.
+    pub reason: Option<SessionCloseReason>,
+    /// Session length in milliseconds (`db.session.closed` only).
+    pub duration_ms: Option<u64>,
+    /// Bytes relayed client to upstream (`db.session.closed` only).
+    pub bytes_in: Option<u64>,
+    /// Bytes relayed upstream to client (`db.session.closed` only).
+    pub bytes_out: Option<u64>,
     /// The id of the short-lived credential (`credential.issued` only; never the credential).
     pub credential_id: Option<Uuid>,
     /// When the short-lived credential expires, Unix seconds (`credential.issued` only).
@@ -356,10 +407,35 @@ impl NewRelayEvent {
                 self.outcome != RelayOutcome::Pending && !self.outcome.is_denial()
             }
             RelayEventKind::Denied | RelayEventKind::GitDenied => self.outcome.is_denial(),
+            RelayEventKind::DbSessionDenied => {
+                self.outcome.is_denial()
+                    || matches!(
+                        self.outcome,
+                        RelayOutcome::UpstreamUnreachable
+                            | RelayOutcome::MaterialError
+                            | RelayOutcome::DecryptFailed
+                    )
+            }
+            RelayEventKind::DbSessionOpened | RelayEventKind::DbSessionClosed => {
+                self.outcome == RelayOutcome::Ok
+            }
             RelayEventKind::CredentialIssued => self.outcome == RelayOutcome::Ok,
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        let closed = self.kind == RelayEventKind::DbSessionClosed;
+        if closed != self.reason.is_some() {
+            return Err(ApiError::validation(
+                "`reason` is required for `db.session.closed` and refused otherwise",
+            ));
+        }
+        if !closed
+            && (self.duration_ms.is_some() || self.bytes_in.is_some() || self.bytes_out.is_some())
+        {
+            return Err(ApiError::validation(
+                "`duration_ms`, `bytes_in` and `bytes_out` are for `db.session.closed` only",
+            ));
         }
         // An issue names the credential and its expiry and nothing about an upstream call; no
         // other kind carries either field.
@@ -415,6 +491,19 @@ impl NewRelayEvent {
         }
         if let Some(a) = self.attempt_id {
             attrs = attrs.id(attr::ATTEMPT_ID, a);
+        }
+        if let Some(r) = self.reason {
+            attrs = attrs.code(attr::REASON, r.code());
+        }
+        for (key, v) in [
+            (attr::DURATION_MS, self.duration_ms),
+            (attr::BYTES_IN, self.bytes_in),
+            (attr::BYTES_OUT, self.bytes_out),
+        ] {
+            if let Some(v) = v {
+                // Saturate rather than wrap: the ledger integer is signed.
+                attrs = attrs.int(key, i64::try_from(v).unwrap_or(i64::MAX));
+            }
         }
         if let Some(c) = self.credential_id {
             attrs = attrs.id(attr::CREDENTIAL_ID, c);

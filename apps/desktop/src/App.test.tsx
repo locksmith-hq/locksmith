@@ -636,3 +636,31 @@ test("mcp clients: lists, revokes an active client, and shows 403 and empty stat
   await nav("MCP clients");
   expect(await screen.findByText(/No MCP clients have signed in yet/)).toBeInTheDocument();
 });
+
+test("bindings: lists non-secret fields, shows errors, empty and not-connected states", async () => {
+  const items = [
+    { kind: "pg", name: "appdb", host: "db.internal.example.com", port: 5432, user: "app", database: "appdb", tls: "verify-full" },
+    { kind: "http", name: "https://api.example.com", origin: "https://api.example.com", header: "Authorization" },
+  ];
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockResolvedValue(items) } as never);
+  const r = render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByText("appdb")).toBeInTheDocument();
+  expect(screen.getByText(/Host: db\.internal\.example\.com · Port: 5432 · User: app · Database: appdb · TLS: verify-full/)).toBeInTheDocument();
+  expect(screen.getByRole("table").textContent).not.toMatch(/password/i);
+  r.unmount();
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockRejectedValue(new Error("Forbidden")) } as never);
+  const r2 = render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  r2.unmount();
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockResolvedValue([]) } as never);
+  const r3 = render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByText(/has not published any bindings/)).toBeInTheDocument();
+  r3.unmount();
+  m.agentsClient.mockReturnValue(null as never);
+  render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
+});

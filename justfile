@@ -24,7 +24,7 @@ quick base="origin/main":
       done
       if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
     fi
-    if grep -q '^apps/web/' <<<"$files"; then npm run lint -w apps/web; fi
+    if grep -qE '\.(tsx?|mjs|js)$|^knip\.json$|^\.oxfmtrc\.json$|^\.oxlintrc\.json$' <<<"$files"; then npx turbo run lint format:check knip typecheck; fi
 
 fmt:
     cargo fmt --all --check

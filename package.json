@@ -9,9 +9,8 @@
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
-    "lint": "turbo run lint",
-    "knip": "knip",
-    "typecheck": "turbo run typecheck"
+    "lint": "turbo run lint format:check knip typecheck",
+    "knip": "knip"
   },
   "license": "Apache-2.0",
   "packageManager": "npm@11.19.0",

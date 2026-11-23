@@ -369,7 +369,7 @@ export const offReason = (s: Source, st: Settings): string | null =>
 /** Glob such as `tests/fixtures/**` or `**` + `/*.snap` against a file path. */
 const globMatch = (glob: string, path: string) => {
   try {
-    // oxlint-disable-next-line no-control-regex -- \u0000 and \u0001 are deliberate private placeholders for ** handling
+    /* oxlint-disable no-control-regex -- \u0000 and \u0001 are deliberate private placeholders for ** handling */
     const re = glob
       .replace(/[.+^${}()|[\]\\]/g, "\\$&")
       .replace(/\*\*\//g, "\u0000")
@@ -378,6 +378,7 @@ const globMatch = (glob: string, path: string) => {
       .replace(/\?/g, "[^/]")
       .replace(/\u0000/g, "(?:.*/)?")
       .replace(/\u0001/g, ".*");
+    /* oxlint-enable no-control-regex */
     return new RegExp(`^${re}$`).test(path);
   } catch {
     return false;

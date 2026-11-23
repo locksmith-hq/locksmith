@@ -25,7 +25,20 @@ export type WorkloadCondition = components["schemas"]["ConditionView"];
 export type McpLayer = components["schemas"]["McpLayer"];
 export type McpToolSetting = components["schemas"]["McpToolSetting"];
 export type McpClient = components["schemas"]["McpClient"];
+/** One gateway binding, non-secret fields only (never a password, template, secret id or key). */
+export type BindingSummary = components["schemas"]["BindingSummary"];
+export type BindingKind = components["schemas"]["BindingKind"];
 export type Problem = components["schemas"]["Problem"];
+
+/** Non-secret fields of a binding as label/value pairs for display, in a fixed order per kind; unset fields are skipped. */
+export function bindingDetails(b: BindingSummary): Array<[label: string, value: string]> {
+  const rows: Array<[string, string | number | boolean | null | undefined]> =
+    b.kind === "pg" ? [["Host", b.host], ["Port", b.port], ["User", b.user], ["Database", b.database], ["TLS", b.tls]]
+    : b.kind === "http" ? [["Origin", b.origin], ["Header", b.header]]
+    : b.kind === "git" ? [["Host", b.host], ["Repo", b.repo]]
+    : [["Role", b.role], ["Region", b.region], ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"], ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`]];
+  return rows.filter((r): r is [string, string | number | boolean] => r[1] != null && r[1] !== "").map(([l, v]) => [l, String(v)]);
+}
 
 /** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
 export type AuditOutcomeFilter = "all" | "denied" | "redaction_failed";
@@ -106,6 +119,8 @@ export interface Client {
   setMcpTool(layer: McpLayer, tool: string, enabled: boolean): Promise<McpToolSetting>;
   /** MCP clients that signed in, revoked ones included. */
   listMcpClients(): Promise<McpClient[]>;
+  /** The gateway's bindings for the org, non-secret fields only. */
+  listBindings(): Promise<BindingSummary[]>;
   /** Revoke a client by its row `id` (not the OAuth `client_id`). Idempotent. */
   revokeMcpClient(id: string): Promise<McpClient>;
 }
@@ -214,6 +229,7 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     deleteWorkloadIdentity: (id) => run(c.DELETE("/v1/workload-identities/{id}", { params: { path: { id } } })),
     setMcpTool: (layer, tool, enabled) =>
       run(c.PUT("/v1/mcp/tools/{layer}/{tool}", { params: { path: { layer, tool } }, body: { enabled } })),
+    listBindings: async () => (await run(c.GET("/v1/bindings"))).items,
     listMcpClients: () => all((cursor) => run(c.GET("/v1/mcp/clients", { params: { query: q(cursor) } }))),
     revokeMcpClient: (client_row_id) =>
       run(c.POST("/v1/mcp/clients/{client_row_id}/revoke", { params: { path: { client_row_id } } })),

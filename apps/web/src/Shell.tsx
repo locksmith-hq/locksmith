@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agents } from "./pages/Agents";
 import { WorkloadIdentities } from "./pages/WorkloadIdentities";
 import { GrantsPage } from "./pages/Grants";
+import { Bindings } from "./pages/Bindings";
 import { Activity } from "./pages/Activity";
 import { Secrets } from "./pages/Secrets";
 import { Overview } from "./pages/Overview";
@@ -19,7 +20,7 @@ import "./shell.css";
 const NAV: ReadonlyArray<{ heading?: string; items: ReadonlyArray<readonly [path: string, label: string]> }> = [
   { items: [["overview", "Home"]] },
   { heading: "Secret Management", items: [["projects", "Projects"], ["environments", "Environments"], ["secrets", "Secrets"]] },
-  { heading: "Agent Gateway", items: [["agents", "Agents"], ["workload-identities", "Workload identities"], ["grants", "Grants"]] },
+  { heading: "Agent Gateway", items: [["agents", "Agents"], ["workload-identities", "Workload identities"], ["grants", "Grants"], ["bindings", "Bindings"]] },
   { heading: "MCP", items: [["tools", "Tools"], ["clients", "Clients"]] },
   { items: [["activity", "Activity"]] },
 ];
@@ -87,6 +88,7 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
           <Route path="agents" element={<Agents client={client} />} />
           <Route path="workload-identities" element={<WorkloadIdentities client={client} />} />
           <Route path="grants" element={<GrantsPage client={client} />} />
+          <Route path="bindings" element={<Bindings client={client} />} />
           <Route path="tools" element={<McpTools client={client} />} />
           <Route path="clients" element={<McpClients client={client} />} />
           <Route path="activity" element={<Activity client={client} />} />

@@ -110,3 +110,23 @@ test("activity: a 5xx ledger read shows an error with retry and no empty message
   expect(screen.queryByText("No audit events yet.")).toBeNull();
   expect(screen.queryByText("Reading the ledger…")).toBeNull();
 });
+
+test("bindings: lists non-secret fields per kind, never a password, and shows the empty state", async () => {
+  const r = open("/bindings");
+  expect(await screen.findByText("appdb")).toBeInTheDocument();
+  expect(screen.getByText(/Host: db\.internal\.example\.com · Port: 5432 · User: app · Database: appdb · TLS: verify-full/)).toBeInTheDocument();
+  expect(screen.getByText(/Header: Authorization/)).toBeInTheDocument();
+  expect(document.body.textContent).not.toMatch(/password/i);
+  expect(r.requests).toContain("GET /v1/bindings");
+});
+
+test("bindings: empty list and a 5xx show honest states", async () => {
+  open("/bindings", { empty: true });
+  expect(await screen.findByText("The gateway has not published any bindings yet.")).toBeInTheDocument();
+});
+
+test("bindings: a 5xx shows an error with retry, not the empty message", async () => {
+  open("/bindings", { fail: { "GET /v1/bindings": 503 } });
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.queryByText("The gateway has not published any bindings yet.")).toBeNull();
+});

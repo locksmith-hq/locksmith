@@ -14,7 +14,7 @@
 pub mod mysql;
 pub mod postgres;
 pub mod redis;
-mod scram;
+pub mod scram;
 
 use ls_redact::{Redactor, Secret};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, pem::PemObject};

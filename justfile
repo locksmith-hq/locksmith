@@ -285,6 +285,15 @@ connector-smoke:
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
 
+# D3 Postgres relay smoke test (needs `just up`, `just api` and psql): the test starts its own
+# gateway with a pg listener, creates a SCRAM role on the compose Postgres and runs real `psql`
+# through `smith db connect --gateway`; asserts the result and that no file holds the agent token or
+# the database password. Run `just leak-scan` after.
+db-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test db_relay
+
 # D4 workload-identity smoke (needs `just up` and `just workload-smoke-api`): an in-process
 # GitHub-shaped OIDC stub issuer (TLS on loopback) and runner endpoint; `smith login --workload
 # github` exchanges its token, relays to the WireMock upstream and holds no secret; a non-matching

@@ -22,7 +22,7 @@ path = "src/main.rs"
 # handle and readiness. The gateway has no copy of them.
 ls-control-plane = { path = "../control-plane" }
 axum = "0.8.9"
-tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time", "io-util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 secrecy = "0.10"
@@ -47,6 +47,10 @@ zeroize = "1.9.1"
 # ls_control_plane::agent_token.
 jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
 time = { version = "0.3.55", features = ["serde", "parsing", "formatting"] }
+pgwire = { version = "=0.42.3", default-features = false }
+# D3 task 2.1: TLS on the Postgres listener, with the gateway's rustls `ring` provider.
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 # M1 task 3.1: the agent MCP server (`/mcp`), same rmcp pin and features as the hub.
 ls-mcp-server = { path = "../../crates/ls-mcp-server" }
 rmcp = { version = "=3.11.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
@@ -62,3 +66,6 @@ wiremock = { workspace = true }
 ls-pg-test = { path = "../../crates/ls-pg-test" }
 # S5 task 3.2: read the ledger back and walk the chain in the relay's ledger tests.
 ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
+# D3 task 2.4: self-signed certificates for the Postgres listener tests (same build as ls-proxy).
+testcontainers = { workspace = true }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }

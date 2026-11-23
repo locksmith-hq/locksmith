@@ -414,6 +414,7 @@ async fn start_gateway_with(
         Bindings {
             org_id: ORG,
             bindings: Vec::new(),
+            pg: Vec::new(),
             git_bindings,
         },
         decryptor,

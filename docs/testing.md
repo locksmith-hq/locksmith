@@ -75,9 +75,9 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 
 | Gate | Tool | Config | One package |
 |---|---|---|---|
-| `lint` | oxlint 1.94.0 | `.oxlintrc.json` | `npm run lint -w <package>` |
-| `format:check` | oxfmt 0.79.0 | `.oxfmtrc.json` (fix with `npx oxfmt -c .oxfmtrc.json <dir>`) | `npm run format:check -w <package>` |
-| `knip` | knip 6.47.0 | `knip.json` (root task `//#knip`) | `npx knip --workspace <dir>` |
-| `typecheck` | tsc | each package's `tsconfig.json` | `npm run typecheck -w <package>` |
+| `npm run lint` | oxlint 1.94.0 | `.oxlintrc.json` | `npm run lint -w <package>` |
+| `npm run format:check` | oxfmt 0.79.0 | `.oxfmtrc.json` (fix with `npx oxfmt -c .oxfmtrc.json <dir>`) | `npm run format:check -w <package>` |
+| `npm run knip` | knip 6.47.0 | `knip.json` (root task `//#knip`) | `npx knip --workspace <dir>` |
+| `npm run typecheck` | tsc | each package's `tsconfig.json` | `npm run typecheck -w <package>` |
 
 `just quick` runs all four when a TypeScript file changed. CI calls `just lint`, so it enforces the same gates.

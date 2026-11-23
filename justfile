@@ -64,6 +64,7 @@ apps-build-test:
 # Regenerate packages/api-types from crates/ls-ipc (ts-rs).
 api-types:
     cargo test -p ls-ipc --features ts export_bindings
+    npx --yes oxfmt@0.79.0 -c .oxfmtrc.json packages/api-types/src
 
 tree-check:
     scripts/tree-check.sh

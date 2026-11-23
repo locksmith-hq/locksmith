@@ -61,11 +61,8 @@ apps-build: desktop-test
 apps-build-test:
     scripts/apps-build.test.sh
 
-# Regenerate generated TypeScript types: packages/api-types (ts-rs) and apps/api/src/db/types.ts.
-api-types: api-types-ipc api-types-db
-
-# Regenerate packages/api-types from crates/ls-ipc (ts-rs).
-api-types-ipc:
+# Regenerate packages/api-types from crates/ls-ipc (ts-rs). CI runs this one.
+api-types:
     cargo test -p ls-ipc --features ts export_bindings
 
 # Regenerate apps/api/src/db/types.ts: throwaway Postgres (docker), the Rust `locksmith-migrate`, kysely-codegen.

@@ -8,6 +8,7 @@ git fetch -q origin 2>/dev/null
 # A worker acts only on PRs it opened (owner 2026-11-20); without a persona (identities paused) count every PR.
 AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
 me=${AGENT_PERSONA:+$(bash "$(dirname "$0")/agent-identity.sh" logins "$AGENT_PERSONA")}  # one login per line
+# shellcheck disable=SC2016 # jq variables
 mine='select(env.me == "" or (.user.login as $l | env.me | split("\n") | index($l)))'; export me
 
 # Your PRs whose merge review failed (fix the findings; worker.md step 0)

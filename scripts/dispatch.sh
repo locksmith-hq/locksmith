@@ -19,14 +19,15 @@ decide() {
     def t: fromdateiso8601;
     (.now|t) as $n | .cfg as $c |
     # Budget starts at `since` (when dispatch went live), so cron runs from before it do not count.
-    (($c.since // "1970-01-01T00:00:00Z")|t) as $s0 |
-    [.fires[]|select((.at|t) >= $s0)] as $fires | [.ends[]|select((.at|t) >= $s0)] as $ends |
+    (($c.since // "1970-01-01T00:00:00Z")|t) as $s0 | .fires as $fires | .ends as $ends |
     def last_fire($w): [$fires[]|select(.role == $w)]|sort_by(.at|t)|last;
     def busy($w): last_fire($w) as $f |
       $f != null and ($n - ($f.at|t)) < $c.run_minutes * 60 and ([$ends[]|select(.role == $w and (.at|t) >= ($f.at|t))]|length) == 0;
     # Runs in a window: finished runs plus running ones. In shadow, cron runs are not ours: count our would-fires.
-    def runs($s): if $c.shadow then [$fires[]|select($n - (.at|t) < $s)]|length
-      else ([$ends[]|select($n - (.at|t) < $s)]|length) + ([$c.workers[]|select(busy(.))]|length) end;
+    # Busy uses every fire; only the budget starts at since.
+    def recent($s): select($n - (.at|t) < $s and (.at|t) >= $s0);
+    def runs($s): if $c.shadow then [$fires[]|recent($s)]|length
+      else ([$ends[]|recent($s)]|length) + ([$c.workers[]|select(busy(.))]|length) end;
     ([$c.workers[]|select(busy(.)|not)]) as $free |
     ([$c.slots - ($c.workers|length) + ($free|length), $c.max_5h - runs(18000), $c.max_day - runs(86400)]|min) as $room |
     (reduce .items[] as $i ({free: $free, out: []};
@@ -105,6 +106,8 @@ selftest() {
   d '' "[$rdy]" '[]' "[$six]"                                                # 5-hour budget used up
   c=$(jq -c '.since = "2026-11-23T11:00:00Z"' <<<"$c")
   d 'worker-a\td3 is ready' "[$rdy]" '[]' "[$six]"                           # runs before since don't count
+  c=$(jq -c '.since = "2026-11-23T11:40:00Z"' <<<"$c")
+  d '' "[$rdy]" '[{"role":"worker-a","at":"2026-11-23T11:30:00Z"},{"role":"worker-b","at":"2026-11-23T11:30:00Z"}]' '[]'  # fires before since still make workers busy
   c=$(jq -c 'del(.since)' <<<"$c")
   c=$(jq -c '.shadow = true' <<<"$c")
   d 'worker-a\td3 is ready' "[$rdy]" '[]' "[$six]"                           # shadow: cron runs don't use our budget

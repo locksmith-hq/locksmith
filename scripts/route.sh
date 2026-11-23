@@ -221,7 +221,7 @@ fire() { # <role> <reason>
   echo "waking $1: $2"
   if [ -z "$trig" ] || [ -z "$token" ]; then echo "::warning::$1 has no routine trigger or ${secret:-token} set; its schedule picks this up"; return 0; fi
   # Event wakes of workers go on the dispatch ledger, so dispatch.sh sees the worker busy (dispatch fires are recorded there too).
-  if [[ "$1" == worker-* ]] && [ "$(cfgq '.dispatch.shadow // true')" = false ] && [ -z "${ROUTE_DRYRUN:-}" ]; then
+  if [[ "$1" == worker-* ]] && [ "$(cfgq '.dispatch.shadow')" = false ] && [ -z "${ROUTE_DRYRUN:-}" ]; then
     bash "$here/dispatch.sh" record "$1" "$2" || echo "::warning::dispatch ledger not updated for $1"
   fi
   curl -fsS -X POST "https://api.anthropic.com/v1/claude_code/routines/$trig/fire" \

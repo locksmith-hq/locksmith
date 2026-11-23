@@ -19,6 +19,11 @@ pub fn wiremock() -> String {
     env::var("E2E_WIREMOCK_URL").unwrap_or_else(|_| "http://127.0.0.1:8089".into())
 }
 
+/// Floci (local AWS stand-in, `floci` in compose) base URL (`FLOCI_URL`).
+pub fn floci() -> String {
+    env::var("FLOCI_URL").unwrap_or_else(|_| "http://127.0.0.1:4566".into())
+}
+
 /// `prefix` plus a nanosecond timestamp, for names that must not collide between runs.
 pub fn uniq(prefix: &str) -> String {
     let t = std::time::SystemTime::now()

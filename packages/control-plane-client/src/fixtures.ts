@@ -36,5 +36,5 @@ export const bindingSummaries: BindingSummary[] = [
   { kind: "http", name: "https://api.example.com", origin: "https://api.example.com", header: "Authorization" },
   { kind: "git", name: "github.com/acme", host: "github.com", repo: "acme" },
   { kind: "pg", name: "appdb", host: "db.internal.example.com", port: 5432, user: "app", database: "appdb", tls: "verify-full" },
-  { kind: "aws", name: "arn:aws:iam::123456789012:role/deploy", role: "arn:aws:iam::123456789012:role/deploy", region: "eu-west-1", vend: true, max_duration_secs: 900 },
+  { kind: "aws", name: "arn:aws:iam::123456789012:role/deploy", role: "arn:aws:iam::123456789012:role/deploy", region: "eu-west-1", vend: true, max_duration_secs: 900, allowed_actions: ["s3:GetObject", "s3:PutObject"] },
 ];

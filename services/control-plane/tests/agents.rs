@@ -575,6 +575,45 @@ async fn without_a_signing_key_tokens_are_503_and_jwks_is_empty() {
     }
 }
 
+/// A `delegate` grant carries an allow-list; `relay` refuses one, `delegate` requires one, and
+/// the internal lookup returns it to the gateway.
+#[tokio::test]
+async fn delegate_grants_carry_a_scope() {
+    let f = Fixture::start().await;
+    let (agent, _) = f.agent(f.a.org, "ci").await;
+    let scope = json!({
+        "actions": ["s3:GetObject"],
+        "resources": ["arn:aws:s3:::bucket/*"],
+        "max_duration_secs": 900
+    });
+    for body in [
+        json!({ "secret_id": f.a.secret, "mode": "delegate" }),
+        json!({ "secret_id": f.a.secret, "mode": "relay", "scope": scope }),
+        json!({ "secret_id": f.a.secret, "mode": "delegate",
+                "scope": { "actions": [], "resources": ["*"] } }),
+        json!({ "secret_id": f.a.secret, "mode": "delegate",
+                "scope": { "actions": ["s3:GetObject"], "resources": ["x"], "extra": 1 } }),
+    ] {
+        let r = f.grant(f.a.org, agent, body).await;
+        assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
+    }
+    let r = f
+        .grant(
+            f.a.org,
+            agent,
+            json!({ "secret_id": f.a.secret, "mode": "delegate", "scope": scope }),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+    assert_eq!(r.body["mode"], "delegate");
+    assert_eq!(r.body["scope"], scope);
+
+    let lookup_uri = format!("/internal/v1/agents/{agent}/grants");
+    let got = internal(&f.app, &lookup_uri, f.a.org, Some(SERVICE_TOKEN)).await;
+    assert_eq!(got.body["items"][0]["mode"], "delegate");
+    assert_eq!(got.body["items"][0]["scope"], scope);
+}
+
 /// Grants: create, list (with the secret name), validation, duplicates, revocation and
 /// cascades; the internal lookup returns unexpired grants only and needs the service token.
 #[tokio::test]
@@ -617,11 +656,13 @@ async fn grants_lifecycle_and_internal_lookup() {
             "expires_at",
             "id",
             "mode",
+            "scope",
             "secret_id",
             "secret_name"
         ]
     );
     assert_eq!(r.body["mode"], "relay");
+    assert!(r.body["scope"].is_null());
     assert_eq!(r.body["secret_name"], "UPSTREAM_KEY");
     let grant: Uuid = r.body["id"].as_str().unwrap().parse().unwrap();
     assert_eq!(grant.get_version_num(), 7);
@@ -673,7 +714,14 @@ async fn grants_lifecycle_and_internal_lookup() {
     assert_eq!(items.len(), 1, "expired grants are not served: {}", r.raw);
     assert_eq!(
         keys(&items[0]),
-        ["expires_at", "grant_id", "mode", "secret_id", "secret_name"]
+        [
+            "expires_at",
+            "grant_id",
+            "mode",
+            "scope",
+            "secret_id",
+            "secret_name"
+        ]
     );
     assert_eq!(items[0]["grant_id"], grant.to_string());
     assert_eq!(items[0]["secret_id"], f.a.secret.to_string());

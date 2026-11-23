@@ -88,3 +88,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (hygiene) - blocked
 - Verified: bash scripts/check-task-edits.sh -> fails on 2 pre-persona commits by "Claude" (417d694, 7650f18); tree-check and public-check OK
 - Notes for next session: only fix is archiving that session or a lead-side exemption; needs-rescue #666 is open and wake-lead. Do not rewrite history.
+
+## 2026-11-23 08:13 worker
+- Task: t6 - blocked
+- Verified: scripts/check-task-edits.sh -> only failure is 2 commits authored "Claude" (417d694, 7650f18); tree-check and public-check OK
+- Notes for next session: needs history change or fresh branch (cherry-pick onto origin/main under App identity); rescue #666 open, waiting on lead. Do not push more commits here.

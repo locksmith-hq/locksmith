@@ -74,7 +74,7 @@ task-guard:
     scripts/change-status.test.sh
     scripts/agent-identity.sh selftest
     scripts/route.sh selftest
-    scripts/dispatch.sh selftest
+    scripts/worker-has-work.test.sh
     scripts/review-tier.sh selftest
     scripts/check-task-edits.sh
     scripts/check-agent-docs.sh

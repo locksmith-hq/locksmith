@@ -3,7 +3,7 @@
 #   route.sh event <event.json>    roles to wake for a GitHub event, "role<TAB>reason" per line (wake-agents.yml)
 #   route.sh debate <issue>        debate guard: "wake <role> <why>" or "wait <why>"; agents act only on their own wake
 #   route.sh fire <role> <reason>  wake a role's routine; its token comes from the env var routing.json names
-#   route.sh role <login>          the agent role of a GitHub login (dispatch.sh)
+#   route.sh role <login>          the agent role of a GitHub login
 #   route.sh tick                  fire each batched (Opus) role once for its queue (wake-agents.yml, every 2 h)
 #   (role "blocker" in event output: no routine; fire records it on one harness-blocker issue per cause)
 #   route.sh selftest
@@ -107,7 +107,7 @@ review_route() { # <pr> <sha>; merge-ready's description from GitHub (or $REVIEW
 }
 
 # One open harness-blocker issue per cause ("<cause>: <detail>"); repeats add a comment instead of waking anyone.
-# A new one queues the lead. While one also carries `hold-workers`, event wakes of workers are dropped.
+# A new one queues the lead. While one also carries `hold-workers`, worker-has-work.sh reports idle, so no worker runs.
 blocker() { # <reason>
   local cause=${1%%: *} n
   n=$(gh api "repos/$repo/issues?labels=harness-blocker&state=open&per_page=100" 2>/dev/null | jq -r --arg t "Blocker: $cause" '.[]|select(.title == $t)|.number' | head -1)
@@ -121,14 +121,9 @@ wake-agents saw a failure no worker run can fix, so it woke nobody.
 
 First: $1
 
-Fix the cause and close this issue; add \`hold-workers\` to stop worker event wakes while it is open." -q .number) || return 1
+Fix the cause and close this issue; add \`hold-workers\` to stop worker runs while it is open." -q .number) || return 1
     echo "blocker #$n opened: $1"; fire lead "harness-blocker #$n opened: $1"
   fi
-}
-
-workers_held() { # an open harness-blocker issue labelled hold-workers (or $HOLD in the selftest)
-  [ -n "${HOLD+x}" ] && { [ "$HOLD" = 1 ]; return; }
-  [ "$(gh api "repos/$repo/issues?labels=harness-blocker,hold-workers&state=open&per_page=1" -q length 2>/dev/null)" = 1 ]
 }
 
 event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
@@ -214,16 +209,13 @@ tick() { # fire each batched role once for its queue, then clear the labels it w
 fire() { # <role> <reason>
   local trig secret token
   [ "$1" = blocker ] && { blocker "$2"; return; }
-  if [[ "$1" == worker-* ]] && ! now_ok "$2" && workers_held; then echo "held: $1 not woken (open hold-workers blocker): $2"; return 0; fi
+  # The AWS tooling dispatcher fires workers (budget, slots, hold-workers); only owner tags still wake one directly.
+  if [[ "$1" == worker-* ]] && [[ "$2" != "owner tagged you"* ]]; then echo "dispatcher owns workers: $1 not fired: $2"; return 0; fi
   if batched "$1" && ! now_ok "$2"; then queue_add "$1" "$2"; return; fi
   trig=$(cfgq --arg r "$1" '.roles[$r].trigger // ""'); secret=$(cfgq --arg r "$1" '.roles[$r].secret // ""')
   [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
   if [ -z "$trig" ] || [ -z "$token" ]; then echo "::warning::$1 has no routine trigger or ${secret:-token} set; its schedule picks this up"; return 0; fi
-  # Event wakes of workers go on the dispatch ledger, so dispatch.sh sees the worker busy (dispatch fires are recorded there too).
-  if [[ "$1" == worker-* ]] && [ "$(cfgq '.dispatch.shadow')" = false ] && [ -z "${ROUTE_DRYRUN:-}" ]; then
-    bash "$here/dispatch.sh" record "$1" "$2" || echo "::warning::dispatch ledger not updated for $1"
-  fi
   curl -fsS -X POST "https://api.anthropic.com/v1/claude_code/routines/$trig/fire" \
     -H "Authorization: Bearer $token" -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
     -H "anthropic-version: 2023-06-01" -H "Content-Type: application/json" \
@@ -324,9 +316,8 @@ no role marker"
     IFS='|' read -r r w on <<<"$rw"; got=$(ROUTE_DRYRUN=1 fire "$r" "$w")
     [ "$got" = "queued for $r${on:+ $on}: $w" ] && echo "ok: queued: $r $w" || { echo "FAIL: queued: $r $w got '$got'"; fail=1; }
   done
-  got=$(HOLD=0 fire worker-a "CI failed on PR #12 (x)" | head -1); [ "$got" = "waking worker-a: CI failed on PR #12 (x)" ] && echo "ok: workers fire at once" || { echo "FAIL: worker got '$got'"; fail=1; }
-  got=$(HOLD=1 fire worker-a "CI failed on PR #12 (x)"); [ "$got" = "held: worker-a not woken (open hold-workers blocker): CI failed on PR #12 (x)" ] && echo "ok: hold-workers drops event wakes" || { echo "FAIL: held got '$got'"; fail=1; }
-  got=$(HOLD=1 fire worker-a "owner tagged you on #8: u" | head -1); [ "$got" = "waking worker-a: owner tagged you on #8: u" ] && echo "ok: owner tags pass a hold" || { echo "FAIL: hold+tag got '$got'"; fail=1; }
+  got=$(fire worker-a "CI failed on PR #12 (x)"); [ "$got" = "dispatcher owns workers: worker-a not fired: CI failed on PR #12 (x)" ] && echo "ok: dispatcher owns worker event wakes" || { echo "FAIL: worker got '$got'"; fail=1; }
+  got=$(fire worker-a "owner tagged you on #8: u" | head -1); [ "$got" = "waking worker-a: owner tagged you on #8: u" ] && echo "ok: owner tags still wake a worker" || { echo "FAIL: worker tag got '$got'"; fail=1; }
   qo() { # <role> <expected lines> <state json>
     printf '%s' "$3" >"$d/q.json"; got=$(QUEUE_JSON=$d/q.json NOW=2026-11-22T12:00:00Z queue_of "$1")
     [ "$got" = "$(printf '%b' "$2")" ] && echo "ok: $1 queue -> ${2:-empty}" || { echo "FAIL: $1 queue want '$2' got '$got'"; fail=1; }

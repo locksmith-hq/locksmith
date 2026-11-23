@@ -30,13 +30,13 @@ jobs:
       - name: tree-check, task guard, public-check
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: just tree-check task-guard public-check
+        run: just tree-check task-guard public-check migration-guard
       - name: gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1
         run: |
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
-          ./gitleaks git --no-banner --redact --exit-code 1 .
+          ./gitleaks git --no-banner --redact --exit-code 1 --log-opts=HEAD .
 
   rust:
     runs-on: ubuntu-24.04
@@ -52,7 +52,13 @@ jobs:
       - run: just fmt
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - uses: EmbarkStudios/cargo-deny-action@v2
+      # Profile `ci` (.config/nextest.toml): one retry and a JUnit report. The report becomes check-run annotations,
+      # the one place cloud agents can read a failure (job logs are blocked by their proxy).
       - run: just test-rust
+        env:
+          NEXTEST_PROFILE: ci
+      - if: always()
+        run: python3 scripts/junit-annotate.py target/nextest/ci/junit.xml
 
   web:
     runs-on: ubuntu-24.04
@@ -67,6 +73,11 @@ jobs:
         with:
           tool: just
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
       - run: npm run lint
       - run: just test-web
 
@@ -95,4 +106,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm test -w @locksmith/desktop
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+      - run: npx turbo run test --filter=@locksmith/desktop

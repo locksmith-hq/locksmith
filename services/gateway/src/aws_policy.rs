@@ -2,8 +2,8 @@
 //!
 //! The agent never supplies a policy. The gateway renders one from the grant's allow-list and
 //! hands it to STS `AssumeRole`, so the issued credentials can only narrow the role. The renderer
-//! emits compact JSON (moto's IAM mode fails signature checks on spaces) and enforces the STS
-//! limit of 2048 packed characters itself, because neither moto nor the call site checks it.
+//! emits compact JSON and enforces the STS limit of 2048 packed characters itself, because
+//! neither Floci (design.md decision 6) nor the call site checks it.
 
 use std::collections::BTreeSet;
 use std::fmt;

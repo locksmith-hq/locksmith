@@ -637,16 +637,42 @@ test("mcp clients: lists, revokes an active client, and shows 403 and empty stat
   expect(await screen.findByText(/No MCP clients have signed in yet/)).toBeInTheDocument();
 });
 
-test("bindings: AWS rows show role, region, actions, vend and max duration; no credential fields", async () => {
-  const aws = { kind: "aws" as const, secret_id: "s1", role_arn: "arn:aws:iam::1:role/dev", region: "us-east-1", allowed_actions: ["s3:GetObject", "s3:ListBucket"], vend: true, max_duration_secs: 900 };
-  // A leaky payload must not leak: only the declared fields are rendered.
-  const leaky = { ...aws, secret_id: "s2", role_arn: "arn:aws:iam::1:role/ro", vend: false, external_id: "EXT-VALUE", secret_access_key: "SAK-VALUE", session_token: "TOKEN-VALUE" };
-  m.listBindings.mockResolvedValue([aws, leaky as never, { kind: "http", secret_id: "s3", origin: "https://api.example.com", header: "Authorization" }]);
+test("bindings: lists non-secret fields, shows errors, empty and not-connected states", async () => {
+  const items = [
+    { kind: "pg", name: "appdb", host: "db.internal.example.com", port: 5432, user: "app", database: "appdb", tls: "verify-full" },
+    { kind: "http", name: "https://api.example.com", origin: "https://api.example.com", header: "Authorization" },
+  ];
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockResolvedValue(items) } as never);
+  const r = render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByText("appdb")).toBeInTheDocument();
+  expect(screen.getByText(/Host: db\.internal\.example\.com · Port: 5432 · User: app · Database: appdb · TLS: verify-full/)).toBeInTheDocument();
+  expect(screen.getByRole("table").textContent).not.toMatch(/password/i);
+  r.unmount();
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockRejectedValue(new Error("Forbidden")) } as never);
+  const r2 = render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
+  r2.unmount();
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockResolvedValue([]) } as never);
+  const r3 = render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByText(/has not published any bindings/)).toBeInTheDocument();
+  r3.unmount();
+  m.agentsClient.mockReturnValue(null as never);
+  render(<App />);
+  await nav("Bindings");
+  expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
+});
+
+test("bindings: AWS rows show role, region, vend and max duration; undeclared fields never render", async () => {
+  const aws = { kind: "aws", name: "arn:aws:iam::1:role/dev", role: "arn:aws:iam::1:role/dev", region: "us-east-1", vend: false, max_duration_secs: 1800 };
+  // A leaky payload must not leak: only the fields bindingDetails declares are rendered.
+  const leaky = { ...aws, external_id: "EXT-VALUE", secret_access_key: "SAK-VALUE", session_token: "TOKEN-VALUE" };
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockResolvedValue([leaky]) } as never);
   const { container } = render(<App />);
   await nav("Bindings");
-  const dev = (await screen.findByText("arn:aws:iam::1:role/dev")).closest("tr")!;
-  for (const t of ["us-east-1", "s3:GetObject, s3:ListBucket", "On", "900 s"]) expect(dev).toHaveTextContent(t);
-  expect(screen.getByText("arn:aws:iam::1:role/ro").closest("tr")).toHaveTextContent("Off");
-  expect(screen.getByText(/api\.example\.com/)).toBeInTheDocument();
+  const row = (await screen.findAllByText("arn:aws:iam::1:role/dev"))[0]!.closest("tr")!;
+  expect(row).toHaveTextContent("Region: us-east-1 · Vend credentials: no · Max duration: 1800s");
   expect(container.textContent).not.toMatch(/EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
 });

@@ -3,8 +3,8 @@
 ### Requirement: Gateway issues short-lived scoped AWS credentials
 The gateway SHALL expose `POST /v1/aws/credentials`, which authenticates the agent token, checks an unexpired `delegate` grant for an AWS binding with `vend = true`, calls STS `AssumeRole` for the bound role with an inline session policy rendered from the grant, and returns `AccessKeyId`, `SecretAccessKey`, `SessionToken` and `Expiration`. The base credential and role trust SHALL never be returned.
 
-#### Scenario: Agent uses the AWS CLI against moto
-- **WHEN** an agent with a grant runs `aws sts get-caller-identity` through a profile whose `credential_process` is `smith aws credential-process`, with STS pointed at moto
+#### Scenario: Agent uses the AWS CLI against Floci
+- **WHEN** an agent with a grant runs `aws sts get-caller-identity` through a profile whose `credential_process` is `smith aws credential-process`, with STS pointed at Floci
 - **THEN** the call succeeds as an assumed-role session, the credentials expire within the granted duration, and the agent environment, AWS config and process arguments contain no long-lived key
 
 #### Scenario: Duration is capped

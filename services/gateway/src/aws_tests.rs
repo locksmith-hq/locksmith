@@ -1,9 +1,9 @@
 //! D2 task 3.4: `POST /v1/aws/credentials`.
 //!
-//! The success path runs against moto (`docker compose -f infra/compose/compose.yaml up -d --wait
-//! moto`, 127.0.0.1:5000 or `E2E_MOTO_URL`) and skips when moto is unreachable, unless
-//! `E2E_REQUIRE_MOTO=1`. moto does not enforce session policies (design.md decision 6), so the
-//! test asserts the policy moto recorded for the session. It runs in the nextest `moto` group.
+//! The success path runs against Floci (`docker compose -f infra/compose/compose.yaml up -d --wait
+//! floci`, 127.0.0.1:4566 or `FLOCI_URL`) and skips when Floci is unreachable, unless
+//! `E2E_REQUIRE_FLOCI=1`. The compose Floci runs without IAM enforcement, so the policy sent to STS
+//! is asserted from a captured request (design.md decision 6).
 //! The refusals and the STS failure modes need no STS at all, or a wiremock STS that must not be
 //! called (or returns a crafted answer), so they always run.
 //!
@@ -43,9 +43,10 @@ const AGENT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a1);
 const VEND: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c1);
 /// A binding without `vend`.
 const NO_VEND: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c2);
-const ACCOUNT: &str = "123456789012";
+/// Floci's fixed account id.
+const ACCOUNT: &str = "000000000000";
 const REGION: &str = "us-east-1";
-/// Fake base key (moto accepts any key with IAM mode off). Never in any output.
+/// Fake base key (Floci accepts any key unless IAM enforcement is on). Never in any output.
 const BASE_KEY_ID: &str = "AKIALOCKSMITHGW00001";
 const BASE_SECRET: &str = "locksmith-gw-fake-base-secret-not-real-7Qx";
 
@@ -148,6 +149,7 @@ impl Harness {
                 org_id: ORG,
                 bindings: Vec::new(),
                 aws_bindings: bindings,
+                pg: Vec::new(),
                 git_bindings: Vec::new(),
             },
             decryptor,
@@ -516,70 +518,59 @@ fn aws_base_credential_parse_and_leak_check() {
     assert!(!leaks_base(b"{\"AccessKeyId\":\"ASIA\"}", &base));
 }
 
-// ---- moto ----
+// ---- Floci ----
 
-fn moto_url() -> String {
-    std::env::var("E2E_MOTO_URL").unwrap_or_else(|_| "http://127.0.0.1:5000".into())
+fn floci_url() -> String {
+    std::env::var("FLOCI_URL").unwrap_or_else(|_| "http://127.0.0.1:4566".into())
 }
 
 fn http() -> reqwest::Client {
     crate::http_client::build(Duration::from_secs(5), Duration::from_secs(10), None).unwrap()
 }
 
-/// moto's base URL when it answers; `None` skips (a failure with `E2E_REQUIRE_MOTO=1`).
-async fn moto_or_skip(test: &str) -> Option<String> {
-    let base = moto_url();
+/// Floci's base URL when it answers; `None` skips (a failure with `E2E_REQUIRE_FLOCI=1`).
+async fn floci_or_skip(test: &str) -> Option<String> {
+    let base = floci_url();
     let up = http()
-        .get(format!("{base}/moto-api/"))
+        .get(format!("{base}/_floci/health"))
         .send()
         .await
         .is_ok_and(|r| r.status().is_success());
     if up {
-        // IAM mode off (another moto test may have left it on).
-        let r = http()
-            .post(format!("{base}/moto-api/reset-auth"))
-            .body("inf")
-            .send()
-            .await
-            .expect("moto reset-auth");
-        assert!(r.status().is_success());
         return Some(base);
     }
     assert!(
-        std::env::var("E2E_REQUIRE_MOTO").is_err(),
-        "{test}: moto is not reachable at {base} and E2E_REQUIRE_MOTO is set"
+        std::env::var("E2E_REQUIRE_FLOCI").is_err(),
+        "{test}: Floci is not reachable at {base} and E2E_REQUIRE_FLOCI is set"
     );
-    eprintln!("{test}: skipped, moto is not reachable at {base}");
+    eprintln!("{test}: skipped, Floci is not reachable at {base}");
     None
 }
 
-/// The (Policy, ExternalId) moto recorded for the session with `access_key_id`. data.json also
-/// holds moto's fake secrets: only these two fields are taken.
-async fn moto_session(base: &str, access_key_id: &str) -> (Option<String>, Option<String>) {
-    let text = http()
-        .get(format!("{base}/moto-api/data.json"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-    let v: Value = serde_json::from_str(&text).unwrap();
-    let role = v["sts"]["AssumedRole"]
-        .as_array()
-        .and_then(|a| {
-            a.iter()
-                .find(|x| x["access_key_id"].as_str() == Some(access_key_id))
+fn form_enc(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
         })
-        .expect("moto recorded the session")
-        .clone();
-    let field = |k: &str| role[k].as_str().map(str::to_owned);
-    (field("policy"), field("external_id"))
+        .collect()
 }
 
-/// `sts:GetCallerIdentity` with the issued credentials; returns the caller ARN.
-async fn caller_arn(base: &str, creds: &Credentials) -> String {
-    let body = "Action=GetCallerIdentity&Version=2011-06-15";
+/// A SigV4-signed AWS query-protocol POST; returns (status, body). Never print a body that
+/// carries credentials.
+async fn aws_query(
+    base: &str,
+    creds: &Credentials,
+    service: &str,
+    params: &[(&str, &str)],
+) -> (u16, String) {
+    let body = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", form_enc(k), form_enc(v)))
+        .collect::<Vec<_>>()
+        .join("&");
     let host = base.split_once("://").map_or(base, |(_, h)| h).to_owned();
     let ct = "application/x-www-form-urlencoded; charset=utf-8";
     let req = sigv4::Request {
@@ -593,7 +584,7 @@ async fn caller_arn(base: &str, creds: &Credentials) -> String {
     let scope = Scope {
         date: amz_date[..8].to_string(),
         region: REGION.into(),
-        service: "sts".into(),
+        service: service.into(),
     };
     let signed = sigv4::sign(&req, creds, &scope, &amz_date, &[]);
     let mut rb = http().post(format!("{base}/")).header("content-type", ct);
@@ -601,16 +592,50 @@ async fn caller_arn(base: &str, creds: &Credentials) -> String {
         rb = rb.header(*k, v.as_str());
     }
     let resp = rb.body(body).send().await.unwrap();
-    assert_eq!(resp.status().as_u16(), 200, "GetCallerIdentity");
-    let text = resp.text().await.unwrap();
+    (resp.status().as_u16(), resp.text().await.unwrap())
+}
+
+/// `sts:GetCallerIdentity` with the issued credentials; returns the caller ARN.
+async fn caller_arn(base: &str, creds: &Credentials) -> String {
+    let (status, text) = aws_query(
+        base,
+        creds,
+        "sts",
+        &[("Action", "GetCallerIdentity"), ("Version", "2011-06-15")],
+    )
+    .await;
+    assert_eq!(status, 200, "GetCallerIdentity");
     let start = text.find("<Arn>").expect("Arn") + 5;
     let end = text[start..].find("</Arn>").unwrap() + start;
     text[start..end].to_owned()
 }
 
+/// Floci refuses AssumeRole on a role it does not know, so the test creates it first.
+async fn floci_create_role(base: &str, role: &str) {
+    let base_creds = Credentials {
+        access_key_id: BASE_KEY_ID.into(),
+        secret_access_key: Zeroizing::new(BASE_SECRET.into()),
+        session_token: None,
+    };
+    let trust = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"*"},"Action":"sts:AssumeRole"}]}"#;
+    let (status, _) = aws_query(
+        base,
+        &base_creds,
+        "iam",
+        &[
+            ("Action", "CreateRole"),
+            ("Version", "2010-05-08"),
+            ("RoleName", role),
+            ("AssumeRolePolicyDocument", trust),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "CreateRole on Floci");
+}
+
 #[tokio::test(flavor = "multi_thread")]
-async fn aws_moto_issues_scoped_credentials() {
-    let Some(moto) = moto_or_skip("aws_moto_issues_scoped_credentials").await else {
+async fn aws_floci_issues_scoped_credentials() {
+    let Some(floci) = floci_or_skip("aws_floci_issues_scoped_credentials").await else {
         return;
     };
     let role = format!(
@@ -620,13 +645,14 @@ async fn aws_moto_issues_scoped_credentials() {
             .unwrap()
             .as_nanos()
     );
+    floci_create_role(&floci, &role).await;
     let b = binding(VEND, &role, true);
     let mut sc = s3_scope();
     sc.max_duration_secs = Some(1200);
     let h = Harness::start(
         vec![b.clone(), binding(NO_VEND, "nv", false)],
         vec![grant(VEND, "delegate", Some(sc.clone()))],
-        Some(format!("{moto}/")),
+        Some(format!("{floci}/")),
         MemoryAudit::default(),
     );
     let (status, body) = h
@@ -653,10 +679,9 @@ async fn aws_moto_issues_scoped_credentials() {
         "clamped to the grant's 1200 s: {left}"
     );
 
-    // The session policy STS received is exactly the one rendered from the grant.
-    let (policy, ext) = moto_session(&moto, &key).await;
-    assert_eq!(policy, Some(render_session_policy(&b, &sc).unwrap()));
-    assert_eq!(ext.as_deref(), Some("ext-gw-1"));
+    // The exact session policy sent to STS is asserted from the captured request in
+    // `aws_duration_floor_is_400_and_cap_is_clamped` (no Floci endpoint exposing it was found), and
+    // Floci's enforcement of a session policy in `tests/e2e/tests/aws_sts_floci.rs`.
 
     // The credentials work as the assumed role.
     let creds = Credentials {
@@ -667,7 +692,7 @@ async fn aws_moto_issues_scoped_credentials() {
         )),
     };
     assert_eq!(
-        caller_arn(&moto, &creds).await,
+        caller_arn(&floci, &creds).await,
         format!(
             "arn:aws:sts::{ACCOUNT}:assumed-role/{role}/locksmith-{}",
             AGENT.simple()

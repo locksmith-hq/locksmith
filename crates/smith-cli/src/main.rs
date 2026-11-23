@@ -13,6 +13,7 @@ mod connector;
 mod daemon_vault;
 mod db_cmd;
 mod doctor_d2;
+mod doctor_d3_db;
 mod doctor_m4;
 mod doctor_m5;
 mod doctor_m6;
@@ -103,7 +104,8 @@ enum Cmd {
         #[command(subcommand)]
         cmd: git_cmd::GitCmd,
     },
-    /// Password-less local endpoints for the project's databases (inside a session).
+    /// Password-less local endpoints for the project's databases (inside a session), or the
+    /// hosted gateway's Postgres listener with `--gateway`.
     Db {
         #[command(subcommand)]
         cmd: db_cmd::DbCmd,

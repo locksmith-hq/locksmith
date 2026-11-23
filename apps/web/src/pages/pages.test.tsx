@@ -111,25 +111,30 @@ test("activity: a 5xx ledger read shows an error with retry and no empty message
   expect(screen.queryByText("Reading the ledger…")).toBeNull();
 });
 
-test("bindings: AWS rows show role, region, actions, vend and max duration", async () => {
-  open("/bindings");
-  const rows = await screen.findAllByRole("row");
-  const dev = rows.find((r) => r.textContent?.includes("locksmith-dev"))!;
-  for (const t of ["arn:aws:iam::123456789012:role/locksmith-dev", "us-east-1", "s3:GetObject, s3:ListBucket", "On", "900 s"]) expect(dev).toHaveTextContent(t);
-  const ro = rows.find((r) => r.textContent?.includes("locksmith-readonly"))!;
-  for (const t of ["eu-west-1", "none", "Off", "3600 s"]) expect(ro).toHaveTextContent(t);
-  expect(screen.getByText(/api\.stripe\.com/)).toBeInTheDocument();
+test("bindings: lists non-secret fields per kind, never a password, and shows the empty state", async () => {
+  const r = open("/bindings");
+  expect(await screen.findByText("appdb")).toBeInTheDocument();
+  expect(screen.getByText(/Host: db\.internal\.example\.com · Port: 5432 · User: app · Database: appdb · TLS: verify-full/)).toBeInTheDocument();
+  expect(screen.getByText(/Header: Authorization/)).toBeInTheDocument();
+  expect(document.body.textContent).not.toMatch(/password/i);
+  expect(r.requests).toContain("GET /v1/bindings");
 });
 
-test("bindings: renders only the declared fields, never a credential", async () => {
-  const leaky = { kind: "aws", secret_id: "id1", role_arn: "arn:aws:iam::1:role/r", region: "us-east-1", allowed_actions: [], vend: true, max_duration_secs: 900,
-    external_id: "EXT-VALUE", secret_access_key: "SAK-VALUE", session_token: "TOKEN-VALUE", access_key_id: "AKIAVALUE" };
-  const { Shell } = await import("../Shell");
-  const { MemoryRouter } = await import("react-router");
-  render(<MemoryRouter initialEntries={["/bindings"]}><Shell client={createClient("o")} bindings={{ listBindings: async () => [leaky as never] }} /></MemoryRouter>);
-  await screen.findByText("arn:aws:iam::1:role/r");
-  const text = screen.getByRole("region", { name: "Bindings" }).textContent ?? "";
-  expect(text).not.toMatch(/EXT-VALUE|SAK-VALUE|TOKEN-VALUE|AKIA|secret_access_key|session_token/i);
-  // The default (fixture) list has none either.
-  expect(JSON.stringify((await import("@locksmith/api-types/fixtures")).bindingFixtures)).not.toMatch(/external_id|secret_access_key|session_token|access_key_id|password/);
+test("bindings: empty list and a 5xx show honest states", async () => {
+  open("/bindings", { empty: true });
+  expect(await screen.findByText("The gateway has not published any bindings yet.")).toBeInTheDocument();
+});
+
+test("bindings: a 5xx shows an error with retry, not the empty message", async () => {
+  open("/bindings", { fail: { "GET /v1/bindings": 503 } });
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.queryByText("The gateway has not published any bindings yet.")).toBeNull();
+});
+
+test("bindings: AWS rows show role, region, vend and max duration (d2-aws-sts)", async () => {
+  open("/bindings");
+  const row = (await screen.findAllByText("arn:aws:iam::123456789012:role/deploy"))[0]!.closest("tr")!;
+  expect(row).toHaveTextContent("AWS");
+  expect(row).toHaveTextContent("Role: arn:aws:iam::123456789012:role/deploy · Region: eu-west-1 · Vend credentials: yes · Max duration: 900s");
+  expect(row.textContent).not.toMatch(/external|secret|token|AKIA/i);
 });

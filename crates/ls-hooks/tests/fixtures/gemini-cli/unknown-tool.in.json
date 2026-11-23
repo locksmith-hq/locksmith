@@ -1,0 +1,1 @@
+{"session_id":"s1","transcript_path":"/t.jsonl","cwd":"__CWD__","hook_event_name":"BeforeTool","timestamp":"2026-11-21T10:00:00Z","tool_name":"list_directory","tool_input":{"dir_path":"__CWD__"}}

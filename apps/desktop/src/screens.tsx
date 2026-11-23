@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type {
-  AuditEvent, AuditVerifyView, BindingView, HttpTokenInfo, LeaseInfo, RelayInfo, SourceKind, StatusView,
+  AuditEvent, AuditVerifyView, HttpTokenInfo, LeaseInfo, RelayInfo, SourceKind, StatusView,
 } from "@locksmith/api-types";
 import * as api from "./api";
-import { ApiError, auditOutcomeMatches, buildWorkloadIdentity, hasPrefixCondition, isPrefixPattern, type AuditOutcomeFilter, type Client, type Environment, type Project, type Secret, type SecretVersion } from "@locksmith/control-plane-client";
+import { ApiError, auditOutcomeMatches, bindingDetails, buildWorkloadIdentity, hasPrefixCondition, isPrefixPattern, type AuditOutcomeFilter, type Client, type Environment, type Project, type Secret, type SecretVersion } from "@locksmith/control-plane-client";
 import { Icon, type IconName } from "@locksmith/ui";
 
 export interface ScreenProps {
@@ -668,44 +668,6 @@ export function Agents(_: ScreenProps) {
   );
 }
 
-/** Bindings: where each secret may be used, kind-specific non-secret fields only (no credentials). */
-export function Bindings(_: ScreenProps) {
-  const [items, setItems] = useState<BindingView[] | null>(null);
-  const [err, setErr] = useState("");
-  useEffect(() => {
-    let live = true;
-    api.listBindings().then((b) => live && setItems(b), (e) => live && setErr(msg(e)));
-    return () => { live = false; };
-  }, []);
-  return (
-    <section className="screen" aria-labelledby="h-bindings">
-      <Head id="h-bindings" title="Bindings" sub="Where each secret may be used. Credentials are never shown." />
-      {err && <Alert>{err}</Alert>}
-      {!items ? (err ? null : <Loading what="bindings" />) : items.length === 0 ? <Empty icon="key">No bindings yet.</Empty> : (
-        <div className="table-wrap">
-          <table className="grid">
-            <caption className="sr-only">Bindings</caption>
-            <thead><tr><th>Kind</th><th>Target</th><th>Region</th><th>Allowed actions</th><th>Vend</th><th>Max duration</th></tr></thead>
-            <tbody>
-              {items.map((b) => b.kind === "aws" ? (
-                <tr key={b.secret_id}>
-                  <td>AWS</td><td className="mono">{b.role_arn}</td><td>{b.region}</td>
-                  <td className="mono">{b.allowed_actions.length ? b.allowed_actions.join(", ") : "none"}</td>
-                  <td>{b.vend ? "On" : "Off"}</td><td>{b.max_duration_secs} s</td>
-                </tr>
-              ) : (
-                <tr key={b.secret_id}>
-                  <td>HTTP</td><td className="mono">{b.origin} ({b.header})</td><td>-</td><td>-</td><td>-</td><td>-</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
 /** Trust policies that let a CI job or cluster workload swap its own OIDC token for an agent token. No secret anywhere. */
 export function WorkloadIdentities(_: ScreenProps) {
   const client = api.agentsClient();
@@ -1174,6 +1136,47 @@ export function McpClients(_: ScreenProps) {
                     <td className="strong">{label(c)}</td><td>{layerName(c.layer)}</td><td className="mono">{c.principal}</td><td className="mono nowrap">{c.last_seen_at}</td>
                     <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
                     <td>{!c.revoked_at && <button type="button" className="btn sm" onClick={() => void revoke(c)}>Revoke {label(c)}</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+    </section>
+  );
+}
+
+const BINDING_KIND: Record<string, string> = { http: "HTTP", git: "Git", pg: "Postgres", aws: "AWS" };
+
+/** Gateway bindings, non-secret fields only (never a password or template). */
+export function Bindings(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [items, setItems] = useState<api.BindingSummary[] | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!client) return;
+    let live = true;
+    client.listBindings().then((b) => live && setItems(b), (e) => live && setErr(msg(e)));
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <section className="screen" aria-labelledby="h-bindings">
+      <Head id="h-bindings" title="Bindings" sub="What the gateway can reach for agents. Secrets and passwords are never shown." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? <Empty icon="key">Connect a control plane on the Agents screen to see bindings.</Empty>
+        : !items ? (err ? null : <Loading what="bindings" />)
+        : items.length === 0 ? <Empty icon="key">The gateway has not published any bindings yet.</Empty>
+        : (
+          <div className="table-wrap">
+            <table className="grid">
+              <caption className="sr-only">Bindings</caption>
+              <thead><tr><th>Name</th><th>Kind</th><th>Details</th></tr></thead>
+              <tbody>
+                {items.map((b) => (
+                  <tr key={`${b.kind}:${b.name}`}>
+                    <td className="strong">{b.name}</td><td>{BINDING_KIND[b.kind] ?? b.kind}</td>
+                    <td className="mono">{bindingDetails(b).map(([l, v]) => `${l}: ${v}`).join(" · ")}</td>
                   </tr>
                 ))}
               </tbody>

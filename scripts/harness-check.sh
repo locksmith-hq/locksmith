@@ -10,7 +10,7 @@ pass() { echo "PASS  $1"; }
 bad()  { echo "FAIL  $1"; fail=1; }
 
 # 1. every service healthy
-for svc in postgres lgtm openbao upstream moto; do
+for svc in postgres lgtm openbao upstream floci; do
   cid=$($COMPOSE ps -q "$svc" 2>/dev/null)
   st=$([ -n "$cid" ] && docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null)
   [ "$st" = healthy ] && pass "healthy: $svc" || bad "healthy: $svc (${st:-not running})"

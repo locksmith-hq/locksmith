@@ -19,9 +19,9 @@ pub fn wiremock() -> String {
     env::var("E2E_WIREMOCK_URL").unwrap_or_else(|_| "http://127.0.0.1:8089".into())
 }
 
-/// moto (local AWS STS/IAM stand-in) base URL (`E2E_MOTO_URL`).
-pub fn moto() -> String {
-    env::var("E2E_MOTO_URL").unwrap_or_else(|_| "http://127.0.0.1:5000".into())
+/// Floci (local AWS stand-in, `floci` in compose) base URL (`FLOCI_URL`).
+pub fn floci() -> String {
+    env::var("FLOCI_URL").unwrap_or_else(|_| "http://127.0.0.1:4566".into())
 }
 
 /// `prefix` plus a nanosecond timestamp, for names that must not collide between runs.

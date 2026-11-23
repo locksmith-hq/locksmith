@@ -146,18 +146,7 @@ pub async fn check(
             None
         }
         Host::Domain(name) => {
-            let addrs = resolver
-                .resolve(name, port)
-                .await
-                .map_err(|_| EgressError::Unresolvable)?;
-            if addrs.is_empty() {
-                return Err(EgressError::Unresolvable);
-            }
-            // Every answer must pass: a name that also points at an internal address is refused
-            // outright rather than filtered.
-            if !addrs.iter().all(|a| address_allowed(a.ip(), allow_private)) {
-                return Err(EgressError::AddressNotAllowed);
-            }
+            let addrs = resolve_name(name, port, allow_private, resolver).await?;
             Some((name.to_owned(), addrs))
         }
     };
@@ -165,6 +154,51 @@ pub async fn check(
         url: url.clone(),
         pin,
     })
+}
+
+/// Resolve `name` once; every answer must pass [`address_allowed`].
+async fn resolve_name(
+    name: &str,
+    port: u16,
+    allow_private: bool,
+    resolver: &dyn Resolver,
+) -> Result<Vec<SocketAddr>, EgressError> {
+    let addrs = resolver
+        .resolve(name, port)
+        .await
+        .map_err(|_| EgressError::Unresolvable)?;
+    if addrs.is_empty() {
+        return Err(EgressError::Unresolvable);
+    }
+    // Every answer must pass: a name that also points at an internal address is refused
+    // outright rather than filtered.
+    if !addrs.iter().all(|a| address_allowed(a.ip(), allow_private)) {
+        return Err(EgressError::AddressNotAllowed);
+    }
+    Ok(addrs)
+}
+
+/// Rule 2 for a fixed `host:port` from configuration (the Postgres relay, D3): an IP literal is
+/// checked as is, a name is resolved once and every answer checked. Returns the addresses the
+/// connection must be pinned to.
+pub async fn check_host(
+    host: &str,
+    port: u16,
+    allow_private: bool,
+    resolver: &dyn Resolver,
+) -> Result<Vec<SocketAddr>, EgressError> {
+    let bare = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
+    if let Ok(ip) = bare.parse::<IpAddr>() {
+        literal(ip, allow_private)?;
+        return Ok(vec![SocketAddr::new(ip, port)]);
+    }
+    if host.is_empty() {
+        return Err(EgressError::HostNotAllowed);
+    }
+    resolve_name(host, port, allow_private, resolver).await
 }
 
 fn literal(ip: IpAddr, allow_private: bool) -> Result<(), EgressError> {

@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check task-guard public-check
+ci: fmt lint test-rust test-web tree-check task-guard public-check migration-guard
 
 # Fast local check: fmt + lint only for files committed on this branch since `base`.
 # The full `just ci` runs in GitHub Actions on every PR.
@@ -74,6 +74,9 @@ task-guard:
     scripts/change-status.test.sh
     scripts/agent-identity.sh selftest
     scripts/route.sh selftest
+    scripts/worker-has-work.test.sh
+    scripts/run-lock.test.sh
+    scripts/review-tier.sh selftest
     scripts/check-task-edits.sh
     scripts/check-agent-docs.sh
 
@@ -81,6 +84,11 @@ task-guard:
 public-check:
     scripts/public-check.test.sh
     scripts/public-check.sh
+
+# Shipped database migrations must not change (add a new one). Compares against origin/main.
+migration-guard:
+    scripts/check-migrations.test.sh
+    scripts/check-migrations.sh
 
 # Install a git pre-push hook that runs the denylist check (see docs/public-private-boundary.md).
 install-hooks:
@@ -278,10 +286,19 @@ connector-smoke:
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
 
-# D2 AWS vend smoke (P1 owns `aws-smoke`, the real-AWS session smoke; this one is local on moto; needs `just up` for moto and `just api`; `pip install awscli`): the real `aws` CLI
+# D3 Postgres relay smoke test (needs `just up`, `just api` and psql): the test starts its own
+# gateway with a pg listener, creates a SCRAM role on the compose Postgres and runs real `psql`
+# through `smith db connect --gateway`; asserts the result and that no file holds the agent token or
+# the database password. Run `just leak-scan` after.
+db-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test db_relay
+
+# D2 AWS vend smoke (P1 owns `aws-smoke`, the real-AWS session smoke; this one is local on Floci; needs `just up` for Floci and `just api`; `pip install awscli`): the real `aws` CLI
 # gets scoped, short-lived STS credentials from the gateway through `smith aws setup` and
 # `credential_process`; asserts the assumed-role identity, expiry and that the agent HOME holds no
-# key. Skips with a note without `aws` or moto unless E2E_REQUIRE_AWS is set. Run `just leak-scan` after.
+# key. Skips with a note without `aws` or Floci unless E2E_REQUIRE_AWS is set. Run `just leak-scan` after.
 aws-vend-smoke:
     cargo build -q -p ls-gateway --bin locksmith-gateway
     cargo build -q -p smith-cli --bin smith
@@ -363,33 +380,3 @@ test name:
           elif grep -q 'just test-web' <<<"$cov"; then run just test-web; fi
         fi ;;
     esac
-
-# OpenTofu offline checks: fmt, validate (no backend) for each root, plan-policy tests. scripts/tofu-setup.sh installs tofu and a verified hashicorp/aws mirror.
-aws-validate:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export TF_CLI_CONFIG_FILE="$(bash scripts/tofu-setup.sh)" PATH="${TOFU_BIN_DIR:-$HOME/.local/bin}:$PATH"
-    tofu fmt -check -recursive infra/tofu
-    for m in base session; do tofu -chdir=infra/tofu/$m init -backend=false -input=false >/dev/null && tofu -chdir=infra/tofu/$m validate; done
-    python3 -I infra/tofu/policy/test_check_plan.py
-    python3 -I infra/tofu/policy/test_base_oidc.py
-
-# Opt-in (not in `just ci`): apply the base S3 and KMS pieces to a local moto server and assert Object Lock and the KMS alias. Installs moto into a cached venv.
-aws-moto-smoke:
-    bash infra/tofu/base/tests/moto-smoke.sh
-
-# AWS dev session (owner machine, needs AWS credentials; refuses to run without them). Set LOCKSMITH_ALLOWED_CIDR and LOCKSMITH_IMAGE_TAG for aws-up.
-aws-up:
-    bash scripts/aws-session.sh up
-
-aws-down:
-    bash scripts/aws-session.sh down
-
-aws-status:
-    bash scripts/aws-session.sh status
-
-aws-drift:
-    bash scripts/aws-session.sh drift
-
-aws-smoke:
-    bash scripts/aws-session.sh smoke

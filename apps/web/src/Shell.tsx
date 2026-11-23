@@ -7,14 +7,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agents } from "./pages/Agents";
 import { WorkloadIdentities } from "./pages/WorkloadIdentities";
 import { GrantsPage } from "./pages/Grants";
+import { Bindings } from "./pages/Bindings";
 import { Activity } from "./pages/Activity";
 import { Secrets } from "./pages/Secrets";
 import { Overview } from "./pages/Overview";
 import { Projects } from "./pages/Projects";
 import { McpTools } from "./pages/McpTools";
 import { McpClients } from "./pages/McpClients";
-import { Bindings } from "./pages/Bindings";
-import { mockBindingsClient, type BindingsClient } from "./api/bindings";
 import { EmptyPage } from "./pages/EmptyPage";
 import "./shell.css";
 
@@ -54,7 +53,7 @@ function OrgSwitcher({ name }: { name: string }) {
 }
 
 /** Signed-in frame: sidebar, org header and sign-out around the routed pages. */
-export function Shell({ client, bindings = mockBindingsClient, user, onSignOut }: { client: Client; bindings?: BindingsClient; user?: string; onSignOut?: () => void }) {
+export function Shell({ client, user, onSignOut }: { client: Client; user?: string; onSignOut?: () => void }) {
   const [selected, setSelected] = useState<string | undefined>();
   const { pathname } = useLocation();
   const m = /^\/projects\/([^/]+)/.exec(pathname);
@@ -89,7 +88,7 @@ export function Shell({ client, bindings = mockBindingsClient, user, onSignOut }
           <Route path="agents" element={<Agents client={client} />} />
           <Route path="workload-identities" element={<WorkloadIdentities client={client} />} />
           <Route path="grants" element={<GrantsPage client={client} />} />
-          <Route path="bindings" element={<Bindings client={bindings} />} />
+          <Route path="bindings" element={<Bindings client={client} />} />
           <Route path="tools" element={<McpTools client={client} />} />
           <Route path="clients" element={<McpClients client={client} />} />
           <Route path="activity" element={<Activity client={client} />} />

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3 -I
-"""A stub STS for the AWS adversarial case (G11). Usage: sts_stub.py PORT_FILE HITS_LOG MODE_FILE CANARY_FILE
+"""A stub STS for the AWS adversarial case (G12). Usage: sts_stub.py PORT_FILE HITS_LOG MODE_FILE CANARY_FILE
 
 Serves `POST /` (an AssumeRole query call) on a free loopback port (written to PORT_FILE). Per
 request it reads the mode from MODE_FILE:

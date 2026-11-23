@@ -197,7 +197,7 @@ impl Relay {
         }
     }
 
-    /// Replace the AWS route's options (D2): the STS endpoint override for tests and moto.
+    /// Replace the AWS route's options (D2): the STS endpoint override for tests and Floci.
     pub fn with_aws(mut self, aws: crate::aws::AwsOptions) -> Self {
         self.aws = aws;
         self
@@ -409,7 +409,12 @@ impl CallAudit {
         let host_ok = match kind {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
-            EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => true,
+            EventKind::GitFetch(_)
+            | EventKind::GitPush(_)
+            | EventKind::GitDenied(_)
+            | EventKind::DbDenied(_)
+            | EventKind::DbOpened
+            | EventKind::DbClosed(_) => true,
             EventKind::CredentialIssued => false,
         };
         RelayEvent {
@@ -1190,6 +1195,7 @@ mod tests {
                 binding(DEAD, format!("http://dead.test:{dead_port}"), true),
             ],
             aws_bindings: Vec::new(),
+            pg: Vec::new(),
             git_bindings: Vec::new(),
         };
         let control_plane =
@@ -1354,6 +1360,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_)
                     | EventKind::CredentialIssued => None,
                 })
                 .collect()
@@ -1378,6 +1387,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_)
                     | EventKind::CredentialIssued => {}
                 }
             }
@@ -1959,6 +1971,7 @@ mod tests {
                 org_id: ORG,
                 bindings: Vec::new(),
                 aws_bindings: Vec::new(),
+                pg: Vec::new(),
                 git_bindings: Vec::new(),
             },
             Decryptor::new(

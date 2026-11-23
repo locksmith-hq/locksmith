@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "locksmith": {
+      "args": [],
+      "command": "locksmith-mcp",
+      "type": "stdio"
+    }
+  }
+}

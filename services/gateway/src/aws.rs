@@ -40,7 +40,7 @@ use crate::relay::{Relay, error};
 /// AWS route options.
 #[derive(Debug, Clone, Default)]
 pub struct AwsOptions {
-    /// STS endpoint override (moto in tests and the local smoke). `None`: the regional AWS
+    /// STS endpoint override (Floci or a stub in tests and the local smoke). `None`: the regional AWS
     /// endpoint `https://sts.<region>.amazonaws.com/`.
     pub sts_endpoint: Option<String>,
 }

@@ -67,8 +67,13 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     ),
     (
         14,
+        "gateway bindings",
+        include_str!("../migrations/0014_gateway_bindings.sql"),
+    ),
+    (
+        15,
         "grant delegate",
-        include_str!("../migrations/0014_grant_delegate.sql"),
+        include_str!("../migrations/0015_grant_delegate.sql"),
     ),
 ];
 

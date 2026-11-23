@@ -1,31 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
 import { Head } from "@locksmith/ui";
-import type { BindingView } from "@locksmith/api-types";
+import { bindingDetails, type BindingSummary, type Client } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
-import type { BindingsClient } from "../api/bindings";
 
-const list = (xs: string[]) => (xs.length ? xs.join(", ") : "none");
+const KIND: Record<string, string> = { http: "HTTP", git: "Git", pg: "Postgres", aws: "AWS" };
 
-/** Bindings: where each secret may be used, with kind-specific non-secret fields only. */
-export function Bindings({ client }: { client: BindingsClient }) {
+/** Bindings page: what the gateway can reach, non-secret fields only (never a password or template). */
+export function Bindings({ client }: { client: Client }) {
   const q = useQuery({ queryKey: ["bindings"], queryFn: () => client.listBindings() });
   return (
     <section aria-label="Bindings">
       <Head title="Bindings" />
-      <QueryState query={q} empty="No bindings yet.">
-        {(items: BindingView[]) => (
+      <QueryState query={q} empty="The gateway has not published any bindings yet.">
+        {(bindings: BindingSummary[]) => (
           <table className="grid">
-            <caption className="sr-only">Bindings</caption>
-            <thead><tr><th>Kind</th><th>Target</th><th>Region</th><th>Allowed actions</th><th>Vend</th><th>Max duration</th></tr></thead>
+            <thead><tr><th>Name</th><th>Kind</th><th>Details</th></tr></thead>
             <tbody>
-              {items.map((b) => b.kind === "aws" ? (
-                <tr key={b.secret_id}>
-                  <td>AWS</td><td>{b.role_arn}</td><td>{b.region}</td><td>{list(b.allowed_actions)}</td>
-                  <td>{b.vend ? "On" : "Off"}</td><td>{b.max_duration_secs} s</td>
-                </tr>
-              ) : (
-                <tr key={b.secret_id}>
-                  <td>HTTP</td><td>{b.origin} ({b.header})</td><td>-</td><td>-</td><td>-</td><td>-</td>
+              {bindings.map((b) => (
+                <tr key={`${b.kind}:${b.name}`}>
+                  <td>{b.name}</td>
+                  <td>{KIND[b.kind] ?? b.kind}</td>
+                  <td>{bindingDetails(b).map(([l, v]) => `${l}: ${v}`).join(" · ")}</td>
                 </tr>
               ))}
             </tbody>

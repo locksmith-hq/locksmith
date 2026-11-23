@@ -29,6 +29,9 @@ jobs:
         with:
           tool: cargo-nextest@0.9.152
       - run: cargo nextest run --workspace --profile portable
+      # Failing tests become check-run annotations (cloud agents cannot read job logs).
+      - if: always()
+        run: python3 scripts/junit-annotate.py target/nextest/portable/junit.xml
       - run: cargo test --workspace --exclude ls-e2e --doc
       - uses: actions/setup-node@v4
         with:

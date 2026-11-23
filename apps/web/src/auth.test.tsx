@@ -169,3 +169,31 @@ test("UI: an expiry event returns to the sign-in screen with a notice", async ()
   expect(await screen.findByRole("alert")).toHaveTextContent("Your session expired");
   expect(screen.getByText("Continue with GitHub")).toBeInTheDocument();
 });
+
+test("Cognito mode uses the hosted-UI endpoints, identity_provider and the logout params", async () => {
+  const HOST = "https://locksmith-dev.auth.us-east-1.amazoncognito.com";
+  const auth = createAuth({ issuer: ISS, clientId: "locksmith-web", redirectUri: "http://localhost:3000/", hostedDomain: HOST, navigate: (u) => nav.push(u) });
+  const url = await roundTrip(auth, "google");
+  expect(url.origin + url.pathname).toBe(`${HOST}/oauth2/authorize`);
+  expect(url.searchParams.get("identity_provider")).toBe("Google");
+  expect(url.searchParams.has("kc_idp_hint")).toBe(false);
+  fetchMock.mockImplementation(async (u: string, init?: RequestInit) =>
+    u === `${HOST}/oauth2/token` ? json({
+      access_token: TOKEN, token_type: "Bearer", expires_in: 300, scope: "openid email profile",
+      id_token: jwt({ iss: ISS, aud: "locksmith-web", sub: "u1", exp: Math.floor(Date.now() / 1000) + 300, iat: Math.floor(Date.now() / 1000), email: "ada@example.com" }),
+    }) : u === "/v1/auth/sign-in" || u === "/v1/auth/sign-out" ? new Response(null, { status: 204 }) : json({}, 404));
+  await auth.start();
+  await auth.signOut();
+  const out = new URL(nav.at(-1)!);
+  expect(out.origin + out.pathname).toBe(`${HOST}/logout`);
+  expect(out.searchParams.get("client_id")).toBe("locksmith-web");
+  expect(out.searchParams.get("logout_uri")).toBe("http://localhost:3000/");
+});
+
+test("UI: Cognito deployments offer Google and email only", async () => {
+  const auth = createAuth({ issuer: ISS, clientId: "locksmith-web", redirectUri: "http://localhost:3000/", hostedDomain: "https://x.auth.us-east-1.amazoncognito.com", navigate: (u) => nav.push(u) });
+  render(<App auth={auth} />);
+  expect(await screen.findByText("Continue with Google")).toBeInTheDocument();
+  expect(screen.getByText("Continue with email")).toBeInTheDocument();
+  expect(screen.queryByText("Continue with GitHub")).toBeNull();
+});

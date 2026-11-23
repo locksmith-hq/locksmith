@@ -1,32 +1,33 @@
 //! d2-aws-sts task 7.1: the real `aws` CLI through `smith aws setup` / `credential_process`.
-//! Requires `just up` (moto), `just api` and built `locksmith-gateway` and `smith`
+//! Requires `just up` (Floci), `just api` and built `locksmith-gateway` and `smith`
 //! (`just aws-vend-smoke` builds them).
 //!
-//! An org, an AWS base-credential secret (a moto fake), an agent and a `delegate` grant with a
+//! An org, an AWS base-credential secret (a Floci fake), an agent and a `delegate` grant with a
 //! scope are created through the control plane. A gateway is started with an `[[aws_binding]]`
-//! (`vend = true`) whose STS endpoint is moto. The test then acts as the agent only through the
+//! (`vend = true`) whose STS endpoint is Floci. The test then acts as the agent only through the
 //! shipped binaries and the real `aws` CLI in an isolated HOME: `smith login --agent`,
-//! `smith aws setup`, `aws sts get-caller-identity --endpoint-url <moto>`. It asserts the assumed
+//! `smith aws setup`, `aws sts get-caller-identity --endpoint-url <floci>`. It asserts the assumed
 //! role identity, the credential expiry, and that nothing in the agent's HOME or in any output
 //! holds the base credential or any long-lived key.
 //!
-//! Skips (passes with a note) when `aws` or moto is missing; `E2E_REQUIRE_AWS=1` makes either a
-//! failure. All credentials are moto fakes and are never printed.
+//! Skips (passes with a note) when `aws` or Floci is missing; `E2E_REQUIRE_AWS=1` makes either a
+//! failure. All credentials are Floci fakes and are never printed.
 
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use ls_e2e::{api, moto, root, uniq};
+use ls_e2e::{api, floci, root, uniq};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use time::OffsetDateTime;
 
 const SERVICE_TOKEN: &str = "dev-only-gateway-service-token-0123456789";
-const ACCOUNT: &str = "123456789012";
+/// Floci's fixed account id.
+const ACCOUNT: &str = "000000000000";
 const REGION: &str = "us-east-1";
-/// Fake base key (moto accepts any key with IAM mode off). Never in any agent-visible place.
+/// Fake base key (Floci accepts any key without IAM enforcement). Never in any agent-visible place.
 const BASE_KEY_ID: &str = "AKIALOCKSMITHSMOKE01";
 const BASE_SECRET: &str = "locksmith-smoke-fake-base-secret-not-real-9Zq";
 
@@ -142,8 +143,8 @@ fn files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-async fn moto_up(c: &Client) -> bool {
-    c.get(format!("{}/moto-api/", moto()))
+async fn floci_up(c: &Client) -> bool {
+    c.get(format!("{}/_floci/health", floci()))
         .send()
         .await
         .is_ok_and(|r| r.status().is_success())
@@ -170,14 +171,14 @@ async fn real_aws_cli_gets_scoped_keyless_credentials() {
         eprintln!("skipped: the `aws` CLI is not installed (pip install awscli)");
         return;
     }
-    if !moto_up(&c).await {
+    if !floci_up(&c).await {
         assert!(
             !required,
-            "moto is not reachable and E2E_REQUIRE_AWS is set"
+            "Floci is not reachable and E2E_REQUIRE_AWS is set"
         );
         eprintln!(
-            "skipped: moto is not reachable at {} (run `just up`)",
-            moto()
+            "skipped: Floci is not reachable at {} (run `just up`)",
+            floci()
         );
         return;
     }
@@ -228,7 +229,29 @@ async fn real_aws_cli_gets_scoped_keyless_credentials() {
     let bindings = format!(
         "org_id = \"{org}\"\n[[aws_binding]]\nsecret_id = \"{sid}\"\nrole_arn = \"arn:aws:iam::{ACCOUNT}:role/{role}\"\nregion = \"{REGION}\"\nexternal_id = \"ext-smoke-1\"\nvend = true\nmax_duration_secs = 900\n"
     );
-    let gw = start_gateway(&c, &bindings, &moto()).await;
+    // Floci refuses AssumeRole on an unknown role: create it with the base key.
+    let trust = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"*"},"Action":"sts:AssumeRole"}]}"#;
+    let made = Command::new("aws")
+        .args(["iam", "create-role", "--role-name", &role])
+        .args(["--assume-role-policy-document", trust])
+        .args([
+            "--endpoint-url",
+            &floci(),
+            "--region",
+            REGION,
+            "--output",
+            "json",
+        ])
+        .env("AWS_ACCESS_KEY_ID", BASE_KEY_ID)
+        .env("AWS_SECRET_ACCESS_KEY", BASE_SECRET)
+        .env("AWS_CONFIG_FILE", "/dev/null")
+        .env("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("run aws iam create-role");
+    assert!(made.success(), "aws iam create-role on Floci failed");
+    let gw = start_gateway(&c, &bindings, &floci()).await;
 
     let home = env::temp_dir().join(uniq("aws-smoke-home"));
     std::fs::create_dir_all(&home).unwrap();
@@ -267,14 +290,14 @@ async fn real_aws_cli_gets_scoped_keyless_credentials() {
         "a shared credentials file exists"
     );
 
-    // The real AWS CLI, default profile `locksmith`, STS on moto.
+    // The real AWS CLI, default profile `locksmith`, STS on Floci.
     let out = agent_cmd("aws", &home, &gw.base)
         .env("AWS_PROFILE", "locksmith")
         .args([
             "sts",
             "get-caller-identity",
             "--endpoint-url",
-            &moto(),
+            &floci(),
             "--output",
             "json",
         ])

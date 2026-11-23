@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { createClient, type Client as AgentsClientT } from "@locksmith/control-plane-client";
 import type {
-  AuditEvent, BindingView, AuditVerifyView, HttpTokenInfo, RelayInfo, SecureOutcome, StatusView,
+  AuditEvent, AuditVerifyView, HttpTokenInfo, RelayInfo, SecureOutcome, StatusView,
 } from "@locksmith/api-types";
 
 // Dev server in a plain browser only: `import.meta.env.DEV` is false in `vite build`, so the
@@ -26,17 +26,12 @@ export const tokenList = () => call<HttpTokenInfo[]>("token_list");
 export const tokenRevoke = (token: string) => call<number>("token_revoke", { token });
 export const relayInfo = () => call<RelayInfo>("relay_info");
 
-// Read-only binding list (D2-1/D2-2). The source of truth is the gateway bindings file and the
-// endpoint serving it is not built yet, so this returns fixtures (see d2-aws-sts design.md).
-export const listBindings = (): Promise<BindingView[]> =>
-  import("@locksmith/api-types/fixtures").then((m) => m.bindingFixtures);
-
 // Agents and grants live in the control plane, not the daemon: the frontend calls its REST API
 // directly (tauri.conf.json allows only loopback in connect-src; the control plane answers the
 // CORS preflight for Tauri origins only). The URL and org id are not
 // secrets; the enrollment secret is returned to the screen and never stored.
 export { type WorkloadIdentity, type WorkloadPreset } from "@locksmith/control-plane-client";
-export { type Agent, type AgentGrant, type AuditEvent as OrgAuditEvent, type AuditStatus, type Client as AgentsClient, type McpClient, type McpToolSetting } from "@locksmith/control-plane-client";
+export { type Agent, type AgentGrant, type AuditEvent as OrgAuditEvent, type AuditStatus, type Client as AgentsClient, type BindingSummary, type McpClient, type McpToolSetting } from "@locksmith/control-plane-client";
 const CP_URL = "locksmith.controlPlane";
 const CP_ORG = "locksmith.org";
 const store = {

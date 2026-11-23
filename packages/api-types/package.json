@@ -7,8 +7,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./fixtures": "./src/fixtures.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "export": "cargo test -p ls-ipc --features ts export_bindings"

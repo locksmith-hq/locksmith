@@ -56,3 +56,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix (macos exit 100 on #605) - done
 - Verified: just quick -> ok; merged main, pushed to rerun checks
 - Notes for next session: check #605 macos result; no code change was made
+
+## 2026-11-23 worker-c
+- Task: ci-fix (macos on #605) - done
+- Cause: the new Postgres-backed binaries `members`, `memberships`, `orgs` were not in the nextest `portable` skip filter, so they panicked on the Docker-less macOS runner (`ls-pg-test` start). Added them to `.config/nextest.toml`.
+- Verified: `just quick` -> pass; pushed once to rerun checks.
+- Next: 4.4 and 4.5, then groups 5-7. PR #605 not auto-merge armed (tasks unticked).

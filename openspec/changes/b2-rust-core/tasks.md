@@ -1,9 +1,9 @@
 # Tasks: B2 Rust core service
 
 ## 1. Contract [sonnet]
-- [ ] 1.1 `services/core/openapi.json` (internal only) for exactly the OC-9 G1 operations: audit append, checkpoint sign, agent-token mint and verify, workload-token mint and verify, DEK wrap and unwrap; bodies carry ids, ciphertext, tokens and verdicts, never plaintext or key bytes. Derive the shapes from `services/control-plane/src` (`audit.rs`, `checkpoint.rs`, `agent_token.rs`, `workload.rs`, `kms.rs`).
-- [ ] 1.2 `packages/core-client`: TypeScript client generated from it the same way as `packages/control-plane-client`, plus fixture responses for every operation that dependents (B1 task 5.4) use as mocks.
-- [ ] 1.3 Verify: `npx turbo run build test --filter=@locksmith/core-client` and a drift test that fails when `openapi.json` and the generated client differ.
+- [x] 1.1 `services/core/openapi.json` (internal only) for exactly the OC-9 G1 operations: audit append, checkpoint sign, agent-token mint and verify, workload-token mint and verify, DEK wrap and unwrap; bodies carry ids, ciphertext, tokens and verdicts, never plaintext or key bytes. Derive the shapes from `services/control-plane/src` (`audit.rs`, `checkpoint.rs`, `agent_token.rs`, `workload.rs`, `kms.rs`).
+- [x] 1.2 `packages/core-client`: TypeScript client generated from it the same way as `packages/control-plane-client`, plus fixture responses for every operation that dependents (B1 task 5.4) use as mocks.
+- [x] 1.3 Verify: `npx turbo run build test --filter=@locksmith/core-client` and a drift test that fails when `openapi.json` and the generated client differ.
 
 ## 2. Service skeleton [sonnet]
 - [ ] 2.1 `services/core` (package `ls-core-service`): axum, `/healthz` and `/readyz`, OTel and config like `services/control-plane`, listens on an internal address; caller authentication (choose a service token from config or mTLS, record it in design.md decision 5) with a test that an unauthenticated request gets 401.

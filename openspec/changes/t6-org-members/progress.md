@@ -78,3 +78,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: t6 PR #605 conflicts - done (merge pushed); hygiene guard still open under #666
 - Verified: cargo test -p ls-control-plane --test tenancy --test memberships --test orgs --test tenant_lint --test openapi -> all passed; just quick -> ok
 - Notes for next session: resolved conflicts with main's 0014_gateway_bindings (t6 migrations now 0015-0017, 20 policies); regenerated openapi.json and sdk schema.d.ts. Check #605 CI for hygiene.
+
+## 2026-11-23 worker (worker-c, wake-up CI failed on #605)
+- Task: t6 PR #605 hygiene - blocked
+- Verified: tree-check OK; check-task-edits fails on commits 7650f18 and 417d694 (authored "Claude", no App identity); main CI green; branch up to date with main
+- Notes for next session: no code fix possible without rewriting history; waiting on lead answer to needs-rescue #666 (likely: new branch with the net diff re-committed under an App identity). Pushed nothing.

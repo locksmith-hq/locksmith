@@ -1,9 +1,9 @@
 # Tasks: D2 AWS STS credentials
 
 ## 1. Floci and spike [sonnet]
-- [ ] 1.1 Floci (`floci/floci:2.5.0`) is already in `infra/compose/compose.yaml`; confirm `just up` starts it and `harness-check` reports it.
+- [x] 1.1 Floci (`floci/floci:2.5.0`) is already in `infra/compose/compose.yaml`; confirm `just up` starts it and `harness-check` reports it.
 - [x] 1.2 [opus] Spike `tests/e2e` against Floci: AssumeRole returns usable keys; record in design.md which session-policy and IAM checks Floci enforces and decide how enforcement is asserted (captured request vs Floci IAM enforcement).
-- [ ] 1.3 Verify: `just up && curl -fsS localhost:4566/` and the spike test pass.
+- [x] 1.3 Verify: `just up && curl -fsS localhost:4566/` and the spike test pass.
 
 ## 2. Session policy and binding model [sonnet]
 - [x] 2.1 Define the AWS binding shape (role ARN, region, external id, `vend`, `unrestricted`, max duration) and the grant allow-list in the gateway config and control-plane types with fixture data; document in design.md.
@@ -30,5 +30,5 @@
 - [ ] 6.2 Verify: `bash tests/adversarial/run.sh`, `just leak-scan`, `just audit-verify`.
 
 ## 7. Local verification [sonnet]
-- [ ] 7.1 `just aws-smoke` recipe: start Floci, gateway and API, register an agent, grant, run the real `aws` CLI through `credential_process`, assert identity, expiry and that the agent home holds no key.
-- [ ] 7.2 `just up`, `just aws-smoke`, `just apps-build`, then `just ci`. Record the P1 named check for session-policy enforcement on real AWS in progress.md.
+- [x] 7.1 `just aws-smoke` recipe: start Floci, gateway and API, register an agent, grant, run the real `aws` CLI through `credential_process`, assert identity, expiry and that the agent home holds no key.
+- [x] 7.2 `just up`, `just aws-smoke`, `just apps-build`, then `just ci`. Record the P1 named check for session-policy enforcement on real AWS in progress.md.

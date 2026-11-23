@@ -66,7 +66,8 @@ gw_post "/v1/projects/$GW_PROJECT/environments/$GW_ENVIRONMENT/secrets/$GW_SECRE
 rm -f "$GW_WORK/version2.json"
 
 # The delegate grant: s3:GetObject on one bucket, at most GRANT_MAX seconds.
-gw_post "/v1/agents/$GW_AGENT_ID/grants" "$(gw_body dgrant "{\"secret_id\":\"$GW_SECRET_ID\",\"mode\":\"delegate\",\"scope\":{\"actions\":[\"s3:GetObject\"],\"resources\":[\"$BUCKET_ARN\"],\"max_duration_secs\":$GRANT_MAX}}")" dgrant
+dgrant_body="{\"secret_id\":\"$GW_SECRET_ID\",\"mode\":\"delegate\",\"scope\":{\"actions\":[\"s3:GetObject\"],\"resources\":[\"$BUCKET_ARN\"],\"max_duration_secs\":$GRANT_MAX}}"
+gw_post "/v1/agents/$GW_AGENT_ID/grants" "$(gw_body dgrant "$dgrant_body")" dgrant
 
 : >"$ARTIFACT_DIR/results.txt"
 auth="$(gw_auth_header)"

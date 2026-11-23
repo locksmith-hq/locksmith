@@ -1,0 +1,1 @@
+{"workspaceRoots":["__CWD__"],"preToolUse":{"toolName":"execute_command","parameters":{"cmd":"cat .env"}}}

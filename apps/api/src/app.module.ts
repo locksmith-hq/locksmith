@@ -4,7 +4,7 @@ import { TerminusModule } from "@nestjs/terminus";
 import { LoggerModule } from "nestjs-pino";
 import { validateEnv } from "./env.js";
 import { HealthController } from "./health.controller.js";
-import { REDACT_PATHS, loggerFormatters } from "./logging.js";
+import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js";
 
 @Module({
   imports: [
@@ -13,6 +13,7 @@ import { REDACT_PATHS, loggerFormatters } from "./logging.js";
       pinoHttp: {
         level: process.env["LOG_LEVEL"] ?? "info",
         formatters: loggerFormatters,
+        serializers: loggerSerializers,
         redact: { paths: REDACT_PATHS, censor: "[redacted]" },
       },
     }),

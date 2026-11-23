@@ -68,3 +68,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Verified: `cargo test -p ls-control-plane --test members --test memberships` (11 passed), `bash tests/adversarial/run.sh T6` PASS, merged main (hygiene scripts pass), `just quick`.
 - Not done: 4.5 stays open: `just leak-scan` and `just audit-verify` need the local stack (`just up`), not run here. Groups 5-7 (web, desktop, e2e) remain.
 - Earlier red `hygiene` on #605 cleared by merging main (task-edit guard changed on main).
+
+## 2026-11-23 worker (worker-c)
+- Task: t6 PR #605 merge-conflict and CI fix - blocked
+- Verified: cargo test -p ls-control-plane --test openapi -> 8 passed; control-plane-client tsc and vitest -> pass; tree-check OK
+- Notes for next session: merged main (migrations renumbered to 0015-0017, tenancy.rs expects 17 migrations and 20 policies). The hygiene guard still fails on 4 old commits authored "Claude" (no App identity); needs-rescue #666. DB integration tests not run locally (need Postgres); check CI.

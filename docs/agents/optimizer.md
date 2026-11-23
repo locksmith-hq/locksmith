@@ -38,7 +38,7 @@ Give each its link, step, harness cause and evidence.
 One table per worker: runs per class, PRs opened and merged, tasks ticked, minutes per shipped run.
 
 ## 4. Usage (Max plan)
-All routines share one Max plan; hitting its 5-hour or weekly limit stops every agent. For each routine, from `RemoteTrigger get` and the run logs: model, `effort_level`, runs, active minutes (first to last event), turns, and subagent tokens and tiers from `run-metadata`.
+All routines share one Max plan; hitting its 5-hour or weekly limit stops every agent. For each routine, from `RemoteTrigger get` and the run logs: model, `effort_level`, runs, active minutes (first to last event), turns, tokens from run logs and `review usage` annotations.
 - **Limits hit:** search the run logs for rate-limit or usage-limit errors, 429s and `rate_limit_event`s. Any hit is a top cause.
 - **Peak 5h window:** the busiest 5 hours of overlapping runs, by model. Weight Opus over Sonnet over Haiku.
 - **Weekly pace:** active minutes by model over 7 days, projected to the weekly reset (Saturday 10:00). Flag a pace that would use up the week early.
@@ -59,7 +59,7 @@ Post one #12 comment. It starts with `<!-- agent -->` and `Optimizer: <N> sessio
 - the setup findings;
 - the latencies;
 - the worker tables;
-- the usage table (per routine: model, effort, runs, minutes, tokens) with the peak 5h window and weekly pace;
+- the usage table (per routine: model, effort, runs, minutes, tokens; tokens per merged PR) with the peak 5h window and weekly pace;
 - the v3 measures (#470), 7 days: product share of merged PRs (product folders and `openspec/changes`), agent-system PRs, `needs-owner` issues, runs starting with 3+ takeable changes, idle share, PRs idle over 24h, open `task` issues;
 - each flagged run with its status;
 - prompt changes (old → new);

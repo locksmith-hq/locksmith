@@ -14,7 +14,7 @@ branch="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 #    This binds every branch, owner sessions included; other findings go to the harness-backlog issue.
 # 2. Trust root: agents (claude/* branches) never change the gates, guards, routing, workflows or hard rules.
 trust=(.github/workflows .github/CODEOWNERS 'scripts/check-task-edits*' scripts/check-agent-docs.sh
-       scripts/route.sh docs/agents/routing.json docs/agents/common.md docs/agents/merge.md .claude/skills/merge-review
+       scripts/route.sh scripts/review-tier.sh docs/agents/routing.json docs/agents/common.md docs/agents/merge.md .claude/skills/merge-review
        AGENTS.md CLAUDE.md openspec/config.yaml .claude/settings.json .claude/settings.local.json .claude/agents)
 harness=("${trust[@]}" docs/agents .claude/skills scripts/run-lock.sh scripts/worker-has-work.sh scripts/owner-replies.sh
          scripts/change-status.sh scripts/change-issue.sh scripts/change-sync.sh scripts/roadmap-sync.sh scripts/issue-lib.sh

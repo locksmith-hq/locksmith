@@ -39,3 +39,9 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: ci-fix - done
 - Verified: npx vitest run src/route-table.test.ts -> 2 passed
 - Notes for next session: web CI failed because route-table.json lacked GET /v1/bindings and PUT /internal/v1/gateway/bindings (added by d3 to openapi.json). 39 tasks still unticked; PR #640 not ready for auto-merge.
+
+## 2026-11-23 worker-b (task 2.1)
+- Task 2.1 done: `apps/api` pins TypeScript 7.0.2 (G3/OC-10), Turborepo has a `typecheck` task, tree-check and docs/testing.md already cover `apps/api`, tsconfig extends `packages/tsconfig/base.json`.
+- Verified: `tsc --noEmit` clean, `vitest run` 2 passed, tree-check OK.
+- Notes for next session: 38 tasks open; next is 2.2 (Nest bootstrap). Tasks 1.4 to 1.6 are sized for several runs. PR #640 not ready for auto-merge.
+- Evaluator FAIL on 2.1 (so left unticked): everything is done except an explicit `apps/api` rule in `scripts/tree-check.sh`; the script covers it only indirectly through `test-recipes-check.sh`. `tree-check.sh` is a guard script (trust root), so agent branches may not edit it: needs the lead or owner to say whether the indirect coverage satisfies 2.1, or to make that edit. Everything else in 2.1 is pushed.

@@ -8,7 +8,10 @@ import { createLocksmith, LocksmithError, paginate, unwrap, VALUE_ROUTE_DENYLIST
 const spec = JSON.parse(readFileSync(new URL("../../../services/control-plane/openapi.json", import.meta.url), "utf8"));
 
 const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": status >= 400 ? "application/problem+json" : "application/json" } });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": status >= 400 ? "application/problem+json" : "application/json" },
+  });
 
 describe("client", () => {
   it("sends the bearer token and returns typed data", async () => {
@@ -28,7 +31,10 @@ describe("client", () => {
   it("throws a LocksmithError carrying the problem fields on 403", async () => {
     const f = async () => json(403, { title: "Forbidden", detail: "no access", type: "about:blank" });
     const c = createLocksmith({ baseUrl: "http://cp", token: "t", fetch: f as unknown as typeof fetch });
-    const err = await c.GET("/v1/agents").then(unwrap).catch((e) => e);
+    const err = await c
+      .GET("/v1/agents")
+      .then(unwrap)
+      .catch((e) => e);
     expect(err).toBeInstanceOf(LocksmithError);
     expect(err.status).toBe(403);
     expect(err.message).toBe("no access");
@@ -44,20 +50,28 @@ describe("client", () => {
   });
 
   it("pages through cursors", async () => {
-    const pages = [{ items: [1], next: "c2" }, { items: [2], next: null }];
+    const pages = [
+      { items: [1], next: "c2" },
+      { items: [2], next: null },
+    ];
     const seen: (string | null)[] = [];
     const got: number[] = [];
     for await (const p of paginate(async (cur) => {
       seen.push(cur);
       return pages[seen.length - 1]!;
-    })) got.push(...p.items);
+    }))
+      got.push(...p.items);
     expect(got).toEqual([1, 2]);
     expect(seen).toEqual([null, "c2"]);
   });
 
   it("does not write to the console", async () => {
     const spies = (["log", "warn", "error", "info", "debug"] as const).map((m) => vi.spyOn(console, m));
-    const c = createLocksmith({ baseUrl: "http://cp", token: "t", fetch: (async () => json(200, [])) as unknown as typeof fetch });
+    const c = createLocksmith({
+      baseUrl: "http://cp",
+      token: "t",
+      fetch: (async () => json(200, [])) as unknown as typeof fetch,
+    });
     unwrap(await c.GET("/v1/agents"));
     await c.GET("/v1/agents");
     spies.forEach((s) => expect(s).not.toHaveBeenCalled());
@@ -72,15 +86,24 @@ describe("generated schema", () => {
     const root = new URL("../../../node_modules/.bin/openapi-typescript", import.meta.url).pathname;
     const spec = new URL("../../../services/control-plane/openapi.json", import.meta.url).pathname;
     let tool = root;
-    try { readFileSync(bin); tool = bin; } catch { /* hoisted to the root */ }
+    try {
+      readFileSync(bin);
+      tool = bin;
+    } catch {
+      /* hoisted to the root */
+    }
     execFileSync(tool, [spec, "-o", out], { stdio: "ignore" });
-    expect(readFileSync(out, "utf8"), "schema.d.ts is stale: run `just sdk-gen`").toBe(readFileSync(new URL("./schema.d.ts", import.meta.url), "utf8"));
+    expect(readFileSync(out, "utf8"), "schema.d.ts is stale: run `just sdk-gen`").toBe(
+      readFileSync(new URL("./schema.d.ts", import.meta.url), "utf8"),
+    );
   });
 
   it("types every operationId in the spec", () => {
     const schema = readFileSync(new URL("./schema.d.ts", import.meta.url), "utf8");
     const ids: string[] = Object.values<Record<string, { operationId?: string }>>(spec.paths).flatMap((p) =>
-      Object.values(p).map((op) => op.operationId).filter((x): x is string => !!x),
+      Object.values(p)
+        .map((op) => op.operationId)
+        .filter((x): x is string => !!x),
     );
     expect(ids.length).toBeGreaterThan(0);
     for (const id of ids) expect(schema, id).toContain(`${id}: {`);

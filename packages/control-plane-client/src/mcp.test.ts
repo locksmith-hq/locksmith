@@ -42,7 +42,10 @@ test("listMcpClients follows cursors", async () => {
 });
 
 test("revokeMcpClient POSTs to the revoke path; a 403 surfaces as ApiError", async () => {
-  const f = vi.fn().mockReturnValueOnce(json(mcpClients[1])).mockReturnValueOnce(json({ title: "Forbidden", detail: "no" }, 403));
+  const f = vi
+    .fn()
+    .mockReturnValueOnce(json(mcpClients[1]))
+    .mockReturnValueOnce(json({ title: "Forbidden", detail: "no" }, 403));
   vi.stubGlobal("fetch", f);
   const c = createClient("org1", B);
   expect((await c.revokeMcpClient("abc")).revoked_at).toBeDefined();

@@ -3,25 +3,36 @@ import type { SelfReport } from "./SelfReport";
 import type { SessionSource } from "./SessionSource";
 import type { StartedBy } from "./StartedBy";
 
-export type LeaseInfo = { id: string, root_pid: number, command: string, project: string, env: string, scopes: Array<string>, created_at: number, expires_at: number, state: string, 
-/**
- * Executable path of the lease root, as the kernel reported it at start (display only).
- */
-root_exe: string, started_by: StartedBy, 
-/**
- * Where the agent runs: a hint from executable names and paths, never used for trust.
- */
-source: SessionSource, 
-/**
- * Terminal, multiplexer or IDE above the root, when one is recognized.
- */
-host: string | null, 
-/**
- * What the agent said about itself in `locksmith_start_session`. Unverified.
- */
-report: SelfReport | null, 
-/**
- * Agent-started leases (M10e): the key names `smith run` may inject; every other key is
- * relay-only. `None` for human-started leases (no restriction). Names only, never values.
- */
-inject: Array<string> | null, };
+export type LeaseInfo = {
+  id: string;
+  root_pid: number;
+  command: string;
+  project: string;
+  env: string;
+  scopes: Array<string>;
+  created_at: number;
+  expires_at: number;
+  state: string;
+  /**
+   * Executable path of the lease root, as the kernel reported it at start (display only).
+   */
+  root_exe: string;
+  started_by: StartedBy;
+  /**
+   * Where the agent runs: a hint from executable names and paths, never used for trust.
+   */
+  source: SessionSource;
+  /**
+   * Terminal, multiplexer or IDE above the root, when one is recognized.
+   */
+  host: string | null;
+  /**
+   * What the agent said about itself in `locksmith_start_session`. Unverified.
+   */
+  report: SelfReport | null;
+  /**
+   * Agent-started leases (M10e): the key names `smith run` may inject; every other key is
+   * relay-only. `None` for human-started leases (no restriction). Names only, never values.
+   */
+  inject: Array<string> | null;
+};

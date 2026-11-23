@@ -3,4 +3,12 @@
 /**
  * Daemon error codes plus the client-side ones.
  */
-export type CommandErrorCode = "Locked" | "Denied" | "NotFound" | "BadRequest" | "Version" | "Internal" | "Unavailable" | "Unexpected";
+export type CommandErrorCode =
+  | "Locked"
+  | "Denied"
+  | "NotFound"
+  | "BadRequest"
+  | "Version"
+  | "Internal"
+  | "Unavailable"
+  | "Unexpected";

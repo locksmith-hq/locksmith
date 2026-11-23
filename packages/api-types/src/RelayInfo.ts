@@ -3,4 +3,9 @@
 /**
  * Relay ports (`null` when that relay is unavailable) and the explicit-proxy CA hosts.
  */
-export type RelayInfo = { git_port: number | null, http_port: number | null, aws_port: number | null, ca_hosts: Array<string>, };
+export type RelayInfo = {
+  git_port: number | null;
+  http_port: number | null;
+  aws_port: number | null;
+  ca_hosts: Array<string>;
+};

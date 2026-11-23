@@ -8,26 +8,43 @@ const ISS = "http://localhost:8180/realms/locksmith";
 const b64 = (o: unknown) => btoa(JSON.stringify(o)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 const jwt = (claims: object) => `${b64({ alg: "none" })}.${b64(claims)}.sig`;
 const TOKEN = "ACCESSTOKEN-SENTINEL";
-const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
+const json = (b: unknown, status = 200) =>
+  new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
 
 let nav: string[];
 let fetchMock: ReturnType<typeof vi.fn>;
 let signInStatus: number;
 
 const mk = () =>
-  createAuth({ issuer: ISS, clientId: "locksmith-web", redirectUri: "http://localhost:3000/", navigate: (u) => nav.push(u) });
+  createAuth({
+    issuer: ISS,
+    clientId: "locksmith-web",
+    redirectUri: "http://localhost:3000/",
+    navigate: (u) => nav.push(u),
+  });
 
 beforeEach(() => {
   nav = [];
   signInStatus = 204;
-  sessionStorage.clear(); localStorage.clear();
+  sessionStorage.clear();
+  localStorage.clear();
   window.history.replaceState(null, "", "/");
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === `${ISS}/protocol/openid-connect/token`) {
       const now = Math.floor(Date.now() / 1000);
       return json({
-        access_token: TOKEN, token_type: "Bearer", expires_in: 300, scope: "openid email profile",
-        id_token: jwt({ iss: ISS, aud: "locksmith-web", sub: "u1", exp: now + 300, iat: now, email: "ada@example.com" }),
+        access_token: TOKEN,
+        token_type: "Bearer",
+        expires_in: 300,
+        scope: "openid email profile",
+        id_token: jwt({
+          iss: ISS,
+          aud: "locksmith-web",
+          sub: "u1",
+          exp: now + 300,
+          iat: now,
+          email: "ada@example.com",
+        }),
       });
     }
     if (url === "/v1/auth/sign-in" && init?.method === "POST") return new Response(null, { status: signInStatus });
@@ -61,7 +78,9 @@ test("sign-in builds a PKCE S256 authorize URL and routes GitHub and Google by k
 });
 
 test("callback signs in, keeps tokens out of storage and logs, and returns to the requested path", async () => {
-  const log = vi.spyOn(console, "log"); const info = vi.spyOn(console, "info"); const warn = vi.spyOn(console, "warn");
+  const log = vi.spyOn(console, "log");
+  const info = vi.spyOn(console, "info");
+  const warn = vi.spyOn(console, "warn");
   const auth = mk();
   await roundTrip(auth, "github", "/audit?x=1");
   await auth.start();
@@ -130,7 +149,9 @@ test("an expired access token is not sent", async () => {
     expect(auth.token()).toBe(TOKEN);
     vi.setSystemTime(Date.now() + 400_000);
     expect(auth.token()).toBeUndefined();
-  } finally { vi.useRealTimers(); }
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("UI: signed-out shows the three choices; signed-in shows the user, bearer requests and sign out", async () => {
@@ -158,9 +179,15 @@ test("UI: an expiry event returns to the sign-in screen with a notice", async ()
   let push: (s: unknown) => void = () => {};
   let st: unknown = { status: "signed-in", user: { accessToken: "t", email: "ada@example.com" } };
   const fake: AuthService = {
-    start: async () => {}, signIn: async () => {}, signOut: async () => {}, token: () => "t",
+    start: async () => {},
+    signIn: async () => {},
+    signOut: async () => {},
+    token: () => "t",
     getState: () => st as never,
-    subscribe: (fn) => { push = fn as never; return () => {}; },
+    subscribe: (fn) => {
+      push = fn as never;
+      return () => {};
+    },
   };
   render(<App auth={fake} />);
   expect(await screen.findByTestId("signed-in-as")).toBeInTheDocument();
@@ -172,16 +199,37 @@ test("UI: an expiry event returns to the sign-in screen with a notice", async ()
 
 test("Cognito mode uses the hosted-UI endpoints, identity_provider and the logout params", async () => {
   const HOST = "https://locksmith-dev.auth.us-east-1.amazoncognito.com";
-  const auth = createAuth({ issuer: ISS, clientId: "locksmith-web", redirectUri: "http://localhost:3000/", hostedDomain: HOST, navigate: (u) => nav.push(u) });
+  const auth = createAuth({
+    issuer: ISS,
+    clientId: "locksmith-web",
+    redirectUri: "http://localhost:3000/",
+    hostedDomain: HOST,
+    navigate: (u) => nav.push(u),
+  });
   const url = await roundTrip(auth, "google");
   expect(url.origin + url.pathname).toBe(`${HOST}/oauth2/authorize`);
   expect(url.searchParams.get("identity_provider")).toBe("Google");
   expect(url.searchParams.has("kc_idp_hint")).toBe(false);
   fetchMock.mockImplementation(async (u: string, _init?: RequestInit) =>
-    u === `${HOST}/oauth2/token` ? json({
-      access_token: TOKEN, token_type: "Bearer", expires_in: 300, scope: "openid email profile",
-      id_token: jwt({ iss: ISS, aud: "locksmith-web", sub: "u1", exp: Math.floor(Date.now() / 1000) + 300, iat: Math.floor(Date.now() / 1000), email: "ada@example.com" }),
-    }) : u === "/v1/auth/sign-in" || u === "/v1/auth/sign-out" ? new Response(null, { status: 204 }) : json({}, 404));
+    u === `${HOST}/oauth2/token`
+      ? json({
+          access_token: TOKEN,
+          token_type: "Bearer",
+          expires_in: 300,
+          scope: "openid email profile",
+          id_token: jwt({
+            iss: ISS,
+            aud: "locksmith-web",
+            sub: "u1",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            iat: Math.floor(Date.now() / 1000),
+            email: "ada@example.com",
+          }),
+        })
+      : u === "/v1/auth/sign-in" || u === "/v1/auth/sign-out"
+        ? new Response(null, { status: 204 })
+        : json({}, 404),
+  );
   await auth.start();
   await auth.signOut();
   const out = new URL(nav.at(-1)!);
@@ -191,7 +239,13 @@ test("Cognito mode uses the hosted-UI endpoints, identity_provider and the logou
 });
 
 test("UI: Cognito deployments offer Google and email only", async () => {
-  const auth = createAuth({ issuer: ISS, clientId: "locksmith-web", redirectUri: "http://localhost:3000/", hostedDomain: "https://x.auth.us-east-1.amazoncognito.com", navigate: (u) => nav.push(u) });
+  const auth = createAuth({
+    issuer: ISS,
+    clientId: "locksmith-web",
+    redirectUri: "http://localhost:3000/",
+    hostedDomain: "https://x.auth.us-east-1.amazoncognito.com",
+    navigate: (u) => nav.push(u),
+  });
   render(<App auth={auth} />);
   expect(await screen.findByText("Continue with Google")).toBeInTheDocument();
   expect(screen.getByText("Continue with email")).toBeInTheDocument();

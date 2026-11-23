@@ -14,6 +14,8 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-core` | Rust lib | `just test ls-core` | no | `just test-rust` |  |
 | `crates/ls-crypto` | Rust lib | `just test ls-crypto` | no | `just test-rust` | Secrets path: tests must not print values |
 | `crates/ls-diag` | Rust lib | `just test ls-diag` | no | `just test-rust` |  |
+| `crates/ls-entitlements` | Rust lib | `just test ls-entitlements` | no | `just test-rust` |  |
+| `ee/crates/ls-ee-license` | Rust lib | `cargo test -p ls-ee-license` | no | `just test-rust` | Source-available (`ee/LICENSE`); bad or lapsed license falls back to free |
 | `crates/ls-envelope` | Rust lib | `just test ls-envelope` | no | `just test-rust` | Envelope crypto |
 | `crates/ls-http` | Rust lib | `just test ls-http` | no | `just test-rust` | Shared outbound TLS client policy |
 | `crates/ls-hooks` | Rust lib | `just test ls-hooks` | no | `just test-rust` |  |

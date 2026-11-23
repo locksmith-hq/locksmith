@@ -154,13 +154,35 @@ impl ControlPlane {
         body: Vec<u8>,
         max: usize,
     ) -> Result<(u16, Vec<u8>), Internal> {
+        self.internal_send_json(reqwest::Method::POST, path, body, max)
+            .await
+    }
+
+    /// `PUT` a JSON body, the same way as [`Self::internal_post_json`].
+    pub(crate) async fn internal_put_json(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        max: usize,
+    ) -> Result<(u16, Vec<u8>), Internal> {
+        self.internal_send_json(reqwest::Method::PUT, path, body, max)
+            .await
+    }
+
+    async fn internal_send_json(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Vec<u8>,
+        max: usize,
+    ) -> Result<(u16, Vec<u8>), Internal> {
         let url = self.base.join(path).map_err(|_| Internal::BadResponse)?;
         let mut auth = HeaderValue::try_from(format!("Bearer {}", self.token.expose_secret()))
             .map_err(|_| Internal::Denied)?;
         auth.set_sensitive(true);
         let mut resp = self
             .client
-            .post(url)
+            .request(method, url)
             .header(AUTHORIZATION, auth)
             .header(ORG_HEADER, self.org_id.to_string())
             .header(reqwest::header::CONTENT_TYPE, "application/json")

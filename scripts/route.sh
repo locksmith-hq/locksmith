@@ -3,6 +3,9 @@
 #   route.sh event <event.json>    roles to wake for a GitHub event, "role<TAB>reason" per line (wake-agents.yml)
 #   route.sh debate <issue>        debate guard: "wake <role> <why>" or "wait <why>"; agents act only on their own wake
 #   route.sh fire <role> <reason>  wake a role's routine; its token comes from the env var routing.json names
+#   route.sh role <login>          the agent role of a GitHub login
+#   route.sh tick                  fire each batched (Opus) role once for its queue (wake-agents.yml, every 2 h)
+#   (role "blocker" in event output: no routine; fire records it on one harness-blocker issue per cause)
 #   route.sh selftest
 # Roles come from GitHub logins, so an agent cannot speak for another role or skip the cap. Shortcut: while
 # identities are paused (#299) agents post as the owner and a role marker decides; drop it once they are live.
@@ -92,17 +95,48 @@ pr_worker() { # <pr number>; the author from GitHub (or $PR_AUTHOR in the selfte
   r=$(role_of "$who"); case "$r" in worker-*|lead) printf '%s' "$r" ;; *) cfgq .default_worker ;; esac
 }
 
+# A failed claude-review run wakes the author only for a real FAIL verdict. 30 event wakes (2026-11-20..22) went to
+# workers for verdict-less failures they could not fix: owner approval pending, unticked tasks, or the job erroring.
+review_route() { # <pr> <sha>; merge-ready's description from GitHub (or $REVIEW_STATUS in the selftest)
+  local d; d=${REVIEW_STATUS-$(gh api "repos/$repo/commits/$2/statuses" -q '[.[]|select(.context == "merge-ready")][0].description // ""' 2>/dev/null)}
+  case "$d" in
+    "Claude review FAIL"*) printf '%s\tmerge review failed on PR #%s\n' "$(pr_worker "$1")" "$1" ;;
+    "owned paths"*|"unchecked tasks"*) ;;  # waits on the owner or on unfinished tasks; a run cannot change that
+    *) printf 'blocker\tclaude-review gave no verdict: PR #%s (%s)\n' "$1" "${d:-no merge-ready status}" ;;
+  esac
+}
+
+# One open harness-blocker issue per cause ("<cause>: <detail>"); repeats add a comment instead of waking anyone.
+# A new one queues the lead. While one also carries `hold-workers`, worker-has-work.sh reports idle, so no worker runs.
+blocker() { # <reason>
+  local cause=${1%%: *} n
+  n=$(gh api "repos/$repo/issues?labels=harness-blocker&state=open&per_page=100" 2>/dev/null | jq -r --arg t "Blocker: $cause" '.[]|select(.title == $t)|.number' | head -1)
+  if [ -n "$n" ]; then
+    gh api "repos/$repo/issues/$n/comments" -f body="<!-- agent -->
+again: $1" >/dev/null && echo "blocker #$n: $1"
+  else
+    n=$(gh api "repos/$repo/issues" -f title="Blocker: $cause" -f "labels[]=harness-blocker" -f body="<!-- agent -->
+<!-- raised-by: lead -->
+wake-agents saw a failure no worker run can fix, so it woke nobody.
+
+First: $1
+
+Fix the cause and close this issue; add \`hold-workers\` to stop worker runs while it is open." -q .number) || return 1
+    echo "blocker #$n opened: $1"; fire lead "harness-blocker #$n opened: $1"
+  fi
+}
+
 event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   local ev=$1 n labels l to who body
   case "${GITHUB_EVENT_NAME:?}" in
     workflow_run)
-      local wf concl br trig pr
-      read -r wf concl br trig pr < <(jq -r '.workflow_run|[.name, .conclusion, .head_branch, .event, (.pull_requests[0].number // "")]|@tsv' "$ev")
+      local wf concl br trig pr sha
+      read -r wf concl br trig pr sha < <(jq -r '.workflow_run|[.name, .conclusion, .head_branch, .event, (.pull_requests[0].number // ""), (.head_sha // "")]|@tsv' "$ev")
       if [ "$wf" = ci ] && [ "$concl" = failure ]; then
         if [ "$br" = main ]; then printf '%s\tCI failed on main\n' lead
         elif [ "$trig" = pull_request ] && [[ "$br" == claude/* ]]; then printf '%s\tCI failed on PR #%s (%s)\n' "$(pr_worker "$pr")" "${pr:-?}" "$br"; fi
-      elif [ "$wf" = claude-review ] && [ "$trig" = pull_request ] && [ -n "$pr" ] && [[ "$concl" =~ ^(success|failure)$ ]]; then
-        printf '%s\tmerge review finished on PR #%s\n' "$(pr_worker "$pr")" "$pr"
+      elif [ "$wf" = claude-review ] && [ "$trig" = pull_request ] && [ -n "$pr" ] && [ "$concl" = failure ]; then
+        review_route "$pr" "$sha"
       fi ;;
     issues)
       n=$(jq -r .issue.number "$ev"); labels=$(jq -r '.issue.labels[].name' "$ev")
@@ -124,7 +158,7 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
       # Owner tags (@locksmith-lead or the org team @locksmith-hq/lead, ...) wake exactly the tagged roles, on issues and PRs alike, and replace the reply rule.
       # The research bot (open internet, comments only) tags the roles its answer is for; it never wakes itself.
       src=owner; [ "$owner" = false ] && [ "$(role_of "$who")" = research ] && src=research
-      tags=$({ [ "$owner" = true ] || [ "$src" = research ]; } && grep -oE '@locksmith-(hq/)?[a-z]+' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done | grep -vx "$([ "$src" = research ] && echo research)")
+      tags=$({ [ "$owner" = true ] || [ "$src" = research ]; } && grep -oE '@locksmith-(hq/)?[a-z][a-z-]*[a-z]' <<<"$body" | sort -u | while read -r t; do cfgq --arg t "$t" '.mentions[$t] // empty'; done | grep -vx "$([ "$src" = research ] && echo research)")
       if [ -n "$tags" ]; then
         for to in $tags; do printf '%s\t%s tagged you on #%s: %s\n' "$to" "$src" "$n" "$(jq -r '.comment.html_url // ""' "$ev")"; done
         return 0
@@ -141,8 +175,43 @@ event() { # <event.json>; GITHUB_EVENT_NAME says which event it is
   esac | awk -F'\t' '!seen[$1]++'  # one wake per role per event
 }
 
+# Batched roles (routing.json `batched`: the Opus routines; owner 2026-11-22: 29 Opus lead runs in 24 h, mostly for
+# nothing) wake at once only when the owner tags them. Any other wake labels the issue or PR `wake-<role>`; `tick`
+# (wake-agents.yml, every 2 h) fires each role once for everything labelled, then clears those labels.
+batched() { [ "$(cfgq --arg r "$1" '.roles[$r].batched // false')" = true ]; }
+now_ok() { [[ "$1" == "owner tagged you"* || "$1" == queue:* ]]; }
+
+queue_add() { # <role> <reason>: label the issue or PR the reason names; main's state needs no label (tick reads it)
+  local n; n=$(grep -oE '#[0-9]+' <<<"$2" | head -1 | tr -d '#')
+  if [ -n "$n" ] && [ -z "${ROUTE_DRYRUN:-}" ]; then gh api "repos/$repo/issues/$n/labels" -f "labels[]=wake-$1" >/dev/null || return 1; fi
+  echo "queued for $1${n:+ on #$n}: $2"
+}
+
+queue_of() { # <role>: one item per line; from GitHub or $QUEUE_JSON {"items": [...], "main": {...}} in the selftest
+  local st; st=${QUEUE_JSON:+$(cat "$QUEUE_JSON")}
+  [ -n "$st" ] || st=$(jq -n --argjson i "$(gh api "repos/$repo/issues?labels=wake-$1&state=all&per_page=100" -q '[.[]|{number, labels: [.labels[].name]}]')" \
+    --argjson m "$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=1" -q '.workflow_runs[0]|{conclusion, updated_at}')" '{items: $i, main: $m}')
+  jq -r --arg r "$1" --arg now "${NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" '
+    (.items[]|"#\(.number) (\([.labels[]|select(startswith("wake-")|not)]|join(", ")))"),
+    (select($r == "lead")|.main // {}|select(.conclusion == "failure" and (($now|fromdateiso8601) - (.updated_at|fromdateiso8601)) > 7200)|"main red over 2 h")' <<<"$st"
+}
+
+tick() { # fire each batched role once for its queue, then clear the labels it was fired for
+  local r q n code
+  for r in $(cfgq '.roles|to_entries[]|select(.value.batched == true)|.key'); do
+    q=$(queue_of "$r"); [ -n "$q" ] || { echo "$r: queue empty"; continue; }
+    code=$(fire "$r" "queue: $(paste -sd ';' - <<<"$q" | sed 's/;/; /g')" | tail -1); echo "$r: fired ($code)"
+    [[ "$code" == 2* ]] || continue  # shortcut: a wake labelled between this fire and the clear is cleared unseen; rare, next owner tag or event re-adds it
+    for n in $(grep -oE '^#[0-9]+' <<<"$q" | tr -d '#'); do gh api -X DELETE "repos/$repo/issues/$n/labels/wake-$r" >/dev/null 2>&1; done
+  done
+}
+
 fire() { # <role> <reason>
   local trig secret token
+  [ "$1" = blocker ] && { blocker "$2"; return; }
+  # The AWS tooling dispatcher fires workers (budget, slots, hold-workers); only owner tags still wake one directly.
+  if [[ "$1" == worker-* ]] && [[ "$2" != "owner tagged you"* ]]; then echo "dispatcher owns workers: $1 not fired: $2"; return 0; fi
+  if batched "$1" && ! now_ok "$2"; then queue_add "$1" "$2"; return; fi
   trig=$(cfgq --arg r "$1" '.roles[$r].trigger // ""'); secret=$(cfgq --arg r "$1" '.roles[$r].secret // ""')
   [ -n "$secret" ] && token=${!secret:-}
   echo "waking $1: $2"
@@ -193,7 +262,7 @@ no role marker"
   }
   ev 'lead\tneeds-rescue #5 opened' issues '{"action":"labeled","label":{"name":"needs-rescue"},"issue":{"number":5,"labels":[{"name":"needs-rescue"}]}}'
   ev '' issues '{"action":"labeled","label":{"name":"needs-owner"},"issue":{"number":5,"labels":[{"name":"needs-owner"}]}}'
-  ev 'worker-b\tneeds-rescue #5 closed\nworker-a\tneeds-owner #5 closed' issues '{"action":"closed","issue":{"number":5,"user":{"login":"locksmith-josie[bot]"},"labels":[{"name":"needs-rescue"},{"name":"needs-owner"}]}}'
+  ev 'worker-b\tneeds-rescue #5 closed' issues '{"action":"closed","issue":{"number":5,"user":{"login":"locksmith-josie[bot]"},"labels":[{"name":"needs-rescue"},{"name":"needs-owner"}]}}'
   ev 'lead\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"approved"}}'
   ev '' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\nplan"}}'
   printf '%s' '[{"id":1,"user":{"login":"tomer555"},"body":"C","created_at":"2026-11-19T16:43:10Z"},{"id":2,"user":{"login":"tomer555"},"body":"<!-- agent -->\nx","created_at":"2026-11-19T16:43:20Z"}]' >"$d/c.json"
@@ -205,16 +274,16 @@ no role marker"
   # owner tags: on issues and PRs, any label; several roles; the tag replaces the reply rule; agents and others cannot tag
   ev 'pm\towner tagged you on #7: u\nresearch\towner tagged you on #7: u' issue_comment '{"issue":{"number":7,"labels":[{"name":"needs-owner"}]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-pm and @locksmith-research: check this"}}'
   ev 'worker-a\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-worker rebase please"}}'
-  ev 'worker-c\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-harriet rebase please"}}'
-  ev 'worker-b\towner tagged you on #8: u\nlead\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-hq/lead and @locksmith-hq/josie: look"}}'
+  ev 'worker-c\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-worker-c rebase please"}}'
+  ev 'lead\towner tagged you on #8: u\npm\towner tagged you on #8: u' issue_comment '{"issue":{"number":8,"labels":[],"pull_request":{}},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-hq/lead and @locksmith-hq/pm: look"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"<!-- agent -->\n@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"stranger"},"body":"@locksmith-lead"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"tomer555"},"body":"@locksmith-nobody"}}'
   # research (Ada) informs: her comment's tags wake those roles, never herself; other bots cannot tag
-  ev 'worker-b\tresearch tagged you on #6: u\npm\tresearch tagged you on #6: u' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-research"}]},"comment":{"html_url":"u","user":{"login":"locksmith-ada[bot]"},"body":"Answer: yes.\n@locksmith-pm @locksmith-josie @locksmith-ada"}}'
+  ev 'pm\tresearch tagged you on #6: u\nworker-b\tresearch tagged you on #6: u' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-research"}]},"comment":{"html_url":"u","user":{"login":"locksmith-ada[bot]"},"body":"Answer: yes.\n@locksmith-pm @locksmith-worker-b @locksmith-research"}}'
   ev '' issue_comment '{"issue":{"number":6,"labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"locksmith-ada[bot]"},"body":"no tags"}}'
   ev '' issue_comment '{"issue":{"number":8,"labels":[]},"comment":{"user":{"login":"locksmith-alfie[bot]"},"body":"@locksmith-lead"}}'
-  ev 'research\towner tagged you on #9: u' issue_comment '{"issue":{"number":9,"labels":[]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-ada what does X cost?"}}'
+  ev 'research\towner tagged you on #9: u' issue_comment '{"issue":{"number":9,"labels":[]},"comment":{"html_url":"u","user":{"login":"tomer555"},"body":"@locksmith-research what does X cost?"}}'
   # no tag: the role that raised the issue gets the reply, else the lead
   ev 'pm\towner replied on needs-owner #7' issue_comment '{"issue":{"number":7,"body":"x\n<!-- raised-by: pm -->","labels":[{"name":"needs-owner"}]},"comment":{"user":{"login":"tomer555"},"body":"yes"}}'
   ev 'research\tneeds-research #6 opened' issues '{"action":"labeled","label":{"name":"needs-research"},"issue":{"number":6,"labels":[{"name":"needs-research"}]}}'
@@ -225,16 +294,38 @@ no role marker"
   ev 'pm\tneeds-research #6 closed' issues '{"action":"closed","issue":{"number":6,"body":"<!-- raised-by: pm -->","labels":[{"name":"needs-research"}]}}'
   ev 'lead\tCI failed on main' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"main","event":"push","pull_requests":[]}}'
   ev '' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"feature","event":"pull_request","pull_requests":[]}}'
-  # each worker owns its PRs: CI failures and finished merge reviews wake the PR's author; owner PRs go to default_worker
+  # each worker owns its PRs: CI failures and failed merge reviews wake the PR's author (a PASS needs no one); owner PRs go to default_worker
   PR_AUTHOR='locksmith-josie[bot]' ev 'worker-b\tCI failed on PR #12 (claude/change-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
-  PR_AUTHOR='locksmith-harriet[bot]' ev 'worker-c\tmerge review finished on PR #12' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
-  PR_AUTHOR=tomer555 ev 'worker-a\tmerge review finished on PR #13' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"owner/x","event":"pull_request","pull_requests":[{"number":13}]}}'
+  PR_AUTHOR='locksmith-harriet[bot]' ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":12}]}}'
+  REVIEW_STATUS='Claude review FAIL: fix the findings and push' PR_AUTHOR=tomer555 ev 'worker-a\tmerge review failed on PR #13' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"owner/x","event":"pull_request","pull_requests":[{"number":13}]}}'
   PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tCI failed on PR #15 (claude/lead-x)' workflow_run '{"workflow_run":{"name":"ci","conclusion":"failure","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":15}]}}'
-  PR_AUTHOR='locksmith-linus[bot]' ev 'lead\tmerge review finished on PR #14' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
+  PR_AUTHOR='locksmith-linus[bot]' ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"claude/lead-x","event":"pull_request","pull_requests":[{"number":14}]}}'
+  # verdict-less review failures wake nobody: owner gate or unticked tasks drop, a job error is a blocker
+  for rs in "owned paths need the owner's approval: x" "unchecked tasks in openspec/changes/x/tasks.md"; do
+    REVIEW_STATUS=$rs PR_AUTHOR='locksmith-alfie[bot]' ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":534}]}}'
+  done
+  REVIEW_STATUS='no review verdict for abc' ev 'blocker\tclaude-review gave no verdict: PR #534 (no review verdict for abc)' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":534}]}}'
+  REVIEW_STATUS='' ev 'blocker\tclaude-review gave no verdict: PR #534 (no merge-ready status)' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"failure","head_branch":"claude/change-x","event":"pull_request","pull_requests":[{"number":534}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"skipped","head_branch":"x","event":"pull_request","pull_requests":[{"number":12}]}}'
   ev '' workflow_run '{"workflow_run":{"name":"claude-review","conclusion":"success","head_branch":"x","event":"issue_comment","pull_requests":[]}}'
   jq -n --arg pm "$pm" --arg lead "$lead" '{state:"open",labels:["debate"],opener:$pm,opener_body:"x",comments:[{login:$lead,body:"x"}]}' >"$d/deb.json"
   DEBATE_JSON=$d/deb.json ev 'pm\tdebate #9: turn 2 of 3' issue_comment '{"issue":{"number":9,"labels":[{"name":"debate"}]},"comment":{"user":{"login":"locksmith-linus[bot]"},"body":"x"}}'
+  # batched (Opus) roles wake at once only for an owner tag or their own tick; everything else is queued on its issue
+  for w in "owner tagged you on #8: u" "queue: #5 (needs-rescue)"; do now_ok "$w" && echo "ok: at once: $w" || { echo "FAIL: at once: $w"; fail=1; }; done
+  for rw in "lead|needs-rescue #5 opened|on #5" "lead|CI failed on main|" "pm|debate #9: turn 2 of 3|on #9" "pm|research tagged you on #6: u|on #6" "research|needs-research #6 opened|on #6"; do
+    IFS='|' read -r r w on <<<"$rw"; got=$(ROUTE_DRYRUN=1 fire "$r" "$w")
+    [ "$got" = "queued for $r${on:+ $on}: $w" ] && echo "ok: queued: $r $w" || { echo "FAIL: queued: $r $w got '$got'"; fail=1; }
+  done
+  got=$(fire worker-a "CI failed on PR #12 (x)"); [ "$got" = "dispatcher owns workers: worker-a not fired: CI failed on PR #12 (x)" ] && echo "ok: dispatcher owns worker event wakes" || { echo "FAIL: worker got '$got'"; fail=1; }
+  got=$(fire worker-a "owner tagged you on #8: u" | head -1); [ "$got" = "waking worker-a: owner tagged you on #8: u" ] && echo "ok: owner tags still wake a worker" || { echo "FAIL: worker tag got '$got'"; fail=1; }
+  qo() { # <role> <expected lines> <state json>
+    printf '%s' "$3" >"$d/q.json"; got=$(QUEUE_JSON=$d/q.json NOW=2026-11-22T12:00:00Z queue_of "$1")
+    [ "$got" = "$(printf '%b' "$2")" ] && echo "ok: $1 queue -> ${2:-empty}" || { echo "FAIL: $1 queue want '$2' got '$got'"; fail=1; }
+  }
+  qo lead '' '{"items":[],"main":{"conclusion":"success","updated_at":"2026-11-22T09:00:00Z"}}'
+  qo lead '#5 (needs-rescue)\n#9 (debate)\nmain red over 2 h' '{"items":[{"number":5,"labels":["needs-rescue","wake-lead"]},{"number":9,"labels":["debate","wake-lead"]}],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
+  qo lead '' '{"items":[],"main":{"conclusion":"failure","updated_at":"2026-11-22T11:00:00Z"}}'  # under 2 h: workers try first
+  qo pm '#597 (needs-work)' '{"items":[{"number":597,"labels":["needs-work","wake-pm"]}],"main":{"conclusion":"failure","updated_at":"2026-11-22T09:00:00Z"}}'
   [ "$fail" = 0 ] && echo "route selftest: OK"; return "$fail"
 }
 
@@ -242,6 +333,8 @@ case "${1:-}" in
   event) event "${2:?event.json}" ;;
   debate) debate_input "${2:?issue}" | decide ;;
   fire) fire "${2:?role}" "${3:?reason}" ;;
+  role) role_of "${2-}" ;;
+  tick) tick ;;
   selftest) selftest ;;
   *) sed -n '2,7p' "$0"; exit 2 ;;
 esac

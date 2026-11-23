@@ -25,7 +25,7 @@ hook="$(git rev-parse --git-common-dir)/hooks/pre-push"
 [ -e "$hook" ] || { printf '#!/bin/sh\ngit show origin/main:scripts/run-meta.sh | bash -s -- push-check\n' > "$hook" && chmod +x "$hook"; }
 echo "== preflight"
 bash scripts/agent-preflight.sh; pf=$?
-persona="${2:-${AGENT_PERSONA:-}}"; var="AGENT_APP_KEY_$(tr '[:lower:]' '[:upper:]' <<<"$persona")"
+persona="${2:-${AGENT_PERSONA:-}}"; var=$(bash scripts/agent-identity.sh keyvar "${persona:-none}")
 echo "== identity"
 if [ -n "$persona" ] && [ -n "${!var:-}" ]; then
   # A key is set, so a run must never fall back to the owner: setup undoes itself and prints FAIL on any error.

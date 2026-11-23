@@ -106,6 +106,7 @@ export function createFixtures(opts: FixtureOptions = {}) {
       if (!t) return problem(404);
       return Object.assign(t, { enabled: (body as unknown as { enabled: boolean }).enabled }), reply(t);
     }
+    if (path === "/v1/bindings") return reply({ items: opts.empty ? [] : [{ kind: "pg", name: "appdb", host: "db.internal.example.com", port: 5432, user: "app", database: "appdb", tls: "verify-full" }, { kind: "http", name: "https://api.example.com", origin: "https://api.example.com", header: "Authorization" }], next: null });
     if (path === "/v1/mcp/clients") return reply({ items: mcpClients });
     if ((m = path.match(/^\/v1\/mcp\/clients\/([^/]+)\/revoke$/))) {
       const c = mcpClients.find((x) => x.id === decodeURIComponent(m![1]!));

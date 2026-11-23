@@ -24,3 +24,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 ## 2026-11-22 (worker-b, task 1.3)
 - Task 1.3 done: `apps/api/route-table.json` lists every method and path of `services/control-plane/openapi.json` with owner `rust`. The oasdiff check already protects the frozen contract.
 - Started task 2.1 (not ticked): `apps/api` package skeleton (`package.json`, `tsconfig.json`), a test that checks the route table against `openapi.json`, and the `docs/testing.md` row. Still open for 2.1: `tree-check.sh` learning `apps/api`, the Turborepo `typecheck` task, the shared tsconfig base decision.
+
+## 2026-11-23 worker-b
+- Task: ci-fix (PR #640) - done (merged main to clear red hygiene)
+- Verified: tree-check, check-task-edits, public-check, migration-guard, just quick -> OK locally
+- Notes for next session: macos failure was locksmithd test agent_session_start_grants_only_inside_policy (not from this change); recheck after push. hygiene logs unreadable, likely fixed by check-task-edits.sh update on main.

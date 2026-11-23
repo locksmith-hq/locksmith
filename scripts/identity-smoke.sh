@@ -7,7 +7,7 @@
 # agents never delete branches).
 set -uo pipefail
 repo=locksmith-hq/locksmith
-persona="${1:-${AGENT_PERSONA:-test}}"; bot="locksmith-${persona}[bot]"
+persona="${1:-${AGENT_PERSONA:-test}}"; bot=$(bash scripts/agent-identity.sh logins "$persona" | head -1); bot=${bot:-locksmith-${persona}[bot]}
 fail=0; pr=""
 step() { # <name> <command...>: run it, print PASS/FAIL
   local name=$1; shift

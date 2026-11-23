@@ -9,7 +9,9 @@ name: wake-agents
 # - needs-research or needs-work closed -> the role that asked; needs-rescue closed -> the worker that opened it; needs-owner closed -> Worker A;
 #   CI failing on main -> the lead;
 # - each PR belongs to its author: a failed merge review (claude-review) or failing CI on a claude/* PR -> the worker
-#   or lead whose App opened it (owner PRs -> Worker A).
+#   or lead whose App opened it (owner PRs -> Worker A). A claude-review failure wakes the author only for a FAIL
+#   verdict; a run with no verdict (job error) goes on one `harness-blocker` issue per cause and wakes nobody;
+#   while a harness-blocker is labelled `hold-workers`, event wakes of workers are dropped; closing it wakes Worker A.
 # Batched (Opus) roles - lead, PM, research - are fired at once only for an owner tag. Their other wakes label the
 # issue or PR `wake-<role>`; the `tick` job fires each once every 2 h if anything waits (`route.sh tick`), so bursts
 # and agent-to-agent tags cost one run (owner 2026-11-22).
@@ -52,7 +54,8 @@ jobs:
        contains(fromJSON('["needs-rescue","needs-research","needs-work","debate"]'), github.event.label.name)) ||
       (github.event_name == 'issues' && github.event.action == 'closed' &&
        (contains(github.event.issue.labels.*.name, 'needs-rescue') || contains(github.event.issue.labels.*.name, 'needs-owner') ||
-        contains(github.event.issue.labels.*.name, 'needs-research') || contains(github.event.issue.labels.*.name, 'needs-work'))) ||
+        contains(github.event.issue.labels.*.name, 'needs-research') || contains(github.event.issue.labels.*.name, 'needs-work') ||
+        contains(github.event.issue.labels.*.name, 'harness-blocker'))) ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'claude-review' &&
        github.event.workflow_run.event == 'pull_request' &&
        github.event.workflow_run.conclusion == 'failure') ||

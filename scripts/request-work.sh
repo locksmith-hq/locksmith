@@ -6,8 +6,7 @@
 set -uo pipefail
 repo=locksmith-hq/locksmith
 AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
-role=${1:-$(jq -r --arg l "locksmith-${AGENT_PERSONA:-}[bot]" '[.roles|to_entries[]|select(.value.logins|index($l))|.key][0] // empty' \
-  "$(dirname "$0")/../docs/agents/routing.json")}
+role=${1:-${AGENT_PERSONA:+$(bash "$(dirname "$0")/agent-identity.sh" role "$AGENT_PERSONA")}}
 [ -n "$role" ] || { echo "usage: request-work.sh <role> [reason] (or set AGENT_PERSONA)"; exit 2; }
 why=${2:-no change to take, continue or plan}
 open=$(gh api "repos/$repo/issues?labels=needs-work&state=open" -q length) || exit 1

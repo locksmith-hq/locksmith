@@ -141,6 +141,15 @@ async fn main() -> ExitCode {
         .with_settings_source(tool_settings)
         .with_clients(clients.clone());
     let binding_count = config.bindings.bindings.len();
+    if config.aws_sts_endpoint.is_some() {
+        tracing::warn!(
+            "{} is set: AWS credentials are requested from a non-AWS STS endpoint (local use only)",
+            config::ENV_AWS_STS_ENDPOINT
+        );
+    }
+    let aws = ls_gateway::aws::AwsOptions {
+        sts_endpoint: config.aws_sts_endpoint.clone(),
+    };
     // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
     // only logs and never blocks the relay.
     bindings_publish::spawn_publish(control_plane, bindings_publish::summaries(&config.bindings));
@@ -154,7 +163,8 @@ async fn main() -> ExitCode {
         RelayOptions::default(),
     )
     // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
-    .with_revoked_agents(clients);
+    .with_revoked_agents(clients)
+    .with_aws(aws);
 
     let relay = Arc::new(relay);
 

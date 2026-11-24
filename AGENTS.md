@@ -3,7 +3,7 @@
 Locksmith is an open-source secrets platform and credential gateway for AI coding agents. Agents perform authenticated operations without ever holding the credential.
 
 ## Build and test
-- `just ci` runs fmt, lint, test-rust, test-web, tree-check and task-guard. Never run it locally: the PR's required checks run it.
+- `just ci` runs fmt, lint, test-rust, test-web, tree-check, task-guard, public-check and migration-guard. Never run it locally: the PR's required checks run it.
 - Before every push run `just quick` (fmt and lint of your branch's committed changes) plus the tests you touched (`cargo test -p <crate>`).
 - Other recipes: `just up` / `just down` (local stack), `just dev <app>`, and `cargo test -p <crate>` for a single crate.
 - npm workspaces only. Never use pnpm or yarn. After changing a `package.json`, run `npm i` in that package's directory. `turbo.json` runs the JavaScript tasks (`npm run lint|build|test` call `turbo run`); TypeScript is checked with oxlint, oxfmt and knip.
@@ -45,5 +45,5 @@ CI jobs call the same `just` recipes as `just ci`, so run `just quick` locally a
 - **Evidence and reuse:** base decisions on evidence, not guesses (`docs/research/`). Reuse a maintained OSS package before writing one.
 - **Local first:** `just up` plus the MCP servers in `.mcp.json` give agents access to the database, logs and traces.
 - **Progress:** each change has an append-only `progress.md`. Read it and `git log` before starting work.
-- **Tasks:** only tick tasks after they are verified. Never rewrite task text on an agent branch; `scripts/check-task-edits.sh` enforces this.
-- **Cloud and scheduled agents:** see `docs/cloud-dev.md` and `docs/agents/`.
+- **Tasks:** only tick tasks after they are verified. Never rewrite task text on an agent branch.
+- **Agent harness and plan:** the scheduled agents' prompts, skills and scripts live in `locksmith-hq/claude-ai-crew`; owner rules, lessons, routing (`crew.json`) and the cloud schedules (`ops/cloud-dev.md`) live in `locksmith-hq/locksmith-roadmap`.

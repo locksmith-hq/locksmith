@@ -3,8 +3,11 @@
 /**
  * Self-reported agent client and model. Never used for any authorization decision.
  */
-export type SelfReport = { agent: string | null, model: string | null, 
-/**
- * Always true: marks these values as claims of the agent, not kernel facts.
- */
-reported: boolean, };
+export type SelfReport = {
+  agent: string | null;
+  model: string | null;
+  /**
+   * Always true: marks these values as claims of the agent, not kernel facts.
+   */
+  reported: boolean;
+};

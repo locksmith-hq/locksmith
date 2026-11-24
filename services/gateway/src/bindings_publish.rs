@@ -4,7 +4,10 @@
 //! `PUT /internal/v1/gateway/bindings` (service token, the gateway's org), so the console can
 //! list them. The wire type [`BindingSummary`] has no field for a secret id, a header template, a
 //! password or a version: [`summaries`] copies only names, hosts, ports, users, databases, TLS
-//! modes, header names and Git repository prefixes. A failure is retried a few times, then
+//! modes, header names, Git repository prefixes and AWS role, region, `vend` and maximum duration
+//! (never the external id). An AWS row alone also carries its base-credential secret id (an id,
+//! never a value): the control plane's join key to the org's `delegate` grants, stored and never
+//! served (d2 design decision 8). A failure is retried a few times, then
 //! logged (status class only, never a body); it never blocks or fails the relay.
 
 use std::sync::Arc;
@@ -40,6 +43,7 @@ pub enum Kind {
     Http,
     Git,
     Pg,
+    Aws,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -71,6 +75,17 @@ pub struct BindingSummary {
     pub database: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tls: Option<Tls>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vend: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_duration_secs: Option<u32>,
+    /// `aws` only: the base-credential secret id, the join key to delegate grants.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret_id: Option<uuid::Uuid>,
 }
 
 impl BindingSummary {
@@ -86,11 +101,16 @@ impl BindingSummary {
             user: None,
             database: None,
             tls: None,
+            role: None,
+            region: None,
+            vend: None,
+            max_duration_secs: None,
+            secret_id: None,
         }
     }
 }
 
-/// The inventory of `bindings`: HTTP, then Git, then Postgres, each in file order.
+/// The inventory of `bindings`: HTTP, then Git, then Postgres, then AWS, each in file order.
 pub fn summaries(bindings: &Bindings) -> Vec<BindingSummary> {
     let mut out = Vec::new();
     for b in &bindings.bindings {
@@ -117,6 +137,15 @@ pub fn summaries(bindings: &Bindings) -> Vec<BindingSummary> {
             PgTls::VerifyFull => Tls::VerifyFull,
             PgTls::Disable => Tls::Disable,
         });
+        out.push(s);
+    }
+    for a in &bindings.aws_bindings {
+        let mut s = BindingSummary::new(Kind::Aws, a.role_arn.clone());
+        s.role = Some(a.role_arn.clone());
+        s.region = Some(a.region.clone());
+        s.vend = Some(a.vend);
+        s.max_duration_secs = Some(a.max_duration_secs);
+        s.secret_id = Some(a.secret_id);
         out.push(s);
     }
     out
@@ -190,6 +219,8 @@ mod bindings_publish_tests {
     const SECRET_ID: &str = "0197c1f0-0000-7000-8000-0000000000aa";
     const GIT_SECRET_ID: &str = "0197c1f0-0000-7000-8000-0000000000ab";
     const PG_SECRET_ID: &str = "0197c1f0-0000-7000-8000-0000000000ac";
+    const AWS_SECRET_ID: &str = "0197c1f0-0000-7000-8000-0000000000ad";
+    const EXTERNAL_ID: &str = "planted-external-id-marker";
     const TEMPLATE: &str = "Bearer {secret} planted-template-marker";
 
     fn cp(base: &str) -> ControlPlane {
@@ -227,6 +258,14 @@ host = "db.example.com"
 user = "svc"
 database = "appdb"
 tls = "verify-full"
+
+[[aws_binding]]
+secret_id = "{AWS_SECRET_ID}"
+role_arn = "arn:aws:iam::123456789012:role/deploy"
+region = "eu-west-1"
+external_id = "{EXTERNAL_ID}"
+vend = true
+max_duration_secs = 1800
 "#
         ))
         .expect("valid bindings")
@@ -236,6 +275,8 @@ tls = "verify-full"
     fn bindings_publish_summaries_carry_non_secret_fields_only() {
         let items = summaries(&config());
         let text = serde_json::to_string(&Snapshot { items: &items }).unwrap();
+        // Only the AWS row carries a secret id (the grant join key); judge the rest without it.
+        let non_aws = serde_json::to_string(&items[..3]).unwrap();
         for secret in [
             SECRET_ID,
             TEMPLATE,
@@ -244,6 +285,18 @@ tls = "verify-full"
             "secret_id",
             "password",
             "version",
+            EXTERNAL_ID,
+            "external_id",
+        ] {
+            assert!(!non_aws.contains(secret), "{secret} in {non_aws}");
+        }
+        for secret in [
+            TEMPLATE,
+            "{secret}",
+            "password",
+            "version",
+            EXTERNAL_ID,
+            "external_id",
         ] {
             assert!(!text.contains(secret), "{secret} in {text}");
         }
@@ -256,6 +309,9 @@ tls = "verify-full"
                 {"kind": "git", "name": "github.com", "host": "github.com", "repo": "acme/widgets"},
                 {"kind": "pg", "name": "app", "host": "db.example.com", "port": 5432,
                  "user": "svc", "database": "appdb", "tls": "verify-full"},
+                {"kind": "aws", "name": "arn:aws:iam::123456789012:role/deploy",
+                 "role": "arn:aws:iam::123456789012:role/deploy", "region": "eu-west-1",
+                 "vend": true, "max_duration_secs": 1800, "secret_id": AWS_SECRET_ID},
             ])
         );
     }

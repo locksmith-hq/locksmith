@@ -15,7 +15,12 @@ export interface QueryLike<T> {
  * Honest page states: loading, error with retry (never the empty message), empty, or the data.
  * `isEmpty` decides what counts as empty (default: an empty array).
  */
-export function QueryState<T>({ query, isEmpty = (d) => Array.isArray(d) && d.length === 0, empty = "Nothing here yet.", children }: {
+export function QueryState<T>({
+  query,
+  isEmpty = (d) => Array.isArray(d) && d.length === 0,
+  empty = "Nothing here yet.",
+  children,
+}: {
   query: QueryLike<T>;
   isEmpty?: (data: T) => boolean;
   empty?: ReactNode;
@@ -27,7 +32,9 @@ export function QueryState<T>({ query, isEmpty = (d) => Array.isArray(d) && d.le
     return (
       <div role="alert" className="state">
         <p>{msg}</p>
-        <button className="btn sm" onClick={() => void query.refetch()}>Retry</button>
+        <button className="btn sm" onClick={() => void query.refetch()}>
+          Retry
+        </button>
       </div>
     );
   }

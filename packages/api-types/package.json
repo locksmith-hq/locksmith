@@ -10,6 +10,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "export": "cargo test -p ls-ipc --features ts export_bindings"
+    "export": "cargo test -p ls-ipc --features ts export_bindings",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   }
 }

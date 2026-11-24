@@ -277,6 +277,105 @@ fn preview_is_shown_and_no_terminal_without_yes_refuses() {
     assert_eq!(s(&o.stdout), include_str!("fixtures/init_preview.txt"));
 }
 
+/// Every new agent marker in one repo: hooks and MCP are merged, user-level MCP configs get a
+/// manual-step note, Windsurf is reported as not wired, and a second run changes nothing.
+#[test]
+fn init_wires_new_agents_idempotently_and_prints_manual_steps() {
+    let h = Home::new();
+    let r = Repo::new();
+    r.write(".gemini/settings.json", "{\"theme\": \"dark\"}\n");
+    r.write(".github/copilot-instructions.md", "# hi\n");
+    r.write(".clinerules/rules.md", "# rules\n");
+    r.write(".devin/notes.md", "# devin\n");
+    let first = init_yes(&h, &r);
+    let out = s(&first.stdout);
+    let read = |p: &str| std::fs::read_to_string(r.0.join(p)).unwrap();
+    let gem = read(".gemini/settings.json");
+    assert!(gem.contains("\"theme\"") && gem.contains("smith hook gemini-cli BeforeTool"));
+    assert!(gem.contains("smith hook gemini-cli BeforeAgent") && gem.contains("locksmith-mcp"));
+    assert!(read(".github/hooks/locksmith.json").contains("smith hook copilot preToolUse"));
+    assert!(read(".vscode/mcp.json").contains("locksmith-mcp"));
+    assert!(read(".clinerules/hooks/PreToolUse").contains("smith hook cline PreToolUse"));
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(r.0.join(".clinerules/hooks/PreToolUse"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_ne!(mode & 0o111, 0, "Cline hook must be executable");
+    }
+    assert!(!r.0.join(".windsurf").exists(), "windsurf stays unwired");
+    assert!(
+        out.contains("note: cline: add the locksmith MCP server by hand"),
+        "{out}"
+    );
+    assert!(
+        out.contains("note: windsurf: detected but not wired"),
+        "{out}"
+    );
+    let before = tree(&r.0);
+    let second = init_yes(&h, &r);
+    assert!(
+        s(&second.stdout).contains("already set up"),
+        "{}",
+        s(&second.stdout)
+    );
+    assert_eq!(before, tree(&r.0));
+}
+
+/// An unparsable config makes init stop with an error and leaves every file as it was.
+#[test]
+fn init_leaves_invalid_agent_configs_untouched() {
+    let h = Home::new();
+    for (file, body) in [
+        (".gemini/settings.json", "{not json"),
+        (".github/hooks/locksmith.json", "[1, 2"),
+        (".clinerules/hooks/PreToolUse", "#!/bin/sh\necho mine\n"),
+    ] {
+        let r = Repo::new();
+        r.write(file, body);
+        let before = tree(&r.0);
+        let o = h.smith_in(&r.0, &["init", "--yes"]);
+        assert!(!o.status.success(), "{file}: {}", s(&o.stdout));
+        assert!(s(&o.stderr).contains(file), "{file}: {}", s(&o.stderr));
+        assert_eq!(before, tree(&r.0), "{file} untouched, nothing else written");
+    }
+}
+
+/// Doctor names the protection of hooked agents and flags Windsurf as not protected.
+#[test]
+fn doctor_reports_new_agents_with_protection_labels() {
+    let h = Home::new();
+    let r = Repo::new();
+    r.write(".gemini/settings.json", "{}\n");
+    r.write(".github/hooks/keep", "");
+    r.write(".devin/notes.md", "# devin\n");
+    let before = h.smith_in(&r.0, &["doctor"]);
+    let text = s(&before.stdout);
+    assert!(
+        text.contains("hooks.gemini_cli ")
+            && text.contains("agent detected but Locksmith hooks are missing"),
+        "{text}"
+    );
+    assert!(
+        text.contains("hooks.windsurf") && text.contains("not protected"),
+        "{text}"
+    );
+    init_yes(&h, &r);
+    let after = h.smith_in(&r.0, &["doctor"]);
+    let text = s(&after.stdout);
+    let line = |id: &str| {
+        text.lines()
+            .find(|l| l.contains(id))
+            .unwrap_or_else(|| panic!("no {id} line in {text}"))
+            .to_string()
+    };
+    assert!(line("hooks.gemini_cli ").contains("protection: prevention (blocking hook)"));
+    assert!(line("hooks.copilot ").contains("protection: prevention (blocking hook)"));
+    assert!(line("hooks.copilot.timeout").contains("fail-open"));
+    assert!(line("hooks.cline ").contains("skip"));
+}
+
 /// `smith init --hub`: Claude Code and Codex get the remote Hub entry (URL and public client id
 /// only), Cursor gets none, a second run changes nothing and no secret lands in any file.
 #[test]

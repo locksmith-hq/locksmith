@@ -10,4 +10,14 @@ import { pages as broker } from "./broker";
 import { pages as security } from "./security";
 import { pages as platform } from "./platform";
 
-export const PAGES: Pages = { ...gateway, ...lobby, ...lifecycle, ...access, ...certs, ...kms, ...broker, ...security, ...platform };
+export const PAGES: Pages = {
+  ...gateway,
+  ...lobby,
+  ...lifecycle,
+  ...access,
+  ...certs,
+  ...kms,
+  ...broker,
+  ...security,
+  ...platform,
+};

@@ -10,6 +10,7 @@ Local stack that makes the system observable to agents. Start it with `just up`;
 | lgtm | `grafana/otel-lgtm:0.41.0` | 3000 Grafana, 4317 OTLP gRPC, 4318 OTLP HTTP | logs (Loki), traces (Tempo), metrics (Prometheus) |
 | openbao | `openbao/openbao:2.7.2` (dev mode) | 8200 | stand-in KMS (transit engine) |
 | upstream | `wiremock/wiremock:3.13.2` | 8089 | mock third-party API that records requests |
+| floci | `floci/floci:2.5.0` | 4566 | local AWS (STS, IAM, S3 and more) for every AWS-API test (`AWS_ENDPOINT_URL_STS=http://localhost:4566`) |
 | keycloak (profile `auth`) | `keycloak/keycloak:26.0.8` (`start-dev`) | 8180 | local OIDC issuer, realm `locksmith` imported from `infra/compose/keycloak/locksmith-realm.json` (clients `locksmith-web`, `locksmith-desktop`, `smith-cli`; users `alice@locksmith.test` verified, `bob@locksmith.test` unverified; Google and GitHub stubs with placeholder client ids) |
 | mailpit (profile `auth`) | `axllent/mailpit:v1.21.8` | 8025 UI and API, 1025 SMTP | catches Keycloak verification and reset mails |
 

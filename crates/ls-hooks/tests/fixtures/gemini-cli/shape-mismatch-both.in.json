@@ -1,0 +1,1 @@
+{"cwd":"__CWD__","hook_event_name":"BeforeTool","tool_name":"list_directory","tool_input":{"dir_path":"__CWD__"},"toolName":"read_file","toolInput":{"file_path":"__CWD__/.env"}}

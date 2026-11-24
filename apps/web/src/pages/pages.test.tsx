@@ -5,7 +5,10 @@ import { createClient } from "@locksmith/control-plane-client";
 import { App } from "../App";
 import { installFixtureFetch } from "../api/fixtures";
 
-afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  localStorage.clear();
+});
 const open = (path: string, opts?: Parameters<typeof installFixtureFetch>[0]) => {
   const fx = installFixtureFetch(opts);
   render(<App client={createClient("o")} initialPath={path} />);
@@ -29,7 +32,8 @@ test("projects: create, rename, delete with confirm", async () => {
   expect(await screen.findByText("billing")).toBeInTheDocument();
   await userEvent.click(screen.getByText("Rename billing"));
   const input = screen.getByLabelText("New name for billing");
-  await userEvent.clear(input); await userEvent.type(input, "invoices");
+  await userEvent.clear(input);
+  await userEvent.type(input, "invoices");
   await userEvent.click(screen.getByText("Save"));
   expect(await screen.findByText("invoices")).toBeInTheDocument();
   await userEvent.click(screen.getByText("Delete invoices"));
@@ -90,13 +94,30 @@ test("agents: a 5xx list shows an error with retry, not the empty message", asyn
 test("grants: a 5xx grants list shows an error with retry, not the empty message", async () => {
   installFixtureFetch();
   const base = fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>;
-  const agent = { id: "a1", name: "bot", description: "", created_at: "2026-11-20T00:00:00Z", updated_at: "2026-11-20T00:00:00Z" };
-  vi.stubGlobal("fetch", vi.fn(async (u: string, i?: RequestInit) => {
-    const path = new URL(String(u), "http://x").pathname;
-    if (path === "/v1/agents") return new Response(JSON.stringify({ items: [agent], next: null }), { status: 200, headers: { "content-type": "application/json" } });
-    if (path === "/v1/agents/a1/grants") return new Response(JSON.stringify({ title: "Bad", detail: "down", status: 503 }), { status: 503, headers: { "content-type": "application/json" } });
-    return base(u, i);
-  }));
+  const agent = {
+    id: "a1",
+    name: "bot",
+    description: "",
+    created_at: "2026-11-20T00:00:00Z",
+    updated_at: "2026-11-20T00:00:00Z",
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (u: string, i?: RequestInit) => {
+      const path = new URL(String(u), "http://x").pathname;
+      if (path === "/v1/agents")
+        return new Response(JSON.stringify({ items: [agent], next: null }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (path === "/v1/agents/a1/grants")
+        return new Response(JSON.stringify({ title: "Bad", detail: "down", status: 503 }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        });
+      return base(u, i);
+    }),
+  );
   render(<App client={createClient("o")} initialPath="/grants" />);
   expect(await screen.findByText("down")).toBeInTheDocument();
   expect(screen.getByText("Retry")).toBeInTheDocument();
@@ -114,7 +135,9 @@ test("activity: a 5xx ledger read shows an error with retry and no empty message
 test("bindings: lists non-secret fields per kind, never a password, and shows the empty state", async () => {
   const r = open("/bindings");
   expect(await screen.findByText("appdb")).toBeInTheDocument();
-  expect(screen.getByText(/Host: db\.internal\.example\.com · Port: 5432 · User: app · Database: appdb · TLS: verify-full/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/Host: db\.internal\.example\.com · Port: 5432 · User: app · Database: appdb · TLS: verify-full/),
+  ).toBeInTheDocument();
   expect(screen.getByText(/Header: Authorization/)).toBeInTheDocument();
   expect(document.body.textContent).not.toMatch(/password/i);
   expect(r.requests).toContain("GET /v1/bindings");
@@ -129,4 +152,37 @@ test("bindings: a 5xx shows an error with retry, not the empty message", async (
   open("/bindings", { fail: { "GET /v1/bindings": 503 } });
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(screen.queryByText("The gateway has not published any bindings yet.")).toBeNull();
+});
+
+test("bindings: AWS rows show role, region, vend and max duration (d2-aws-sts)", async () => {
+  open("/bindings");
+  const row = (await screen.findAllByText("arn:aws:iam::123456789012:role/deploy"))[0]!.closest("tr")!;
+  expect(row).toHaveTextContent("AWS");
+  expect(row).toHaveTextContent(
+    "Role: arn:aws:iam::123456789012:role/deploy · Region: eu-west-1 · Vend credentials: yes · Max duration: 900s · Allowed actions: s3:GetObject, s3:PutObject",
+  );
+  expect(row.textContent).not.toMatch(/external|secret|token|AKIA/i);
+});
+
+test("bindings: a credential-shaped field injected into an AWS row never renders (d2-aws-sts 5.1)", async () => {
+  installFixtureFetch();
+  const client = createClient("o");
+  const leaky = {
+    kind: "aws" as const,
+    name: "arn:aws:iam::1:role/dev",
+    role: "arn:aws:iam::1:role/dev",
+    region: "us-east-1",
+    vend: true,
+    max_duration_secs: 900,
+    allowed_actions: ["s3:ListBucket"],
+    secret_id: "SECRET-ID-VALUE",
+    external_id: "EXT-VALUE",
+    secret_access_key: "SAK-VALUE",
+    session_token: "TOKEN-VALUE",
+  };
+  client.listBindings = async () => [leaky];
+  const { container } = render(<App client={client} initialPath="/bindings" />);
+  const row = (await screen.findAllByText("arn:aws:iam::1:role/dev"))[0]!.closest("tr")!;
+  expect(row).toHaveTextContent("Allowed actions: s3:ListBucket");
+  expect(container.textContent).not.toMatch(/SECRET-ID-VALUE|EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
 });

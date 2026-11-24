@@ -1,0 +1,3 @@
+# Formatting-only commits (git blame ignores these; `git config blame.ignoreRevsFile .git-blame-ignore-revs`)
+# b3-ts-tooling: oxfmt over all TypeScript
+4bd8ea035b80b63c94a459916ae8f992ea352ee4

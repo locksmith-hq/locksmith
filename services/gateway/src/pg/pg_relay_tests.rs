@@ -183,6 +183,7 @@ impl Harness {
                 secret_name: "DB".to_owned(),
                 mode: "relay".to_owned(),
                 expires_at: None,
+                scope: None,
             }],
         );
         let resolver = Arc::new(StubResolver::with(&[(
@@ -192,6 +193,7 @@ impl Harness {
         let bindings = Bindings {
             org_id: ORG,
             bindings: Vec::new(),
+            aws_bindings: Vec::new(),
             pg: vec![upstream],
             git_bindings: Vec::new(),
         };

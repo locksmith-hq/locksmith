@@ -323,6 +323,7 @@ fn grant(secret_id: Uuid) -> Grant {
         secret_id,
         secret_name: "GIT".to_owned(),
         mode: "relay".to_owned(),
+        scope: None,
         expires_at: None,
     }
 }
@@ -414,6 +415,7 @@ async fn start_gateway_with(
         Bindings {
             org_id: ORG,
             bindings: Vec::new(),
+            aws_bindings: Vec::new(),
             pg: Vec::new(),
             git_bindings,
         },

@@ -70,6 +70,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "gateway bindings",
         include_str!("../migrations/0014_gateway_bindings.sql"),
     ),
+    (
+        15,
+        "grant delegate",
+        include_str!("../migrations/0015_grant_delegate.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

@@ -3,7 +3,7 @@ name = "ls-oauth"
 description = "Locksmith OAuth connections: provider registry and the wire types of the gateway's OAuth endpoints. No type carries a token."
 edition.workspace = true
 version.workspace = true
-license = "AGPL-3.0-only"
+license.workspace = true
 publish.workspace = true
 
 [lints]

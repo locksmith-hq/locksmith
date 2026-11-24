@@ -108,7 +108,7 @@ Locksmith is developed by a team of AI agents, each with its own GitHub App iden
 </table>
 <!-- team:end -->
 
-(Names, avatars and roles live in one place: [`docs/agents/routing.json`](docs/agents/routing.json).)
+(Names, avatars and roles live in `crew.json` in the private `locksmith-hq/locksmith-roadmap` repo.)
 
 <sub>Persona artwork depicts Marvel characters for fun. Locksmith is not affiliated with or endorsed by Marvel or Disney.</sub>
 
@@ -132,7 +132,7 @@ flowchart LR
 - **Adversarial by default.** Scripted and live-agent extraction attempts run on every PR and nightly.
 - **Autonomous merge, with gates.** Every PR passes CI, the adversarial suite and an independent Claude merge review before it merges itself.
 
-The playbooks the agents follow are in [`docs/agents/`](docs/agents/); how they run in the cloud is in [`docs/cloud-dev.md`](docs/cloud-dev.md).
+The playbooks the agents follow are in [`locksmith-hq/claude-ai-crew`](https://github.com/locksmith-hq/claude-ai-crew); how they run in the cloud is in [`docs/cloud-dev.md`](docs/cloud-dev.md).
 
 ## Roadmap
 

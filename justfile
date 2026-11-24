@@ -69,17 +69,9 @@ api-types:
 tree-check:
     scripts/tree-check.sh
 
-# Agents on change branches may only tick OpenSpec tasks, not rewrite them.
+# Merge-review tier selftest (the task-edit guard moved to claude-ai-crew).
 task-guard:
-    scripts/check-task-edits.test.sh
-    scripts/change-status.test.sh
-    scripts/agent-identity.sh selftest
-    scripts/route.sh selftest
-    scripts/worker-has-work.test.sh
-    scripts/run-lock.test.sh
     scripts/review-tier.sh selftest
-    scripts/check-task-edits.sh
-    scripts/check-agent-docs.sh
 
 # Public-readiness hygiene: licences, root docs, links, denylist, secret canary.
 public-check:

@@ -8,7 +8,7 @@
 #   scripts/review-tier.sh < files    |    scripts/review-tier.sh selftest
 set -euo pipefail
 
-opus_re='^(crates/(ls-crypto|ls-ipc|ls-broker|ls-update|ls-license|ls-entitlements|ls-envelope|ls-audit|locksmith-audit|ls-vault|ls-proxy|ls-connector|ls-redact|ls-http|ls-platform|ls-hooks|locksmithd|smith-cli)/|ee/|services/|\.github/|\.claude/|scripts/(route|run-lock|check-task-edits|check-agent-docs|review-tier)|AGENTS\.md$|CLAUDE\.md$|openspec/config\.yaml$)'
+opus_re='^(crates/(ls-crypto|ls-ipc|ls-broker|ls-update|ls-license|ls-entitlements|ls-envelope|ls-audit|locksmith-audit|ls-vault|ls-proxy|ls-connector|ls-redact|ls-http|ls-platform|ls-hooks|locksmithd|smith-cli)/|ee/|services/|\.github/|\.claude/|scripts/review-tier|AGENTS\.md$|CLAUDE\.md$|openspec/config\.yaml$)'
 none_re='^(docs/|openspec/changes/)'
 keep_re='^docs/agents/|/tasks\.md$'
 
@@ -30,7 +30,7 @@ selftest() {
   t opus   'crates/ls-crypto/src/lib.rs'
   t opus   'docs/x.md\nservices/gateway/src/main.rs'
   t opus   '.github/workflows/ci.yml'
-  t opus   'scripts/route.sh'
+  t opus   'scripts/review-tier.sh'
   t sonnet 'apps/web/src/App.tsx'
   t sonnet 'crates/ls-core/src/lib.rs\ndocs/a.md'
   t sonnet 'openspec/changes/x/tasks.md'

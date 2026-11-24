@@ -112,3 +112,29 @@ jobs:
           key: turbo-${{ runner.os }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-
       - run: npx turbo run test --filter=@locksmith/desktop
+
+  # Kysely types drift check (b1-nestjs-api task 2.3): migrate a throwaway Postgres with the Rust
+  # migrator, regenerate apps/api/src/db/types.ts and fail on any diff. Skips until the recipe lands.
+  api-types:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -y -q libssl-dev pkg-config postgresql-client
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: api-types-check
+        run: |
+          if just --summary | tr ' ' '\n' | grep -qx api-types-check; then
+            just api-types-check
+          else
+            echo "api-types-check recipe not on this branch yet; skipping"
+          fi

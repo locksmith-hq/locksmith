@@ -9,6 +9,26 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { HealthController } from "./health.controller.js";
 import { pinoOptions } from "./logging.js";
 import { TerminusModule } from "@nestjs/terminus";
+import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from "kysely";
+import { DATABASE } from "./db/db.module.js";
+
+// A Kysely whose driver answers (or fails) without a server: readiness depends only on the query succeeding.
+function fakeDb(fail: boolean) {
+  const driver = new DummyDriver();
+  if (fail) {
+    driver.acquireConnection = async () => {
+      throw new Error("connect ECONNREFUSED postgres://user:hunter2@db/x");
+    };
+  }
+  return new Kysely({
+    dialect: {
+      createAdapter: () => new PostgresAdapter(),
+      createDriver: () => driver,
+      createIntrospector: (db) => new PostgresIntrospector(db),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+  });
+}
 
 describe("health and log redaction", () => {
   let app: INestApplication;
@@ -32,6 +52,7 @@ describe("health and log redaction", () => {
         }),
       ],
       controllers: [HealthController],
+      providers: [{ provide: DATABASE, useValue: fakeDb(false) }],
     }).compile();
     app = mod.createNestApplication();
     await app.init();
@@ -68,7 +89,15 @@ describe("health and log redaction", () => {
 
   it("keeps error message and stack, and scrubs query-string tokens", () => {
     const sink: string[] = [];
-    const log = pino(pinoOptions, new Writable({ write(c, _e, cb) { sink.push(c.toString()); cb(); } }));
+    const log = pino(
+      pinoOptions,
+      new Writable({
+        write(c, _e, cb) {
+          sink.push(c.toString());
+          cb();
+        },
+      }),
+    );
     log.error({ err: new Error("boom"), url: "http://x/y?access_token=PLANTED-U&a=1" }, "m");
     const rec = JSON.parse(sink.join(""));
     expect(rec.err.message).toBe("boom");
@@ -80,10 +109,32 @@ describe("health and log redaction", () => {
     const sink: string[] = [];
     const log = pino(
       pinoOptions,
-      new Writable({ write(c, _e, cb) { sink.push(c.toString()); cb(); } }),
+      new Writable({
+        write(c, _e, cb) {
+          sink.push(c.toString());
+          cb();
+        },
+      }),
     );
     log.info({ client_secret: "PLANTED-S", body: { access_token: "PLANTED-T", secret_value: "PLANTED-V" } }, "x");
     const out = sink.join("");
     expect(out).not.toContain("PLANTED");
+  });
+});
+
+describe("readiness when the database is down", () => {
+  it("returns 503 and never echoes the connection error", async () => {
+    const mod = await Test.createTestingModule({
+      imports: [TerminusModule],
+      controllers: [HealthController],
+      providers: [{ provide: DATABASE, useValue: fakeDb(true) }],
+    }).compile();
+    const app = mod.createNestApplication();
+    await app.init();
+    const res = await request(app.getHttpServer()).get("/readyz");
+    expect(res.status).toBe(503);
+    expect(JSON.stringify(res.body)).not.toContain("hunter2");
+    expect((await request(app.getHttpServer()).get("/healthz")).status).toBe(200);
+    await app.close();
   });
 });

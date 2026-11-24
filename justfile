@@ -66,6 +66,11 @@ api-types:
     cargo test -p ls-ipc --features ts export_bindings
     npx --yes oxfmt@0.79.0 -c .oxfmtrc.json packages/api-types/src
 
+# Regenerate apps/api/src/db/types.ts from the migrations (`--check` fails on drift). Needs Docker.
+# Named api-db-types because `api-types` is the Rust ts-rs recipe above.
+api-db-types *args:
+    scripts/api-db-types.sh {{args}}
+
 tree-check:
     scripts/tree-check.sh
 

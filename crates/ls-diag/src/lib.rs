@@ -1,4 +1,5 @@
 //! Doctor checks: a registry any crate can add to, plus the `doctor.v1` report.
+//! (Merge-gate smoke test: comment-only change, safe to revert.)
 
 use serde::Serialize;
 

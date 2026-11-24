@@ -3,7 +3,7 @@
 Locksmith is an open-source secrets platform and credential gateway for AI coding agents. Agents perform authenticated operations without ever holding the credential.
 
 ## Build and test
-- `just ci` runs fmt, lint, test-rust, test-web, tree-check, task-guard, public-check and migration-guard. Never run it locally: the PR's required checks run it.
+- `just ci` runs fmt, lint, test-rust, test-web, tree-check, public-check and migration-guard. Never run it locally: the PR's required checks run it.
 - Before every push run `just quick` (fmt and lint of your branch's committed changes) plus the tests you touched (`cargo test -p <crate>`).
 - Other recipes: `just up` / `just down` (local stack), `just dev <app>`, and `cargo test -p <crate>` for a single crate.
 - npm workspaces only. Never use pnpm or yarn. After changing a `package.json`, run `npm i` in that package's directory. `turbo.json` runs the JavaScript tasks (`npm run lint|build|test` call `turbo run`); TypeScript is checked with oxlint, oxfmt and knip.

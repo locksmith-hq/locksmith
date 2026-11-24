@@ -8,7 +8,9 @@ use ls_mcp_server::{FORBIDDEN_LAST_WORDS, agent_tools, tool_from_def};
 use serde_json::Value;
 
 fn fixture(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/kit/agent-contract").join(name)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/kit/agent-contract")
+        .join(name)
 }
 
 fn check(name: &str, actual: &Value) {
@@ -20,7 +22,10 @@ fn check(name: &str, actual: &Value) {
     }
     let on_disk = std::fs::read_to_string(&path)
         .unwrap_or_else(|_| panic!("missing {name}: run with UPDATE_FIXTURES=1"));
-    assert_eq!(on_disk, text, "{name} drifted: run with UPDATE_FIXTURES=1 and review the diff");
+    assert_eq!(
+        on_disk, text,
+        "{name} drifted: run with UPDATE_FIXTURES=1 and review the diff"
+    );
 }
 
 #[test]
@@ -31,5 +36,8 @@ fn agent_contract_mcp_tools() {
 
 #[test]
 fn agent_contract_forbidden_words() {
-    check("forbidden-words.json", &serde_json::to_value(FORBIDDEN_LAST_WORDS).unwrap());
+    check(
+        "forbidden-words.json",
+        &serde_json::to_value(FORBIDDEN_LAST_WORDS).unwrap(),
+    );
 }

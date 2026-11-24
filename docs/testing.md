@@ -32,7 +32,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-vault` | Rust lib | `just test ls-vault` | no | `just test-rust` | Vault; secrets path |
 | `crates/smith-cli` | Rust bin | `just test smith-cli` | no | `just test-rust` | `smith` CLI; some db tests skip without Postgres |
 | `services/control-plane` | Rust service (axum) | `just test control-plane` | yes (Postgres integration tests) | `just test-e2e` (partial) | Package `ls-control-plane` |
-| `services/core` | Internal core service (B2) | `just test core` | no | `packages/core-client` | Only `openapi.json` so far (change b2-rust-core 1.1); the crate `ls-core-service` arrives in group 2 |
+| `services/core` | Rust service (axum) | `just test core` | no | `packages/core-client` | Package `ls-core-service`; skeleton with probes and service-token auth (b2 2.1), operations in group 3 |
 | `services/gateway` | Rust service (axum) | `just test gateway` | yes (`audit_pg`) | `just relay-smoke`, `just connector-smoke` | Package `ls-gateway` |
 | `apps/desktop` | Tauri app (npm + Rust) | `just test desktop` | no | `just apps-build` | Runs `just desktop-test` (fmt, clippy, cargo test) plus `npm test`; not in the root Cargo workspace |
 | `apps/docs` | npm static site | `just test docs` | no | `just test-web` | No tests of its own; `npm run build` in `just test-web` builds it |

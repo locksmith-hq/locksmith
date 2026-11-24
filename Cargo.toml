@@ -2,8 +2,7 @@
 resolver = "3"
 members = ["crates/*", "ee/crates/*", "services/*", "tests/e2e"]
 # Tauri app: own lockfile, keeps webkit/gtk out of the core build.
-# services/core is contract-only until b2 task 2.1 adds its crate (then drop it from exclude).
-exclude = ["apps/desktop/src-tauri", "services/core"]
+exclude = ["apps/desktop/src-tauri"]
 
 [workspace.package]
 edition = "2024"

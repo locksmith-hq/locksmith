@@ -2806,6 +2806,29 @@ name = "ls-core"
 version = "0.0.1-alpha.4"
 
 [[package]]
+name = "ls-core-service"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "axum",
+ "http",
+ "http-body-util",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "rustls",
+ "secrecy",
+ "serde_json",
+ "subtle",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-log",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ls-crypto"
 version = "0.0.1-alpha.4"
 dependencies = [

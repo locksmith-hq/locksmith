@@ -6,9 +6,9 @@
 - [x] 1.3 Verify: `npx turbo run build test --filter=@locksmith/core-client` and a drift test that fails when `openapi.json` and the generated client differ.
 
 ## 2. Service skeleton [sonnet]
-- [ ] 2.1 `services/core` (package `ls-core-service`): axum, `/healthz` and `/readyz`, OTel and config like `services/control-plane`, listens on an internal address; caller authentication (choose a service token from config or mTLS, record it in design.md decision 5) with a test that an unauthenticated request gets 401.
-- [ ] 2.2 [haiku] `scripts/tree-check.sh` and `docs/testing.md` entries; `just test ls-core-service` runs its tests.
-- [ ] 2.3 Verify: `cargo nextest run -p ls-core-service`.
+- [x] 2.1 `services/core` (package `ls-core-service`): axum, `/healthz` and `/readyz`, OTel and config like `services/control-plane`, listens on an internal address; caller authentication (choose a service token from config or mTLS, record it in design.md decision 5) with a test that an unauthenticated request gets 401.
+- [x] 2.2 [haiku] `scripts/tree-check.sh` and `docs/testing.md` entries; `just test ls-core-service` runs its tests.
+- [x] 2.3 Verify: `cargo nextest run -p ls-core-service`.
 
 ## 3. Operations (moved, no behaviour change) [sonnet]
 - [ ] 3.1 Audit append and checkpoint signing endpoints, reusing `ls_audit` and the control plane's `audit.rs`/`checkpoint.rs` logic (move shared code into a library crate; the control plane keeps calling it in-process).

@@ -12,7 +12,7 @@ Split out of `b1-nestjs-api` (design: `openspec/changes/b1-nestjs-api/design.md`
 | 2 | A separate service `services/core`, package `ls-core-service` | Name it `ls-core`; extend the control plane | `crates/ls-core` already exists (exit codes, config paths); the control plane is being strangled by B1 |
 | 3 | axum and utoipa, the same stack and OpenAPI generation as `services/control-plane` | gRPC/tonic | One HTTP stack in the workspace; the TypeScript client is generated the same way as `packages/control-plane-client` |
 | 4 | Move code, do not rewrite it; shared code goes to a library crate both services use | Copy the modules | No behaviour change; one implementation to review |
-| 5 | Caller authentication mechanism (service token or mTLS) is chosen in task 2.1 and recorded here | - | Decided with evidence in the task |
+| 5 | Caller authentication: a shared service token (`LOCKSMITH_CORE_SERVICE_TOKEN`, `Authorization: Bearer`, constant-time compare, required at startup, 401 on everything but `/healthz` and `/readyz`) | mTLS | Same mechanism as the control plane's gateway service token (`auth.rs` `ServiceToken`); one secret on an internal-only network needs no PKI. mTLS can layer on later without changing the API |
 
 ## OSS used
 

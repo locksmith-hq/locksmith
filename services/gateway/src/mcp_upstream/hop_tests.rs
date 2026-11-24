@@ -135,6 +135,20 @@ impl ServerHandler for FakeUpstream {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
+        if request.name == "reflect" {
+            let auth = context
+                .extensions
+                .get::<axum::http::request::Parts>()
+                .and_then(|p| p.headers.get("authorization"))
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .to_owned();
+            use base64::Engine as _;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&auth);
+            let mut r = CallToolResult::success(vec![ContentBlock::text(format!("raw {auth}"))]);
+            r.structured_content = Some(serde_json::json!({"got": auth, "b64": b64}));
+            return Ok(r.into());
+        }
         if request.name != "ask" {
             return Ok(CallToolResult::success(vec![ContentBlock::text("echoed")]).into());
         }
@@ -673,4 +687,107 @@ async fn production_route_keeps_the_seam_closed() {
     assert_eq!(call.message()["error"]["message"], "unknown_tool");
     assert!(up.seen.hits().is_empty(), "upstream called");
     assert_eq!(material.fetches.load(Ordering::SeqCst), 0, "secret touched");
+}
+
+/// A forwarded answer built around `VALUE` in several places and encodings.
+fn reflected() -> CallToolResult {
+    use base64::Engine as _;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(VALUE);
+    let mut r = CallToolResult::success(vec![ContentBlock::text(format!("raw {VALUE} end"))]);
+    r.structured_content =
+        Some(serde_json::json!({"got": VALUE, "b64": b64, "esc": VALUE.replace('-', "\\u002d")}));
+    r
+}
+
+fn redactor() -> Redactor {
+    Redactor::new(&[Secret::new(crate::relay::REDACTION_LABEL, VALUE.as_bytes())])
+}
+
+#[test]
+fn redact_scrubs_results_descriptions_and_schemas() {
+    let r = redactor();
+    let Answer::Call(c) = redact(&r, Answer::Call(reflected())).unwrap() else {
+        panic!()
+    };
+    let out = serde_json::to_string(&c).unwrap();
+    assert!(r.find(out.as_bytes()).is_empty(), "{out}");
+    assert!(!out.contains(VALUE), "{out}");
+    assert!(out.contains("[REDACTED:SECRET]"), "{out}");
+
+    let schema = serde_json::json!({"type": "object", "description": VALUE});
+    let tool = Tool::new(
+        format!("t-{VALUE}"),
+        format!("see {VALUE}"),
+        schema.as_object().unwrap().clone(),
+    );
+    let Answer::Tools(t) = redact(
+        &r,
+        Answer::Tools(ListToolsResult::with_all_items(vec![tool])),
+    )
+    .unwrap() else {
+        panic!()
+    };
+    let out = serde_json::to_string(&t).unwrap();
+    assert!(r.find(out.as_bytes()).is_empty(), "{out}");
+    assert!(!out.contains(VALUE), "{out}");
+}
+
+#[test]
+fn redact_withholds_an_oversized_message() {
+    let big = "x".repeat(MAX_MESSAGE + 1);
+    let c = CallToolResult::success(vec![ContentBlock::text(big)]);
+    assert_eq!(
+        redact(&redactor(), Answer::Call(c)).unwrap_err(),
+        HopError::RedactionFailed
+    );
+    assert_eq!(HopError::RedactionFailed.slug(), "redaction_failed");
+}
+
+#[tokio::test]
+async fn hop_redacts_what_the_upstream_reflects() {
+    let up = upstream().await;
+    let kit = Kit::new();
+    let b = binding(&up.url, "Authorization", "Bearer {secret}", true);
+    let r = call_tool(&kit.deps(), &b, ME, CallToolRequestParams::new("reflect"))
+        .await
+        .expect("call");
+    let out = serde_json::to_string(&r).unwrap();
+    assert!(!out.contains(VALUE), "{out}");
+    assert!(redactor().find(out.as_bytes()).is_empty(), "{out}");
+    assert!(out.contains("[REDACTED:SECRET]"), "{out}");
+    // The upstream really received it: the reflection above is not vacuous.
+    assert_every_hit_has(&up.seen, "authorization", &format!("Bearer {VALUE}"));
+}
+
+#[tokio::test]
+async fn hop_refuses_a_credential_too_short_to_scan_for() {
+    let up = upstream().await;
+    let sealed = seal(ORG, SECRET, 1, b"short");
+    let dek = sealed.dek;
+    let material = Arc::new(FakeMaterial {
+        sealed,
+        secret: SECRET,
+        version: 1,
+        fetches: AtomicUsize::new(0),
+    });
+    let kms = Arc::new(FakeKms {
+        dek: Some(dek),
+        calls: AtomicUsize::new(0),
+    });
+    let d = Decryptor::new(
+        ORG,
+        material,
+        kms,
+        Arc::new(DekCache::new(CacheSettings::default())),
+    );
+    let resolver = StubResolver::default();
+    let deps = HopDeps {
+        decryptor: &d,
+        resolver: &resolver,
+        connect_timeout: Duration::from_secs(5),
+    };
+    let b = binding(&up.url, "Authorization", "Bearer {secret}", true);
+    let e = list_tools(&deps, &b, ME, None).await.unwrap_err();
+    assert_eq!(e, HopError::RedactionFailed);
+    assert!(up.seen.hits().is_empty(), "nothing was sent upstream");
 }

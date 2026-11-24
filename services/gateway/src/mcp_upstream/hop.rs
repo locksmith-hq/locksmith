@@ -31,12 +31,13 @@
 //! relay).
 //!
 //! Errors are fixed slugs ([`HopError`]); no upstream error text, URL or value is kept.
-//! Redaction of what comes back is task 2.4; see the seam in `mod.rs`.
+//! What comes back is redacted before it is returned ([`redact`], task 2.4).
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use ls_redact::{MIN_ENCODED_LEN, Redactor, Secret};
 use reqwest::header::HeaderName;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ClientCapabilities, ClientConfig,
@@ -83,7 +84,7 @@ pub enum Forward {
     CallTool(CallToolRequestParams),
 }
 
-/// The upstream's answer to a [`Forward`], unredacted (task 2.4 redacts it).
+/// The upstream's answer to a [`Forward`], redacted by [`forward`].
 #[derive(Debug)]
 pub enum Answer {
     Pong,
@@ -111,6 +112,10 @@ pub enum HopError {
     Unsupported,
     /// The exchange took longer than [`TIMEOUT`].
     Timeout,
+    /// The answer could not be scanned (too large, not serializable, or the value is too short
+    /// for its encoded forms to be matched) or still held the credential after redaction; it is
+    /// withheld (design decision 11).
+    RedactionFailed,
     /// The client could not be built.
     Internal,
 }
@@ -127,6 +132,7 @@ impl HopError {
             Self::Upstream => "upstream_error",
             Self::Unsupported => "upstream_unsupported",
             Self::Timeout => "upstream_timeout",
+            Self::RedactionFailed => "redaction_failed",
             Self::Internal => "internal",
         }
     }
@@ -209,6 +215,12 @@ async fn run(
         .map_err(|_| HopError::SecretUnavailable)?;
     let header_value =
         crate::relay::render(&upstream.template, value.expose()).ok_or(HopError::SecretUnusable)?;
+    // Encoded forms of values shorter than this are not matched by ls-redact, so an echo could
+    // not be caught: refuse rather than forward unscannable (fail closed, as the relay).
+    if value.expose().len() < MIN_ENCODED_LEN {
+        return Err(HopError::RedactionFailed);
+    }
+    let redactor = Redactor::new(&[Secret::new(crate::relay::REDACTION_LABEL, value.expose())]);
     drop(value);
 
     // 4. One exchange; the transport, and the header with it, is dropped when it ends.
@@ -249,9 +261,39 @@ async fn run(
         let _ = service.close_with_timeout(CLOSE_TIMEOUT).await;
         answer
     };
-    tokio::time::timeout(TIMEOUT, exchange)
+    let answer = tokio::time::timeout(TIMEOUT, exchange)
         .await
-        .unwrap_or(Err(HopError::Timeout))
+        .unwrap_or(Err(HopError::Timeout))?;
+    redact(&redactor, answer)
+}
+
+/// Every upstream message passes through the redactor (design decision 11): the answer is
+/// serialized whole (tool names, descriptions and schemas; text, structured content and embedded
+/// resources of results; the `_meta` objects), redacted in every encoding `ls-redact` knows,
+/// re-checked, and parsed back. A message over [`MAX_MESSAGE`] or one that cannot be serialized
+/// or parsed back is withheld, never passed unscanned.
+fn redact(redactor: &Redactor, answer: Answer) -> Result<Answer, HopError> {
+    fn go<T>(redactor: &Redactor, value: &T) -> Result<T, HopError>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned,
+    {
+        let raw = serde_json::to_vec(value).map_err(|_| HopError::RedactionFailed)?;
+        if raw.len() > MAX_MESSAGE {
+            return Err(HopError::RedactionFailed);
+        }
+        let clean = redactor.redact_all(&raw);
+        drop(raw);
+        // Belt and braces: nothing the redactor knows may remain.
+        if !redactor.find(&clean).is_empty() {
+            return Err(HopError::RedactionFailed);
+        }
+        serde_json::from_slice(&clean).map_err(|_| HopError::RedactionFailed)
+    }
+    Ok(match answer {
+        Answer::Pong => Answer::Pong,
+        Answer::Tools(t) => Answer::Tools(go(redactor, &t)?),
+        Answer::Call(c) => Answer::Call(go(redactor, &c)?),
+    })
 }
 
 /// Wait for the session to close (`DELETE`) after the answer.

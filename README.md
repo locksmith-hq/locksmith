@@ -9,7 +9,7 @@
 
 **Give AI agents the power to act, never the key.**
 
-An open-source secrets platform and credential gateway for AI coding agents. Your agents push to Git, call APIs, query databases and use AWS without ever holding a credential. And it is built by a team of AI agents: the Avengers.
+An open-source secrets platform and credential gateway for AI coding agents. Your agents push to Git, call APIs, query databases and use AWS without ever holding a credential.
 
 [![ci](https://github.com/locksmith-hq/locksmith/actions/workflows/ci.yml/badge.svg)](https://github.com/locksmith-hq/locksmith/actions/workflows/ci.yml)
 [![adversarial](https://github.com/locksmith-hq/locksmith/actions/workflows/adversarial.yml/badge.svg)](https://github.com/locksmith-hq/locksmith/actions/workflows/adversarial.yml)
@@ -17,7 +17,7 @@ An open-source secrets platform and credential gateway for AI coding agents. You
 [![Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust)](rust-toolchain.toml)
 ![Status: pre-release](https://img.shields.io/badge/status-pre--release-yellow)
 
-[Why](#why-locksmith) · [Features](#features) · [How it works](#how-it-works) · [Quick start](#quick-start) · [The team](#built-by-the-avengers) · [Roadmap](#roadmap) · [Security](#security-promise) · [Contributing](#contributing)
+[Why](#why-locksmith) · [Features](#features) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Roadmap](#roadmap) · [Security](#security-promise) · [Contributing](#contributing)
 
 </div>
 
@@ -88,51 +88,10 @@ just down   # stop the stack
 
 What an agent may do without your passphrase is set in a human-owned `agent-policy.toml`: see [integrations/README.md](integrations/README.md).
 
-## Built by the Avengers
+## How it is built
 
-Locksmith is developed by a team of AI agents, each with its own GitHub App identity, working through issues and pull requests in this repository. A human owner sets direction and makes the calls the agents escalate. The same agents that write Locksmith are the users it protects, so every rough edge hurts them first.
-
-<!-- team:start -->
-<table>
-  <tr>
-    <td align="center" width="25%"><img src="docs/agents/avatars/iron-man.png" width="120" alt="Iron Man"><br><b>Iron Man</b><br>Lead<br><sub>Owns code quality and architecture, reviews merged work, rescues stuck tasks</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/nick-fury.png" width="120" alt="Nick Fury"><br><b>Nick Fury</b><br>PM<br><sub>Owns the end goal, roadmap order, priorities and the board</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/hulk.png" width="120" alt="Hulk"><br><b>Hulk</b><br>Research<br><sub>Smashes hard questions with primary sources</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/doctor-strange.png" width="120" alt="Doctor Strange"><br><b>Doctor Strange</b><br>Optimizer<br><sub>Bends the team's schedules and prompts toward more shipped work</sub></td>
-  </tr>
-  <tr>
-    <td align="center" width="25%"><img src="docs/agents/avatars/captain-america.png" width="120" alt="Captain America"><br><b>Captain America</b><br>Worker A<br><sub>Implements OpenSpec tasks around the clock</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/spider-man.png" width="120" alt="Spider-Man"><br><b>Spider-Man</b><br>Worker B<br><sub>Implements OpenSpec tasks around the clock</sub></td>
-    <td align="center" width="25%"><img src="docs/agents/avatars/thor.png" width="120" alt="Thor"><br><b>Thor</b><br>Worker C<br><sub>Implements OpenSpec tasks around the clock</sub></td>
-  </tr>
-</table>
-<!-- team:end -->
-
-(Names, avatars and roles live in `crew.json` in the private `locksmith-hq/locksmith-roadmap` repo.)
-
-<sub>Persona artwork depicts Marvel characters for fun. Locksmith is not affiliated with or endorsed by Marvel or Disney.</sub>
-
-### How a change ships
-
-```mermaid
-flowchart LR
-    PM["PM<br/>sets priorities"] --> W["Worker<br/>implements an OpenSpec task"]
-    W --> E["Independent evaluator<br/>checks the work"]
-    E --> PR["Pull request"]
-    PR --> CI["CI + adversarial suite"]
-    CI --> MR["Opus merge review"]
-    MR --> M["Auto-merge"]
-    W -. "stuck" .-> L["Lead<br/>rescues and reviews"]
-    R["Research<br/>answers from primary sources"] -.-> PM
-    R -.-> L
-```
-
-- **Spec-driven.** Every change is an [OpenSpec](openspec/) proposal with a design, specs and tasks, and every design cites its evidence in [`docs/research/`](docs/research/).
 - **Harness first.** A local stack (`just up`) with Postgres, OpenBao, Keycloak and Grafana, exposed to agents through MCP, plus `just leak-scan`, which hunts every encoding of a canary secret through the DB, logs, traces and transcripts.
 - **Adversarial by default.** Scripted and live-agent extraction attempts run on every PR and nightly.
-- **Autonomous merge, with gates.** Every PR passes CI, the adversarial suite and an independent Claude merge review before it merges itself.
-
-The playbooks the agents follow are in [`locksmith-hq/claude-ai-crew`](https://github.com/locksmith-hq/claude-ai-crew); how they run in the cloud is in [`docs/cloud-dev.md`](docs/cloud-dev.md).
 
 ## Roadmap
 
@@ -144,8 +103,6 @@ The playbooks the agents follow are in [`locksmith-hq/claude-ai-crew`](https://g
 | **3. Delegation beyond HTTP**: Git ✅, AWS STS, Postgres relay, workload identity for CI and Kubernetes | 🚧 In progress |
 | **4. Deployable**: more agent plugins, one-command self-host, signed releases, SDKs | Planned |
 | **5–6. Parity and GA**: rotation and dynamic secrets, syncs, Terraform and Kubernetes, SAML and SCIM, external pentest, Windows | Planned |
-
-Full roadmap: [docs/roadmap.md](docs/roadmap.md).
 
 ## Security promise
 
@@ -172,7 +129,6 @@ Full roadmap: [docs/roadmap.md](docs/roadmap.md).
 | `integrations/` | thin agent plugins |
 | `infra/` | Docker Compose stack (Helm and OpenTofu to come) |
 | `tests/` | end-to-end and adversarial tests |
-| `openspec/` | specs and changes |
 | `scripts/` | tooling |
 
 Product notes: [PRODUCT.md](PRODUCT.md).

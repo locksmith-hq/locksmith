@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Setup script for the Claude Code cloud environment "locksmith-dev" (paste into the environment's
 # setup script field). Runs as root on Ubuntu 24.04 before Claude starts; result is cached if it
-# finishes in about 5 minutes, so keep slow, rarely-changing installs here. See docs/cloud-dev.md.
+# finishes in about 5 minutes, so keep slow, rarely-changing installs here.
 set -uo pipefail
 
 apt-get update -q && apt-get install -y -q libssl-dev pkg-config just || true
@@ -21,7 +21,6 @@ NEXTEST=cargo-nextest-0.9.152-x86_64-unknown-linux-gnu
 # gitleaks and cargo-deny: preflight installed them in every run (60-120 s of logged friction each).
 bash scripts/ci-tools.sh || true
 
-npm i -g @fission-ai/openspec || true
 [ -f package-lock.json ] && npm ci --no-audit --no-fund || true
 
 # No Docker here: starting dockerd and pulling ~2 GB of images blew the 5-minute cache budget

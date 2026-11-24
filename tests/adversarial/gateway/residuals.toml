@@ -1,6 +1,5 @@
 # Residual register for the gateway cases (`run.sh gateway`): known leak paths the gate accepts
-# for now, each with the protection that still applies. Design decision 5 of
-# openspec/changes/s6-adversarial-gate-1.
+# for now, each with the protection that still applies.
 #
 # One [[residual]] table per (case, encoding):
 #   case      the case id, the file name without .sh (e.g. "G4")

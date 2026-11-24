@@ -2,8 +2,7 @@
 
 `hooks/locksmith.json` is the hook file (installed as `.github/hooks/locksmith.json`) and
 `mcp.json` the VS Code MCP entry (installed as `.vscode/mcp.json`). Both are generated from
-`crates/smith-cli/src/agents.rs`; `smith init` merges them. Format notes and sources are in
-`docs/research/agent-plugin-formats.md`.
+`crates/smith-cli/src/agents.rs`; `smith init` merges them.
 
 **Protection: prevention (blocking hook), with a fail-open timeout.** The `preToolUse` hook calls
 `smith hook copilot preToolUse`; a denial blocks the tool call.

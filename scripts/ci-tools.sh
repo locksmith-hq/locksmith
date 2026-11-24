@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prebuilt, sha256-checked CI tools for agent VMs: cargo install took 114 s, and guessing gitleaks
 # fingerprints without the binary cost 3 hygiene re-pushes. Called by cloud-setup.sh (cached in
-# the VM image) and by claude-ai-crew's agent-preflight.sh (fallback). Prints OK / FIXED / WARN per tool; exit 0.
+# the VM image). Prints OK / FIXED / WARN per tool; exit 0.
 set -uo pipefail
 say() { printf '%-6s %-14s %s\n' "$1" "$2" "${3:-}"; }
 tool() { # <name> <url> <sha256> <path-in-tarball>

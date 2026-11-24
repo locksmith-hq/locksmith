@@ -78,9 +78,7 @@ describe("tenant isolation (app role, row-level security)", () => {
 
   it("cross-tenant write is rejected", async () => {
     await expect(
-      tenant.run(ORG_A, (tx) =>
-        tx.insertInto("projects").values({ org_id: ORG_B, name: "evil" }).execute(),
-      ),
+      tenant.run(ORG_A, (tx) => tx.insertInto("projects").values({ org_id: ORG_B, name: "evil" }).execute()),
     ).rejects.toThrow(/row-level security/);
   });
 

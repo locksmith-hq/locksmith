@@ -102,12 +102,7 @@ describe("tenant interceptor", () => {
     const log: string[] = [];
     const a = await app(log);
     await request(a.getHttpServer()).get("/t/scoped").set("x-test-org", ORG).expect(200);
-    expect(log).toEqual([
-      "begin",
-      "select set_config('app.org_id', $1, true)",
-      'select "id" from "orgs"',
-      "commit",
-    ]);
+    expect(log).toEqual(["begin", "select set_config('app.org_id', $1, true)", 'select "id" from "orgs"', "commit"]);
     await a.close();
   });
 

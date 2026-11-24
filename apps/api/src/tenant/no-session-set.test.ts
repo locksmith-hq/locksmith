@@ -20,8 +20,15 @@ function sources(dir: string): string[] {
 
 describe("session-level SET ban", () => {
   it("the detector flags the banned forms", () => {
-    for (const bad of ["SET app.org_id = 'x'", "set session app.org_id to 'x'", "select set_config('app.org_id', $1, false)"]) {
-      expect(BANNED.some((r) => r.test(bad)), bad).toBe(true);
+    for (const bad of [
+      "SET app.org_id = 'x'",
+      "set session app.org_id to 'x'",
+      "select set_config('app.org_id', $1, false)",
+    ]) {
+      expect(
+        BANNED.some((r) => r.test(bad)),
+        bad,
+      ).toBe(true);
     }
     expect(BANNED.some((r) => r.test("select set_config('app.org_id', $1, true)"))).toBe(false);
   });

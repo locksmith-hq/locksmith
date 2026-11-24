@@ -22,7 +22,10 @@ describe("createKysely", () => {
 describe("DbModule", () => {
   it("provides KYSELY from DATABASE_URL and closes it on shutdown", async () => {
     const mod = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => ({ DATABASE_URL: URL })] }), DbModule],
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => ({ DATABASE_URL: URL })] }),
+        DbModule,
+      ],
     }).compile();
     const app = mod.createNestApplication();
     await app.init();

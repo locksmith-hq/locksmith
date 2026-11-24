@@ -40,8 +40,7 @@ class DbLifecycle implements OnApplicationShutdown {
     {
       provide: KYSELY,
       inject: [ConfigService],
-      useFactory: (config: ConfigService): Database =>
-        createKysely(config.getOrThrow<string>("DATABASE_URL")),
+      useFactory: (config: ConfigService): Database => createKysely(config.getOrThrow<string>("DATABASE_URL")),
     },
     DbLifecycle,
   ],

@@ -1,11 +1,7 @@
 // pino's `redact` paths cannot match key-name fragments, so this walks the log
 // object and censors any key that looks sensitive. Header paths stay in
 // REDACT_PATHS as a second layer.
-export const REDACT_PATHS = [
-  "req.headers.authorization",
-  "req.headers.cookie",
-  'res.headers["set-cookie"]',
-];
+export const REDACT_PATHS = ["req.headers.authorization", "req.headers.cookie", 'res.headers["set-cookie"]'];
 
 const SENSITIVE_KEY = /secret|token|password|passwd|authorization|cookie|api[-_]?key/i;
 const CENSOR = "[redacted]";
@@ -30,8 +26,7 @@ export const loggerFormatters = {
 // pino-http wraps these around its own std serializers, so they receive the
 // already-serialized plain req/res; redact that.
 // pino-http serialized values carry a prototype; copy their enumerable fields to a plain object.
-const plain = (v: unknown) =>
-  v !== null && typeof v === "object" ? { ...(v as Record<string, unknown>) } : v;
+const plain = (v: unknown) => (v !== null && typeof v === "object" ? { ...(v as Record<string, unknown>) } : v);
 
 export const loggerSerializers = {
   req: (req: unknown) => redactDeep(plain(req)),

@@ -47,7 +47,20 @@ describe("health", () => {
     process.env["DATABASE_URL"] = "postgres://unused";
     process.env["LOG_LEVEL"] = "silent";
     const { AppModule } = await import("./app.module.js"); // reads env at import
-    const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const { PG_BOSS } = await import("./jobs/jobs.service.js");
+    // Jobs need a real database (see jobs.test.ts); the health test stubs pg-boss.
+    const boss = {
+      on() {},
+      start: async () => {},
+      createQueue: async () => {},
+      work: async () => "",
+      schedule: async () => {},
+      stop: async () => {},
+    };
+    const mod = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PG_BOSS)
+      .useValue(boss)
+      .compile();
     const app = mod.createNestApplication();
     await app.init();
     await request(app.getHttpServer()).get("/healthz").expect(200, { status: "ok" });

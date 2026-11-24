@@ -5,6 +5,7 @@ import { LoggerModule } from "nestjs-pino";
 import { JobsModule } from "./jobs/jobs.module.js";
 import { DbModule } from "./db/db.module.js";
 import { AuthModule } from "./platform/auth/auth.module.js";
+import { ProblemModule } from "./platform/problem/problem.module.js";
 import { TenantModule } from "./tenant/tenant.module.js";
 import { validateEnv } from "./env.js";
 import { HealthController } from "./health.controller.js";
@@ -25,6 +26,7 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
     DbModule,
     TenantModule,
     AuthModule,
+    ProblemModule,
     JobsModule,
   ],
   controllers: [HealthController],

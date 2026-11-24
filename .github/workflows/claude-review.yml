@@ -55,7 +55,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - id: bots
-        # App bots that may open PRs: the single place to edit (was docs/agents/routing.json, now in locksmith-roadmap crew.json).
+        # App bots that may open PRs: the single place to edit.
         run: |
           echo "list=captain-america-locksmith,hulk-locksmith,iron-man-locksmith,locksmith-ada,locksmith-alfie,locksmith-harriet,locksmith-josie,locksmith-linus,locksmith-walt,nick-fury-locksmith,spider-man-locksmith,thor-locksmith" >>"$GITHUB_OUTPUT"
       - id: pre

@@ -2,7 +2,7 @@
 
 `PreToolUse` is the hook script (generated from `crates/smith-cli/src/agents.rs`; `smith init`
 installs it as `.clinerules/hooks/PreToolUse`, executable, and never overwrites a hook someone else
-wrote). Format notes and sources are in `docs/research/agent-plugin-formats.md`.
+wrote).
 
 **Protection: prevention (blocking hook), unconfirmed against a live agent.** Cline runs the script
 before each tool call and `smith hook cline PreToolUse` answers `{"cancel":true,"errorMessage":...}`

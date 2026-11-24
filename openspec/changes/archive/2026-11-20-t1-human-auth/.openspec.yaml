@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-11-19
-# s6-adversarial-gate-1 is a merge-time dependency only (tasks 5.2, 5.3, 7.1); see proposal.md "Depends on".
-x-depends_on: []

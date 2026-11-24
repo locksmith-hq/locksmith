@@ -1,7 +1,6 @@
 # Windsurf (Devin Desktop)
 
 `hooks.json` is the legacy Windsurf hook file (generated from `crates/smith-cli/src/agents.rs`).
-Format notes and sources are in `docs/research/agent-plugin-formats.md`.
 
 **Protection: unknown, not protected.** Windsurf is now Devin Desktop, whose current hook file is
 `.devin/hooks.v1.json` (Claude-style `PreToolUse`), not the `.windsurf/hooks.json` shape in this

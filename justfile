@@ -69,7 +69,7 @@ api-types:
 tree-check:
     scripts/tree-check.sh
 
-# Merge-review tier selftest (the task-edit guard moved to claude-ai-crew).
+# Merge-review tier selftest.
 task-guard:
     scripts/review-tier.sh selftest
 

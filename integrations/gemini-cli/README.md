@@ -1,8 +1,7 @@
 # Gemini CLI
 
 `settings.json` is the hook and MCP snippet (generated from `crates/smith-cli/src/agents.rs`;
-`smith init` merges it into `.gemini/settings.json`). Format notes and sources are in
-`docs/research/agent-plugin-formats.md`.
+`smith init` merges it into `.gemini/settings.json`).
 
 **Protection: prevention (blocking hook).** `BeforeTool` and `BeforeAgent` hooks call
 `smith hook gemini-cli <event>`; a denial exits 2 with the reason on stderr.

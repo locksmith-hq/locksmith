@@ -18,8 +18,9 @@ mod spike_tests {
     /// (no second HTTP stack), and a transport can be built over it with a per-request credential.
     #[tokio::test]
     async fn rmcp_transport_runs_over_the_gateway_client() {
-        let client = crate::http_client::build(Duration::from_secs(5), Duration::from_secs(60), None)
-            .expect("client");
+        let client =
+            crate::http_client::build(Duration::from_secs(5), Duration::from_secs(60), None)
+                .expect("client");
         assert_client(&client);
         let config = StreamableHttpClientTransportConfig::with_uri("https://upstream.example/mcp")
             .auth_header("not-a-real-token");

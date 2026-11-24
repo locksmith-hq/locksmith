@@ -10,5 +10,16 @@
         ]
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "locksmith-common": {
+      "source": {
+        "source": "github",
+        "repo": "locksmith-hq/locksmith-common"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "common@locksmith-common": true
   }
 }

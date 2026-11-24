@@ -3,10 +3,15 @@
 
 # Trust root: CI, repo config and contributor instructions.
 /.github/ @tomer555
+# Workers and the lead may change workflows, except the one that sets the merge rules and flow (last match wins).
+/.github/workflows/
+/.github/workflows/claude-review.yml @tomer555
+# AWS and budget: workflows that assume an AWS role or change AWS resources, and the budget guardrail's apply.
+/.github/workflows/web-deploy.yml @tomer555
+/.github/workflows/aws-*.yml @tomer555
 /.claude/ @tomer555
 /AGENTS.md @tomer555
 /CLAUDE.md @tomer555
-/scripts/review-tier.sh @tomer555
 
 # Crates that hold or move secrets.
 /crates/ls-crypto/ @tomer555

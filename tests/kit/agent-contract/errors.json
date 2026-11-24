@@ -66,5 +66,57 @@
   {
     "slug": "upstream_timeout",
     "status": 504
+  },
+  {
+    "slug": "invalid_request",
+    "status": 400
+  },
+  {
+    "slug": "duration_too_short",
+    "status": 400
+  },
+  {
+    "slug": "binding_ambiguous",
+    "status": 400
+  },
+  {
+    "slug": "not_bound",
+    "status": 403
+  },
+  {
+    "slug": "vend_disabled",
+    "status": 403
+  },
+  {
+    "slug": "service_denied",
+    "status": 403
+  },
+  {
+    "slug": "sts_error",
+    "status": 502
+  },
+  {
+    "slug": "sts_unreachable",
+    "status": 502
+  },
+  {
+    "slug": "redaction_failed",
+    "status": 502
+  },
+  {
+    "slug": "token_unavailable",
+    "status": 502
+  },
+  {
+    "slug": "upstream_unauthorized",
+    "status": 502
+  },
+  {
+    "slug": "upstream_redirect",
+    "status": 502
+  },
+  {
+    "slug": "too_many_credentials",
+    "status": 429
   }
 ]

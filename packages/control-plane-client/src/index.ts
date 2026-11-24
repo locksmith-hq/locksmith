@@ -54,6 +54,7 @@ export function bindingDetails(b: BindingSummary): Array<[label: string, value: 
           : b.kind === "mcp"
             ? [
                 ["Upstream", b.origin],
+                ["Header", b.header],
                 ["Other tools", b.default_decision],
                 ...(["allow", "hold", "deny", "hide"] as const).map((d): [string, string] => [
                   d[0]!.toUpperCase() + d.slice(1),

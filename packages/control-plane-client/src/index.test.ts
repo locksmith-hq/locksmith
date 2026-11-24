@@ -98,6 +98,7 @@ describe("console client", () => {
     expect(bindingDetails({ kind: "aws", name: "r", allowed_actions: [] })).toEqual([["Allowed actions", "none"]]);
     expect(by.mcp).toEqual([
       ["Upstream", "https://api.githubcopilot.com/mcp/"],
+      ["Header", "Authorization"],
       ["Other tools", "hide"],
       ["Allow", "list_issues"],
       ["Hold", "create_issue"],

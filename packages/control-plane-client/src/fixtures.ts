@@ -85,6 +85,7 @@ export const bindingSummaries: BindingSummary[] = [
     kind: "mcp",
     name: "github",
     origin: "https://api.githubcopilot.com/mcp/",
+    header: "Authorization",
     default_decision: "hide",
     tools: [
       { name: "create_issue", decision: "hold" },

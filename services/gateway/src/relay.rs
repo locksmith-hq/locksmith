@@ -881,7 +881,7 @@ fn names_coding_other_than(
 
 /// The binding template with `{secret}` replaced by the value, as a sensitive header value.
 /// `None` when the result is not a valid header value (e.g. the value has a newline).
-fn render(template: &str, value: &[u8]) -> Option<HeaderValue> {
+pub(crate) fn render(template: &str, value: &[u8]) -> Option<HeaderValue> {
     let (prefix, suffix) = template.split_once("{secret}")?;
     let mut buf = Zeroizing::new(Vec::with_capacity(
         prefix.len() + value.len() + suffix.len(),

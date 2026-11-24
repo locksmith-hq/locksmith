@@ -211,6 +211,9 @@ pub struct McpUpstream {
     pub default: ToolDecision,
     #[serde(default)]
     pub allow_private_hosts: bool,
+    /// Secret version injected (MCP requests carry none, as `[[git_binding]]`). Default 1.
+    #[serde(default = "default_pg_version")]
+    pub version: u32,
     /// Per-tool decisions; keys are exact, case-sensitive tool names.
     #[serde(default)]
     pub tools: BTreeMap<String, ToolDecision>,
@@ -247,6 +250,9 @@ impl McpUpstream {
             || self.template.chars().any(|c| c.is_control())
         {
             return Err("template");
+        }
+        if self.version == 0 {
+            return Err("version");
         }
         if !self.tools.keys().all(|k| valid_tool_name(k)) {
             return Err("tools");
@@ -732,6 +738,7 @@ mod tests {
         assert_eq!(m.default, ToolDecision::Deny);
         assert_eq!(m.tools["create_issue"], ToolDecision::Hold);
         assert!(!m.allow_private_hosts);
+        assert_eq!(m.version, 1);
         let d = Bindings::parse(&mcp_toml("")).unwrap();
         assert_eq!(d.mcp_upstreams[0].default, ToolDecision::Hide);
         assert!(d.mcp_upstreams[0].tools.is_empty());
@@ -767,6 +774,7 @@ mod tests {
         }
         let t = mcp_toml("[mcp_upstream.tools]\n\"bad name\" = \"allow\"\n");
         assert_eq!(mcp_err(&t), mcp_bad("tools"));
+        assert_eq!(mcp_err(&mcp_toml("version = 0")), mcp_bad("version"));
         for bad in [
             "default = \"permit\"",
             "default = \"Allow\"",

@@ -1,6 +1,7 @@
 //! Task 2.2 of m2-mcp-gateway: the `/mcp/upstream/{name}` gate and the tools-only server
-//! handler, driven through the gateway router (`tower` oneshot). Nothing is forwarded yet, so
-//! the relay behind the route has no reachable control plane, KMS or upstream.
+//! handler, driven through the gateway router (`tower` oneshot). The production route keeps the
+//! forwarding seam closed (task 2.3), so nothing is forwarded and the relay behind the route has
+//! no reachable control plane, KMS or upstream. The hop itself is tested in `hop_tests.rs`.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -32,20 +33,20 @@ use crate::grants::testkit::StubGrants;
 use crate::mcp_endpoint::McpEndpoint;
 use crate::relay::{Relay, RelayOptions};
 
-const ORG: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c1);
-const AGENT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c2);
+pub(super) const ORG: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c1);
+pub(super) const AGENT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c2);
 /// The secret behind the `github` upstream.
 const SECRET: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c3);
 /// Another secret the agent may hold a grant on.
 const OTHER: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c4);
-const HOST: &str = "gateway.test";
-const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
+pub(super) const HOST: &str = "gateway.test";
+pub(super) const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
 
-fn signer() -> AgentTokenSigner {
+pub(super) fn signer() -> AgentTokenSigner {
     AgentTokenSigner::from_seed(Zeroizing::new([9; 32])).unwrap()
 }
 
-fn token(exp_in: i64) -> String {
+pub(super) fn token(exp_in: i64) -> String {
     let now = OffsetDateTime::now_utc().unix_timestamp();
     signer()
         .sign(&AgentClaims {
@@ -58,7 +59,7 @@ fn token(exp_in: i64) -> String {
         .unwrap()
 }
 
-fn grant(secret_id: Uuid, mode: &str, expires_at: Option<OffsetDateTime>) -> Grant {
+pub(super) fn grant(secret_id: Uuid, mode: &str, expires_at: Option<OffsetDateTime>) -> Grant {
     Grant {
         grant_id: Uuid::now_v7(),
         secret_id,
@@ -78,6 +79,7 @@ fn upstream(name: &str, secret_id: Uuid) -> McpUpstream {
         template: "Bearer {secret}".to_owned(),
         default: ToolDecision::Hide,
         allow_private_hosts: false,
+        version: 1,
         tools: BTreeMap::new(),
     }
 }
@@ -142,15 +144,15 @@ fn harness_with(grants: StubGrants) -> Harness {
     }
 }
 
-struct Answer {
-    status: StatusCode,
-    headers: axum::http::HeaderMap,
-    text: String,
+pub(super) struct Answer {
+    pub(super) status: StatusCode,
+    pub(super) headers: axum::http::HeaderMap,
+    pub(super) text: String,
 }
 
 impl Answer {
     /// The JSON-RPC message of an MCP answer (JSON or SSE).
-    fn message(&self) -> Value {
+    pub(super) fn message(&self) -> Value {
         self.text
             .lines()
             .filter_map(|l| l.strip_prefix("data:"))
@@ -175,7 +177,7 @@ impl Answer {
         v
     }
 
-    fn session(&self) -> Option<String> {
+    pub(super) fn session(&self) -> Option<String> {
         self.headers
             .get("mcp-session-id")
             .and_then(|v| v.to_str().ok())
@@ -183,7 +185,7 @@ impl Answer {
     }
 }
 
-async fn send(
+pub(super) async fn send(
     app: &Router,
     path: &str,
     authorization: Option<&str>,

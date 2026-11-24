@@ -12,8 +12,18 @@
 //! read that fails is a `502 grants_unavailable` for every name, checked before the name.
 //!
 //! The server handler advertises only the tools capability, so every other method is
-//! method-not-found. Nothing is forwarded yet: `tools/list` is empty and `tools/call` answers
-//! `unknown_tool` until the upstream hop (task 2.3) and the catalogue (group 3) land.
+//! method-not-found; `initialize` and `ping` are answered here.
+//!
+//! Task 2.3: the upstream hop ([`hop`]) is built: per request it checks egress, decrypts,
+//! injects the credential and runs one rmcp client exchange (`initialize`, then `ping`,
+//! `tools/list` or `tools/call`), refusing upstream sampling, elicitation and roots. The handler
+//! calls it through one seam, [`UpstreamMcp::raw_forwarding`], which is **off on every
+//! production path** ([`route`]): until the catalogue and policy (group 3, design decisions 5-7)
+//! and redaction (task 2.4, decision 11) land, forwarding would let an agent call any upstream
+//! tool, hidden ones included, and read unredacted upstream text that can carry the credential.
+//! So with the seam off `tools/list` stays empty and `tools/call` answers `unknown_tool` (fail
+//! closed); only tests turn it on, to drive the hop end to end. Group 3 and 2.4 replace the
+//! flag with policy and redaction at the marked seams.
 //!
 //! Spike 2.1: the rmcp client transport runs over the gateway's own pinned HTTP client
 //! (`http_client.rs`: no redirects, no env proxy, pinned addresses); see the spike test.
@@ -38,12 +48,14 @@ use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+pub mod hop;
+
 use crate::app::AppState;
 use crate::auth::AgentIdentity;
 use crate::config::McpUpstream;
 use crate::grants::allows_relay;
 use crate::mcp_endpoint::{admit, unauthorized};
-use crate::relay::error;
+use crate::relay::{Relay, error};
 
 /// The route the upstreams are served at.
 pub const PATH: &str = "/mcp/upstream/{name}";
@@ -66,15 +78,22 @@ struct Upstreams {
 }
 
 impl Upstreams {
-    fn new(bindings: &[McpUpstream], allowed_hosts: &[String]) -> Self {
-        let by_name = bindings
+    fn new(relay: &Arc<Relay>, allowed_hosts: &[String], raw_forwarding: bool) -> Self {
+        let by_name = relay
+            .bindings()
+            .mcp_upstreams
             .iter()
             .map(|b| {
                 let config = StreamableHttpServerConfig::default()
                     .with_allowed_hosts(allowed_hosts.to_vec())
                     .with_legacy_session_mode(true);
+                let handler = UpstreamMcp {
+                    relay: relay.clone(),
+                    upstream: Arc::new(b.clone()),
+                    raw_forwarding,
+                };
                 let service = StreamableHttpService::new(
-                    || Ok(UpstreamMcp),
+                    move || Ok(handler.clone()),
                     Arc::new(LocalSessionManager::default()),
                     config,
                 );
@@ -93,9 +112,20 @@ impl Upstreams {
 /// bindings and the `Host` allowlist from the `/mcp` endpoint; without an endpoint every request
 /// is `401` (fail closed, as `/mcp`), and without a relay (no grants to read) every name is `404`.
 pub fn route(state: &AppState) -> MethodRouter<AppState> {
+    // The seam stays closed in production: nothing unpoliced or unredacted is relayed.
+    route_with(state, false)
+}
+
+/// [`route`] with the upstream forwarded raw (no policy, no redaction): tests of the hop only.
+#[cfg(test)]
+pub(crate) fn route_forwarding_raw_for_tests(state: &AppState) -> MethodRouter<AppState> {
+    route_with(state, true)
+}
+
+fn route_with(state: &AppState, raw_forwarding: bool) -> MethodRouter<AppState> {
     let upstreams = Arc::new(match (state.mcp(), state.relay()) {
         (Some(endpoint), Some(relay)) => {
-            Upstreams::new(&relay.bindings().mcp_upstreams, endpoint.allowed_hosts())
+            Upstreams::new(&relay, endpoint.allowed_hosts(), raw_forwarding)
         }
         _ => Upstreams::default(),
     });
@@ -154,9 +184,29 @@ async fn serve(
 /// The MCP server an agent talks to at `/mcp/upstream/{name}`. Only the tools capability is
 /// advertised, so prompts, resources, completions, logging and tasks are method-not-found.
 #[derive(Clone)]
-struct UpstreamMcp;
+struct UpstreamMcp {
+    relay: Arc<Relay>,
+    upstream: Arc<McpUpstream>,
+    /// The seam (see the module header): `false` on every production path, so `tools/list` is
+    /// empty and `tools/call` is `unknown_tool` until policy (group 3) and redaction (task 2.4)
+    /// sit here. `true` only from [`route_forwarding_raw_for_tests`].
+    raw_forwarding: bool,
+}
 
 impl UpstreamMcp {
+    fn deps(&self) -> hop::HopDeps<'_> {
+        hop::HopDeps {
+            decryptor: self.relay.decryptor(),
+            resolver: self.relay.resolver(),
+            connect_timeout: self.relay.options().connect_timeout,
+        }
+    }
+
+    /// A hop failure as the agent sees it: a fixed slug, nothing from the upstream.
+    fn hop_error(e: hop::HopError) -> McpError {
+        McpError::internal_error(e.slug(), None)
+    }
+
     /// The agent the gate verified for this request (fail closed if it is missing).
     fn agent(context: &RequestContext<RoleServer>) -> Result<AgentIdentity, McpError> {
         context
@@ -187,22 +237,37 @@ impl ServerHandler for UpstreamMcp {
 
     async fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParams>,
+        request: Option<PaginatedRequestParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        Self::agent(&context)?;
-        // No catalogue until the upstream hop (task 2.3) and the policy (group 3).
-        Ok(ListToolsResult::default())
+        let agent = Self::agent(&context)?;
+        // Seam (group 3 policy, 3.2 catalogue): closed, the agent sees no tool.
+        if !self.raw_forwarding {
+            return Ok(ListToolsResult::default());
+        }
+        let tools = hop::list_tools(&self.deps(), &self.upstream, agent, request)
+            .await
+            .map_err(Self::hop_error)?;
+        // Seam (task 2.4): redact the upstream's names, descriptions and schemas here.
+        Ok(tools)
     }
 
     async fn call_tool(
         &self,
-        _request: CallToolRequestParams,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
-        Self::agent(&context)?;
-        // The catalogue is empty, so every name is not in it (design decision 7).
-        Err(McpError::invalid_params("unknown_tool", None))
+        let agent = Self::agent(&context)?;
+        // Seam (3.3 decisions, 4.2 audit): closed, the catalogue is empty so every name is
+        // unknown (design decision 7).
+        if !self.raw_forwarding {
+            return Err(McpError::invalid_params("unknown_tool", None));
+        }
+        let result = hop::call_tool(&self.deps(), &self.upstream, agent, request)
+            .await
+            .map_err(Self::hop_error)?;
+        // Seam (task 2.4): redact the result and re-check here.
+        Ok(CallToolResponse::Complete(result))
     }
 }
 

@@ -83,7 +83,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
 | D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - | ☑ |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on Floci first. | t3-console-mvp | ◐ |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on Floci first. | t3-console-mvp | ☑ |
 | D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - | ☑ |
 | D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract | ☑ |
 

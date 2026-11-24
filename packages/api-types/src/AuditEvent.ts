@@ -3,4 +3,14 @@
 /**
  * An audit row as shown to users. Never holds a value, only identifiers.
  */
-export type AuditEvent = { seq: number, ts: number, session_id: string | null, actor_pid: number, actor_exe: string, action: string, target: string | null, policy_rule: string, decision: string, };
+export type AuditEvent = {
+  seq: number;
+  ts: number;
+  session_id: string | null;
+  actor_pid: number;
+  actor_exe: string;
+  action: string;
+  target: string | null;
+  policy_rule: string;
+  decision: string;
+};

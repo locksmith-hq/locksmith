@@ -24,7 +24,7 @@ quick base="origin/main":
       done
       if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
     fi
-    if grep -q '^apps/web/' <<<"$files"; then npm run lint -w apps/web; fi
+    if grep -qE '\.(tsx?|mjs|js)$|^knip\.json$|^\.oxfmtrc\.json$|^\.oxlintrc\.json$' <<<"$files"; then npx turbo run lint format:check knip typecheck; fi
 
 fmt:
     cargo fmt --all --check
@@ -64,6 +64,7 @@ apps-build-test:
 # Regenerate packages/api-types from crates/ls-ipc (ts-rs).
 api-types:
     cargo test -p ls-ipc --features ts export_bindings
+    npx --yes oxfmt@0.79.0 -c .oxfmtrc.json packages/api-types/src
 
 tree-check:
     scripts/tree-check.sh

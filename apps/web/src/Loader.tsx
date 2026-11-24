@@ -4,7 +4,9 @@ import { VaultMark } from "@locksmith/ui";
 export function Loader({ label = "Loading", fill = false }: { label?: string; fill?: boolean }) {
   return (
     <div className={fill ? "loader loader-fill" : "loader"} role="status">
-      <span className="logo"><VaultMark small size={42} /></span>
+      <span className="logo">
+        <VaultMark small size={42} />
+      </span>
       <span className="sr-only">{label}</span>
     </div>
   );

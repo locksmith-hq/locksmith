@@ -10,9 +10,15 @@ export function McpTools({ client }: { client: Client }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    setTools(null); setError(null);
-    client.listMcpTools().then((t) => live && setTools(t), (e) => live && setError(errMsg(e)));
-    return () => { live = false; };
+    setTools(null);
+    setError(null);
+    client.listMcpTools().then(
+      (t) => live && setTools(t),
+      (e) => live && setError(errMsg(e)),
+    );
+    return () => {
+      live = false;
+    };
   }, [client]);
 
   const toggle = async (t: McpToolSetting, enabled: boolean) => {
@@ -20,14 +26,26 @@ export function McpTools({ client }: { client: Client }) {
     try {
       const u = await client.setMcpTool(t.layer, t.tool, enabled);
       setTools((cur) => cur?.map((x) => (x.layer === u.layer && x.tool === u.tool ? u : x)) ?? cur);
-    } catch (e) { setError(errMsg(e)); }
+    } catch (e) {
+      setError(errMsg(e));
+    }
   };
 
   return (
     <section aria-label="Tools">
       <Head title="MCP tools" />
-      {error && <p role="alert" className="state">{error}</p>}
-      {!tools ? (error ? null : <p>Loading tools…</p>) : tools.length === 0 ? <p>No MCP tools.</p> : (
+      {error && (
+        <p role="alert" className="state">
+          {error}
+        </p>
+      )}
+      {!tools ? (
+        error ? null : (
+          <p>Loading tools…</p>
+        )
+      ) : tools.length === 0 ? (
+        <p>No MCP tools.</p>
+      ) : (
         (["hub", "agent"] as const).map((layer) => {
           const rows = tools.filter((t) => t.layer === layer);
           if (rows.length === 0) return null;
@@ -48,7 +66,11 @@ export function McpTools({ client }: { client: Client }) {
                       />{" "}
                       <strong>{t.tool}</strong>
                     </label>{" "}
-                    {t.description} <em>{t.default_enabled ? "on by default" : "off by default"}{t.overridden ? ", changed" : ""}</em>
+                    {t.description}{" "}
+                    <em>
+                      {t.default_enabled ? "on by default" : "off by default"}
+                      {t.overridden ? ", changed" : ""}
+                    </em>
                   </li>
                 ))}
               </ul>

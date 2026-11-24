@@ -33,21 +33,46 @@ export type Problem = components["schemas"]["Problem"];
 /** Non-secret fields of a binding as label/value pairs for display, in a fixed order per kind; unset fields are skipped. */
 export function bindingDetails(b: BindingSummary): Array<[label: string, value: string]> {
   const rows: Array<[string, string | number | boolean | null | undefined]> =
-    b.kind === "pg" ? [["Host", b.host], ["Port", b.port], ["User", b.user], ["Database", b.database], ["TLS", b.tls]]
-    : b.kind === "http" ? [["Origin", b.origin], ["Header", b.header]]
-    : b.kind === "git" ? [["Host", b.host], ["Repo", b.repo]]
-    : [["Role", b.role], ["Region", b.region], ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"], ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`], ["Allowed actions", b.allowed_actions == null ? null : b.allowed_actions.join(", ") || "none"]];
-  return rows.filter((r): r is [string, string | number | boolean] => r[1] != null && r[1] !== "").map(([l, v]) => [l, String(v)]);
+    b.kind === "pg"
+      ? [
+          ["Host", b.host],
+          ["Port", b.port],
+          ["User", b.user],
+          ["Database", b.database],
+          ["TLS", b.tls],
+        ]
+      : b.kind === "http"
+        ? [
+            ["Origin", b.origin],
+            ["Header", b.header],
+          ]
+        : b.kind === "git"
+          ? [
+              ["Host", b.host],
+              ["Repo", b.repo],
+            ]
+          : [
+              ["Role", b.role],
+              ["Region", b.region],
+              ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"],
+              ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`],
+              ["Allowed actions", b.allowed_actions == null ? null : b.allowed_actions.join(", ") || "none"],
+            ];
+  return rows
+    .filter((r): r is [string, string | number | boolean] => r[1] != null && r[1] !== "")
+    .map(([l, v]) => [l, String(v)]);
 }
 
 /** The audit views' outcome filter: denials (any denied outcome or a `relay.denied` event) or redaction failures. */
 export type AuditOutcomeFilter = "all" | "denied" | "redaction_failed";
 export const auditOutcomeMatches = (e: AuditEvent, f: AuditOutcomeFilter): boolean =>
-  f === "all" || (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
+  f === "all" ||
+  (f === "denied" ? e.outcome === "denied" || e.kind === "relay.denied" : e.outcome === "redaction_failed");
 
 /** True when a condition value is a trailing-`*` prefix match (broader than an exact match). */
 export const isPrefixPattern = (c: WorkloadCondition): boolean => c.pattern.endsWith("*");
-export const hasPrefixCondition = (conditions: readonly WorkloadCondition[]): boolean => conditions.some(isPrefixPattern);
+export const hasPrefixCondition = (conditions: readonly WorkloadCondition[]): boolean =>
+  conditions.some(isPrefixPattern);
 
 export type WorkloadPreset = "github" | "kubernetes";
 export interface WorkloadForm {
@@ -69,14 +94,27 @@ export interface WorkloadForm {
 /** Builds the create request from a preset form. Carries no token or secret field by construction. */
 export function buildWorkloadIdentity(f: WorkloadForm): NewWorkloadIdentity {
   const conditions: WorkloadCondition[] = [];
-  const add = (claim: string, pattern?: string) => { const v = pattern?.trim(); if (v) conditions.push({ claim, pattern: v }); };
+  const add = (claim: string, pattern?: string) => {
+    const v = pattern?.trim();
+    if (v) conditions.push({ claim, pattern: v });
+  };
   if (f.preset === "github") {
-    add("repository", f.repository); add("ref", f.ref); add("environment", f.environment);
+    add("repository", f.repository);
+    add("ref", f.ref);
+    add("environment", f.environment);
     return { name: f.name.trim(), agent_id: f.agentId, audience: f.audience.trim(), issuer_kind: "github", conditions };
   }
-  const ns = f.namespace?.trim(), sa = f.serviceaccount?.trim();
+  const ns = f.namespace?.trim(),
+    sa = f.serviceaccount?.trim();
   if (ns && sa) add("sub", `system:serviceaccount:${ns}:${sa}`);
-  return { name: f.name.trim(), agent_id: f.agentId, audience: f.audience.trim(), issuer_kind: "oidc", issuer: f.issuer?.trim(), conditions };
+  return {
+    name: f.name.trim(),
+    agent_id: f.agentId,
+    audience: f.audience.trim(),
+    issuer_kind: "oidc",
+    issuer: f.issuer?.trim(),
+    conditions,
+  };
 }
 
 export class ApiError extends LocksmithError {
@@ -179,10 +217,12 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     listAgents: () => all((cursor) => run(c.GET("/v1/agents", { params: { query: q(cursor) } }))),
     createAgent: (body) => run(c.POST("/v1/agents", { body })),
     deleteAgent: (agent_id) => run(c.DELETE("/v1/agents/{agent_id}", { params: { path: { agent_id } } })),
-    rotateEnrollment: (agent_id) => run(c.POST("/v1/agents/{agent_id}/enrollment-secret", { params: { path: { agent_id } } })),
+    rotateEnrollment: (agent_id) =>
+      run(c.POST("/v1/agents/{agent_id}/enrollment-secret", { params: { path: { agent_id } } })),
     listGrants: (agent_id) =>
       all((cursor) => run(c.GET("/v1/agents/{agent_id}/grants", { params: { path: { agent_id }, query: q(cursor) } }))),
-    createGrant: (agent_id, body) => run(c.POST("/v1/agents/{agent_id}/grants", { params: { path: { agent_id } }, body })),
+    createGrant: (agent_id, body) =>
+      run(c.POST("/v1/agents/{agent_id}/grants", { params: { path: { agent_id } }, body })),
     revokeGrant: (agent_id, grant_id) =>
       run(c.DELETE("/v1/agents/{agent_id}/grants/{grant_id}", { params: { path: { agent_id, grant_id } } })),
     listAuditEvents: ({ cursor, limit } = {}) =>
@@ -191,16 +231,28 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
     getOrg: (org_id) => run(c.GET("/v1/orgs/{org_id}", { params: { path: { org_id } } })),
     listProjects: () => all((cursor) => run(c.GET("/v1/projects", { params: { query: q(cursor) } }))),
     createProject: (body) => run(c.POST("/v1/projects", { body })),
-    updateProject: (project_id, body) => run(c.PATCH("/v1/projects/{project_id}", { params: { path: { project_id } }, body })),
+    updateProject: (project_id, body) =>
+      run(c.PATCH("/v1/projects/{project_id}", { params: { path: { project_id } }, body })),
     deleteProject: (project_id) => run(c.DELETE("/v1/projects/{project_id}", { params: { path: { project_id } } })),
     listEnvironments: (project_id) =>
-      all((cursor) => run(c.GET("/v1/projects/{project_id}/environments", { params: { path: { project_id }, query: q(cursor) } }))),
+      all((cursor) =>
+        run(c.GET("/v1/projects/{project_id}/environments", { params: { path: { project_id }, query: q(cursor) } })),
+      ),
     createEnvironment: (project_id, body) =>
       run(c.POST("/v1/projects/{project_id}/environments", { params: { path: { project_id } }, body })),
     updateEnvironment: (project_id, environment_id, body) =>
-      run(c.PATCH("/v1/projects/{project_id}/environments/{environment_id}", { params: { path: { project_id, environment_id } }, body })),
+      run(
+        c.PATCH("/v1/projects/{project_id}/environments/{environment_id}", {
+          params: { path: { project_id, environment_id } },
+          body,
+        }),
+      ),
     deleteEnvironment: (project_id, environment_id) =>
-      run(c.DELETE("/v1/projects/{project_id}/environments/{environment_id}", { params: { path: { project_id, environment_id } } })),
+      run(
+        c.DELETE("/v1/projects/{project_id}/environments/{environment_id}", {
+          params: { path: { project_id, environment_id } },
+        }),
+      ),
     listSecrets: (project_id, environment_id) =>
       all((cursor) =>
         run(
@@ -224,7 +276,8 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
         )
       ).items,
     listMcpTools: async () => (await run(c.GET("/v1/mcp/tools"))).items,
-    listWorkloadIdentities: () => all((cursor) => run(c.GET("/v1/workload-identities", { params: { query: q(cursor) } }))),
+    listWorkloadIdentities: () =>
+      all((cursor) => run(c.GET("/v1/workload-identities", { params: { query: q(cursor) } }))),
     createWorkloadIdentity: (body) => run(c.POST("/v1/workload-identities", { body })),
     deleteWorkloadIdentity: (id) => run(c.DELETE("/v1/workload-identities/{id}", { params: { path: { id } } })),
     setMcpTool: (layer, tool, enabled) =>

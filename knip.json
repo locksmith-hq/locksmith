@@ -39,6 +39,11 @@
         "src/**/*.ts"
       ]
     },
+    "packages/agent": {
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
     "packages/sdk": {
       "project": [
         "src/**/*.ts"

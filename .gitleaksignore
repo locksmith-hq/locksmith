@@ -61,3 +61,5 @@ e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index
 # t7 HPKE known-answer vectors: public test keys, not secrets (worker alfie, 2026-11-22).
 016ae34ad2889d9e63e161849c3ed2fa41bf37ea:crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
 crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
+# b6 auth test: fake token fixtures, not secrets (worker-c, 2026-11-24).
+c39fe6b474818ce04a3bd77b1ef2e806146edb40:apps/api/src/platform/auth/auth.test.ts:generic-api-key:72

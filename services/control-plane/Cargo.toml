@@ -55,6 +55,7 @@ jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["alloc", "fast", "pkcs8", "zeroize"] }
 sha2 = "0.10"
 ls-crypto = { path = "../../crates/ls-crypto" }
+ls-agent-token = { path = "../../crates/ls-agent-token" }
 # S5: the audit ledger (hash chain) and its Postgres store, appended inside tenant transactions.
 ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
 # T1: human JWT verification. `jsonwebtoken` (above) verifies; this fetches the issuer's JWKS.

@@ -2,6 +2,7 @@
 //! calls for audit, token and DEK operations. Never exposed publicly and never returns
 //! plaintext secrets or key bytes.
 
+pub mod agent_token_api;
 pub mod app;
 pub mod audit_api;
 pub mod audit_event;

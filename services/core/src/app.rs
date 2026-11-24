@@ -6,8 +6,10 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::{get, post};
 use http::StatusCode;
+use ls_agent_token::AgentTokenSigner;
 use sqlx_postgres::PgPool;
 
+use crate::agent_token_api;
 use crate::audit_api;
 use crate::auth::{self, ServiceToken};
 use crate::checkpoint_api::{self, CheckpointSigner};
@@ -17,6 +19,7 @@ pub struct AppState {
     token: Arc<ServiceToken>,
     pool: Option<PgPool>,
     signer: Option<Arc<dyn CheckpointSigner>>,
+    agent_signer: Option<Arc<AgentTokenSigner>>,
 }
 
 impl AppState {
@@ -25,6 +28,7 @@ impl AppState {
             token: Arc::new(token),
             pool: None,
             signer: None,
+            agent_signer: None,
         }
     }
 
@@ -38,6 +42,16 @@ impl AppState {
     pub fn with_signer(mut self, signer: Arc<dyn CheckpointSigner>) -> Self {
         self.signer = Some(signer);
         self
+    }
+
+    /// The Ed25519 key agent tokens are minted and verified with.
+    pub fn with_agent_signer(mut self, signer: Arc<AgentTokenSigner>) -> Self {
+        self.agent_signer = Some(signer);
+        self
+    }
+
+    pub(crate) fn agent_signer(&self) -> Option<&Arc<AgentTokenSigner>> {
+        self.agent_signer.as_ref()
     }
 
     pub(crate) fn signer(&self) -> Option<&Arc<dyn CheckpointSigner>> {
@@ -61,6 +75,8 @@ pub fn router(state: AppState) -> Router {
             "/v1/audit/checkpoints",
             post(checkpoint_api::sign_checkpoint),
         )
+        .route("/v1/agent-tokens/mint", post(agent_token_api::mint))
+        .route("/v1/agent-tokens/verify", post(agent_token_api::verify))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_service_token,

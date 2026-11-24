@@ -9,6 +9,7 @@ pub const ENV_SERVICE_TOKEN: &str = "LOCKSMITH_CORE_SERVICE_TOKEN";
 pub const ENV_DATABASE_URL: &str = "LOCKSMITH_CORE_DATABASE_URL";
 pub const ENV_OPENBAO_ADDR: &str = "LOCKSMITH_CORE_OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "LOCKSMITH_CORE_OPENBAO_TOKEN";
+pub const ENV_AGENT_SIGNING_KEY: &str = "LOCKSMITH_CORE_AGENT_SIGNING_KEY";
 pub const ENV_CHECKPOINT_KEY: &str = "LOCKSMITH_CORE_CHECKPOINT_KEY";
 pub const DEFAULT_CHECKPOINT_KEY: &str = "audit-checkpoint";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
@@ -40,6 +41,8 @@ pub struct Config {
     pub otlp_endpoint: Option<String>,
     /// OpenBao transit signing for audit checkpoints. `None` when the address or token is unset.
     pub checkpoint_kms: Option<CheckpointKms>,
+    /// Base64 32-byte Ed25519 seed for agent tokens. Secret.
+    pub agent_signing_key: Option<SecretString>,
 }
 
 /// No `Debug`, `Display` or `Clone`: it holds the OpenBao token (sign-only policy).
@@ -88,6 +91,9 @@ impl Config {
             database_url,
             otlp_endpoint,
             checkpoint_kms,
+            agent_signing_key: get(ENV_AGENT_SIGNING_KEY)
+                .filter(|v| !v.trim().is_empty())
+                .map(SecretString::from),
         })
     }
 }

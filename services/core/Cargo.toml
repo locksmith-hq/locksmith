@@ -39,7 +39,9 @@ uuid = { version = "1.29", features = ["serde"] }
 # The ledger's allow-listed event types (the core turns request strings into these).
 ls-envelope = { path = "../../crates/ls-envelope" }
 base64 = "0.22"
-time = { version = "0.3.55", features = ["parsing"] }
+time = { version = "0.3.55", features = ["parsing", "formatting"] }
+ls-agent-token = { path = "../../crates/ls-agent-token" }
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
 ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
 sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "uuid"] }
 sqlx-postgres = { version = "0.9.0", default-features = false, features = ["uuid"] }

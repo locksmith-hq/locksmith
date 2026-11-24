@@ -1,6 +1,6 @@
 //! Locksmith control-plane API service.
 
-pub mod agent_token;
+pub use ls_agent_token as agent_token;
 pub mod api;
 pub mod app;
 pub mod audit;

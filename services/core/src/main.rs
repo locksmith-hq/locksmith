@@ -60,6 +60,16 @@ async fn main() -> ExitCode {
             }
         }
     }
+    if let Some(seed) = &config.agent_signing_key {
+        use secrecy::ExposeSecret as _;
+        match ls_agent_token::AgentTokenSigner::from_base64_seed(seed.expose_secret()) {
+            Ok(signer) => state = state.with_agent_signer(std::sync::Arc::new(signer)),
+            Err(_) => {
+                tracing::error!("invalid agent signing key");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {

@@ -93,3 +93,7 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task: t6 - blocked
 - Verified: scripts/check-task-edits.sh -> only failure is 2 commits authored "Claude" (417d694, 7650f18); tree-check and public-check OK
 - Notes for next session: needs history change or fresh branch (cherry-pick onto origin/main under App identity); rescue #666 open, waiting on lead. Do not push more commits here.
+
+## 2026-11-24 (worker-c)
+- Unblocked PR #605: merged main (migration 0015 clash: renumbered memberships to 0016-0018), regenerated openapi.json and sdk schema, fixed oxfmt and knip. `just quick` green. Pushed once. Auto-merge not enabled: t6 tasks still unticked.
+- b1-nestjs-api: 1.3 is on #674 (spider-man); remaining tasks (group 2 onward) not started this run, lock released.

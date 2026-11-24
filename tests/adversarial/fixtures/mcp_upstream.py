@@ -16,6 +16,9 @@ MODE:
                    X-Api-Key) is put into a tool result, a tool description in tools/list, structured
                    content, a tool error, a JSON-RPC error and, in SSE mode, an extra SSE event, raw and
                    base64 (the proxy's redaction must catch every one of them).
+  echo-credential-sse  as echo-credential, every answer as a `text/event-stream` body (the gateway's URL
+                   cannot carry `?sse=1`).
+  huge             normal, but `echo` returns 2 MiB of text (a body the redactor cannot scan).
   redirect         every request answers 307 with `Location: REDIRECT_URL` (default
                    http://127.0.0.1:1/never) and nothing else.
 
@@ -114,11 +117,15 @@ def handle(msg, mode, cred):
             data = {"credential": raw, "b64": b64} if echo else None
             return rpc_error(req_id, -32602, f"unknown tool {name}" + (f" ({raw})" if echo else ""), data), []
         text = str(args.get("text", "ok")) if name == "echo" else "ok"
+        if mode == "huge" and name == "echo":
+            text = "x" * (2 * 1024 * 1024)  # over the redactor's 1 MiB bound: unscannable
         result = {"content": [{"type": "text", "text": text}]}
         extra = []
         if echo:
             result["content"].append({"type": "text", "text": f"credential={raw}"})
             result["content"].append({"type": "text", "text": f"b64={b64}"})
+            result["content"].append({"type": "text", "text": f"hex={raw.encode().hex()}"})
+            result["content"].append({"type": "text", "text": json.dumps({"nested": json.dumps({"credential": raw})})})
             result["structuredContent"] = {"credential": raw, "b64": b64}
             extra.append(rpc_notification_with(raw, b64))
             if name == "create_issue":
@@ -135,6 +142,9 @@ def rpc_notification_with(raw, b64):
 
 def make_handler(mode, headers_log, redirect_url):
     lock = threading.Lock()
+    force_sse = mode == "echo-credential-sse"
+    if force_sse:
+        mode = "echo-credential"
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -142,8 +152,9 @@ def make_handler(mode, headers_log, redirect_url):
         def log_message(self, *_):
             pass
 
-        def _record(self):
-            line = json.dumps({"method": self.command, "path": self.path, "headers": dict(self.headers.items())})
+        def _record(self, rpc=None, tool=None):
+            line = json.dumps({"method": self.command, "path": self.path, "rpc": rpc, "tool": tool,
+                               "headers": dict(self.headers.items())})
             with lock, os.fdopen(os.open(headers_log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as f:
                 f.write(line + "\n")
 
@@ -166,9 +177,15 @@ def make_handler(mode, headers_log, redirect_url):
             self._send(200)
 
         def do_POST(self):
-            self._record()
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length)
+            try:
+                first = json.loads(body)
+                rpc = first.get("method") if isinstance(first, dict) else "batch"
+                tool = (first.get("params") or {}).get("name") if isinstance(first, dict) else None
+            except ValueError:
+                rpc, tool = None, None
+            self._record(rpc, tool if isinstance(tool, str) else None)
             if mode == "redirect":
                 self._send(307, b"", extra=[("Location", redirect_url)])
                 return
@@ -185,7 +202,7 @@ def make_handler(mode, headers_log, redirect_url):
             if response is None:
                 self._send(202)
                 return
-            sse = parse_qs(urlsplit(self.path).query).get("sse") == ["1"]
+            sse = force_sse or parse_qs(urlsplit(self.path).query).get("sse") == ["1"]
             if not sse:
                 self._send(200, json.dumps(response).encode())
                 return
@@ -299,7 +316,7 @@ def main():
     if sys.argv[1:] == ["--selftest"]:
         selftest()
         return
-    if len(sys.argv) not in (4, 5) or sys.argv[1] not in ("normal", "echo-credential", "redirect"):
+    if len(sys.argv) not in (4, 5) or sys.argv[1] not in ("normal", "echo-credential", "echo-credential-sse", "huge", "redirect"):
         sys.exit(__doc__)
     mode, port_file, headers_log = sys.argv[1:4]
     server = serve(mode, headers_log, *(sys.argv[4:5]))

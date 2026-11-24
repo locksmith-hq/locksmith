@@ -5,7 +5,7 @@
 //! same gate as `/mcp`: the agent token verified by the shared [`AgentAuth`](crate::auth::AgentAuth)
 //! and the revoked-agent check ([`crate::mcp_endpoint::admit`]), the same `Host` allowlist (the
 //! endpoint's list, enforced by rmcp), and rmcp logging capped process-wide by
-//! [`crate::mcp_endpoint::cap_rmcp_logs`] (`rmcp=info` covers the client modules too). Then, on
+//! [`crate::mcp_endpoint::cap_rmcp_logs`] (`rmcp=warn` covers the client modules too). Then, on
 //! every request, the agent's grants are read (cached at most 10 s, the relay's cache) and an
 //! unknown `name` and an upstream whose `secret_id` the agent holds no unexpired `relay` grant
 //! for get the same `404`, built by one function, so neither can be told from the other. A grant

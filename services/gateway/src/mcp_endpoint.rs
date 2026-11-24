@@ -43,12 +43,13 @@ use crate::relay::{Relay, error};
 /// rmcp targets that log whole JSON-RPC messages (tool results included) at `debug`/`trace`.
 const RMCP_MESSAGE_TARGETS: &[&str] = &["rmcp", "rmcp::service", "rmcp::transport"];
 
-/// Cap rmcp's logging at `info`, whatever else `filter` allows. rmcp logs every response message
-/// at `debug`, which would put an `issue_short_lived_credential` result (the credential) in the
-/// logs; the more specific directives also override a `RUST_LOG=rmcp::service=trace`.
+/// Cap rmcp's logging at `warn`, whatever else `filter` allows. rmcp logs every response message
+/// at `debug` and every notification its client receives (an upstream MCP server's, which can
+/// quote the credential it was sent) at `info`; both would put a credential in the logs. The more
+/// specific directives also override a `RUST_LOG=rmcp::service=trace`.
 pub fn cap_rmcp_logs(mut filter: tracing_subscriber::EnvFilter) -> tracing_subscriber::EnvFilter {
     for target in RMCP_MESSAGE_TARGETS {
-        if let Ok(d) = format!("{target}=info").parse() {
+        if let Ok(d) = format!("{target}=warn").parse() {
             filter = filter.add_directive(d);
         }
     }

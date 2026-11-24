@@ -474,7 +474,7 @@ impl std::io::Write for Capture {
 }
 
 /// Under the gateway's filter (`RUST_LOG=trace` plus [`crate::mcp_endpoint::cap_rmcp_logs`])
-/// rmcp logs nothing below `info` for `/mcp/upstream/{name}`, so no MCP message is logged whole;
+/// rmcp logs nothing below `warn` (so no upstream notification, which can quote the credential, either) for `/mcp/upstream/{name}`, so no MCP message is logged whole;
 /// without the cap the same exchange does log at `debug` (the capture works).
 #[tokio::test]
 async fn mcp_upstream_rmcp_logs_are_capped_like_mcp() {
@@ -512,21 +512,19 @@ async fn mcp_upstream_rmcp_logs_are_capped_like_mcp() {
         assert!(!text.contains(&t), "agent token in the logs");
         text
     }
-    let below_info = |text: &str| {
-        text.lines()
-            .any(|l| (l.contains("DEBUG") || l.contains("TRACE")) && l.contains(" rmcp"))
+    let below_warn = |text: &str| {
+        text.lines().any(|l| {
+            (l.contains("DEBUG") || l.contains("TRACE") || l.contains(" INFO"))
+                && l.contains(" rmcp")
+        })
     };
     // Warm-up: the first scoped subscriber of a test binary can miss events while other tests
     // register the same callsites in parallel.
     run(false).await;
     let uncapped = run(false).await;
-    assert!(below_info(&uncapped), "capture saw rmcp debug logs");
+    assert!(below_warn(&uncapped), "capture saw rmcp debug logs");
     let capped = run(true).await;
-    assert!(
-        capped.contains("create new session"),
-        "capture saw rmcp info logs"
-    );
-    assert!(!below_info(&capped), "rmcp logged below info");
+    assert!(!below_warn(&capped), "rmcp logged below warn");
 }
 
 async fn get_upstreams(app: &Router, authorization: Option<&str>) -> (StatusCode, String) {

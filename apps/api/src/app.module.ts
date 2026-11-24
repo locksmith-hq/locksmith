@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { TerminusModule } from "@nestjs/terminus";
 import { LoggerModule } from "nestjs-pino";
+import { DbModule } from "./db/db.module.js";
+import { TenantModule } from "./tenant/tenant.module.js";
 import { validateEnv } from "./env.js";
 import { HealthController } from "./health.controller.js";
 import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js";
@@ -18,6 +20,8 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
       },
     }),
     TerminusModule,
+    DbModule,
+    TenantModule,
   ],
   controllers: [HealthController],
 })

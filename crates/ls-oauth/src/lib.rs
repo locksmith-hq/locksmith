@@ -7,10 +7,15 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod client;
 mod registry;
 #[cfg(feature = "testing")]
 pub mod testing;
 
+pub use client::{
+    Account, AuthorizeStart, DEFAULT_MAX_BODY, OAuthClient, OAuthError, ProviderEndpoints, Quirk,
+    Reason, Tokens,
+};
 pub use registry::{ProviderDef, RefreshKind, Registry, RegistryError};
 
 /// Name of the relay request field that selects a person's connection instead of a vault secret.

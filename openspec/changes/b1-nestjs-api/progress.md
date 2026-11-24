@@ -74,3 +74,7 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Task 2.4 done: `apps/api/src/tenant` (TenantService, TenantInterceptor, TenantModule with nestjs-cls 7.0.2) wraps an org-scoped request in one transaction starting `set_config('app.org_id', $1, true)`; session-SET ban test scans `src/`. Wired into AppModule with DbModule.
 - Verified: vitest 18 passed, tsc clean, `just quick` OK; evaluator PASS. Notes from evaluator: interceptor collapses streams (no `@Sse` with an org id yet; commented), ban test misses `.sql` files and bare `SET search_path`.
 - Notes for next session: 2.5 (testcontainers isolation tests) is next; 2.1 and 2.3 still wait on lead/owner items above. PR #674 not ready for auto-merge (tasks open).
+
+## 2026-11-24 (worker-b)
+- Verified task 2.1 on PR #674: `apps/api` is private, ESM, AGPL-3.0-only, tsconfig extends `packages/tsconfig/base.json`, turbo tasks build/test/typecheck run, `docs/testing.md` lists it; `npm test --workspace apps/api` 18 pass. 2.1 left unticked: tree-check.sh accepts apps/api only by default, with no explicit entry (evaluator caveat); needs a small tree-check edit.
+- Next: 2.3 (Kysely codegen and `just api-types`), 2.5 (isolation tests), 1.4 to 1.6 (contract suite). Auto-merge not enabled: tasks remain.

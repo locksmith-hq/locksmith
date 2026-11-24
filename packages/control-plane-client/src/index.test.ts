@@ -102,7 +102,10 @@ describe("console client", () => {
 });
 
 test("listOrgs and listMembers unwrap the T6 fixtures", async () => {
-  const f = vi.fn().mockReturnValueOnce(json({ items: myOrgs })).mockReturnValueOnce(json(memberList));
+  const f = vi
+    .fn()
+    .mockReturnValueOnce(json({ items: myOrgs }))
+    .mockReturnValueOnce(json(memberList));
   vi.stubGlobal("fetch", f);
   const c = createClient("org1", B);
   expect(await c.listOrgs()).toEqual(myOrgs);
@@ -115,7 +118,9 @@ test("invites: the token goes in the body only, and a 409 surfaces as ApiError",
     .fn()
     .mockReturnValueOnce(json({ items: invites }))
     .mockReturnValueOnce(json({ org_id: "o", role: "member" }))
-    .mockReturnValueOnce(json({ type: "urn:locksmith:problem:conflict", title: "Conflict", status: 409, detail: "last owner" }, 409));
+    .mockReturnValueOnce(
+      json({ type: "urn:locksmith:problem:conflict", title: "Conflict", status: 409, detail: "last owner" }, 409),
+    );
   vi.stubGlobal("fetch", f);
   const c = createClient("org1", B);
   expect(await c.listInvites()).toEqual(invites);

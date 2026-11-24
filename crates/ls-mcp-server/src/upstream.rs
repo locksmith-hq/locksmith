@@ -158,8 +158,9 @@ mod tests {
         let got = ok.decide(&query()).await.unwrap();
         assert_eq!(got["list_issues"], ToolDecision::Allow);
 
-        let err: std::sync::Arc<dyn ToolPolicy> =
-            std::sync::Arc::new(Fixed(Err(PolicyError { code: "unavailable" })));
+        let err: std::sync::Arc<dyn ToolPolicy> = std::sync::Arc::new(Fixed(Err(PolicyError {
+            code: "unavailable",
+        })));
         let e = err.decide(&query()).await.unwrap_err();
         assert_eq!(e.to_string(), "tool policy unavailable: unavailable");
     }

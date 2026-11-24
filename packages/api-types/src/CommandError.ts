@@ -4,4 +4,4 @@ import type { CommandErrorCode } from "./CommandErrorCode";
 /**
  * The rejection value of every desktop command.
  */
-export type CommandError = { code: CommandErrorCode, message: string, };
+export type CommandError = { code: CommandErrorCode; message: string };

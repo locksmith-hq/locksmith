@@ -9,9 +9,7 @@ export type { paths, components };
  * Value and key-material routes. The SDK never exposes a call to them: they are removed from the
  * client's path type, and a test checks this list against the OpenAPI spec.
  */
-export const VALUE_ROUTE_DENYLIST = [
-  "/internal/v1/secrets/{secret_id}/versions/{version}/material",
-] as const;
+export const VALUE_ROUTE_DENYLIST = ["/internal/v1/secrets/{secret_id}/versions/{version}/material"] as const;
 
 type DeniedPath = (typeof VALUE_ROUTE_DENYLIST)[number] | Extract<keyof paths, `/internal/${string}`>;
 /** The API surface an SDK user can call: every path except the denied ones. */

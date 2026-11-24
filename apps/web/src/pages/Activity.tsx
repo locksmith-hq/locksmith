@@ -1,6 +1,12 @@
 import { Head } from "@locksmith/ui";
 import { useEffect, useRef, useState } from "react";
-import { auditOutcomeMatches as auditMatches, type AuditOutcomeFilter as AuditFilter, type AuditEvent, type AuditStatus, type Client } from "@locksmith/control-plane-client";
+import {
+  auditOutcomeMatches as auditMatches,
+  type AuditOutcomeFilter as AuditFilter,
+  type AuditEvent,
+  type AuditStatus,
+  type Client,
+} from "@locksmith/control-plane-client";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
@@ -23,23 +29,47 @@ export function Activity({ client }: { client: Client }) {
 
   useEffect(() => {
     let live = true; // a response for an earlier client (org) is ignored
-    setStatus(null); setEvents(null); setNext(null); setError(null); setLoadingMore(false);
-    client.auditStatus().then((s) => live && setStatus(s), (e) => live && setError(errMsg(e)));
-    client.listAuditEvents().then(
-      (p) => { if (live) { setEvents(p.items); setNext(p.next ?? null); } },
+    setStatus(null);
+    setEvents(null);
+    setNext(null);
+    setError(null);
+    setLoadingMore(false);
+    client.auditStatus().then(
+      (s) => live && setStatus(s),
       (e) => live && setError(errMsg(e)),
     );
-    return () => { live = false; };
+    client.listAuditEvents().then(
+      (p) => {
+        if (live) {
+          setEvents(p.items);
+          setNext(p.next ?? null);
+        }
+      },
+      (e) => live && setError(errMsg(e)),
+    );
+    return () => {
+      live = false;
+    };
   }, [client, attempt]);
 
   const more = () => {
     if (inflight.current || !next) return;
     inflight.current = true;
     setLoadingMore(true);
-    client.listAuditEvents({ cursor: next }).then(
-      (p) => { setEvents((cur) => [...(cur ?? []), ...p.items]); setNext(p.next ?? null); setError(null); },
-      (e) => setError(errMsg(e)),
-    ).finally(() => { inflight.current = false; setLoadingMore(false); });
+    client
+      .listAuditEvents({ cursor: next })
+      .then(
+        (p) => {
+          setEvents((cur) => [...(cur ?? []), ...p.items]);
+          setNext(p.next ?? null);
+          setError(null);
+        },
+        (e) => setError(errMsg(e)),
+      )
+      .finally(() => {
+        inflight.current = false;
+        setLoadingMore(false);
+      });
   };
 
   return (
@@ -48,7 +78,11 @@ export function Activity({ client }: { client: Client }) {
       {error && (
         <div role="alert" className="state">
           <p>{error}</p>
-          {!events && <button className="btn sm" onClick={() => setAttempt((n) => n + 1)}>Retry</button>}
+          {!events && (
+            <button className="btn sm" onClick={() => setAttempt((n) => n + 1)}>
+              Retry
+            </button>
+          )}
         </div>
       )}
       {status && (
@@ -56,7 +90,9 @@ export function Activity({ client }: { client: Client }) {
           <p>Head seq: {status.head_seq}</p>
           <p>
             Latest checkpoint:{" "}
-            {status.latest_checkpoint ? `seq ${status.latest_checkpoint.seq} at ${status.latest_checkpoint.at}` : "none yet"}
+            {status.latest_checkpoint
+              ? `seq ${status.latest_checkpoint.seq} at ${status.latest_checkpoint.at}`
+              : "none yet"}
           </p>
           <p data-testid="verify-result">{chainSummary(status)}</p>
         </div>
@@ -69,21 +105,47 @@ export function Activity({ client }: { client: Client }) {
           <option value="redaction_failed">Redaction failed</option>
         </select>
       </label>
-      {!events ? (error ? null : <p>Reading the ledger…</p>) : events.length === 0 ? <p>No audit events yet.</p> : !events.some((e) => auditMatches(e, filter)) ? <p>No matching events{next ? " loaded yet" : ""}.</p> : (
+      {!events ? (
+        error ? null : (
+          <p>Reading the ledger…</p>
+        )
+      ) : events.length === 0 ? (
+        <p>No audit events yet.</p>
+      ) : !events.some((e) => auditMatches(e, filter)) ? (
+        <p>No matching events{next ? " loaded yet" : ""}.</p>
+      ) : (
         <table className="grid">
           <thead>
-            <tr><th>Seq</th><th>Time</th><th>Kind</th><th>Actor</th><th>Target</th><th>Outcome</th></tr>
+            <tr>
+              <th>Seq</th>
+              <th>Time</th>
+              <th>Kind</th>
+              <th>Actor</th>
+              <th>Target</th>
+              <th>Outcome</th>
+            </tr>
           </thead>
           <tbody>
-            {events.filter((e) => auditMatches(e, filter)).map((e) => (
-              <tr key={e.id}>
-                <td>{e.seq}</td><td>{e.at}</td><td>{e.kind}</td><td>{e.actor}</td><td>{e.target ?? ""}</td><td>{e.outcome}</td>
-              </tr>
-            ))}
+            {events
+              .filter((e) => auditMatches(e, filter))
+              .map((e) => (
+                <tr key={e.id}>
+                  <td>{e.seq}</td>
+                  <td>{e.at}</td>
+                  <td>{e.kind}</td>
+                  <td>{e.actor}</td>
+                  <td>{e.target ?? ""}</td>
+                  <td>{e.outcome}</td>
+                </tr>
+              ))}
           </tbody>
         </table>
       )}
-      {next && <button className="btn" disabled={loadingMore} onClick={more}>Load more</button>}
+      {next && (
+        <button className="btn" disabled={loadingMore} onClick={more}>
+          Load more
+        </button>
+      )}
     </section>
   );
 }

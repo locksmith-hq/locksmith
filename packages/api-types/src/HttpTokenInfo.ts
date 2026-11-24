@@ -3,4 +3,13 @@
 /**
  * A live opaque token as `smith token ls` shows it: never the full token, never a value.
  */
-export type HttpTokenInfo = { prefix: string, key: string, project: string, env: string, hosts: Array<string>, placement: string, lease: string, created_at: number, };
+export type HttpTokenInfo = {
+  prefix: string;
+  key: string;
+  project: string;
+  env: string;
+  hosts: Array<string>;
+  placement: string;
+  lease: string;
+  created_at: number;
+};

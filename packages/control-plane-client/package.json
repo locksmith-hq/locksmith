@@ -10,12 +10,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "tsc --noEmit -p .",
-    "test": "vitest run"
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   },
   "devDependencies": {
-    "openapi-typescript": "^7.13.0",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "typescript": "^5.7.0"
   },
   "dependencies": {
     "@locksmith/sdk": "*"

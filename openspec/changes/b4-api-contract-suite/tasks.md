@@ -13,11 +13,11 @@
 - [x] 2.4 Verify: `just up`, `just api`, then `just api-contract http://127.0.0.1:8080` passes for these files.
 
 ## 3. Scenarios: agents, workloads, MCP and audit [sonnet]
-- [ ] 3.1 Scenarios for agents, enrollment secrets, grants and `/v1/agent-tokens`.
-- [ ] 3.2 Scenarios for workload identities, `/v1/workload-tokens` and `/v1/bindings`.
-- [ ] 3.3 Scenarios for `/v1/mcp/clients`, client revoke, `/v1/mcp/tools`, `/v1/audit/events` and `/v1/audit/status`.
-- [ ] 3.4 Scenarios for every `/internal/v1/*` path with the gateway's internal credential and without it (401).
-- [ ] 3.5 Verify: `just api-contract http://127.0.0.1:8080` passes with the coverage test reporting no missing path.
+- [x] 3.1 Scenarios for agents, enrollment secrets, grants and `/v1/agent-tokens`.
+- [x] 3.2 Scenarios for workload identities, `/v1/workload-tokens` and `/v1/bindings`.
+- [x] 3.3 Scenarios for `/v1/mcp/clients`, client revoke, `/v1/mcp/tools`, `/v1/audit/events` and `/v1/audit/status`.
+- [x] 3.4 Scenarios for every `/internal/v1/*` path with the gateway's internal credential and without it (401).
+- [x] 3.5 Verify: `just api-contract http://127.0.0.1:8080` passes with the coverage test reporting no missing path.
 
 ## 4. Local verification
-- [ ] 4.1 `just up`, `just api`, `just api-contract http://127.0.0.1:8080` twice with identical transcripts, `just leak-scan`, `just apps-build`, then `just quick`; append to `openspec/changes/b1-nestjs-api/progress.md` that B1 tasks 1.4 to 1.6 can be verified.
+- [x] 4.1 `just up`, `just api`, `just api-contract http://127.0.0.1:8080` twice with identical transcripts, `just leak-scan`, `just apps-build`, then `just quick`; append to `openspec/changes/b1-nestjs-api/progress.md` that B1 tasks 1.4 to 1.6 can be verified.

@@ -66,3 +66,10 @@ export class Recorder {
     return res;
   }
 }
+
+/** Headers for `/internal/v1/*`: the gateway's service token and the org it acts for. */
+export function internalAuth(orgId: string): Record<string, string> {
+  const token = process.env.LOCKSMITH_GATEWAY_SERVICE_TOKEN;
+  if (!token) throw new Error("LOCKSMITH_GATEWAY_SERVICE_TOKEN is not set; run through scripts/api-contract.sh");
+  return { authorization: `Bearer ${token}`, "x-locksmith-org": orgId };
+}

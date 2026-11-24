@@ -16,3 +16,10 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Sign-in and sign-out success need a verified bearer token (dev header is refused), so only the 401 cases are recorded; success stays with `just auth-e2e` (design decision 4).
 - Normaliser additions found by the self-diff: per-run seed suffix (`<run>`), JWKS `kid`/`x`.
 - Next: group 3 (agents, workloads, MCP, audit, internal).
+
+## 2026-11-24 (worker-b, group 3 and local verification)
+- Scenarios added: `agents`, `grants` (agents.ts), `workloads` (identities, tokens, bindings), `mcp`, `audit`, `internal` (all eight `/internal/v1/*` routes, each with the service token, without it, and with a user token: 401). The coverage test now has an empty exclusion list: every one of the 54 operations has a scenario.
+- Workload-token and agent-token success are covered (agent) or refused-only (workload: an external issuer token cannot be scripted).
+- Normaliser additions found by self-diffs: page cursors (`next`), workload `handle`, audit `digest`/`prev_digest`, secret `ciphertext`/`wrapped_dek`.
+- Verified against `just up-lite` + `just api`: 238 exchanges; two `just api-contract http://127.0.0.1:8080` runs produce byte-identical transcripts; `--diff` of the server with itself matches; `just leak-scan` (stack and `--dir target/api-contract`) clean; the transcript holds no service token; `npm run build` ok. Not run: the Tauri half of `just apps-build` (desktop, unrelated to this change).
+- Handoff: B1 tasks 1.4 to 1.6 can now be verified (see `b1-nestjs-api/progress.md`).

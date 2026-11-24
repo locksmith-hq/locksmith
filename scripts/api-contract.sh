@@ -12,6 +12,11 @@ if [ -z "${API_CONTRACT_CANARY:-}" ] && [ "${1:-}" != "--diff-files" ]; then
   API_CONTRACT_CANARY=$(python3 -I tests/kit/oracle.py canary-new --file "${LOCKSMITH_CANARIES:-infra/compose/.canaries}")
   export API_CONTRACT_CANARY
 fi
+# The `/internal/v1/*` scenarios need the gateway's service token: the dev default `just api` uses.
+if [ -z "${LOCKSMITH_GATEWAY_SERVICE_TOKEN:-}" ]; then
+  LOCKSMITH_GATEWAY_SERVICE_TOKEN=$(sed -n 's/^LOCKSMITH_GATEWAY_SERVICE_TOKEN=//p' infra/compose/.env.example)
+  export LOCKSMITH_GATEWAY_SERVICE_TOKEN
+fi
 case "${1:-}" in
   --diff)
     [ $# -eq 3 ] || { echo "usage: $0 --diff <url-a> <url-b>" >&2; exit 2; }

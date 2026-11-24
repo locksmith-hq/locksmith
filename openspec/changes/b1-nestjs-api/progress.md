@@ -26,3 +26,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-24 (PM, split for parallel work)
 - T2, T6, T7, T8 and N1 now need only `b1-nestjs-api:contract` (this change's group 1), not the whole port. Tasks 1.4 to 1.6 (scenario suite, runner, verify) are also planned as `b4-api-contract-suite` (no deps) for a second worker; when it merges, run 1.6 here and tick 1.4 to 1.6 only if it passes. Task text unchanged. Landing 1.3 (route table, #674) on main also counts: `change-status.sh` reads B1 ticks from main or `claude/change-b1-nestjs-api`, not the `-r2` branch.
+
+## 2026-11-24 (worker-b, from b4-api-contract-suite)
+- B4 is implemented on `claude/change-b4-api-contract-suite`: `just api-contract <url>` records a deterministic 238-exchange transcript and `just api-contract --diff <a> <b>` compares two servers. After it merges, B1 tasks 1.4 to 1.6 can be verified and ticked by the B1 worker; this completes `b1-nestjs-api:contract`.

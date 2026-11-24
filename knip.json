@@ -32,6 +32,7 @@
     "tests/api-contract": {
       "entry": [
         "src/run.ts",
+        "src/scenarios/*.ts",
         "src/**/*.test.ts"
       ],
       "project": [

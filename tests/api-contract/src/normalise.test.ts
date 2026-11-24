@@ -47,6 +47,17 @@ describe("normalise", () => {
     expect(n.json({ name: "contract-a-x1y2" })).toEqual({ name: "contract-a-<run>" });
   });
 
+  it("replaces digests, cursors and ciphertext blobs", () => {
+    const n = new Normaliser();
+    expect(n.json({ digest: "ab", prev_digest: "cd", next: "n1", ciphertext: "Y2k=", wrapped_dek: "ZA==" })).toEqual({
+      ciphertext: "<key-1>",
+      digest: "<key-2>",
+      next: "<key-3>",
+      prev_digest: "<key-4>",
+      wrapped_dek: "<key-5>",
+    });
+  });
+
   it("sorts object keys and leaves other values alone", () => {
     const n = new Normaliser();
     expect(JSON.stringify(n.json({ z: 1, a: [true, null, "x"] }))).toBe('{"a":[true,null,"x"],"z":1}');

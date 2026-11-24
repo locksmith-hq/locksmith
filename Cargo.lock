@@ -2829,11 +2829,13 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "getrandom 0.2.17",
  "http",
  "http-body-util",
  "jsonwebtoken",
  "ls-agent-token",
  "ls-audit",
+ "ls-crypto",
  "ls-envelope",
  "ls-oidc-verify",
  "ls-pg-test",

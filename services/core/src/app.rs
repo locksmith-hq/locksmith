@@ -15,6 +15,7 @@ use crate::agent_token_api;
 use crate::audit_api;
 use crate::auth::{self, ServiceToken};
 use crate::checkpoint_api::{self, CheckpointSigner};
+use crate::dek_api::{self, DekKeyWrapper, HandleStore};
 use crate::workload_api;
 
 #[derive(Clone)]
@@ -25,6 +26,8 @@ pub struct AppState {
     agent_signer: Option<Arc<AgentTokenSigner>>,
     workload_verifier: Option<Arc<ExternalVerifier>>,
     workload_abuse: Arc<AbuseGuard>,
+    dek_kms: Option<Arc<dyn DekKeyWrapper>>,
+    deks: Arc<HandleStore>,
 }
 
 impl AppState {
@@ -36,6 +39,8 @@ impl AppState {
             agent_signer: None,
             workload_verifier: None,
             workload_abuse: Arc::new(AbuseGuard::default()),
+            dek_kms: None,
+            deks: Arc::new(HandleStore::default()),
         }
     }
 
@@ -61,6 +66,20 @@ impl AppState {
     pub fn with_workload_verifier(mut self, verifier: ExternalVerifier) -> Self {
         self.workload_verifier = Some(Arc::new(verifier));
         self
+    }
+
+    /// The KMS data keys are wrapped and unwrapped with.
+    pub fn with_dek_kms(mut self, kms: Arc<dyn DekKeyWrapper>) -> Self {
+        self.dek_kms = Some(kms);
+        self
+    }
+
+    pub(crate) fn dek_kms(&self) -> Option<&Arc<dyn DekKeyWrapper>> {
+        self.dek_kms.as_ref()
+    }
+
+    pub(crate) fn deks(&self) -> &HandleStore {
+        &self.deks
     }
 
     pub(crate) fn workload_verifier(&self) -> Option<&Arc<ExternalVerifier>> {
@@ -103,6 +122,8 @@ pub fn router(state: AppState) -> Router {
             post(agent_token_api::mint_workload),
         )
         .route("/v1/workload-tokens/verify", post(workload_api::verify))
+        .route("/v1/deks/wrap", post(dek_api::wrap))
+        .route("/v1/deks/unwrap", post(dek_api::unwrap))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_service_token,

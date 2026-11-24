@@ -39,6 +39,9 @@ uuid = { version = "1.29", features = ["serde"] }
 # The ledger's allow-listed event types (the core turns request strings into these).
 ls-envelope = { path = "../../crates/ls-envelope" }
 base64 = "0.22"
+ls-crypto = { path = "../../crates/ls-crypto" }
+# Same version ls-envelope uses; only for random handles and DEK ids.
+getrandom = "0.2"
 time = { version = "0.3.55", features = ["parsing", "formatting"] }
 ls-agent-token = { path = "../../crates/ls-agent-token" }
 ls-oidc-verify = { path = "../../crates/ls-oidc-verify" }

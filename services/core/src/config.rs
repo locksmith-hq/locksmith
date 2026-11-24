@@ -13,6 +13,11 @@ pub const ENV_AGENT_SIGNING_KEY: &str = "LOCKSMITH_CORE_AGENT_SIGNING_KEY";
 /// Local development only: `1` lets workload issuers live on loopback or private addresses.
 pub const ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS: &str =
     "LOCKSMITH_CORE_WORKLOAD_ALLOW_PRIVATE_ISSUERS";
+/// Token for DEK wrap and unwrap (a policy allowing `transit/encrypt` and `transit/decrypt` on the DEK key only).
+pub const ENV_DEK_TOKEN: &str = "LOCKSMITH_CORE_OPENBAO_DEK_TOKEN";
+pub const ENV_DEK_KEY: &str = "LOCKSMITH_CORE_DEK_KEY";
+pub const ENV_DEK_KEY_VERSION: &str = "LOCKSMITH_CORE_DEK_KEY_VERSION";
+pub const DEFAULT_DEK_KEY: &str = "gateway";
 pub const ENV_CHECKPOINT_KEY: &str = "LOCKSMITH_CORE_CHECKPOINT_KEY";
 pub const DEFAULT_CHECKPOINT_KEY: &str = "audit-checkpoint";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
@@ -44,6 +49,8 @@ pub struct Config {
     pub otlp_endpoint: Option<String>,
     /// OpenBao transit signing for audit checkpoints. `None` when the address or token is unset.
     pub checkpoint_kms: Option<CheckpointKms>,
+    /// OpenBao transit wrapping for data keys. `None` when the address or DEK token is unset.
+    pub dek_kms: Option<DekKms>,
     /// Base64 32-byte Ed25519 seed for agent tokens. Secret.
     pub agent_signing_key: Option<SecretString>,
     /// Whether workload issuers may be on private addresses (local development only).
@@ -55,6 +62,14 @@ pub struct CheckpointKms {
     pub addr: String,
     pub token: SecretString,
     pub key: String,
+}
+
+/// No `Debug`, `Display` or `Clone`: it holds the OpenBao token (wrap and unwrap policy).
+pub struct DekKms {
+    pub addr: String,
+    pub token: SecretString,
+    pub key: String,
+    pub key_version: u32,
 }
 
 impl Config {
@@ -75,20 +90,41 @@ impl Config {
         let database_url = get(ENV_DATABASE_URL)
             .filter(|v| !v.trim().is_empty())
             .map(SecretString::from);
-        let checkpoint_kms = match (
-            get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty()),
-            get(ENV_OPENBAO_TOKEN).filter(|v| !v.trim().is_empty()),
-        ) {
+        let addr = get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty());
+        let cp_token = get(ENV_OPENBAO_TOKEN).filter(|v| !v.trim().is_empty());
+        let dek_token = get(ENV_DEK_TOKEN).filter(|v| !v.trim().is_empty());
+        match (&addr, cp_token.is_some() || dek_token.is_some()) {
+            (Some(_), false) => return Err(ConfigError::Missing(ENV_OPENBAO_TOKEN)),
+            (None, true) => return Err(ConfigError::Missing(ENV_OPENBAO_ADDR)),
+            _ => {}
+        }
+        let checkpoint_kms = match (&addr, cp_token) {
             (Some(addr), Some(token)) => Some(CheckpointKms {
-                addr,
+                addr: addr.clone(),
                 token: SecretString::from(token),
                 key: get(ENV_CHECKPOINT_KEY)
                     .filter(|v| !v.trim().is_empty())
                     .unwrap_or_else(|| DEFAULT_CHECKPOINT_KEY.to_owned()),
             }),
-            (None, None) => None,
-            (Some(_), None) => return Err(ConfigError::Missing(ENV_OPENBAO_TOKEN)),
-            (None, Some(_)) => return Err(ConfigError::Missing(ENV_OPENBAO_ADDR)),
+            _ => None,
+        };
+        let dek_kms = match (&addr, dek_token) {
+            (Some(addr), Some(token)) => Some(DekKms {
+                addr: addr.clone(),
+                token: SecretString::from(token),
+                key: get(ENV_DEK_KEY)
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(|| DEFAULT_DEK_KEY.to_owned()),
+                key_version: match get(ENV_DEK_KEY_VERSION).filter(|v| !v.trim().is_empty()) {
+                    None => 1,
+                    Some(v) => v
+                        .parse::<u32>()
+                        .ok()
+                        .filter(|v| *v >= 1)
+                        .ok_or(ConfigError::Invalid(ENV_DEK_KEY_VERSION))?,
+                },
+            }),
+            _ => None,
         };
         let workload_allow_private_issuers =
             match get(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS).as_deref() {
@@ -103,6 +139,7 @@ impl Config {
             database_url,
             otlp_endpoint,
             checkpoint_kms,
+            dek_kms,
             agent_signing_key: get(ENV_AGENT_SIGNING_KEY)
                 .filter(|v| !v.trim().is_empty())
                 .map(SecretString::from),
@@ -157,6 +194,28 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(c.checkpoint_kms.unwrap().key, DEFAULT_CHECKPOINT_KEY);
+    }
+
+    #[test]
+    fn dek_kms_is_configured_by_its_own_token() {
+        let c = Config::from_lookup(|k| match k {
+            ENV_SERVICE_TOKEN => Some("t".into()),
+            ENV_OPENBAO_ADDR => Some("http://bao:8200".into()),
+            ENV_DEK_TOKEN => Some("x".into()),
+            _ => None,
+        })
+        .unwrap();
+        assert!(c.checkpoint_kms.is_none());
+        let k = c.dek_kms.unwrap();
+        assert_eq!((k.key.as_str(), k.key_version), (DEFAULT_DEK_KEY, 1));
+        let bad = Config::from_lookup(|k| match k {
+            ENV_SERVICE_TOKEN => Some("t".into()),
+            ENV_OPENBAO_ADDR => Some("http://bao:8200".into()),
+            ENV_DEK_TOKEN => Some("x".into()),
+            ENV_DEK_KEY_VERSION => Some("0".into()),
+            _ => None,
+        });
+        assert_eq!(bad.err(), Some(ConfigError::Invalid(ENV_DEK_KEY_VERSION)));
     }
 
     #[test]

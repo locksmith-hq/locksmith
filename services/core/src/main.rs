@@ -60,6 +60,15 @@ async fn main() -> ExitCode {
             }
         }
     }
+    if let Some(kms) = &config.dek_kms {
+        match ls_core_service::dek_api::openbao(kms) {
+            Ok(w) => state = state.with_dek_kms(w),
+            Err(_) => {
+                tracing::error!("invalid DEK key management configuration");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     if let Some(seed) = &config.agent_signing_key {
         use secrecy::ExposeSecret as _;
         match ls_agent_token::AgentTokenSigner::from_base64_seed(seed.expose_secret()) {

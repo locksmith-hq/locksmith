@@ -1,0 +1,33 @@
+# Installed by `crew init`. Install in the plan repo (issue and comment events) and in each code repo (CI and
+# review runs); the reusable workflow ignores events that do not belong to the repo it runs in.
+# Needs the roles' fire tokens as repo or org secrets, named as in crew.json roles.<role>.secret.
+# Wakes only; who wakes whom is decided by scripts/route.sh from crew.json.
+# Keep the workflow names in `workflows:` equal to your CI workflow's `name:` and to crew-review below.
+name: crew-wake
+
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [labeled, closed]
+  workflow_run:
+    workflows: [ci, claude-review]
+    types: [completed]
+  workflow_dispatch: {}  # the tick for batched roles: send it every 2 h from a clock, or add `schedule: [{cron: '7 */2 * * *'}]`
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  wake:
+    uses: locksmith-hq/claude-ai-crew/.github/workflows/wake.yml@3d2b271de0f8b04d4ef3934ce550db834a076a0d
+    with:
+      plan_repo: locksmith-hq/locksmith-roadmap
+      harness_repo: locksmith-hq/claude-ai-crew
+      harness_ref: 3d2b271de0f8b04d4ef3934ce550db834a076a0d
+      ci_workflow: ci
+      review_workflow: claude-review
+    secrets: inherit

@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-11-22
-# Contract first: the Rust control plane's openapi.json is the contract the NestJS API must satisfy.
-x-depends_on: []

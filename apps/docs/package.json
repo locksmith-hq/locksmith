@@ -5,6 +5,8 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   }
 }

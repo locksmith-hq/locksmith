@@ -1,0 +1,1 @@
+{"workspaceRoots":["__CWD__"],"preToolUse":{"toolName":"write_to_file","parameters":{"path":"README.md","content":"copy config/.env.example to .env"}}}

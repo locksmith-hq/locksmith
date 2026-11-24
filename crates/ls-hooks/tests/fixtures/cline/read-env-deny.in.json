@@ -1,0 +1,1 @@
+{"clineVersion":"4.1.27","hookName":"PreToolUse","timestamp":"1763719200000","taskId":"t1","workspaceRoots":["__CWD__"],"userId":"u1","preToolUse":{"toolName":"read_file","parameters":{"path":"__CWD__/.env"}}}

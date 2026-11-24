@@ -17,10 +17,18 @@ function fakeAuth(initial: AuthState) {
   let st = initial;
   let push: (s: AuthState) => void = () => {};
   const auth: AuthService = {
-    start: async () => {}, signIn: async () => {}, token: () => "t",
-    signOut: vi.fn(async () => { st = { status: "signed-out" }; push(st); }),
+    start: async () => {},
+    signIn: async () => {},
+    token: () => "t",
+    signOut: vi.fn(async () => {
+      st = { status: "signed-out" };
+      push(st);
+    }),
     getState: () => st,
-    subscribe: (fn) => { push = fn; return () => {}; },
+    subscribe: (fn) => {
+      push = fn;
+      return () => {};
+    },
   };
   return auth;
 }
@@ -80,7 +88,11 @@ test("frame: org switcher in the top bar, user card holds sign-out, Environments
 
 test("Environments keeps the project being viewed (not the first), even after another page", async () => {
   installFixtureFetch();
-  const res = await fetch("/v1/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "second" }) });
+  const res = await fetch("/v1/projects", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "second" }),
+  });
   const second = (await res.json()) as { id: string };
   window.history.pushState({}, "", `/projects/${second.id}`);
   render(<App auth={fakeAuth(signedIn)} />);

@@ -36,6 +36,9 @@ pub struct Grant {
     pub secret_id: Uuid,
     pub secret_name: String,
     pub mode: String,
+    /// The allow-list of a `delegate` grant (D2); `None` for `relay`.
+    #[serde(default)]
+    pub scope: Option<crate::aws_policy::AwsGrantScope>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
 }
@@ -49,6 +52,16 @@ impl Grant {
 
 /// The only mode `/v1/relay` serves.
 pub const MODE_RELAY: &str = "relay";
+/// The only mode `/v1/aws/credentials` serves (D2).
+pub const MODE_DELEGATE: &str = "delegate";
+
+/// The unexpired `delegate` grant for `secret_id` at `now`, if any (the first, in the control
+/// plane's order).
+pub fn delegate_grant(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) -> Option<&Grant> {
+    grants
+        .iter()
+        .find(|g| g.secret_id == secret_id && g.mode == MODE_DELEGATE && g.active_at(now))
+}
 
 /// Whether `grants` hold an unexpired relay grant for `secret_id` at `now`.
 pub fn allows_relay(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) -> bool {
@@ -82,6 +95,12 @@ impl GrantError {
 /// Reads an agent's unexpired grants.
 pub trait GrantSource: Send + Sync {
     fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>>;
+
+    /// The same read, never served from a cache. Long-lived sessions use it to re-check a grant,
+    /// so a revocation is seen on the next check and not one cache TTL later.
+    fn grants_uncached(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+        self.grants(agent_id)
+    }
 }
 
 #[derive(Deserialize)]
@@ -229,11 +248,24 @@ impl GrantCache {
         self.insert_at(agent_id, grants.clone(), started);
         Ok(grants)
     }
+
+    /// Fetch from the source and refresh the cached entry, so one revoked grant is not served
+    /// to other callers either.
+    async fn read_uncached(&self, agent_id: Uuid) -> Result<Vec<Grant>, GrantError> {
+        let started = Instant::now();
+        let grants = self.source.grants(agent_id).await?;
+        self.insert_at(agent_id, grants.clone(), started);
+        Ok(grants)
+    }
 }
 
 impl GrantSource for GrantCache {
     fn grants(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
         Box::pin(self.read(agent_id))
+    }
+
+    fn grants_uncached(&self, agent_id: Uuid) -> BoxFuture<'_, Result<Vec<Grant>, GrantError>> {
+        Box::pin(self.read_uncached(agent_id))
     }
 }
 
@@ -434,6 +466,7 @@ mod tests {
             secret_id,
             secret_name: "S".to_owned(),
             mode: mode.to_owned(),
+            scope: None,
             expires_at,
         }
     }
@@ -546,6 +579,19 @@ mod tests {
         // Refreshing an agent already in a full map evicts nothing.
         c.insert_at(e, Vec::new(), later);
         assert_eq!(c.lock().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn uncached_read_sees_a_revocation_the_cache_still_hides() {
+        let src = Arc::new(testkit::StubGrants::default());
+        let secret = Uuid::now_v7();
+        src.set(AGENT, vec![grant(secret, "relay", None)]);
+        let c = GrantCache::new(src.clone(), GrantCacheSettings::default());
+        assert_eq!(c.grants(AGENT).await.unwrap().len(), 1);
+        src.set(AGENT, Vec::new());
+        assert_eq!(c.grants(AGENT).await.unwrap().len(), 1, "cache is stale");
+        assert!(c.grants_uncached(AGENT).await.unwrap().is_empty());
+        assert!(c.grants(AGENT).await.unwrap().is_empty(), "cache refreshed");
     }
 
     #[tokio::test]

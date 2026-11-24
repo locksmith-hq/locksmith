@@ -65,6 +65,16 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "workload_identities",
         include_str!("../migrations/0013_workload_identities.sql"),
     ),
+    (
+        14,
+        "gateway bindings",
+        include_str!("../migrations/0014_gateway_bindings.sql"),
+    ),
+    (
+        15,
+        "grant delegate",
+        include_str!("../migrations/0015_grant_delegate.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

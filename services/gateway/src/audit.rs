@@ -116,8 +116,49 @@ pub enum EventKind {
     GitPush(Outcome),
     /// A refused Git call (`Outcome::is_denial`).
     GitDenied(Outcome),
+    /// A refused session on the Postgres listener (D3), after the agent token verified
+    /// (`Outcome::is_denial`).
+    DbDenied(Outcome),
+    /// A relayed Postgres session was established (D3); written before the upstream connect, and
+    /// the session is refused if the append fails.
+    DbOpened,
+    /// A relayed Postgres session ended (D3), with why and how much.
+    DbClosed(SessionClose),
     /// A short-lived credential was issued (outcome `ok`); the event carries [`Issued`].
     CredentialIssued,
+}
+
+/// Why a relayed Postgres session ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloseReason {
+    ClientClosed,
+    UpstreamClosed,
+    /// The grant behind the session was revoked or expired.
+    Revoked,
+    /// The agent token expired.
+    Expired,
+    Error,
+}
+
+impl CloseReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ClientClosed => "client_closed",
+            Self::UpstreamClosed => "upstream_closed",
+            Self::Revoked => "revoked",
+            Self::Expired => "expired",
+            Self::Error => "error",
+        }
+    }
+}
+
+/// The `db.session.closed` payload: a reason and numbers, never query text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionClose {
+    pub reason: CloseReason,
+    pub duration_ms: u64,
+    pub bytes_in: u64,
+    pub bytes_out: u64,
 }
 
 impl EventKind {
@@ -129,6 +170,9 @@ impl EventKind {
             Self::GitFetch(o) => ("git.fetch", o.as_str()),
             Self::GitPush(o) => ("git.push", o.as_str()),
             Self::GitDenied(o) => ("git.denied", o.as_str()),
+            Self::DbDenied(o) => ("db.session.denied", o.as_str()),
+            Self::DbOpened => ("db.session.opened", "ok"),
+            Self::DbClosed(_) => ("db.session.closed", "ok"),
             Self::CredentialIssued => ("credential.issued", "ok"),
         }
     }
@@ -232,8 +276,29 @@ impl std::error::Error for AuditError {}
 pub trait AuditSink: Send + Sync {
     fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
 
+    /// Append an AWS credential-vending event (D2).
+    fn append_aws(&self, ev: AwsEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+
     /// Append the `mcp.call` event for one `/mcp` tool call (m1-remote-mcp task 3.4).
     fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+}
+
+/// What happened to one `POST /v1/aws/credentials` call (D2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AwsEventKind {
+    /// Credentials were issued and returned; outcome `ok`.
+    Issued,
+    /// Refused or failed; never `ok` or `pending`.
+    Denied(Outcome),
+}
+
+impl AwsEventKind {
+    fn wire(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Issued => ("aws.credentials.issued", "ok"),
+            Self::Denied(o) => ("aws.credentials.denied", o.as_str()),
+        }
+    }
 }
 
 /// How an agent MCP call ended.
@@ -252,6 +317,33 @@ impl McpOutcome {
             Self::Error => "error",
         }
     }
+}
+
+/// One AWS credential event: the binding (its base-credential secret id names the bound role in
+/// the gateway's bindings file), its region, the clamped duration and the outcome. Never a key,
+/// a secret, a session token, a policy or an STS response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AwsEvent {
+    pub kind: AwsEventKind,
+    pub agent_id: Uuid,
+    /// The binding's base-credential secret (the event's target).
+    pub secret_id: Uuid,
+    /// The bound region (configuration, validated at load).
+    pub region: String,
+    /// The credential lifetime, once clamped.
+    pub duration_secs: Option<u32>,
+}
+
+/// The wire body of an AWS event on `POST /internal/v1/audit/events`.
+#[derive(Serialize)]
+struct WireAwsEvent {
+    kind: &'static str,
+    outcome: &'static str,
+    agent_id: Uuid,
+    secret_id: Uuid,
+    region: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_secs: Option<u32>,
 }
 
 /// Why a call was refused or failed: a closed set of static codes.
@@ -313,6 +405,14 @@ struct WireEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     attempt_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bytes_in: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bytes_out: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     credential_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     expires_at: Option<i64>,
@@ -334,17 +434,41 @@ impl HttpAudit {
         Self { control_plane }
     }
 
+    async fn post_aws(&self, ev: AwsEvent) -> Result<Uuid, AuditError> {
+        if ev.kind == AwsEventKind::Denied(Outcome::AuditUnavailable)
+            || ev.kind == AwsEventKind::Denied(Outcome::Ok)
+        {
+            return Err(AuditError::Rejected);
+        }
+        let (kind, outcome) = ev.kind.wire();
+        let body = serde_json::to_vec(&WireAwsEvent {
+            kind,
+            outcome,
+            agent_id: ev.agent_id,
+            secret_id: ev.secret_id,
+            region: ev.region,
+            duration_secs: ev.duration_secs,
+        })
+        .map_err(|_| AuditError::Rejected)?;
+        self.append_to(EVENTS_PATH, body, &[200, 201]).await
+    }
+
     async fn post(&self, ev: RelayEvent) -> Result<Uuid, AuditError> {
         // Never a ledger outcome: the ledger was unreachable when it happened.
         if let EventKind::Outcome(Outcome::AuditUnavailable)
         | EventKind::Denied(Outcome::AuditUnavailable)
         | EventKind::GitFetch(Outcome::AuditUnavailable)
         | EventKind::GitPush(Outcome::AuditUnavailable)
-        | EventKind::GitDenied(Outcome::AuditUnavailable) = ev.kind
+        | EventKind::GitDenied(Outcome::AuditUnavailable)
+        | EventKind::DbDenied(Outcome::AuditUnavailable) = ev.kind
         {
             return Err(AuditError::Rejected);
         }
         let (kind, outcome) = ev.kind.wire();
+        let closed = match ev.kind {
+            EventKind::DbClosed(c) => Some(c),
+            _ => None,
+        };
         let body = serde_json::to_vec(&WireEvent {
             kind,
             outcome,
@@ -357,6 +481,10 @@ impl HttpAudit {
             port: ev.port,
             status: ev.status,
             attempt_id: ev.attempt_id,
+            reason: closed.map(|c| c.reason.as_str()),
+            duration_ms: closed.map(|c| c.duration_ms),
+            bytes_in: closed.map(|c| c.bytes_in),
+            bytes_out: closed.map(|c| c.bytes_out),
             credential_id: ev.issued.map(|i| i.credential_id),
             expires_at: ev.issued.map(|i| i.expires_at),
         })
@@ -405,6 +533,10 @@ impl AuditSink for HttpAudit {
         Box::pin(self.post(ev))
     }
 
+    fn append_aws(&self, ev: AwsEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        Box::pin(self.post_aws(ev))
+    }
+
     fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         Box::pin(self.post_mcp_call(ev))
     }
@@ -421,6 +553,8 @@ pub struct MemoryAudit {
     pub fail_outcomes_first: Mutex<usize>,
     /// Every append tried, failed ones included.
     pub tries: Mutex<usize>,
+    /// Stored AWS events (D2); `fail` fails these too.
+    pub aws_events: Mutex<Vec<AwsEvent>>,
     /// The `mcp.call` events appended.
     pub mcp_calls: Mutex<Vec<McpCallEvent>>,
 }
@@ -449,6 +583,14 @@ impl MemoryAudit {
 
     pub fn tries(&self) -> usize {
         *self.tries.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The stored AWS events in order.
+    pub fn aws_events(&self) -> Vec<AwsEvent> {
+        self.aws_events
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
@@ -487,6 +629,20 @@ impl AuditSink for MemoryAudit {
                     .push((id, ev));
                 Ok(id)
             }
+        };
+        Box::pin(async move { result })
+    }
+
+    fn append_aws(&self, ev: AwsEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        *self.tries.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        let result = if self.fail {
+            Err(AuditError::Unavailable)
+        } else {
+            self.aws_events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(ev);
+            Ok(Uuid::now_v7())
         };
         Box::pin(async move { result })
     }

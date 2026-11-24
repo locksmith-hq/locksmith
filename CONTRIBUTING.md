@@ -25,7 +25,7 @@ just up      # optional: local stack (Postgres, telemetry, mocks)
 
 ## Pull request workflow
 1. Fork the repository and create a branch from `main`.
-2. Keep the change small and focused: one fix or feature per pull request. Larger features start as an OpenSpec change in `openspec/changes/<id>/` (proposal, design, tasks); open an issue first to agree the plan.
+2. Keep the change small and focused: one fix or feature per pull request. For a larger feature, open an issue first to agree the plan.
 3. Add or update tests for any behaviour change.
 4. Run `just quick` and the tests you touched (`cargo test -p <crate>`). The full `just ci` runs as required checks on every pull request; no need to run it locally.
 5. Write clear commit messages: a short imperative subject line (`ls-proxy: reject unsigned S3 requests`), then the why in the body.

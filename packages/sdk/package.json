@@ -10,8 +10,10 @@
   },
   "scripts": {
     "gen": "openapi-typescript ../../services/control-plane/openapi.json -o src/schema.d.ts",
-    "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   },
   "dependencies": {
     "openapi-fetch": "0.17.0"
@@ -19,6 +21,7 @@
   "devDependencies": {
     "@types/node": "^22.20.5",
     "openapi-typescript": "^7.13.0",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "typescript": "^5.7.0"
   }
 }

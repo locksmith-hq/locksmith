@@ -1,0 +1,1 @@
+{"cwd":"__CWD__","hook_event_name":"BeforeTool","tool_name":"grep_search","tool_input":{"pattern":"KEY","path":"__CWD__/.env"}}

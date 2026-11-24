@@ -1456,8 +1456,13 @@ mod tests {
 
         // A caller whose parent cannot be identified (it has exited): refused and audited.
         let (mut c, gone) = {
-            let c = std::process::Command::new("true").spawn().unwrap();
+            // `sleep`, not `true`: a fast-exiting child can be gone before `id_of` runs (macOS).
+            let mut c = std::process::Command::new("sleep")
+                .arg("60")
+                .spawn()
+                .unwrap();
             let id = id_of(c.id()).unwrap();
+            c.kill().unwrap();
             (c, id)
         };
         c.wait().unwrap();

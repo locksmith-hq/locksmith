@@ -131,6 +131,7 @@ pub struct Relay {
     audit: Arc<dyn AuditSink>,
     options: RelayOptions,
     git: crate::git::GitState,
+    aws: crate::aws::AwsOptions,
     /// Short-lived credentials issued over MCP (m1-remote-mcp task 3.3).
     short_lived: crate::short_lived::ShortLivedStore,
     /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
@@ -158,6 +159,7 @@ impl Relay {
             audit,
             options,
             git: crate::git::GitState::default(),
+            aws: crate::aws::AwsOptions::default(),
             short_lived: crate::short_lived::ShortLivedStore::default(),
             revoked_agents: None,
         }
@@ -193,6 +195,16 @@ impl Relay {
                 true
             }
         }
+    }
+
+    /// Replace the AWS route's options (D2): the STS endpoint override for tests and Floci.
+    pub fn with_aws(mut self, aws: crate::aws::AwsOptions) -> Self {
+        self.aws = aws;
+        self
+    }
+
+    pub(crate) fn aws(&self) -> &crate::aws::AwsOptions {
+        &self.aws
     }
 
     /// Replace the Git route's timeouts and token cache (D1).
@@ -397,7 +409,12 @@ impl CallAudit {
         let host_ok = match kind {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
-            EventKind::GitFetch(_) | EventKind::GitPush(_) | EventKind::GitDenied(_) => true,
+            EventKind::GitFetch(_)
+            | EventKind::GitPush(_)
+            | EventKind::GitDenied(_)
+            | EventKind::DbDenied(_)
+            | EventKind::DbOpened
+            | EventKind::DbClosed(_) => true,
             EventKind::CredentialIssued => false,
         };
         RelayEvent {
@@ -976,6 +993,7 @@ mod tests {
             secret_id,
             secret_name: name.to_owned(),
             mode: "relay".to_owned(),
+            scope: None,
             expires_at,
         }
     }
@@ -1176,6 +1194,8 @@ mod tests {
                 binding(INTERNAL, format!("http://internal.test:{port}"), false),
                 binding(DEAD, format!("http://dead.test:{dead_port}"), true),
             ],
+            aws_bindings: Vec::new(),
+            pg: Vec::new(),
             git_bindings: Vec::new(),
         };
         let control_plane =
@@ -1340,6 +1360,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_)
                     | EventKind::CredentialIssued => None,
                 })
                 .collect()
@@ -1364,6 +1387,9 @@ mod tests {
                     EventKind::GitFetch(_)
                     | EventKind::GitPush(_)
                     | EventKind::GitDenied(_)
+                    | EventKind::DbDenied(_)
+                    | EventKind::DbOpened
+                    | EventKind::DbClosed(_)
                     | EventKind::CredentialIssued => {}
                 }
             }
@@ -1944,6 +1970,8 @@ mod tests {
             Bindings {
                 org_id: ORG,
                 bindings: Vec::new(),
+                aws_bindings: Vec::new(),
+                pg: Vec::new(),
                 git_bindings: Vec::new(),
             },
             Decryptor::new(

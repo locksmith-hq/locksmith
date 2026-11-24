@@ -190,6 +190,24 @@ async fn non_allow_listed_bodies_are_400() {
         json!({"kind": "git.fetch", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "git.push", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         json!({"kind": "git.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        // AWS events (D2): region and duration only, issued only as `ok`.
+        json!({"kind": "aws.credentials.issued", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": "us-east-1", "duration_secs": 900}),
+        json!({"kind": "aws.credentials.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": "us-east-1"}),
+        json!({"kind": "aws.credentials.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": CANARY, "duration_secs": 900}),
+        json!({"kind": "aws.credentials.issued", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": "us-east-1", "duration_secs": 7200}),
+        json!({"kind": "aws.credentials.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": "us-east-1"}),
+        json!({"kind": "aws.credentials.denied", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": "us-east-1", "host": "sts.amazonaws.com"}),
+        json!({"kind": "relay.denied", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "region": "us-east-1"}),
+        // Postgres refusals (D3): only denial outcomes.
+        json!({"kind": "db.session.denied", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.denied", "outcome": "pending", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.denied", "outcome": "upstream_timeout", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        // Session events (D3): outcome `ok` only; `reason` only on the closing event.
+        json!({"kind": "db.session.opened", "outcome": "denied", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.opened", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "reason": "revoked"}),
+        json!({"kind": "db.session.opened", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "bytes_in": 1}),
+        json!({"kind": "db.session.closed", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
+        json!({"kind": "db.session.closed", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "reason": "query text"}),
         // An outcome must name its attempt (the idempotency key).
         json!({"kind": "relay.outcome", "outcome": "ok", "agent_id": Uuid::now_v7(), "secret_id": Uuid::now_v7()}),
         // A short-lived credential issue: outcome `ok`, its id and expiry, no upstream fields,
@@ -225,6 +243,8 @@ async fn git_events_append_to_the_chain() {
         ("git.fetch", "ok"),
         ("git.push", "upstream_timeout"),
         ("git.denied", "denied"),
+        ("db.session.denied", "no_grant"),
+        ("db.session.denied", "decrypt_failed"),
     ]
     .into_iter()
     .enumerate()
@@ -246,8 +266,100 @@ async fn git_events_append_to_the_chain() {
         [
             ("git.fetch", "ok"),
             ("git.push", "upstream_timeout"),
-            ("git.denied", "denied")
+            ("git.denied", "denied"),
+            ("db.session.denied", "no_grant"),
+            ("db.session.denied", "decrypt_failed")
         ]
+    );
+}
+
+/// AWS credential events (D2): `aws.credentials.issued` and `.denied` append with the region
+/// and duration as attributes and the binding's secret as the target.
+#[tokio::test]
+async fn aws_credential_events_append_to_the_chain() {
+    let f = Fixture::start().await;
+    let org = f.org("aws").await;
+    let auth = bearer(TOKEN);
+    let (agent, secret) = (Uuid::now_v7(), Uuid::now_v7());
+    for (n, ev) in [
+        json!({"kind": "aws.credentials.issued", "outcome": "ok", "agent_id": agent,
+               "secret_id": secret, "region": "eu-west-2", "duration_secs": 900}),
+        json!({"kind": "aws.credentials.denied", "outcome": "no_grant", "agent_id": agent,
+               "secret_id": secret, "region": "eu-west-2"}),
+        json!({"kind": "aws.credentials.denied", "outcome": "upstream_error", "agent_id": agent,
+               "secret_id": secret, "region": "eu-west-2", "duration_secs": 1800}),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let r = post_event(&f.app, Some(&auth), Some(org), ev).await;
+        assert_eq!(
+            (r.status, r.body["seq"].as_u64()),
+            (StatusCode::CREATED, Some(n as u64 + 1))
+        );
+    }
+    let rows = f.records(org).await;
+    assert_intact(&rows);
+    let seen: Vec<_> = rows
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("aws.credentials.issued", "ok"),
+            ("aws.credentials.denied", "no_grant"),
+            ("aws.credentials.denied", "upstream_error")
+        ]
+    );
+    let attrs = rows[0].attrs.as_ref().unwrap().to_json();
+    assert_eq!(
+        attrs,
+        json!({"duration_secs": {"int": 900}, "region": {"host": "eu-west-2"}})
+    );
+    assert_eq!(
+        rows[0].target.as_deref(),
+        Some(format!("secret:{secret}").as_str())
+    );
+}
+
+/// Session events (D3): `db.session.opened` then `db.session.closed` with reason, duration and
+/// byte counts, linked by `attempt_id`.
+#[tokio::test]
+async fn db_session_events_append_to_the_chain() {
+    let f = Fixture::start().await;
+    let org = f.org("dbsession").await;
+    let auth = bearer(TOKEN);
+    let (agent, secret) = (Uuid::now_v7(), Uuid::now_v7());
+    let opened = post_event(
+        &f.app,
+        Some(&auth),
+        Some(org),
+        &json!({"kind": "db.session.opened", "outcome": "ok", "agent_id": agent,
+                "secret_id": secret, "version": 1, "host": "db.internal", "port": 5432}),
+    )
+    .await;
+    assert_eq!(opened.status, StatusCode::CREATED);
+    let closed = post_event(
+        &f.app,
+        Some(&auth),
+        Some(org),
+        &json!({"kind": "db.session.closed", "outcome": "ok", "agent_id": agent,
+                "secret_id": secret, "version": 1, "host": "db.internal", "port": 5432,
+                "attempt_id": opened.body["id"], "reason": "revoked",
+                "duration_ms": 1234, "bytes_in": 10, "bytes_out": 2048}),
+    )
+    .await;
+    assert_eq!(closed.status, StatusCode::CREATED);
+    let rows = f.records(org).await;
+    assert_intact(&rows);
+    let seen: Vec<_> = rows
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    assert_eq!(
+        seen,
+        [("db.session.opened", "ok"), ("db.session.closed", "ok")]
     );
 }
 

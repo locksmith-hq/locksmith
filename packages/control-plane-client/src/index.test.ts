@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createClient } from "./index";
+import { ApiError, bindingDetails, createClient } from "./index";
+import { bindingSummaries } from "./fixtures";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -23,7 +24,14 @@ describe("console client", () => {
   });
 
   it("uses the right method and path for project and environment writes", async () => {
-    const f = stub(json({}), json({}), new Response(null, { status: 204 }), json({}), json({}), new Response(null, { status: 204 }));
+    const f = stub(
+      json({}),
+      json({}),
+      new Response(null, { status: 204 }),
+      json({}),
+      json({}),
+      new Response(null, { status: 204 }),
+    );
     const c = createClient("org");
     await c.createProject({ name: "a" });
     await c.updateProject("p/1", { name: "b" });
@@ -53,8 +61,41 @@ describe("console client", () => {
 
   it("surfaces the problem detail and status", async () => {
     stub(json({ title: "Conflict", detail: "name taken", status: 409 }, 409));
-    const err = await createClient("o").createProject({ name: "a" }).catch((e) => e);
+    const err = await createClient("o")
+      .createProject({ name: "a" })
+      .catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 409, message: "name taken" });
+  });
+
+  it("lists bindings with a GET and the fixtures carry no secret fields", async () => {
+    const f = stub(json({ items: bindingSummaries }));
+    const got = await createClient("org").listBindings();
+    expect(got.map((b) => b.kind)).toEqual(["http", "git", "pg", "aws"]);
+    expect(`${(f.mock.calls[0]![1] as RequestInit).method} ${f.mock.calls[0]![0]}`).toBe("GET /v1/bindings");
+    expect(JSON.stringify(bindingSummaries)).not.toMatch(/password|template|secret|token|key/i);
+  });
+
+  it("bindingDetails shows the non-secret fields per kind", () => {
+    const by = Object.fromEntries(bindingSummaries.map((b) => [b.kind, bindingDetails(b)]));
+    expect(by.pg).toEqual([
+      ["Host", "db.internal.example.com"],
+      ["Port", "5432"],
+      ["User", "app"],
+      ["Database", "appdb"],
+      ["TLS", "verify-full"],
+    ]);
+    expect(by.http).toEqual([
+      ["Origin", "https://api.example.com"],
+      ["Header", "Authorization"],
+    ]);
+    expect(by.git).toEqual([
+      ["Host", "github.com"],
+      ["Repo", "acme"],
+    ]);
+    expect(by.aws).toContainEqual(["Max duration", "900s"]);
+    expect(by.aws).toContainEqual(["Allowed actions", "s3:GetObject, s3:PutObject"]);
+    expect(bindingDetails({ kind: "aws", name: "r", allowed_actions: [] })).toEqual([["Allowed actions", "none"]]);
+    expect(by.pg!.map(([l]) => l)).not.toContain("Allowed actions");
   });
 });

@@ -24,7 +24,7 @@ quick base="origin/main":
       done
       if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
     fi
-    if grep -q '^apps/web/' <<<"$files"; then npm run lint -w apps/web; fi
+    if grep -qE '\.(tsx?|mjs|js)$|^knip\.json$|^\.oxfmtrc\.json$|^\.oxlintrc\.json$' <<<"$files"; then npx turbo run lint format:check knip typecheck; fi
 
 fmt:
     cargo fmt --all --check
@@ -64,18 +64,14 @@ apps-build-test:
 # Regenerate packages/api-types from crates/ls-ipc (ts-rs).
 api-types:
     cargo test -p ls-ipc --features ts export_bindings
+    npx --yes oxfmt@0.79.0 -c .oxfmtrc.json packages/api-types/src
 
 tree-check:
     scripts/tree-check.sh
 
-# Agents on change branches may only tick OpenSpec tasks, not rewrite them.
+# Merge-review tier selftest.
 task-guard:
-    scripts/check-task-edits.test.sh
-    scripts/change-status.test.sh
-    scripts/agent-identity.sh selftest
-    scripts/route.sh selftest
-    scripts/check-task-edits.sh
-    scripts/check-agent-docs.sh
+    scripts/review-tier.sh selftest
 
 # Public-readiness hygiene: licences, root docs, links, denylist, secret canary.
 public-check:
@@ -235,6 +231,11 @@ api:
     export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 LOCKSMITH_MCP_RESOURCE_URL=http://127.0.0.1:8080/mcp OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
 
+# B4 API contract suite: `just api-contract <url>` records a normalised transcript under target/api-contract/;
+# `just api-contract --diff <url-a> <url-b>` compares two servers (needs `just up` and `just api`).
+api-contract *args:
+    bash scripts/api-contract.sh {{args}}
+
 # T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
 # Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.
 web-e2e *args:
@@ -282,6 +283,24 @@ connector-smoke:
     cargo build -q -p smith-cli --bin smith
     cargo build -q -p locksmith-mcp
     cargo nextest run -p ls-e2e --test connector
+
+# D3 Postgres relay smoke test (needs `just up`, `just api` and psql): the test starts its own
+# gateway with a pg listener, creates a SCRAM role on the compose Postgres and runs real `psql`
+# through `smith db connect --gateway`; asserts the result and that no file holds the agent token or
+# the database password. Run `just leak-scan` after.
+db-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test db_relay
+
+# D2 AWS vend smoke (P1 owns `aws-smoke`, the real-AWS session smoke; this one is local on Floci; needs `just up` for Floci and `just api`; `pip install awscli`): the real `aws` CLI
+# gets scoped, short-lived STS credentials from the gateway through `smith aws setup` and
+# `credential_process`; asserts the assumed-role identity, expiry and that the agent HOME holds no
+# key. Skips with a note without `aws` or Floci unless E2E_REQUIRE_AWS is set. Run `just leak-scan` after.
+aws-vend-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test aws_smoke --no-capture
 
 # D4 workload-identity smoke (needs `just up` and `just workload-smoke-api`): an in-process
 # GitHub-shaped OIDC stub issuer (TLS on loopback) and runner endpoint; `smith login --workload

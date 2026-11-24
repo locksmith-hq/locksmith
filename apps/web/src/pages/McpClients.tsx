@@ -10,9 +10,15 @@ export function McpClients({ client }: { client: Client }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    setClients(null); setError(null);
-    client.listMcpClients().then((c) => live && setClients(c), (e) => live && setError(errMsg(e)));
-    return () => { live = false; };
+    setClients(null);
+    setError(null);
+    client.listMcpClients().then(
+      (c) => live && setClients(c),
+      (e) => live && setError(errMsg(e)),
+    );
+    return () => {
+      live = false;
+    };
   }, [client]);
 
   const revoke = async (c: McpClient) => {
@@ -20,25 +26,53 @@ export function McpClients({ client }: { client: Client }) {
     try {
       const u = await client.revokeMcpClient(c.id);
       setClients((cur) => cur?.map((x) => (x.id === u.id ? u : x)) ?? cur);
-    } catch (e) { setError(errMsg(e)); }
+    } catch (e) {
+      setError(errMsg(e));
+    }
   };
 
   const label = (c: McpClient) => c.client_name || c.client_id;
   return (
     <section aria-label="Clients">
       <Head title="MCP clients" />
-      {error && <p role="alert" className="state">{error}</p>}
-      {!clients ? (error ? null : <p>Loading clients…</p>) : clients.length === 0 ? <p>No MCP clients have signed in yet.</p> : (
+      {error && (
+        <p role="alert" className="state">
+          {error}
+        </p>
+      )}
+      {!clients ? (
+        error ? null : (
+          <p>Loading clients…</p>
+        )
+      ) : clients.length === 0 ? (
+        <p>No MCP clients have signed in yet.</p>
+      ) : (
         <table className="grid">
           <thead>
-            <tr><th>Client</th><th>Layer</th><th>Principal</th><th>Last seen</th><th>Status</th><th></th></tr>
+            <tr>
+              <th>Client</th>
+              <th>Layer</th>
+              <th>Principal</th>
+              <th>Last seen</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
           </thead>
           <tbody>
             {clients.map((c) => (
               <tr key={c.id}>
-                <td>{label(c)}</td><td>{layerName(c.layer)}</td><td>{c.principal}</td><td>{c.last_seen_at}</td>
+                <td>{label(c)}</td>
+                <td>{layerName(c.layer)}</td>
+                <td>{c.principal}</td>
+                <td>{c.last_seen_at}</td>
                 <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
-                <td>{!c.revoked_at && <button className="btn sm danger" onClick={() => void revoke(c)}>Revoke {label(c)}</button>}</td>
+                <td>
+                  {!c.revoked_at && (
+                    <button className="btn sm danger" onClick={() => void revoke(c)}>
+                      Revoke {label(c)}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -1,6 +1,6 @@
 name: claude-review
 
-# The `merge-ready` commit status, a required check on main (docs/agents/merge.md). PRs merge through GitHub
+# The `merge-ready` commit status, a required check on main (merge policy: claude-ai-crew prompts/merge-policy.md). PRs merge through GitHub
 # auto-merge: the author (or the lead, on a worker PR) runs `gh pr merge --auto --merge`, which starts this job;
 # GitHub merges once every required check is green. A push to a PR with auto-merge on re-runs it.
 # The status is set only here, so a PR whose job never ran has no status and cannot merge (a skipped job would
@@ -9,7 +9,9 @@ name: claude-review
 #   2. owned paths (main's .github/CODEOWNERS, last match wins) need the owner's approval of this head (or of a head with the same PR diff); an owner
 #      review re-runs the job;
 #   3. complete: every tasks.md the PR touches is fully ticked (planning-only PRs exempt, #112);
-#   4. review: an independent Claude (Opus) review posts "merge-review <sha>: PASS|FAIL"; a PASS for an earlier
+#   5. reviewer by risk (scripts/review-tier.sh): Opus for secret paths and the trust root, Sonnet for other code,
+#      none for docs/planning-only diffs (merge-ready passes on CI and the guard alone);
+#   4. review: an independent Claude review posts "merge-review <sha>: PASS|FAIL"; a PASS for an earlier
 #      head still counts while the PR's own diff (patch-id against main) is unchanged, e.g. after merging main in.
 # Plus on-demand @claude mentions from people with write access.
 on:
@@ -53,10 +55,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - id: bots
-        # App bots may open PRs: the list comes from main's routing.json (never the PR's copy), so a rename is one edit there.
+        # App bots that may open PRs: the single place to edit.
         run: |
-          git fetch -q origin main
-          echo "list=$(git show origin/main:docs/agents/routing.json | jq -r '[.roles[].logins[]?|select(endswith("[bot]"))|rtrimstr("[bot]")]|unique|join(",")')" >>"$GITHUB_OUTPUT"
+          echo "list=captain-america-locksmith,hulk-locksmith,iron-man-locksmith,locksmith-ada,locksmith-alfie,locksmith-harriet,locksmith-josie,locksmith-linus,locksmith-walt,nick-fury-locksmith,spider-man-locksmith,thor-locksmith" >>"$GITHUB_OUTPUT"
       - id: pre
         run: |
           st() { gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f context=merge-ready -f state="$1" -f description="$2" \
@@ -106,8 +107,18 @@ jobs:
              [ "$(pid "$vsha")" = "$(pid HEAD)" ]; then
             st success "review PASS for $vsha still applies"; echo done=1 >>"$GITHUB_OUTPUT"; exit 0
           fi
-          st pending "Claude review running"
+          # 5 reviewer by risk (main's scripts/review-tier.sh, never the PR's; missing on main -> opus)
+          { git show origin/main:scripts/review-tier.sh >"$RUNNER_TEMP/review-tier.sh" &&
+            tier=$(git diff --name-only origin/main...HEAD | bash "$RUNNER_TEMP/review-tier.sh"); } 2>/dev/null || tier=opus
+          case "$tier" in
+            none) st success "no model review: docs or planning only"; echo done=1 >>"$GITHUB_OUTPUT"; exit 0 ;;
+            sonnet) echo model=claude-sonnet-5-5 >>"$GITHUB_OUTPUT" ;;
+            *) echo model=claude-opus-5-5 >>"$GITHUB_OUTPUT" ;;
+          esac
+          echo "::notice::review tier $tier"
+          st pending "Claude review running ($tier)"
       - if: steps.pre.outputs.done != '1'
+        id: review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -115,8 +126,17 @@ jobs:
           show_full_output: true
           allowed_bots: ${{ steps.bots.outputs.list }}
           claude_args: >-
-            --model claude-opus-5-5 --max-turns 40
+            --model ${{ steps.pre.outputs.model }} --max-turns 40
             --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),mcp__github_inline_comment__create_inline_comment"
+      # Review spend as a check annotation, so the optimizer can count tokens per PR from the API.
+      - if: steps.pre.outputs.done != '1' && !cancelled() && steps.review.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXEC: ${{ steps.review.outputs.execution_file }}
+        run: |
+          u=$(jq -r '[.[]|select(.type == "result")][-1]|"turns=\(.num_turns // "?") in=\(.usage.input_tokens // 0) cache_read=\(.usage.cache_read_input_tokens // 0) cache_write=\(.usage.cache_creation_input_tokens // 0) out=\(.usage.output_tokens // 0) cost_usd=\(.total_cost_usd // "?")"' "$EXEC")
+          echo "::notice title=review usage::model=${{ steps.pre.outputs.model }} $u"
+          echo "review usage: model=${{ steps.pre.outputs.model }} $u" >>"$GITHUB_STEP_SUMMARY"
       - if: steps.pre.outputs.done != '1' && !cancelled()
         run: |
           st() { gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f context=merge-ready -f state="$1" -f description="$2" \
@@ -126,7 +146,7 @@ jobs:
           vsha=$(sed -nE 's/^merge-review ([0-9a-f]{7,40}): (PASS|FAIL).*/\1/p' <<<"$v")
           res=$(sed -nE 's/^merge-review ([0-9a-f]{7,40}): (PASS|FAIL).*/\2/p' <<<"$v")
           if [ -z "$vsha" ] || [[ "$SHA" != "$vsha"* ]]; then st error "no review verdict for $SHA"; exit 1; fi
-          # Labels are informational; wake-agents wakes the PR's author when this run ends.
+          # Labels are informational; the crew's wake workflow wakes the PR's author when this run ends.
           label=review-passed; [ "$res" = PASS ] || label=review-failed
           gh api "repos/$GITHUB_REPOSITORY/issues/$N/labels" -f "labels[]=$label" >/dev/null
           if [ "$res" = PASS ]; then st success "Claude review PASS"; else st failure "Claude review FAIL: fix the findings and push"; exit 1; fi

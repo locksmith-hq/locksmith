@@ -81,6 +81,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/gateway/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the org's binding inventory (gateway only)
+         * @description The gateway publishes its non-secret binding inventory at startup. The body replaces the org's latest snapshot, which `GET /v1/bindings` serves. Fields are names, hosts, ports, users, databases, header names and similar; a password, header template, a `secret_id` on any kind but `aws`, or any unknown field is a `400`; the `aws` secret id is stored as the join key to `delegate` grants and never served.
+         */
+        put: operations["put_gateway_bindings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/mcp/agent-calls": {
         parameters: {
             query?: never;
@@ -374,6 +394,23 @@ export interface paths {
         put?: never;
         /** Record a sign-out in the audit ledger */
         post: operations["auth_sign_out"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the gateway's bindings (non-secret fields only) */
+        get: operations["list_bindings"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -711,6 +748,7 @@ export interface components {
             /** Format: uuid */
             grant_id: string;
             mode: components["schemas"]["GrantMode"];
+            scope?: components["schemas"]["GrantScope"] | null;
             /** Format: uuid */
             secret_id: string;
             secret_name: string;
@@ -750,6 +788,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             mode: components["schemas"]["GrantMode"];
+            scope?: components["schemas"]["GrantScope"] | null;
             /** Format: uuid */
             secret_id: string;
             secret_name: string;
@@ -895,6 +934,64 @@ export interface components {
              */
             truncated_at?: number | null;
         };
+        /**
+         * @description What a binding lets the gateway do.
+         * @enum {string}
+         */
+        BindingKind: "http" | "git" | "pg" | "aws";
+        /** @description Every binding the gateway reports for the org. */
+        BindingList: {
+            items: components["schemas"]["BindingSummary"][];
+        };
+        /** @description The gateway's full inventory. It replaces the org's previous snapshot. */
+        BindingSnapshot: {
+            items: components["schemas"]["PublishedBinding"][];
+        };
+        /** @description One gateway binding, non-secret fields only. Which optional fields are set depends on `kind`. */
+        BindingSummary: {
+            /**
+             * @description `aws`: the IAM actions the org's unexpired `delegate` grants on this binding allow
+             *     (sorted, de-duplicated; names only, never resources). Computed on read, never published.
+             */
+            allowed_actions?: string[] | null;
+            /** @description `pg`: the bound database. */
+            database?: string | null;
+            /** @description `http`: the header the secret is injected into (never its value or template). */
+            header?: string | null;
+            /** @description `pg`, `git`: the upstream host. */
+            host?: string | null;
+            kind: components["schemas"]["BindingKind"];
+            /**
+             * Format: int32
+             * @description `aws`: the longest vended session, in seconds.
+             */
+            max_duration_secs?: number | null;
+            /** @description Display name: the database name (`pg`), the origin or host (`http`, `git`), the role (`aws`). */
+            name: string;
+            /** @description `http`: the exact upstream origin. */
+            origin?: string | null;
+            /**
+             * Format: int32
+             * @description `pg`: the upstream port.
+             */
+            port?: number | null;
+            /** @description `aws`: the region. */
+            region?: string | null;
+            /** @description `git`: `owner` or `owner/repo`. */
+            repo?: string | null;
+            /** @description `aws`: the role ARN. */
+            role?: string | null;
+            tls?: components["schemas"]["BindingTls"] | null;
+            /** @description `pg`: the bound database user. */
+            user?: string | null;
+            /** @description `aws`: whether short-lived credentials may be vended. */
+            vend?: boolean | null;
+        };
+        /**
+         * @description How the gateway reaches a Postgres upstream.
+         * @enum {string}
+         */
+        BindingTls: "require" | "verify-full" | "disable";
         /** @description One claim test as shown to callers: `pattern` ends in `*` for a prefix match. */
         ConditionView: {
             claim: string;
@@ -914,10 +1011,22 @@ export interface components {
             updated_at: string;
         };
         /**
-         * @description How a grant lets the agent use the secret. S4 has relay only.
+         * @description How a grant lets the agent use the secret.
          * @enum {string}
          */
-        GrantMode: "relay";
+        GrantMode: "relay" | "delegate";
+        /** @description The allow-list a `delegate` grant carries: what the vended credentials may do. */
+        GrantScope: {
+            /** @description IAM actions, for example `s3:GetObject`. */
+            actions?: string[];
+            /**
+             * Format: int32
+             * @description Upper bound on a credential's lifetime in seconds.
+             */
+            max_duration_secs?: number | null;
+            /** @description Resource ARNs the actions apply to. */
+            resources?: string[];
+        };
         /** @description One public key in the JWKS (RFC 7517, RFC 8037 `OKP`/`Ed25519`). */
         Jwk: {
             /** @description Always `EdDSA`. */
@@ -1006,6 +1115,7 @@ export interface components {
             expires_at?: string | null;
             /** @description Defaults to `relay`. */
             mode?: components["schemas"]["GrantMode"];
+            scope?: components["schemas"]["GrantScope"] | null;
             /**
              * Format: uuid
              * @description The secret the agent may relay (same org).
@@ -1070,10 +1180,30 @@ export interface components {
              */
             attempt_id?: string | null;
             /**
+             * Format: int64
+             * @description Bytes relayed client to upstream (`db.session.closed` only).
+             */
+            bytes_in?: number | null;
+            /**
+             * Format: int64
+             * @description Bytes relayed upstream to client (`db.session.closed` only).
+             */
+            bytes_out?: number | null;
+            /**
              * Format: uuid
              * @description The id of the short-lived credential (`credential.issued` only; never the credential).
              */
             credential_id?: string | null;
+            /**
+             * Format: int64
+             * @description Session length in milliseconds (`db.session.closed` only).
+             */
+            duration_ms?: number | null;
+            /**
+             * Format: int32
+             * @description Lifetime of the vended credentials (`aws.credentials.*` only; required for `issued`).
+             */
+            duration_secs?: number | null;
             /**
              * Format: int64
              * @description When the short-lived credential expires, Unix seconds (`credential.issued` only).
@@ -1092,6 +1222,9 @@ export interface components {
              * @description Upstream port, when the URL names one explicitly.
              */
             port?: number | null;
+            reason?: components["schemas"]["SessionCloseReason"] | null;
+            /** @description AWS region of the binding (`aws.credentials.*` only, required there), e.g. `us-east-1`. */
+            region?: string | null;
             /**
              * Format: uuid
              * @description The secret the call used (the event's target).
@@ -1175,6 +1308,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 mode: components["schemas"]["GrantMode"];
+                scope?: components["schemas"]["GrantScope"] | null;
                 /** Format: uuid */
                 secret_id: string;
                 secret_name: string;
@@ -1304,10 +1438,54 @@ export interface components {
             updated_at: string;
         };
         /**
+         * @description One binding as the gateway publishes it: the [`BindingSummary`] fields plus, for `aws` only,
+         *     the binding's base-credential secret id. That id is stored as the join key to the org's
+         *     `delegate` grants (d2 design decision 8) and is never served.
+         */
+        PublishedBinding: {
+            /** @description `pg`: the bound database. */
+            database?: string | null;
+            /** @description `http`: the header the secret is injected into (never its value or template). */
+            header?: string | null;
+            /** @description `pg`, `git`: the upstream host. */
+            host?: string | null;
+            kind: components["schemas"]["BindingKind"];
+            /**
+             * Format: int32
+             * @description `aws`: the longest vended session, in seconds.
+             */
+            max_duration_secs?: number | null;
+            /** @description Display name: the database name (`pg`), the origin or host (`http`, `git`), the role (`aws`). */
+            name: string;
+            /** @description `http`: the exact upstream origin. */
+            origin?: string | null;
+            /**
+             * Format: int32
+             * @description `pg`: the upstream port.
+             */
+            port?: number | null;
+            /** @description `aws`: the region. */
+            region?: string | null;
+            /** @description `git`: `owner` or `owner/repo`. */
+            repo?: string | null;
+            /** @description `aws`: the role ARN. */
+            role?: string | null;
+            /**
+             * Format: uuid
+             * @description `aws`: the base-credential secret id (an id, never a value). Refused on other kinds.
+             */
+            secret_id?: string | null;
+            tls?: components["schemas"]["BindingTls"] | null;
+            /** @description `pg`: the bound database user. */
+            user?: string | null;
+            /** @description `aws`: whether short-lived credentials may be vended. */
+            vend?: boolean | null;
+        };
+        /**
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "credential.issued";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued";
         /**
          * @description The upstream request method.
          * @enum {string}
@@ -1380,6 +1558,11 @@ export interface components {
             /** @description A0-7 `dek-wrap` blob (the KMS-wrapped data key), standard base64 with padding. */
             wrapped_dek: string;
         };
+        /**
+         * @description Why a relayed Postgres session ended (`db.session.closed`).
+         * @enum {string}
+         */
+        SessionCloseReason: "client_closed" | "upstream_closed" | "revoked" | "expired" | "error";
         /**
          * @description A trust policy. The `handle` is the non-secret routing value a workload sends to the
          *     exchange route.
@@ -1586,6 +1769,85 @@ export interface operations {
             };
             /** @description `relay.outcome` already recorded for this `attempt_id` with different fields */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_gateway_bindings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the gateway acts for (the token's `org`) */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindingSnapshot"];
+            };
+        };
+        responses: {
+            /** @description Stored */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2828,6 +3090,62 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Missing or invalid org binding */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_bindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The org's bindings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingList"];
+                };
             };
             /** @description Missing or invalid org binding */
             401: {

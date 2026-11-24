@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-11-20
-# t1-human-auth is archived on main, so nothing unarchived is needed (scripts/change-status.sh --plannable lists this row).
-x-depends_on: []

@@ -89,6 +89,16 @@ pub mod kind {
     pub const GIT_FETCH: Code = Code::new("git.fetch");
     pub const GIT_PUSH: Code = Code::new("git.push");
     pub const GIT_DENIED: Code = Code::new("git.denied");
+    /// Short-lived AWS credentials issued by the gateway (D2).
+    pub const AWS_CREDENTIALS_ISSUED: Code = Code::new("aws.credentials.issued");
+    /// A refused or failed AWS credential request (D2).
+    pub const AWS_CREDENTIALS_DENIED: Code = Code::new("aws.credentials.denied");
+    /// A refused session on the gateway's Postgres listener (D3).
+    pub const DB_SESSION_DENIED: Code = Code::new("db.session.denied");
+    /// A relayed Postgres session was established (D3).
+    pub const DB_SESSION_OPENED: Code = Code::new("db.session.opened");
+    /// A relayed Postgres session ended (D3): `reason`, duration and byte counts.
+    pub const DB_SESSION_CLOSED: Code = Code::new("db.session.closed");
     pub const AGENT_CREATED: Code = Code::new("agent.created");
     pub const AGENT_ROTATED: Code = Code::new("agent.rotated");
     pub const AGENT_DELETED: Code = Code::new("agent.deleted");
@@ -149,6 +159,16 @@ pub mod attr {
     pub const ISSUER: Code = Code::new("issuer");
     /// Static reason code for a refusal.
     pub const REASON: Code = Code::new("reason");
+    /// AWS region of vended credentials (D2), stored as a validated host label.
+    pub const REGION: Code = Code::new("region");
+    /// Lifetime of vended credentials in seconds (D2).
+    pub const DURATION_SECS: Code = Code::new("duration_secs");
+    /// Session length in milliseconds.
+    pub const DURATION_MS: Code = Code::new("duration_ms");
+    /// Bytes relayed from the client to the upstream.
+    pub const BYTES_IN: Code = Code::new("bytes_in");
+    /// Bytes relayed from the upstream to the client.
+    pub const BYTES_OUT: Code = Code::new("bytes_out");
     /// The MCP server layer (`hub` or `agent`).
     pub const LAYER: Code = Code::new("layer");
     /// The MCP tool name, from the registry (`unknown` for a name the registry does not have).

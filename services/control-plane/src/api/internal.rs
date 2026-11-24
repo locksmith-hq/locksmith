@@ -12,8 +12,9 @@
 //! same service token and org scoping apply.
 //!
 //! `POST /internal/v1/audit/events` appends a relay event (`relay.attempt`, `relay.outcome`,
-//! `relay.denied`, for Git `git.fetch`, `git.push`, `git.denied`, and `credential.issued` for a
-//! short-lived credential the agent MCP issued) to the org's audit ledger (S5 design decision 5). The body is typed end to
+//! `relay.denied`, for Git `git.fetch`, `git.push`, `git.denied`, `credential.issued` for a
+//! short-lived credential the agent MCP issued, and for AWS credential vending
+//! `aws.credentials.issued`, `aws.credentials.denied`) to the org's audit ledger (S5 design decision 5). The body is typed end to
 //! end: kinds, outcomes and methods are closed enums mapped to static codes, ids are UUIDs, the
 //! host is validated as a bare host name or IP, and unknown fields are refused. There is no field
 //! for a URL, path, query, header or body, so none of them can reach the ledger.
@@ -29,7 +30,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::agents::{GrantMode, grant_cols, optional_utc};
+use super::agents::{GrantMode, GrantScope, grant_cols, optional_utc, scope_from_row};
 use super::extract::{ApiJson, ApiPath};
 use super::responses::{InternalReadErrors, InternalWriteErrors};
 use super::{all, exists_or_404, one};
@@ -127,6 +128,8 @@ pub struct ActiveGrant {
     pub secret_id: Uuid,
     pub secret_name: String,
     pub mode: GrantMode,
+    /// The allow-list of a `delegate` grant; `null` for `relay`.
+    pub scope: Option<GrantScope>,
     /// `null` when the grant does not expire. The gateway must still refuse it at or after this
     /// time, even while cached.
     #[serde(with = "time::serde::rfc3339::option")]
@@ -188,6 +191,7 @@ pub async fn agent_grants(
                         secret_id: r.try_get("secret_id")?,
                         secret_name: r.try_get("secret_name")?,
                         mode: GrantMode::parse(r.try_get::<&str, _>("mode")?)?,
+                        scope: scope_from_row(r)?,
                         expires_at: optional_utc(r, "expires_at")?,
                     })
                 })
@@ -220,6 +224,25 @@ pub enum RelayEventKind {
     /// A refused Git call; outcome `denied`, `grants_unavailable`, `no_grant` or `denied_address`.
     #[serde(rename = "git.denied")]
     GitDenied,
+    /// Short-lived AWS credentials issued (D2); outcome `ok`, with `region` and `duration_secs`.
+    #[serde(rename = "aws.credentials.issued")]
+    AwsIssued,
+    /// A refused or failed AWS credential request (D2); any outcome but `pending` and `ok`, with
+    /// `region`.
+    #[serde(rename = "aws.credentials.denied")]
+    AwsDenied,
+    /// A refused Postgres session on the gateway's pg listener (D3); a denial outcome, or
+    /// `upstream_unreachable`, `material_error` or `decrypt_failed` (refused before any upstream
+    /// connect).
+    #[serde(rename = "db.session.denied")]
+    DbSessionDenied,
+    /// A relayed Postgres session was established (D3); outcome `ok`.
+    #[serde(rename = "db.session.opened")]
+    DbSessionOpened,
+    /// A relayed Postgres session ended (D3); outcome `ok`, with `reason`, `duration_ms`,
+    /// `bytes_in` and `bytes_out` (and `attempt_id`: the `db.session.opened` event's id).
+    #[serde(rename = "db.session.closed")]
+    DbSessionClosed,
     /// The gateway issued a short-lived credential scoped to the secret (m1-remote-mcp task 3.3,
     /// decision H1-2); outcome `ok`, with `credential_id` and `expires_at`. Written before the
     /// credential is usable, so a failed append means nothing was issued.
@@ -236,8 +259,17 @@ impl RelayEventKind {
             Self::GitFetch => kind::GIT_FETCH,
             Self::GitPush => kind::GIT_PUSH,
             Self::GitDenied => kind::GIT_DENIED,
+            Self::AwsIssued => kind::AWS_CREDENTIALS_ISSUED,
+            Self::AwsDenied => kind::AWS_CREDENTIALS_DENIED,
+            Self::DbSessionDenied => kind::DB_SESSION_DENIED,
+            Self::DbSessionOpened => kind::DB_SESSION_OPENED,
+            Self::DbSessionClosed => kind::DB_SESSION_CLOSED,
             Self::CredentialIssued => kind::CREDENTIAL_ISSUED,
         }
+    }
+
+    fn is_aws(self) -> bool {
+        matches!(self, Self::AwsIssued | Self::AwsDenied)
     }
 }
 
@@ -284,6 +316,34 @@ impl RelayOutcome {
             self,
             Self::Denied | Self::NoGrant | Self::GrantsUnavailable | Self::DeniedAddress
         )
+    }
+}
+
+/// Why a relayed Postgres session ended (`db.session.closed`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionCloseReason {
+    /// The client disconnected.
+    ClientClosed,
+    /// The upstream database closed the connection.
+    UpstreamClosed,
+    /// The grant behind the session was revoked or expired.
+    Revoked,
+    /// The agent token expired.
+    Expired,
+    /// The relay failed before or during the session.
+    Error,
+}
+
+impl SessionCloseReason {
+    fn code(self) -> Code {
+        match self {
+            Self::ClientClosed => Code::new("client_closed"),
+            Self::UpstreamClosed => Code::new("upstream_closed"),
+            Self::Revoked => Code::new("revoked"),
+            Self::Expired => Code::new("expired"),
+            Self::Error => Code::new("error"),
+        }
     }
 }
 
@@ -340,10 +400,34 @@ pub struct NewRelayEvent {
     /// append returned). Required for `relay.outcome`, and its idempotency key: an outcome
     /// resent for the same attempt returns the stored event instead of appending another.
     pub attempt_id: Option<Uuid>,
+    /// Why the session ended; required for `db.session.closed`, refused elsewhere.
+    pub reason: Option<SessionCloseReason>,
+    /// Session length in milliseconds (`db.session.closed` only).
+    pub duration_ms: Option<u64>,
+    /// Bytes relayed client to upstream (`db.session.closed` only).
+    pub bytes_in: Option<u64>,
+    /// Bytes relayed upstream to client (`db.session.closed` only).
+    pub bytes_out: Option<u64>,
     /// The id of the short-lived credential (`credential.issued` only; never the credential).
     pub credential_id: Option<Uuid>,
     /// When the short-lived credential expires, Unix seconds (`credential.issued` only).
     pub expires_at: Option<i64>,
+    /// AWS region of the binding (`aws.credentials.*` only, required there), e.g. `us-east-1`.
+    pub region: Option<String>,
+    /// Lifetime of the vended credentials (`aws.credentials.*` only; required for `issued`).
+    #[schema(minimum = 900, maximum = 3600)]
+    pub duration_secs: Option<u32>,
+}
+
+/// An AWS region code: lowercase letters, digits and inner hyphens.
+fn valid_region(r: &str) -> bool {
+    !r.is_empty()
+        && r.len() <= 32
+        && !r.starts_with('-')
+        && !r.ends_with('-')
+        && r.contains('-')
+        && r.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 impl NewRelayEvent {
@@ -356,10 +440,39 @@ impl NewRelayEvent {
                 self.outcome != RelayOutcome::Pending && !self.outcome.is_denial()
             }
             RelayEventKind::Denied | RelayEventKind::GitDenied => self.outcome.is_denial(),
+            RelayEventKind::AwsIssued => self.outcome == RelayOutcome::Ok,
+            RelayEventKind::AwsDenied => {
+                !matches!(self.outcome, RelayOutcome::Ok | RelayOutcome::Pending)
+            }
+            RelayEventKind::DbSessionDenied => {
+                self.outcome.is_denial()
+                    || matches!(
+                        self.outcome,
+                        RelayOutcome::UpstreamUnreachable
+                            | RelayOutcome::MaterialError
+                            | RelayOutcome::DecryptFailed
+                    )
+            }
+            RelayEventKind::DbSessionOpened | RelayEventKind::DbSessionClosed => {
+                self.outcome == RelayOutcome::Ok
+            }
             RelayEventKind::CredentialIssued => self.outcome == RelayOutcome::Ok,
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        let closed = self.kind == RelayEventKind::DbSessionClosed;
+        if closed != self.reason.is_some() {
+            return Err(ApiError::validation(
+                "`reason` is required for `db.session.closed` and refused otherwise",
+            ));
+        }
+        if !closed
+            && (self.duration_ms.is_some() || self.bytes_in.is_some() || self.bytes_out.is_some())
+        {
+            return Err(ApiError::validation(
+                "`duration_ms`, `bytes_in` and `bytes_out` are for `db.session.closed` only",
+            ));
         }
         // An issue names the credential and its expiry and nothing about an upstream call; no
         // other kind carries either field.
@@ -384,11 +497,58 @@ impl NewRelayEvent {
                 "`credential_id` and `expires_at` are for `credential.issued` only",
             ));
         }
+        let mut attrs = Attrs::new();
+        if self.kind.is_aws() {
+            // Binding, region, duration and outcome only.
+            if self.version.is_some()
+                || self.method.is_some()
+                || self.host.is_some()
+                || self.port.is_some()
+                || self.status.is_some()
+                || self.attempt_id.is_some()
+            {
+                return Err(ApiError::validation(
+                    "`aws.credentials.*` takes only `region` and `duration_secs`",
+                ));
+            }
+            let region = self
+                .region
+                .as_deref()
+                .filter(|r| valid_region(r))
+                .and_then(|r| Host::parse(r).ok())
+                .ok_or_else(|| ApiError::validation("`region` must be an AWS region code"))?;
+            attrs = attrs.host(attr::REGION, region);
+            match self.duration_secs {
+                Some(d) if (900..=3600).contains(&d) => {
+                    attrs = attrs.int(attr::DURATION_SECS, i64::from(d));
+                }
+                Some(_) => {
+                    return Err(ApiError::validation("`duration_secs` must be 900 to 3600"));
+                }
+                None if self.kind == RelayEventKind::AwsIssued => {
+                    return Err(ApiError::validation(
+                        "`aws.credentials.issued` needs `duration_secs`",
+                    ));
+                }
+                None => {}
+            }
+            return Ok(Event {
+                kind: self.kind.code(),
+                actor: Actor::Agent(self.agent_id),
+                target: Some(Target::Secret(self.secret_id)),
+                outcome: self.outcome.code(),
+                attrs,
+            });
+        }
+        if self.region.is_some() || self.duration_secs.is_some() {
+            return Err(ApiError::validation(
+                "`region` and `duration_secs` are for `aws.credentials.*` only",
+            ));
+        }
         // The outcome is idempotent on its attempt (design decision 5), so it must name one.
         if self.kind == RelayEventKind::Outcome && self.attempt_id.is_none() {
             return Err(ApiError::validation("`relay.outcome` needs `attempt_id`"));
         }
-        let mut attrs = Attrs::new();
         if let Some(v) = self.version {
             if v == 0 {
                 return Err(ApiError::validation("`version` must be at least 1"));
@@ -415,6 +575,19 @@ impl NewRelayEvent {
         }
         if let Some(a) = self.attempt_id {
             attrs = attrs.id(attr::ATTEMPT_ID, a);
+        }
+        if let Some(r) = self.reason {
+            attrs = attrs.code(attr::REASON, r.code());
+        }
+        for (key, v) in [
+            (attr::DURATION_MS, self.duration_ms),
+            (attr::BYTES_IN, self.bytes_in),
+            (attr::BYTES_OUT, self.bytes_out),
+        ] {
+            if let Some(v) = v {
+                // Saturate rather than wrap: the ledger integer is signed.
+                attrs = attrs.int(key, i64::try_from(v).unwrap_or(i64::MAX));
+            }
         }
         if let Some(c) = self.credential_id {
             attrs = attrs.id(attr::CREDENTIAL_ID, c);

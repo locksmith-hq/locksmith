@@ -1,0 +1,48 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [],
+      "project": []
+    },
+    "apps/web": {
+      "entry": [
+        "src/mockup/main.tsx",
+        "src/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ]
+    },
+    "apps/desktop": {
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/ui": {
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/control-plane-client": {
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "tests/api-contract": {
+      "entry": [
+        "src/run.ts",
+        "src/scenarios/*.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/sdk": {
+      "project": [
+        "src/**/*.ts"
+      ]
+    }
+  }
+}

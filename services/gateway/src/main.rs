@@ -9,6 +9,7 @@ use ls_envelope::{BaoToken, OpenBaoTransit, WrapKeyId};
 use ls_gateway::app::{self, AppState};
 use ls_gateway::audit::HttpAudit;
 use ls_gateway::auth::{AgentAuth, HttpJwks, JwksSettings};
+use ls_gateway::bindings_publish;
 use ls_gateway::config::{self, Config};
 use ls_gateway::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
 use ls_gateway::egress::SystemResolver;
@@ -16,6 +17,7 @@ use ls_gateway::grants::{GrantCache, GrantCacheSettings};
 use ls_gateway::mcp_clients::ClientsCache;
 use ls_gateway::mcp_endpoint::McpEndpoint;
 use ls_gateway::mcp_settings::SettingsCache;
+use ls_gateway::pg::{Connector, PgListener, PgListenerOptions, PgRelayUpstream, tls_acceptor};
 use ls_gateway::relay::{Relay, RelayOptions};
 use ls_gateway::ttl::MAX_CACHE_TTL;
 use secrecy::ExposeSecret;
@@ -133,12 +135,24 @@ async fn main() -> ExitCode {
     // Agent MCP clients and their revoke (task 4.2): recorded on initialize, the revoked set
     // read on every `/mcp` request through a cache of at most 10 s, failing closed.
     let clients = Arc::new(ClientsCache::new(control_plane.clone(), MAX_CACHE_TTL));
-    let audit = Arc::new(HttpAudit::new(control_plane));
+    let audit = Arc::new(HttpAudit::new(control_plane.clone()));
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)
         .with_settings_source(tool_settings)
         .with_clients(clients.clone());
     let binding_count = config.bindings.bindings.len();
+    if config.aws_sts_endpoint.is_some() {
+        tracing::warn!(
+            "{} is set: AWS credentials are requested from a non-AWS STS endpoint (local use only)",
+            config::ENV_AWS_STS_ENDPOINT
+        );
+    }
+    let aws = ls_gateway::aws::AwsOptions {
+        sts_endpoint: config.aws_sts_endpoint.clone(),
+    };
+    // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
+    // only logs and never blocks the relay.
+    bindings_publish::spawn_publish(control_plane, bindings_publish::summaries(&config.bindings));
     let relay = Relay::new(
         auth,
         grants,
@@ -149,13 +163,73 @@ async fn main() -> ExitCode {
         RelayOptions::default(),
     )
     // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
-    .with_revoked_agents(clients);
+    .with_revoked_agents(clients)
+    .with_aws(aws);
 
-    let router = app::build(
-        AppState::new(readiness)
-            .with_relay(Arc::new(relay))
-            .with_mcp(mcp),
-    );
+    let relay = Arc::new(relay);
+
+    // Postgres listener (D3), off unless LOCKSMITH_GATEWAY_PG_LISTEN is set. TLS is required
+    // before startup, so it does not start without a certificate and key.
+    let pg_task = match &config.pg_listen {
+        None => None,
+        Some(pg) => {
+            let cert = std::fs::read(&pg.cert_path).ok();
+            let key = std::fs::read(&pg.key_path)
+                .ok()
+                .map(zeroize::Zeroizing::new);
+            let (Some(cert), Some(key)) = (cert, key) else {
+                tracing::error!(
+                    "pg listener TLS files could not be read ({}, {})",
+                    config::ENV_PG_TLS_CERT,
+                    config::ENV_PG_TLS_KEY
+                );
+                return ExitCode::FAILURE;
+            };
+            let tls = match tls_acceptor(&cert, &key) {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!(error = %e, "pg listener TLS setup failed");
+                    return ExitCode::FAILURE;
+                }
+            };
+            drop(key);
+            let listener = match tokio::net::TcpListener::bind(pg.addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to bind pg listen address ({})", config::ENV_PG_LISTEN);
+                    return ExitCode::FAILURE;
+                }
+            };
+            let connector = match ls_http::tls_config()
+                .ok()
+                .and_then(|c| Connector::new(c).ok())
+            {
+                Some(c) => c,
+                None => {
+                    tracing::error!("pg upstream TLS client setup failed");
+                    return ExitCode::FAILURE;
+                }
+            };
+            let upstream = Arc::new(PgRelayUpstream::new(connector));
+            let pg_listener = Arc::new(
+                PgListener::new(
+                    relay.clone(),
+                    tls,
+                    upstream.clone(),
+                    PgListenerOptions::default(),
+                )
+                .with_cancel_map(upstream.cancel_map()),
+            );
+            tracing::info!(addr = %pg.addr, bindings = relay.bindings().pg.len(), "pg listener started");
+            Some(tokio::spawn(async move {
+                if let Err(e) = pg_listener.serve(listener).await {
+                    tracing::error!(error = %e, "pg listener stopped");
+                }
+            }))
+        }
+    };
+
+    let router = app::build(AppState::new(readiness).with_relay(relay).with_mcp(mcp));
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {
@@ -172,6 +246,9 @@ async fn main() -> ExitCode {
         .await;
     probe.abort();
     sweeper.abort();
+    if let Some(t) = pg_task {
+        t.abort();
+    }
     database.close().await;
     let _ = tokio::task::spawn_blocking(move || telemetry.shutdown()).await;
     match served {

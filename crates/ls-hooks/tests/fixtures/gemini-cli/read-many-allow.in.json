@@ -1,0 +1,1 @@
+{"cwd":"__CWD__","hook_event_name":"BeforeTool","tool_name":"read_many_files","tool_input":{"include":["README.md","src/**/*.rs"],"recursive":true}}

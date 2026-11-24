@@ -11,17 +11,37 @@ function SecretList({ client }: { client: Client }) {
   const [pid, setPid] = useState("");
   const [eid, setEid] = useState("");
   const project = pid || projects.data?.[0]?.id || "";
-  const envs = useQuery({ queryKey: ["environments", project], queryFn: () => client.listEnvironments(project), enabled: !!project });
+  const envs = useQuery({
+    queryKey: ["environments", project],
+    queryFn: () => client.listEnvironments(project),
+    enabled: !!project,
+  });
   const env = eid || envs.data?.[0]?.id || "";
-  const secrets = useQuery({ queryKey: ["secrets", project, env], queryFn: () => client.listSecrets(project, env), enabled: !!project && !!env });
+  const secrets = useQuery({
+    queryKey: ["secrets", project, env],
+    queryFn: () => client.listSecrets(project, env),
+    enabled: !!project && !!env,
+  });
   return (
     <>
       <Head title="Secrets" />
       <QueryState query={projects} empty="No projects yet, so no secrets.">
         {(ps: Project[]) => (
-          <label className="muted">Project{" "}
-            <select aria-label="Project" value={project} onChange={(e) => { setPid(e.target.value); setEid(""); }}>
-              {ps.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <label className="muted">
+            Project{" "}
+            <select
+              aria-label="Project"
+              value={project}
+              onChange={(e) => {
+                setPid(e.target.value);
+                setEid("");
+              }}
+            >
+              {ps.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
           </label>
         )}
@@ -29,9 +49,14 @@ function SecretList({ client }: { client: Client }) {
       {project && (
         <QueryState query={envs} empty="No environments in this project.">
           {(es: Environment[]) => (
-            <label className="muted">Environment{" "}
+            <label className="muted">
+              Environment{" "}
               <select aria-label="Environment" value={env} onChange={(e) => setEid(e.target.value)}>
-                {es.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                {es.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
               </select>
             </label>
           )}
@@ -57,19 +82,44 @@ function SecretList({ client }: { client: Client }) {
 function SecretDetail({ client }: { client: Client }) {
   const { pid = "", eid = "", sid = "" } = useParams();
   const secret = useQuery({ queryKey: ["secret", pid, eid, sid], queryFn: () => client.getSecret(pid, eid, sid) });
-  const versions = useQuery({ queryKey: ["secret-versions", pid, eid, sid], queryFn: () => client.listSecretVersions(pid, eid, sid) });
+  const versions = useQuery({
+    queryKey: ["secret-versions", pid, eid, sid],
+    queryFn: () => client.listSecretVersions(pid, eid, sid),
+  });
   return (
     <>
-      <nav className="crumbs"><Link to="/secrets">All secrets</Link></nav>
+      <nav className="crumbs">
+        <Link to="/secrets">All secrets</Link>
+      </nav>
       <QueryState query={secret}>
-        {(s: Secret) => <><Head title={s.name} /><p>{s.description}</p><p>Updated {s.updated_at}</p></>}
+        {(s: Secret) => (
+          <>
+            <Head title={s.name} />
+            <p>{s.description}</p>
+            <p>Updated {s.updated_at}</p>
+          </>
+        )}
       </QueryState>
       <h3>Versions</h3>
       <QueryState query={versions} empty="No versions yet.">
         {(vs: SecretVersion[]) => (
           <table className="grid">
-            <thead><tr><th>Version</th><th>Key</th><th>Created</th></tr></thead>
-            <tbody>{vs.map((v) => <tr key={v.version}><td>{v.version}</td><td>{v.key_id}</td><td>{v.created_at}</td></tr>)}</tbody>
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Key</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vs.map((v) => (
+                <tr key={v.version}>
+                  <td>{v.version}</td>
+                  <td>{v.key_id}</td>
+                  <td>{v.created_at}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         )}
       </QueryState>

@@ -21,6 +21,15 @@ pub const ENV_OPENBAO_ADDR: &str = "OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "OPENBAO_GATEWAY_TOKEN";
 pub const ENV_OPENBAO_KEY: &str = "OPENBAO_TRANSIT_KEY";
 pub const ENV_BINDINGS: &str = "LOCKSMITH_GATEWAY_BINDINGS";
+/// STS endpoint override for `/v1/aws/credentials` (D2): local and test use only (Floci or a stub). Unset in
+/// production, where the regional `https://sts.<region>.amazonaws.com/` is called.
+pub const ENV_AWS_STS_ENDPOINT: &str = "LOCKSMITH_GATEWAY_AWS_STS_ENDPOINT";
+/// Postgres listener address (D3). Unset: no listener.
+pub const ENV_PG_LISTEN: &str = "LOCKSMITH_GATEWAY_PG_LISTEN";
+/// PEM certificate chain the Postgres listener presents (required with [`ENV_PG_LISTEN`]).
+pub const ENV_PG_TLS_CERT: &str = "LOCKSMITH_GATEWAY_PG_TLS_CERT";
+/// PEM private key for [`ENV_PG_TLS_CERT`] (required with [`ENV_PG_LISTEN`]).
+pub const ENV_PG_TLS_KEY: &str = "LOCKSMITH_GATEWAY_PG_TLS_KEY";
 /// Comma-separated public host names (`host` or `host:port`) `/mcp` accepts in the `Host`
 /// header, on top of loopback (DNS rebinding protection). Optional.
 pub const ENV_MCP_ALLOWED_HOSTS: &str = "LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS";
@@ -44,6 +53,11 @@ pub enum ConfigError {
         index: usize,
         field: &'static str,
     },
+    /// A `[[pg]]` binding is invalid; names the binding's index and the field.
+    PgBinding {
+        index: usize,
+        field: &'static str,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -59,6 +73,9 @@ impl fmt::Display for ConfigError {
             }
             Self::Binding { index, field } => {
                 write!(f, "binding #{index} has an invalid `{field}`")
+            }
+            Self::PgBinding { index, field } => {
+                write!(f, "pg binding #{index} has an invalid `{field}`")
             }
         }
     }
@@ -78,8 +95,20 @@ pub struct Config {
     pub service_token: SecretString,
     pub openbao: OpenBaoConfig,
     pub bindings: Bindings,
+    /// [`ENV_AWS_STS_ENDPOINT`]: tests and the local Floci smoke only.
+    pub aws_sts_endpoint: Option<String>,
+    /// The Postgres listener (D3), when [`ENV_PG_LISTEN`] is set.
+    pub pg_listen: Option<PgListenConfig>,
     /// Extra `Host` values `/mcp` accepts ([`ENV_MCP_ALLOWED_HOSTS`]).
     pub mcp_allowed_hosts: Vec<String>,
+}
+
+/// Where the Postgres listener binds and the TLS files it serves (paths only; the key is read
+/// at startup).
+pub struct PgListenConfig {
+    pub addr: SocketAddr,
+    pub cert_path: String,
+    pub key_path: String,
 }
 
 /// OpenBao transit settings for unwrapping DEKs: the gateway's decrypt-capable token.
@@ -105,6 +134,49 @@ pub struct Binding {
     pub allow_private_hosts: bool,
 }
 
+/// TLS mode for the upstream Postgres leg of a `[[pg]]` binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PgTls {
+    Require,
+    VerifyFull,
+    Disable,
+}
+
+fn default_pg_port() -> u16 {
+    5432
+}
+
+fn default_pg_tls() -> PgTls {
+    PgTls::Require
+}
+
+fn default_pg_version() -> u32 {
+    1
+}
+
+/// One Postgres database an agent may reach through the relay (D3). There is deliberately no
+/// password field: the password is the secret `secret_id`, decrypted per session.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PgBinding {
+    /// The client's `database` startup parameter.
+    pub name: String,
+    pub secret_id: Uuid,
+    /// Secret version decrypted for the session (as `[[git_binding]]`). Default 1.
+    #[serde(default = "default_pg_version")]
+    pub version: u32,
+    pub host: String,
+    #[serde(default = "default_pg_port")]
+    pub port: u16,
+    pub user: String,
+    pub database: String,
+    #[serde(default = "default_pg_tls")]
+    pub tls: PgTls,
+    #[serde(default)]
+    pub allow_private_hosts: bool,
+}
+
 /// The bindings file: the org the gateway acts for, and its bindings.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -112,6 +184,11 @@ pub struct Bindings {
     pub org_id: Uuid,
     #[serde(default, rename = "binding")]
     pub bindings: Vec<Binding>,
+    /// AWS credential-vending bindings (D2); none by default.
+    #[serde(default, rename = "aws_binding")]
+    pub aws_bindings: Vec<crate::aws_policy::AwsBinding>,
+    #[serde(default, rename = "pg")]
+    pub pg: Vec<PgBinding>,
     /// Git repositories a secret may be used for through `/git/...` (D1).
     #[serde(default, rename = "git_binding")]
     pub git_bindings: Vec<crate::git::GitBinding>,
@@ -128,6 +205,17 @@ impl Bindings {
     fn validate(&self) -> Result<(), ConfigError> {
         let mut seen = HashSet::new();
         let mut git_seen = HashSet::new();
+        let mut aws_seen = HashSet::new();
+        for (index, a) in self.aws_bindings.iter().enumerate() {
+            a.validate()
+                .map_err(|field| ConfigError::Binding { index, field })?;
+            if !aws_seen.insert(a.secret_id) {
+                return Err(ConfigError::Binding {
+                    index,
+                    field: "aws_binding.secret_id",
+                });
+            }
+        }
         for (index, g) in self.git_bindings.iter().enumerate() {
             g.validate()
                 .map_err(|field| ConfigError::Binding { index, field })?;
@@ -163,7 +251,44 @@ impl Bindings {
                 return Err(bad("template"));
             }
         }
+        let mut names = HashSet::new();
+        let mut pg_secrets = HashSet::new();
+        for (index, b) in self.pg.iter().enumerate() {
+            let bad = |field| ConfigError::PgBinding { index, field };
+            if b.name.is_empty() || !names.insert(b.name.as_str()) {
+                return Err(bad("name"));
+            }
+            if !pg_secrets.insert(b.secret_id) {
+                return Err(bad("secret_id"));
+            }
+            if b.version == 0 {
+                return Err(bad("version"));
+            }
+            if b.host.is_empty()
+                || b.host
+                    .chars()
+                    .any(|c| c.is_whitespace() || c.is_control() || c == '/')
+            {
+                return Err(bad("host"));
+            }
+            if b.user.is_empty() || b.database.is_empty() {
+                return Err(bad("user"));
+            }
+            if b.tls == PgTls::Disable && !b.allow_private_hosts {
+                return Err(bad("tls"));
+            }
+        }
         Ok(())
+    }
+
+    /// The AWS binding for `secret_id`, if any.
+    pub fn aws_for_secret(&self, secret_id: Uuid) -> Option<&crate::aws_policy::AwsBinding> {
+        self.aws_bindings.iter().find(|b| b.secret_id == secret_id)
+    }
+
+    /// The Postgres binding named `name`, if any.
+    pub fn pg_by_name(&self, name: &str) -> Option<&PgBinding> {
+        self.pg.iter().find(|b| b.name == name)
     }
 
     /// The Git binding for `secret_id`, if any.
@@ -240,6 +365,31 @@ impl Config {
         let text = read_file(&path).ok_or(ConfigError::BindingsUnreadable)?;
         let bindings = Bindings::parse(&text)?;
 
+        let aws_sts_endpoint = match get(ENV_AWS_STS_ENDPOINT).filter(|v| !v.trim().is_empty()) {
+            None => None,
+            Some(v) => Some(
+                Url::parse(&v)
+                    .ok()
+                    .filter(|u| {
+                        matches!(u.scheme(), "http" | "https")
+                            && u.host_str().is_some()
+                            && u.username().is_empty()
+                            && u.password().is_none()
+                    })
+                    .map(|_| v)
+                    .ok_or(ConfigError::Invalid(ENV_AWS_STS_ENDPOINT))?,
+            ),
+        };
+
+        let pg_listen = match get(ENV_PG_LISTEN).filter(|v| !v.trim().is_empty()) {
+            None => None,
+            Some(v) => Some(PgListenConfig {
+                addr: v.parse().map_err(|_| ConfigError::Invalid(ENV_PG_LISTEN))?,
+                cert_path: required(ENV_PG_TLS_CERT)?,
+                key_path: required(ENV_PG_TLS_KEY)?,
+            }),
+        };
+
         let mcp_allowed_hosts = get(ENV_MCP_ALLOWED_HOSTS)
             .map(|v| {
                 v.split(',')
@@ -258,6 +408,8 @@ impl Config {
             service_token,
             openbao,
             bindings,
+            aws_sts_endpoint,
+            pg_listen,
             mcp_allowed_hosts,
         })
     }
@@ -341,6 +493,67 @@ mod tests {
         e.insert(ENV_SERVICE_TOKEN, "hunter2".to_owned());
         let msg = load(&e, &bindings_toml("")).err().unwrap().to_string();
         assert!(!msg.contains("hunter2"), "{msg}");
+    }
+
+    const PG: &str = "\n[[pg]]\nname = \"app\"\nsecret_id = \"0197c1f0-0000-7000-8000-000000000003\"\nhost = \"postgres\"\nuser = \"app_rw\"\ndatabase = \"app\"\n";
+
+    #[test]
+    fn pg_config_accepts_fixture_and_defaults() {
+        let c = load(&env(), &bindings_toml(PG)).expect("valid");
+        let b = c.bindings.pg_by_name("app").expect("binding");
+        assert_eq!(
+            (b.port, b.tls, b.allow_private_hosts, b.version),
+            (5432, PgTls::Require, false, 1)
+        );
+        assert!(c.pg_listen.is_none(), "the pg listener is off by default");
+    }
+
+    #[test]
+    fn pg_config_listener_needs_an_address_and_tls_files() {
+        let mut e = env();
+        e.insert(ENV_PG_LISTEN, "127.0.0.1:6432".to_owned());
+        assert_eq!(
+            load(&e, &bindings_toml("")).err(),
+            Some(ConfigError::Missing(ENV_PG_TLS_CERT))
+        );
+        e.insert(ENV_PG_TLS_CERT, "/etc/pg.crt".to_owned());
+        assert_eq!(
+            load(&e, &bindings_toml("")).err(),
+            Some(ConfigError::Missing(ENV_PG_TLS_KEY))
+        );
+        e.insert(ENV_PG_TLS_KEY, "/etc/pg.key".to_owned());
+        let c = load(&e, &bindings_toml("")).expect("valid");
+        let l = c.pg_listen.expect("listener configured");
+        assert_eq!(l.addr, "127.0.0.1:6432".parse().unwrap());
+        e.insert(ENV_PG_LISTEN, "not an address".to_owned());
+        assert_eq!(
+            load(&e, &bindings_toml("")).err(),
+            Some(ConfigError::Invalid(ENV_PG_LISTEN))
+        );
+    }
+
+    #[test]
+    fn pg_config_rejects_bad_bindings() {
+        let err = |extra: &str| load(&env(), &bindings_toml(extra)).err();
+        let field = |f| Some(ConfigError::PgBinding { index: 1, field: f });
+        // Password fields do not exist.
+        assert!(err(&format!("{PG}password = \"x\"\n")).is_some());
+        // Duplicate name.
+        let dup_name = PG.replace("000000000003", "000000000004");
+        assert_eq!(err(&format!("{PG}{dup_name}")), field("name"));
+        // Duplicate secret.
+        let dup_secret = PG.replace("\"app\"\nsecret", "\"app2\"\nsecret");
+        assert_eq!(err(&format!("{PG}{dup_secret}")), field("secret_id"));
+        // tls disable only with allow_private_hosts.
+        let off = format!("{PG}tls = \"disable\"\n");
+        assert_eq!(
+            err(&off),
+            Some(ConfigError::PgBinding {
+                index: 0,
+                field: "tls"
+            })
+        );
+        assert!(err(&format!("{off}allow_private_hosts = true\n")).is_none());
     }
 
     #[test]

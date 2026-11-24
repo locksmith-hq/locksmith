@@ -10,6 +10,7 @@
 
 pub(crate) mod agents;
 pub(crate) mod audit;
+mod bindings;
 pub(crate) mod environments;
 pub(crate) mod extract;
 mod internal;
@@ -84,6 +85,8 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(session::sign_out))
         .routes(routes!(audit::list_events))
         .routes(routes!(audit::status))
+        .routes(routes!(bindings::list))
+        .routes(routes!(bindings::put_snapshot))
         .routes(routes!(mcp::list_tools))
         .routes(routes!(mcp::update_tool))
         .routes(routes!(mcp::list_clients))

@@ -205,6 +205,12 @@ impl State {
         ))
     }
 
+    /// The agent token as a secret, for `smith db connect --gateway`: the caller puts it in a
+    /// child process environment (`PGPASSWORD`) and nowhere else.
+    pub fn token_secret(&self) -> SecretString {
+        SecretString::from(self.token.expose_secret().to_owned())
+    }
+
     /// Redactor for this agent's own token.
     pub fn redactor(&self) -> Redactor {
         Redactor::new(&[Secret::new("TOKEN", self.token.expose_secret().as_bytes())])
@@ -507,6 +513,71 @@ pub fn relay(st: &State, req: RelayRequest) -> Result<RelayOutput> {
         headers,
         body,
     })
+}
+
+/// `POST /v1/aws/credentials` (D2): short-lived STS credentials as the AWS CLI `credential_process`
+/// document `{"Version":1,"AccessKeyId","SecretAccessKey","SessionToken","Expiration"}`.
+///
+/// The document is the credential: it is returned in a zeroizing buffer and never logged. The
+/// response is parsed and re-serialized, so nothing else the server sent can reach the output.
+/// Every failure is one fixed message: no status, slug, server or transport text.
+pub fn aws_credentials(st: &State, duration_secs: Option<u32>) -> Result<Zeroizing<String>> {
+    const DENIED: &str = "AWS credentials were not issued (not granted, token expired or gateway \
+                          unavailable); run `smith doctor` to check";
+    let body = match duration_secs {
+        Some(d) => json!({ "duration_secs": d }),
+        None => json!({}),
+    };
+    let resp = client()?
+        .post(format!("{}/v1/aws/credentials", st.gateway_url))
+        .bearer_auth(st.token.expose_secret())
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .map_err(|_| fail(DENIED))?;
+    if !resp.status().is_success() {
+        return Err(fail(DENIED));
+    }
+    let raw = read_body(resp).map_err(|_| fail(DENIED))?;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct In {
+        version: u8,
+        access_key_id: String,
+        secret_access_key: String,
+        session_token: String,
+        expiration: String,
+    }
+    #[derive(Serialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Out<'a> {
+        version: u8,
+        access_key_id: &'a str,
+        secret_access_key: &'a str,
+        session_token: &'a str,
+        expiration: &'a str,
+    }
+    let doc: In = serde_json::from_slice(&raw).map_err(|_| fail(DENIED))?;
+    let held = Zeroizing::new((
+        doc.access_key_id,
+        doc.secret_access_key,
+        doc.session_token,
+        doc.expiration,
+    ));
+    let (k, sk, t, e) = &*held;
+    if doc.version != 1 || [k, sk, t, e].iter().any(|v| v.is_empty()) {
+        return Err(fail(DENIED));
+    }
+    serde_json::to_string(&Out {
+        version: 1,
+        access_key_id: k,
+        secret_access_key: sk,
+        session_token: t,
+        expiration: e,
+    })
+    .map(Zeroizing::new)
+    .map_err(|_| fail(DENIED))
 }
 
 /// Canonical hyphenated UUID, lowercased, or a usage error (the id is sent verbatim to the

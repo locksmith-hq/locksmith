@@ -1,5 +1,0 @@
-schema: spec-driven
-created: 2026-11-19
-# PM 2026-11-20: every open task (5.1, 5.2, 7.2) needs the console bindings page from t3-console-mvp;
-# workers re-parked d2 three times, so it waits for t3 instead of showing as ready.
-x-depends_on: [t3-console-mvp]

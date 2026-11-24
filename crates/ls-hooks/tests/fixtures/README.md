@@ -21,3 +21,7 @@ Schemas checked on 2026-11-14:
   Hooks exist (`hooks.json` or `[[hooks.PreToolUse]]` in `config.toml`, on by default, project
   hooks need a trusted `.codex/` and `/hooks` review). Shell is `Bash`; there is no Read tool.
   `ask` is unsupported and fails open, so Ask becomes deny.
+- Gemini CLI, Copilot, Cline: derived from vendor docs on 2026-11-21, not recorded; see each
+  directory's `SOURCE.md` and `docs/research/agent-plugin-formats.md`. Gemini blocks with exit 2
+  and stderr; Copilot answers `permissionDecision` JSON (exit 2 on malformed input); Cline answers
+  `{cancel, errorMessage}` on exit 0 and cancels on malformed input.

@@ -53,3 +53,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-24 (worker-b, from b4-api-contract-suite)
 - B4 is implemented on `claude/change-b4-api-contract-suite`: `just api-contract <url>` records a deterministic 238-exchange transcript and `just api-contract --diff <a> <b>` compares two servers. After it merges, B1 tasks 1.4 to 1.6 can be verified and ticked by the B1 worker; this completes `b1-nestjs-api:contract`.
+
+## 2026-11-24 (worker-b, tasks 1.4 to 1.6)
+- Merged main (turbo.json: took main's; lockfile: main's, regenerated). B4's suite is on main. Verified 1.6: `just up`, `just api`, then `just api-contract http://127.0.0.1:8080` twice records 238 exchanges each time and `--diff-files` reports the transcripts match. Ticked 1.4 to 1.6, which completes `b1-nestjs-api:contract`. Group 2 (skeleton) is next; 2.1 has a partial slice (TypeScript pin, typecheck task) on this branch.

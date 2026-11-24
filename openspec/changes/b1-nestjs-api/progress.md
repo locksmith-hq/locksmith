@@ -83,3 +83,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-24 (worker-b, from b4-api-contract-suite)
 - B4 is implemented on `claude/change-b4-api-contract-suite`: `just api-contract <url>` records a deterministic 238-exchange transcript and `just api-contract --diff <a> <b>` compares two servers. After it merges, B1 tasks 1.4 to 1.6 can be verified and ticked by the B1 worker; this completes `b1-nestjs-api:contract`.
+
+## 2026-11-24 (worker-b, task 2.5)
+- Task 2.5 done: `apps/api/src/tenant/isolation.test.ts` starts postgres:18.7 with testcontainers 12.2.2, applies the control plane's `0001_roles.sql` and `0002_tenancy_schema.sql`, and connects as `locksmith_app` (checked: not superuser, not BYPASSRLS). Cases: own-org read, cross-tenant read empty, cross-tenant write rejected by RLS, no org bound reads empty, no leak on a one-connection pool after commit or rollback.
+- Verified: vitest 25 passed (7 new), tsc clean, `just quick` OK. No independent evaluator run this session.
+- Notes for next session: 2.1 (needs a guard-script edit by the lead/owner) and 2.3 (Kysely codegen and `just api-types`) are still open; 2.6 and 2.7 are next. Merged origin/main (package-lock taken from main, regenerated). PR #674 not ready for auto-merge (tasks open).

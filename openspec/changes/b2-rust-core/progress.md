@@ -17,3 +17,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Merged main into the branch (conflict in docs/testing.md only). Task 2.1-2.3 done: `services/core` crate `ls-core-service` (bin `locksmith-core`): `/healthz`, `/readyz`, service-token auth middleware (design decision 5), config, telemetry (copied from the control plane with `service_name` option; shared crate is a later cleanup), 9 tests incl. 401 without token.
 - Verified: `cargo nextest run -p ls-core-service` (9 pass), clippy -D warnings, tree-check, `just test core` path.
 - Notes for next session: group 3. The auth layer is applied with `.layer` on an empty internal router; mount operation routes there. Shared code for 3.1 needs a library crate moved out of control-plane `audit.rs`/`checkpoint.rs`; this is a big move, slice per operation.
+
+## 2026-11-24 01:33 worker
+- Task: ci-fix (cargo-deny) - ci-fix
+- Verified: cargo deny check -> advisories, bans, licenses, sources ok
+- Notes for next session: CI red on #687 was cargo-deny rejecting AGPL on ls-core-service; added exception in deny.toml. Pushed without holding the lock (another worker-a session held it).

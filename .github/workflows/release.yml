@@ -4,13 +4,50 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, sign with a throwaway minisign key and verify; push no images and publish no release"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
+env:
+  # "true" only for a dispatch with dry_run ticked; a tag push is always a real release.
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+  REGISTRY: ghcr.io/locksmith-hq
+
 jobs:
+  version:
+    name: check version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches workspace version
+        id: v
+        run: |
+          WS_VERSION="$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$3); print $3; exit}' Cargo.toml)"
+          [ -n "$WS_VERSION" ] || { echo "No [workspace.package] version in Cargo.toml" >&2; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "${GITHUB_REF_NAME#v}" != "$WS_VERSION" ]; then
+              echo "Tag $GITHUB_REF_NAME does not match [workspace.package] version '$WS_VERSION' in Cargo.toml" >&2
+              exit 1
+            fi
+          elif [ "$DRY_RUN" != true ]; then
+            echo "A real release runs only from a v* tag; a dispatch from a branch must be a dry run" >&2
+            exit 1
+          fi
+          echo "version=$WS_VERSION" >> "$GITHUB_OUTPUT"
+
   build:
     name: build ${{ matrix.target }}
+    needs: version
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     strategy:
@@ -57,13 +94,75 @@ jobs:
           path: dist/smith-${{ matrix.target }}
           if-no-files-found: error
 
-  release:
-    name: publish release
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+  images:
+    # One native runner per arch (no QEMU); the sign job joins the digests into multi-arch manifests.
+    name: image ${{ matrix.image }} ${{ matrix.arch }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     permissions:
-      contents: write
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [control-plane, gateway]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        if: env.DRY_RUN != 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build image (push by digest unless dry run)
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: infra/docker/${{ matrix.image }}.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.REGISTRY }}/locksmith-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=${{ env.DRY_RUN != 'true' }}
+
+      - name: Save digest
+        if: env.DRY_RUN != 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p digests
+          echo "$DIGEST" > "digests/${{ matrix.image }}-${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@v4
+        if: env.DRY_RUN != 'true'
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: digests/${{ matrix.image }}-${{ matrix.arch }}
+          if-no-files-found: error
+
+  sign:
+    # The only job with id-token: write (cosign keyless and build provenance).
+    name: manifest, SBOM and signatures
+    needs: [version, build, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,42 +172,132 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Check tag matches workspace version
-        env:
-          TAG: ${{ github.ref_name }}
+      - uses: actions/download-artifact@v4
+        if: env.DRY_RUN != 'true'
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+
+      - name: Install minisign and syft
         run: |
-          VERSION="${TAG#v}"
-          WS_VERSION="$(awk '/^\[workspace\.package\]/{f=1;next} /^\[/{f=0} f && /^version *=/{gsub(/[" ]/,"",$3); print $3; exit}' Cargo.toml)"
-          if [ -z "$WS_VERSION" ] || [ "$VERSION" != "$WS_VERSION" ]; then
-            echo "Tag $TAG (version $VERSION) does not match [workspace.package] version '$WS_VERSION' in Cargo.toml" >&2
-            exit 1
+          sudo apt-get install -y minisign
+          curl -fsSL -o syft.tgz https://github.com/anchore/syft/releases/download/v1.57.2/syft_1.57.2_linux_amd64.tar.gz
+          echo "ad92bd3ec1b94a3df01d4d0aec199afa9c42b72e86da436ff5f837914d32706b  syft.tgz" | sha256sum -c -
+          tar xzf syft.tgz syft && sudo install -m 755 syft /usr/local/bin/syft && rm syft syft.tgz
+
+      - uses: sigstore/cosign-installer@v4
+        with:
+          cosign-release: v3.1.4
+
+      - uses: docker/setup-buildx-action@v4
+        if: env.DRY_RUN != 'true'
+
+      - uses: docker/login-action@v4
+        if: env.DRY_RUN != 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Create multi-arch image manifests
+        if: env.DRY_RUN != 'true'
+        run: |
+          : > images.txt
+          for img in control-plane gateway; do
+            name="$REGISTRY/locksmith-$img"
+            tags=(-t "$name:$VERSION")
+            case "$VERSION" in *-*) ;; *) tags+=(-t "$name:latest") ;; esac
+            docker buildx imagetools create "${tags[@]}" \
+              "$name@$(cat "digests/$img-amd64")" "$name@$(cat "digests/$img-arm64")"
+            digest="$(docker buildx imagetools inspect "$name:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)"
+            echo "$name@$digest" >> images.txt
+          done
+          cat images.txt
+
+      - name: SBOM (CycloneDX, source tree at this ref)
+        run: syft scan dir:. -o cyclonedx-json=sbom.cdx.json
+
+      - name: Build manifest
+        run: |
+          args=(--sbom sbom.cdx.json)
+          [ "$DRY_RUN" = true ] || args+=(--images images.txt)
+          scripts/make-manifest.sh "$VERSION" dist "${args[@]}"
+
+      - name: Sign manifest (minisign)
+        env:
+          # Dry runs never see the release key.
+          MINISIGN_SECRET_KEY: ${{ env.DRY_RUN != 'true' && secrets.MINISIGN_SECRET_KEY || '' }}
+        run: |
+          umask 077
+          KEYDIR="$(mktemp -d)"
+          trap 'rm -rf "$KEYDIR"' EXIT
+          if [ "$DRY_RUN" = true ]; then
+            minisign -G -W -p "$KEYDIR/pub" -s "$KEYDIR/key"
+            sed -n 2p "$KEYDIR/pub" > dist/dry-run-pubkey.txt
+          else
+            printf '%s\n' "$MINISIGN_SECRET_KEY" > "$KEYDIR/key"
           fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          minisign -S -s "$KEYDIR/key" -m dist/manifest.json -x dist/manifest.json.minisig </dev/null
+
+      - name: Sign manifest and images (cosign keyless)
+        run: |
+          cosign sign-blob --yes --bundle dist/manifest.json.bundle dist/manifest.json
+          if [ "$DRY_RUN" != true ]; then
+            while read -r ref; do cosign sign --yes "$ref"; done < images.txt
+          fi
+
+      - name: Build provenance
+        if: env.DRY_RUN != 'true'
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            dist/smith-*
+            dist/manifest.json
+            dist/sbom.cdx.json
+
+      - name: Homebrew formula
+        run: scripts/gen-formula.sh dist > dist/smith.rb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+          if-no-files-found: error
+
+  publish:
+    name: verify and publish release
+    needs: sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
 
       - name: Install minisign
         run: sudo apt-get install -y minisign
 
-      - name: Build manifest
-        run: scripts/make-manifest.sh "$VERSION" dist
+      - uses: sigstore/cosign-installer@v4
+        with:
+          cosign-release: v3.1.4
 
-      - name: Sign manifest
-        env:
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+      - name: Verify release (required)
         run: |
-          umask 077
-          KEYFILE="$(mktemp)"
-          trap 'rm -f "$KEYFILE"' EXIT
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$KEYFILE"
-          minisign -S -s "$KEYFILE" -m dist/manifest.json -x dist/manifest.json.minisig </dev/null
-          rm -f "$KEYFILE"
-
-      - name: Verify signature
-        run: |
-          # Pubkey file is a single base64 line (no untrusted-comment header), as ls-update reads it.
-          PUBKEY="$(head -n 1 crates/ls-update/update-pubkey.txt | tr -d '[:space:]')"
-          minisign -V -P "$PUBKEY" -m dist/manifest.json -x dist/manifest.json.minisig
+          if [ "$DRY_RUN" = true ]; then
+            scripts/verify-release.sh dist --pubkey dist/dry-run-pubkey.txt \
+              --identity-regexp "^https://github.com/locksmith-hq/locksmith/\.github/workflows/release\.yml@${GITHUB_REF}\$"
+          else
+            scripts/verify-release.sh dist
+          fi
 
       - name: Create GitHub release
+        if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

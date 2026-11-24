@@ -9,7 +9,7 @@ const REDACT_PATHS = [
   'res.headers["set-cookie"]',
 ];
 
-const SENSITIVE = /secret|token|password|passwd|authorization|cookie|private[_-]?key|api[_-]?key/i;
+const SENSITIVE = /secret|token|x-auth|password|passwd|authorization|cookie|private[_-]?key|api[_-]?key/i;
 const CENSOR = "[redacted]";
 
 const SENSITIVE_QUERY = /([?&][^=&#\s]*(?:secret|token|password|key|code)[^=&#\s]*=)[^&#\s]*/gi;
@@ -33,7 +33,7 @@ function scrub(value: unknown, depth = 0): unknown {
 
 export const pinoOptions = {
   redact: { paths: REDACT_PATHS, censor: CENSOR },
-  // req and res are raw objects here; their serializers and the redact paths handle them.
+  // req and res are raw objects here; their serializers (which scrub by name) handle them.
   formatters: {
     log: (o: Record<string, unknown>) => {
       const { req, res, ...rest } = o;
@@ -41,7 +41,11 @@ export const pinoOptions = {
     },
   },
   serializers: {
-    req: (r: { url?: string }) => ({ ...stdSerializers.req(r as never), url: scrubText(r.url ?? "") }),
+    req: (r: { url?: string }) => {
+      const o = stdSerializers.req(r as never) as unknown as Record<string, unknown>;
+      return { ...(scrub(o) as object), url: scrubText(r.url ?? "") };
+    },
+    res: (r: unknown) => scrub(stdSerializers.res(r as never)),
   },
 };
 

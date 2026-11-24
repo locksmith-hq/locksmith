@@ -26,7 +26,8 @@ describe("health and log redaction", () => {
         TerminusModule,
         LoggerModule.forRoot({
           pinoHttp: {
-            logger: pino(pinoOptions, stream),
+            stream,
+            ...pinoOptions,
           },
         }),
       ],
@@ -47,7 +48,9 @@ describe("health and log redaction", () => {
 
   it("redacts authorization and cookie headers in request logs", async () => {
     await request(app.getHttpServer())
-      .get("/healthz")
+      .get("/healthz?access_token=PLANTED-CANARY-Q&a=1")
+      .set("X-Auth-Token", "PLANTED-CANARY-H")
+      .set("X-Api-Key", "PLANTED-CANARY-K")
       .set("Authorization", "Bearer PLANTED-CANARY-TOKEN")
       .set("Cookie", "sid=PLANTED-CANARY-COOKIE");
     await new Promise((r) => setTimeout(r, 50));
@@ -57,7 +60,10 @@ describe("health and log redaction", () => {
     const rec = JSON.parse(lines.filter((l) => l.includes('"req"')).at(-1) as string);
     expect(rec.req.headers.authorization).toBe("[redacted]");
     expect(rec.req.headers.cookie).toBe("[redacted]");
-    expect(rec.req.url).toBe("/healthz");
+    expect(rec.req.url).toBe("/healthz?access_token=[redacted]&a=1");
+    expect(rec.req.query.access_token).toBe("[redacted]");
+    expect(rec.req.headers["x-auth-token"]).toBe("[redacted]");
+    expect(rec.req.headers["x-api-key"]).toBe("[redacted]");
   });
 
   it("keeps error message and stack, and scrubs query-string tokens", () => {

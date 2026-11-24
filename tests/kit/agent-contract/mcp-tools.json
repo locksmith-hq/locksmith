@@ -1,0 +1,267 @@
+[
+  {
+    "description": "Secrets this agent holds a grant for: names and ids only. Never values.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_my_keys",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "allowed_origin": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "grant_expires_at": {
+                "format": "date-time",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mode": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "secret_id": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "secret_id",
+              "name",
+              "mode"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Send an HTTP request through the gateway; it injects the credential and returns the redacted response.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "body_base64": {
+          "type": "string"
+        },
+        "headers": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "type": "string"
+        },
+        "secret_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "secret_id",
+        "version",
+        "method",
+        "url"
+      ],
+      "type": "object"
+    },
+    "name": "relay_http_request",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "body_base64": {
+          "type": "string"
+        },
+        "headers": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "status": {
+          "maximum": 599,
+          "minimum": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "headers"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Why a request was blocked and what to do next. Never values.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "description": "The block message or rule id you received.",
+          "maxLength": 512,
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
+    "name": "explain_block",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "explanation": {
+          "type": "string"
+        },
+        "next_step": {
+          "type": "string"
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "explanation",
+        "next_step"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "A credential valid for minutes, scoped to one job, destroyed after. It is not the stored secret: present it as `Authorization: Bearer` to the gateway's `POST /v1/relay` for the one secret it was issued for (never past the grant). Off by default; every issue is audited.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "job": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:/-]+$",
+          "type": "string"
+        },
+        "secret_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "ttl_secs": {
+          "maximum": 900,
+          "minimum": 60,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "secret_id",
+        "job",
+        "ttl_secs"
+      ],
+      "type": "object"
+    },
+    "name": "issue_short_lived_credential",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "credential": {
+          "type": "string"
+        },
+        "credential_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "credential",
+        "credential_id",
+        "expires_at",
+        "scope"
+      ],
+      "type": "object"
+    }
+  }
+]

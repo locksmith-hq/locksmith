@@ -1,0 +1,12 @@
+{
+  "secret_id": "0195f2c0-0000-7000-8000-000000000002",
+  "version": 1,
+  "method": "GET",
+  "url": "http://127.0.0.1:9/v1/ping",
+  "headers": [
+    [
+      "accept",
+      "application/json"
+    ]
+  ]
+}

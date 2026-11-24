@@ -1,0 +1,70 @@
+[
+  {
+    "slug": "bad_request",
+    "status": 400
+  },
+  {
+    "slug": "unauthenticated",
+    "status": 401
+  },
+  {
+    "slug": "denied",
+    "status": 403
+  },
+  {
+    "slug": "denied_address",
+    "status": 403
+  },
+  {
+    "slug": "no_grant",
+    "status": 403
+  },
+  {
+    "slug": "not_found",
+    "status": 404
+  },
+  {
+    "slug": "audit_failed",
+    "status": 500
+  },
+  {
+    "slug": "internal",
+    "status": 500
+  },
+  {
+    "slug": "grants_unavailable",
+    "status": 502
+  },
+  {
+    "slug": "response_withheld",
+    "status": 502
+  },
+  {
+    "slug": "secret_unavailable",
+    "status": 502
+  },
+  {
+    "slug": "secret_unusable",
+    "status": 502
+  },
+  {
+    "slug": "upstream_error",
+    "status": 502
+  },
+  {
+    "slug": "upstream_unreachable",
+    "status": 502
+  },
+  {
+    "slug": "audit_unavailable",
+    "status": 503
+  },
+  {
+    "slug": "unavailable",
+    "status": 503
+  },
+  {
+    "slug": "upstream_timeout",
+    "status": 504
+  }
+]

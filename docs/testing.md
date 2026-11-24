@@ -33,7 +33,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/smith-cli` | Rust bin | `just test smith-cli` | no | `just test-rust` | `smith` CLI; some db tests skip without Postgres |
 | `services/control-plane` | Rust service (axum) | `just test control-plane` | yes (Postgres integration tests) | `just test-e2e` (partial) | Package `ls-control-plane` |
 | `services/gateway` | Rust service (axum) | `just test gateway` | yes (`audit_pg`) | `just relay-smoke`, `just connector-smoke` | Package `ls-gateway` |
-| `apps/api` | npm NestJS API (change b1-nestjs-api) | `just test api` | no | `just test-web` | Runs `npm test --workspace apps/api`; for now it checks `route-table.json` against the frozen `openapi.json` |
+| `apps/api` | npm NestJS API (change b1-nestjs-api) | `just test api` | no | `just test-web` | Runs `npm test --workspace apps/api`; for now it checks `route-table.json` against the frozen `openapi.json`. The route-proxy generator (`scripts/route-proxy-gen.mjs`, B5) has no row of its own: `just test api-proxy` runs its `node --test` suite, and `just test-web` includes it |
 | `apps/desktop` | Tauri app (npm + Rust) | `just test desktop` | no | `just apps-build` | Runs `just desktop-test` (fmt, clippy, cargo test) plus `npm test`; not in the root Cargo workspace |
 | `apps/docs` | npm static site | `just test docs` | no | `just test-web` | No tests of its own; `npm run build` in `just test-web` builds it |
 | `apps/web` | npm web console | `just test web` | no | `just test-web` | Runs `npm test --workspace apps/web` |
@@ -63,6 +63,7 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just up` starts the stack, `just down` stops it and `just reset` wipes it.
 - `just ps` and `just logs` show what runs.
 - `just psql` opens a database shell.
+- `just api-proxy-config` (run by `just up`) generates the B5 proxy config from `apps/api/route-table.json`; `just api-nest` runs the NestJS API on `LOCKSMITH_NEST_PORT`; `just test api-proxy` tests the generator.
 - `just api` and `just gateway` run the services against the stack.
 - `just relay-smoke`, `just connector-smoke` and `just audit-smoke` are the smoke tests that need `just up` and `just api`. `just audit-smoke` also runs `oha` at 200 relays/s when it is installed (`AUDIT_SMOKE_LOAD=0` skips that).
 - `just test-e2e` runs every e2e test.

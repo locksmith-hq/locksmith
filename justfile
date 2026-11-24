@@ -45,6 +45,7 @@ test-rust-portable:
 
 test-web:
     npm run build && npm test
+    node --test scripts/route-proxy-gen.test.mjs
 
 # Tauri app: not in the root workspace, so fmt/lint/test-rust skip it.
 desktop-test:
@@ -112,13 +113,34 @@ compose := "docker compose -f infra/compose/compose.yaml --env-file infra/compos
 
 # `up` also writes the audit checkpoint public key to the verifier config (S5 task 4.1).
 # Includes the Keycloak issuer and mail catcher (compose profile `auth`, T1); `up-lite` skips them.
-up:
+up: api-proxy-config
     {{compose}} --profile auth up -d --wait
     bash scripts/audit-verifier-config.sh
 
-up-lite:
+up-lite: api-proxy-config
     {{compose}} up -d --wait
     bash scripts/audit-verifier-config.sh
+
+# B5: generate infra/compose/api-proxy/caddy.json from apps/api/route-table.json (or LOCKSMITH_ROUTE_TABLE).
+api-proxy-config:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    set -a; . "$root/infra/compose/.env.example"; set +a
+    mkdir -p "$root/infra/compose/api-proxy"
+    node "$root/scripts/route-proxy-gen.mjs" "${LOCKSMITH_ROUTE_TABLE:-$root/apps/api/route-table.json}" "$root/infra/compose/api-proxy/caddy.json"
+
+# B5: run apps/api on the host on LOCKSMITH_NEST_PORT against `just up` (same database and OTLP as `just api`).
+api-nest:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root={{quote(justfile_directory())}}
+    [ -f "$root/apps/api/package.json" ] || { echo "apps/api is not on this branch yet (change b1-nestjs-api); nothing to run" >&2; exit 0; }
+    set -a; . "$root/infra/compose/.env.example"; set +a
+    export PORT="$LOCKSMITH_NEST_PORT" OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    cd "$root/apps/api"
+    [ "$(npm pkg get scripts.start)" != "{}" ] || { echo "apps/api has no start script yet (b1-nestjs-api builds it); nothing to run" >&2; exit 0; }
+    exec npm run start
 
 down:
     {{compose}} --profile auth down
@@ -355,6 +377,7 @@ test name:
     #!/usr/bin/env bash
     set -euo pipefail
     n="$1"
+    if [ "$n" = api-proxy ]; then echo "+ node --test scripts/route-proxy-gen.test.mjs" >&2; exec node --test scripts/route-proxy-gen.test.mjs; fi
     dir=""
     for d in crates/"$n" services/"$n" apps/"$n" packages/"$n" integrations/"$n" tests/"$n"; do
       [ -d "$d" ] && dir="$d" && break

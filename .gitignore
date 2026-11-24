@@ -41,3 +41,6 @@ override.tf
 *_override.tf
 crash.log
 .turbo/
+
+# B5 generated api-proxy config (just api-proxy-config)
+infra/compose/api-proxy/caddy.json

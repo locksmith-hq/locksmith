@@ -14,9 +14,6 @@
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   },
-  "dependencies": {
-    "@locksmith/sdk": "*"
-  },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "vitest": "^4.1.12",

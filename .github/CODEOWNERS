@@ -6,7 +6,6 @@
 /.claude/ @tomer555
 /AGENTS.md @tomer555
 /CLAUDE.md @tomer555
-/scripts/review-tier.sh @tomer555
 
 # Crates that hold or move secrets.
 /crates/ls-crypto/ @tomer555

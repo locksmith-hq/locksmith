@@ -12,7 +12,7 @@
 - [ ] 2.1 `scripts/tree-check.sh` and `docs/testing.md` learn `apps/api`; `apps/api/package.json` (private, ESM, AGPL-3.0-only), `tsconfig` extending a shared base, Turborepo tasks `build`, `test`, `typecheck`.
 - [x] 2.2 Nest bootstrap: `ConfigModule` with a zod-validated env schema (fails fast, no defaults for secrets), `nestjs-pino` with redaction of `authorization` and any `*secret*`/`*token*` field, `GET /healthz` and `/readyz` with terminus.
 - [ ] 2.3 Data layer: Kysely over `pg`, `kysely-codegen` from the migrated database into `src/db/types.ts`, a `just api-types` recipe and a CI drift check; migrations stay owned by the Rust `migrate` binary (record the decision in design.md).
-- [ ] 2.4 Tenant interceptor: request-scoped transaction runner (nestjs-cls) that runs `set_config('app.org_id', $1, true)` first; a lint or test rule that bans session-level `SET` (decision A0-5).
+- [x] 2.4 Tenant interceptor: request-scoped transaction runner (nestjs-cls) that runs `set_config('app.org_id', $1, true)` first; a lint or test rule that bans session-level `SET` (decision A0-5).
 - [ ] 2.5 Isolation tests: testcontainers Postgres, the app role (not owner, not `BYPASSRLS`), two orgs, cross-tenant read returns nothing, pooled-connection leakage test.
 - [ ] 2.6 Jobs: pg-boss wired to the same Postgres; one example recurring job and its test; no Redis anywhere.
 - [ ] 2.7 OpenAPI: generate the document from the zod schemas and fail CI if it differs from the frozen `openapi.json` for any path marked `nest`.

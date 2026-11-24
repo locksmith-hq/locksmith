@@ -69,3 +69,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - PR #674 had conflicts with main: merged origin/main (took main's turbo.json and package-lock.json, reran `npm i`), added `apps/api` to `knip.json` (new //#knip gate), un-exported `envSchema` and `redactDeep`.
 - Verified: apps/api `tsc --noEmit` clean, vitest 11 passed, `just quick` OK.
 - Notes for next session: tasks 2.1 and 2.3 still wait on the lead/owner items above; next new task is 2.4. PR #674 is not ready for auto-merge.
+
+## 2026-11-24 worker-b (task 2.4)
+- Task 2.4 done: `apps/api/src/tenant` (TenantService, TenantInterceptor, TenantModule with nestjs-cls 7.0.2) wraps an org-scoped request in one transaction starting `set_config('app.org_id', $1, true)`; session-SET ban test scans `src/`. Wired into AppModule with DbModule.
+- Verified: vitest 18 passed, tsc clean, `just quick` OK; evaluator PASS. Notes from evaluator: interceptor collapses streams (no `@Sse` with an org id yet; commented), ban test misses `.sql` files and bare `SET search_path`.
+- Notes for next session: 2.5 (testcontainers isolation tests) is next; 2.1 and 2.3 still wait on lead/owner items above. PR #674 not ready for auto-merge (tasks open).

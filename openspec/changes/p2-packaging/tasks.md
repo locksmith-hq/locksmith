@@ -43,7 +43,7 @@
 - [ ] 6.4 Verify: `just installer-test` and `bash scripts/test-recipes-check.sh`.
 
 ## 7. Docs and owner gate [haiku]
-- [ ] 7.1 Gate: confirm `openspec/decisions.md` records the owner's approval of the self-host key custody default (bundled production-mode OpenBao labelled containment, external provider option). Otherwise stop applying the tasks below and report to the lead; tasks 1 to 6 do not depend on it.
+- [x] 7.1 Gate: confirm `openspec/decisions.md` records the owner's approval of the self-host key custody default (bundled production-mode OpenBao labelled containment, external provider option). Otherwise stop applying the tasks below and report to the lead; tasks 1 to 6 do not depend on it.
 - [ ] 7.2 `apps/docs` and `docs/`: self-host guide for compose and Helm (prerequisites, one command, what is generated, backup of the secrets file and the OpenBao volume, upgrade, external keys), with the key custody label stated as containment.
 - [ ] 7.3 `apps/docs`: install and verify guide (`install.sh`, Homebrew, `minisign`, `cosign verify`, `gh attestation verify`) and a first-release checklist for the owner (public repo, tag, tap repository, secret names).
 - [ ] 7.4 Verify: `npm run build` for `apps/docs` and `bash scripts/public-check.sh` (links and denylist).

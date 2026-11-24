@@ -192,7 +192,7 @@ export interface paths {
         put?: never;
         /**
          * Append an `mcp.upstream_call` or `mcp.upstream_outcome` event (gateway only)
-         * @description The gateway records every call through its MCP upstream proxy: the agent, the upstream's configured name, the tool, the decision and the outcome with a static reason; never arguments, results or the upstream credential. Unknown fields are a `400`. Contract only for now: it answers `501` until the proxy lands.
+         * @description The gateway records every call through its MCP upstream proxy: the agent, the upstream's configured name, the tool (a valid MCP tool name, else `unknown`), the decision and the outcome with a static reason; never arguments, results or the upstream credential. Phase `call` appends `mcp.upstream_call` with outcome `pending` (decision `allow`, before forwarding) or `denied` (a refusal, with a refusal reason). Phase `outcome` appends `mcp.upstream_outcome` with outcome `ok`, or `error` and a failure reason, and needs `attempt_id` (the id of the `pending` event); it is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`. Unknown fields, and fields that do not fit together, are a `400`.
          */
         post: operations["append_mcp_upstream_call"];
         delete?: never;
@@ -1141,6 +1141,13 @@ export interface components {
          * @enum {string}
          */
         McpUpstreamPhase: "call" | "outcome";
+        /**
+         * @description Why an upstream call was refused or failed: a closed set of static codes. The first group is
+         *     a refusal (phase `call`, outcome `denied`); the rest is a failure after the call was forwarded
+         *     (phase `outcome`, outcome `error`; the gateway's hop error slugs).
+         * @enum {string}
+         */
+        McpUpstreamReason: "hide" | "deny" | "hold" | "unknown_tool" | "policy_unavailable" | "catalogue_unavailable" | "denied" | "denied_address" | "upstream_unreachable" | "secret_unavailable" | "secret_unusable" | "upstream_error" | "upstream_unsupported" | "upstream_timeout" | "redaction_failed" | "internal";
         NewAgent: {
             description?: string;
             name: string;
@@ -1205,17 +1212,18 @@ export interface components {
             agent_id: string;
             /**
              * Format: uuid
-             * @description Links an `outcome` event to its `call` event; required with phase `outcome`.
+             * @description Links an `outcome` event to its `call` event; required with phase `outcome`, refused with
+             *     phase `call`.
              */
             attempt_id?: string | null;
             decision: components["schemas"]["McpUpstreamDecision"];
             outcome: components["schemas"]["McpUpstreamOutcome"];
             phase: components["schemas"]["McpUpstreamPhase"];
-            /** @description Why a call was `denied` or `error`: a fixed slug. */
-            reason?: string | null;
+            reason?: components["schemas"]["McpUpstreamReason"] | null;
             /**
-             * @description The tool name from the upstream catalogue; recorded only when it is a valid tool name
-             *     present in that catalogue, else `unknown`.
+             * @description The tool name from the upstream catalogue; recorded only when it passes the MCP tool-name
+             *     rule (`[A-Za-z0-9_.-]{1,128}`), else `unknown`. The gateway sends `unknown` for a name
+             *     outside the catalogue.
              */
             tool: string;
             /** @description The upstream's configured name. */
@@ -2313,6 +2321,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `mcp.upstream_outcome` already recorded for this `attempt_id` with different fields */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Request body too large */
             413: {
                 headers: {
@@ -2324,15 +2341,6 @@ export interface operations {
             };
             /** @description Unsupported media type */
             415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not implemented yet */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

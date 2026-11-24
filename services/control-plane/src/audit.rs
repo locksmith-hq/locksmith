@@ -50,13 +50,14 @@ pub enum Once {
     Conflict,
 }
 
-/// `(id, seq, hash, actor, target, outcome, attrs)` of a stored `relay.outcome`.
+/// `(id, seq, hash, actor, target, outcome, attrs)` of a stored outcome event.
 type StoredOutcome = (Uuid, i64, Vec<u8>, String, Option<String>, String, String);
 
-/// Append a `relay.outcome` `event` unless one is already stored for `attempt_id` (S5 design
+/// Append an outcome `event` (`relay.outcome`, or `mcp.upstream_outcome` for the MCP upstream
+/// proxy) unless one of the same kind is already stored for `attempt_id` (S5 design
 /// decision 5: the gateway retries outcomes, so a retry after a lost response must not append a
 /// second one). Takes the org's head lock first, so the check and the append see no concurrent
-/// append; the partial unique index from migration 0009 is the backstop. An existing outcome
+/// append; the partial unique indexes from migrations 0009 and 0016 are the backstop. An existing outcome
 /// with the same actor, target, outcome and attributes is returned as [`Once::Existing`], one
 /// that differs is [`Once::Conflict`].
 pub async fn append_outcome_once(
@@ -71,7 +72,7 @@ pub async fn append_outcome_once(
              WHERE org_id = $1 AND kind = $2 AND (attrs -> 'attempt_id' ->> 'id') = $3",
     )
     .bind(org_id)
-    .bind(kind::RELAY_OUTCOME.as_str())
+    .bind(event.kind.as_str())
     .bind(attempt_id.hyphenated().to_string())
     .fetch_optional(&mut *c)
     .await?;
@@ -81,13 +82,12 @@ pub async fn append_outcome_once(
     let stored_attrs = serde_json::from_str(&attrs)
         .ok()
         .and_then(|v| ls_audit::StoredAttrs::from_json(&v));
-    let same = event.kind == kind::RELAY_OUTCOME
-        && actor == event.actor.to_text()
+    let same = actor == event.actor.to_text()
         && target == event.target.map(|t| t.to_text())
         && outcome == event.outcome.as_str()
         && stored_attrs.as_ref() == Some(&event.attrs.stored());
     if !same {
-        tracing::warn!(org.id = %org_id, "conflicting relay outcome for an attempt refused");
+        tracing::warn!(org.id = %org_id, kind = event.kind.as_str(), "conflicting outcome for an attempt refused");
         return Ok(Once::Conflict);
     }
     let (Ok(seq), Ok(hash)) = (u64::try_from(seq), ls_audit::Hash::try_from(&hash[..])) else {

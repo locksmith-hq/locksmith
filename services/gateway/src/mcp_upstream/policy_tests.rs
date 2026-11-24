@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 use super::*;
 use crate::app::AppState;
-use crate::audit::MemoryAudit;
+use crate::audit::{AuditSink, MemoryAudit};
 use crate::auth::testkit::StubJwks;
 use crate::auth::{AgentAuth, JwksSettings};
 use crate::config::{Bindings, McpUpstream};
@@ -216,20 +216,26 @@ fn catalogue_drops_invalid_and_repeated_names() {
 // ---------------------------------------------------------------------------------------------
 // Through the router.
 
-const SECRET: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000e1);
+pub(in crate::mcp_upstream) const SECRET: Uuid =
+    Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000e1);
 /// The upstream credential (a test value, never a real one).
-const VALUE: &str = "up-cred-0123456789abcdef-canary";
+pub(in crate::mcp_upstream) const VALUE: &str = "up-cred-0123456789abcdef-canary";
+
+/// Text in every call result, for tests that look for it elsewhere.
+pub(in crate::mcp_upstream) const RESULT_CANARY: &str = "result-canary-5b1d7e";
 
 /// What the upstream saw and how it behaves.
 #[derive(Default)]
-struct Probe {
-    lists: AtomicUsize,
+pub(in crate::mcp_upstream) struct Probe {
+    pub(in crate::mcp_upstream) lists: AtomicUsize,
     calls: Mutex<Vec<String>>,
-    fail_list: AtomicBool,
+    pub(in crate::mcp_upstream) fail_list: AtomicBool,
+    /// Every `tools/call` is answered with a JSON-RPC error.
+    pub(in crate::mcp_upstream) fail_call: AtomicBool,
 }
 
 impl Probe {
-    fn calls(&self) -> Vec<String> {
+    pub(in crate::mcp_upstream) fn calls(&self) -> Vec<String> {
         self.calls.lock().unwrap().clone()
     }
 }
@@ -278,7 +284,13 @@ impl ServerHandler for FakeUpstream {
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         self.0.calls.lock().unwrap().push(request.name.to_string());
-        Ok(CallToolResult::success(vec![ContentBlock::text("called")]).into())
+        if self.0.fail_call.load(Ordering::SeqCst) {
+            return Err(McpError::internal_error("boom", None));
+        }
+        Ok(
+            CallToolResult::success(vec![ContentBlock::text(format!("called {RESULT_CANARY}"))])
+                .into(),
+        )
     }
 }
 
@@ -304,15 +316,29 @@ fn decryptor() -> Decryptor {
 }
 
 /// The gateway router over a live upstream, with an agent session already initialized.
-struct Rig {
+pub(in crate::mcp_upstream) struct Rig {
     app: Router,
-    probe: Arc<Probe>,
+    pub(in crate::mcp_upstream) probe: Arc<Probe>,
     auth: String,
     sid: String,
 }
 
 impl Rig {
     async fn new(ttl: Duration) -> Self {
+        Self::build(
+            ttl,
+            Arc::new(MemoryAudit::default()),
+            RelayOptions::default(),
+        )
+        .await
+    }
+
+    /// [`Rig::new`] with the relay's audit sink and options chosen by the test.
+    pub(in crate::mcp_upstream) async fn build(
+        ttl: Duration,
+        audit: Arc<dyn AuditSink>,
+        options: RelayOptions,
+    ) -> Self {
         use ToolDecision::{Allow, Deny, Hide, Hold};
         let probe = Arc::new(Probe::default());
         let fake = FakeUpstream(probe.clone());
@@ -362,8 +388,8 @@ impl Rig {
             bindings,
             decryptor(),
             Arc::new(StubResolver::default()),
-            Arc::new(MemoryAudit::default()),
-            RelayOptions::default(),
+            audit,
+            options,
         );
         let state = AppState::new(Arc::new(ReadyFlag::new(true)))
             .with_relay(Arc::new(relay))
@@ -401,7 +427,10 @@ impl Rig {
         }
     }
 
-    async fn rpc(&self, body: &str) -> crate::mcp_upstream::tests::Answer {
+    pub(in crate::mcp_upstream) async fn rpc(
+        &self,
+        body: &str,
+    ) -> crate::mcp_upstream::tests::Answer {
         send(
             &self.app,
             "/mcp/upstream/github",
@@ -413,16 +442,25 @@ impl Rig {
         .await
     }
 
-    async fn list(&self) -> Value {
+    pub(in crate::mcp_upstream) async fn list(&self) -> Value {
         self.rpc(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
             .await
             .message()
     }
 
-    async fn call(&self, name: &str) -> Value {
+    pub(in crate::mcp_upstream) async fn call(&self, name: &str) -> Value {
+        self.call_with(name, json!({})).await.message()
+    }
+
+    /// A `tools/call` with these arguments; the whole answer.
+    pub(in crate::mcp_upstream) async fn call_with(
+        &self,
+        name: &str,
+        arguments: Value,
+    ) -> crate::mcp_upstream::tests::Answer {
         let body = json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-            "params": {"name": name, "arguments": {}}});
-        self.rpc(&body.to_string()).await.message()
+            "params": {"name": name, "arguments": arguments}});
+        self.rpc(&body.to_string()).await
     }
 }
 

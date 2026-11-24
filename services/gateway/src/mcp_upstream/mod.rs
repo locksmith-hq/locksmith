@@ -27,6 +27,11 @@
 //! `approval_required` (no approver until M3) and only `allow` reaches the upstream. A failed
 //! catalogue fetch is a fixed hop error, never a stale list.
 
+//! Group 4 (design decision 8): every `tools/call` is audited ([`audit`]): `mcp.upstream_call`
+//! (`pending`) before forwarding an allowed call (refused `audit_unavailable` if it cannot be
+//! appended) and `mcp.upstream_outcome` after; one `denied` `mcp.upstream_call` for every refusal.
+//! Never arguments or results.
+//!
 //! Spike 2.1: the rmcp client transport runs over the gateway's own pinned HTTP client
 //! (`http_client.rs`: no redirects, no env proxy, pinned addresses); see the spike test.
 
@@ -52,6 +57,7 @@ use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+pub mod audit;
 pub mod catalogue;
 pub mod hop;
 pub mod policy;
@@ -64,6 +70,8 @@ use crate::mcp_endpoint::{admit, unauthorized};
 use crate::relay::{Relay, error};
 use crate::ttl::{MAX_CACHE_TTL, TtlCell};
 
+use crate::audit::McpUpstreamReason;
+use audit::{CallAudit, UNKNOWN_TOOL};
 use catalogue::Catalogue;
 use policy::StaticToolPolicy;
 
@@ -326,29 +334,72 @@ impl ServerHandler for UpstreamMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let agent = Self::agent(&context)?;
-        let catalogue = self.catalogue(agent).await?;
+        let audit = CallAudit::new(&self.relay, agent, &self.upstream.name);
+        let catalogue = match self.catalogue(agent).await {
+            Ok(c) => c,
+            Err(e) => {
+                audit
+                    .refused(
+                        UNKNOWN_TOOL,
+                        ToolDecision::Hide,
+                        McpUpstreamReason::CatalogueUnavailable,
+                    )
+                    .await;
+                return Err(e);
+            }
+        };
         if !catalogue.contains(&request.name) {
+            // The agent's text is never recorded: a name outside the catalogue is `unknown`.
+            audit
+                .refused(
+                    UNKNOWN_TOOL,
+                    ToolDecision::Hide,
+                    McpUpstreamReason::UnknownTool,
+                )
+                .await;
             return Err(unknown_tool());
         }
+        // In the catalogue, so it passed the tool-name rule.
+        let tool = request.name.to_string();
         let Some(decisions) = self.decisions(agent, &catalogue).await else {
+            audit
+                .refused(
+                    &tool,
+                    ToolDecision::Hide,
+                    McpUpstreamReason::PolicyUnavailable,
+                )
+                .await;
             return Err(McpError::internal_error("policy_unavailable", None));
         };
-        // Seam (4.2 audit): every refusal below and the pending event before the forward.
         match decisions.get(request.name.as_ref()) {
             Some(ToolDecision::Allow) => {}
             Some(ToolDecision::Deny) => {
+                audit
+                    .refused(&tool, ToolDecision::Deny, McpUpstreamReason::Deny)
+                    .await;
                 return Err(McpError::invalid_request("tool_denied", None));
             }
             Some(ToolDecision::Hold) => {
+                audit
+                    .refused(&tool, ToolDecision::Hold, McpUpstreamReason::Hold)
+                    .await;
                 // No approver until M3: fail closed.
                 return Err(McpError::invalid_request("approval_required", None));
             }
-            Some(ToolDecision::Hide) | None => return Err(unknown_tool()),
+            Some(ToolDecision::Hide) | None => {
+                audit
+                    .refused(&tool, ToolDecision::Hide, McpUpstreamReason::Hide)
+                    .await;
+                return Err(unknown_tool());
+            }
         }
-        let result = hop::call_tool(&self.deps(), &self.upstream, agent, request)
-            .await
-            .map_err(Self::hop_error)?;
-        Ok(CallToolResponse::Complete(result))
+        // The pending event first: without it nothing is forwarded.
+        let attempt = audit.begin(&tool).await?;
+        let result = hop::call_tool(&self.deps(), &self.upstream, agent, request).await;
+        audit
+            .finish(&tool, attempt, result.as_ref().map(|_| ()).map_err(|e| *e))
+            .await;
+        Ok(CallToolResponse::Complete(result.map_err(Self::hop_error)?))
     }
 }
 

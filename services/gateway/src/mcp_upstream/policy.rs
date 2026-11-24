@@ -71,4 +71,4 @@ impl ToolPolicy for StaticToolPolicy {
 
 #[cfg(test)]
 #[path = "policy_tests.rs"]
-mod tests;
+pub(in crate::mcp_upstream) mod tests;

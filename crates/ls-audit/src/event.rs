@@ -178,9 +178,12 @@ pub mod attr {
     pub const BYTES_OUT: Code = Code::new("bytes_out");
     /// The MCP server layer (`hub` or `agent`).
     pub const LAYER: Code = Code::new("layer");
-    /// The MCP tool name, from the registry (`unknown` for a name the registry does not have).
+    /// The MCP tool name: from the registry for the agent layer, a [`Text`](super::Text) that passed
+    /// the MCP tool-name rule for an upstream call; `unknown` for any other name.
     pub const TOOL: Code = Code::new("tool");
-    /// The configured name of an MCP upstream (a code, `[a-z0-9-]{1,32}`).
+    /// The configured name of an MCP upstream (a [`Text`](super::Text) the control plane checks
+    /// against `[a-z0-9-]{1,32}`; a name has hyphens and may start with a digit, so it is not a
+    /// [`Code`]).
     pub const UPSTREAM: Code = Code::new("upstream");
     /// The tool decision applied to an MCP upstream call (`allow`, `hide`, `deny` or `hold`).
     pub const DECISION: Code = Code::new("decision");

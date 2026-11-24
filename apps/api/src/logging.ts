@@ -10,7 +10,7 @@ export const REDACT_PATHS = [
 const SENSITIVE_KEY = /secret|token|password|passwd|authorization|cookie|api[-_]?key/i;
 const CENSOR = "[redacted]";
 
-export function redactDeep(value: unknown, depth = 0): unknown {
+function redactDeep(value: unknown, depth = 0): unknown {
   if (depth > 8 || value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map((v) => redactDeep(v, depth + 1));
   // Only plain objects: live req/res/socket objects are left for the serializers.

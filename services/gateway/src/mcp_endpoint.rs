@@ -108,6 +108,12 @@ impl McpEndpoint {
         self.clients = clients;
         self
     }
+
+    /// The `Host` values accepted (loopback plus the public hosts); `/mcp/upstream/{name}` uses
+    /// the same list.
+    pub(crate) fn allowed_hosts(&self) -> &[String] {
+        &self.allowed_hosts
+    }
 }
 
 /// The gateway MCP server: the registry's agent tools that are on, run as the agent behind the
@@ -283,7 +289,7 @@ impl GatewayMcp {
     }
 }
 
-fn unauthorized(token_presented: bool) -> Response {
+pub(crate) fn unauthorized(token_presented: bool) -> Response {
     let mut response = error(
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
@@ -330,26 +336,40 @@ async fn agent_revoked(
     revoked.contains(&agent.agent_id)
 }
 
+/// Verify the agent token on `request` and refuse a revoked agent; on success the verified
+/// [`AgentIdentity`] is inserted as a request extension and returned. The refusal is the one
+/// `401` with its challenge. Shared by `/mcp` and `/mcp/upstream/{name}` ([`crate::mcp_upstream`]).
+pub(crate) async fn admit(
+    endpoint: &McpEndpoint,
+    relay: Option<&Arc<Relay>>,
+    request: &mut Request,
+) -> Result<AgentIdentity, Box<Response>> {
+    let presented = request.headers().contains_key(header::AUTHORIZATION);
+    match endpoint.auth.authenticate(request.headers()).await {
+        Ok(identity) => {
+            // A revoked agent is refused like a bad token, on calls and on a fresh initialize.
+            if agent_revoked(endpoint, relay, &identity).await {
+                return Err(Box::new(unauthorized(true)));
+            }
+            request.extensions_mut().insert(identity);
+            Ok(identity)
+        }
+        Err(e) => {
+            // The reason is a fixed label, never token text.
+            tracing::debug!(reason = e.as_str(), "mcp request refused");
+            Err(Box::new(unauthorized(presented)))
+        }
+    }
+}
+
 async fn require_agent(
     State((endpoint, relay)): State<(Arc<McpEndpoint>, Option<Arc<Relay>>)>,
     mut request: Request,
     next: Next,
 ) -> Response {
-    let presented = request.headers().contains_key(header::AUTHORIZATION);
-    match endpoint.auth.authenticate(request.headers()).await {
-        Ok(identity) => {
-            // A revoked agent is refused like a bad token, on calls and on a fresh initialize.
-            if agent_revoked(&endpoint, relay.as_ref(), &identity).await {
-                return unauthorized(true);
-            }
-            request.extensions_mut().insert(identity);
-            next.run(request).await
-        }
-        Err(e) => {
-            // The reason is a fixed label, never token text.
-            tracing::debug!(reason = e.as_str(), "mcp request refused");
-            unauthorized(presented)
-        }
+    match admit(&endpoint, relay.as_ref(), &mut request).await {
+        Ok(_) => next.run(request).await,
+        Err(refused) => *refused,
     }
 }
 
@@ -361,7 +381,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
             .route("/mcp/{*rest}", any(|| async { unauthorized(false) }));
     };
     let config = StreamableHttpServerConfig::default()
-        .with_allowed_hosts(endpoint.allowed_hosts.clone())
+        .with_allowed_hosts(endpoint.allowed_hosts().to_vec())
         .with_legacy_session_mode(true);
     let relay = state.relay();
     let settings = endpoint.settings.clone();

@@ -1,5 +1,6 @@
 //! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
-//! ([`crate::grants`]) and `/git/{host}/...` ([`crate::git`]).
+//! ([`crate::grants`]), `/git/{host}/...` ([`crate::git`]), `/mcp` ([`crate::mcp_endpoint`]) and
+//! `/mcp/upstream/{name}` ([`crate::mcp_upstream`]).
 
 use std::sync::Arc;
 
@@ -13,6 +14,7 @@ use crate::aws;
 use crate::git;
 use crate::grants;
 use crate::mcp_endpoint::{self, McpEndpoint};
+use crate::mcp_upstream;
 use crate::relay::{self, Relay};
 
 /// Shared, cheaply cloneable state.
@@ -80,6 +82,9 @@ pub fn build(state: AppState) -> Router {
                 .post(git::route)
                 .layer(DefaultBodyLimit::disable()),
         )
+        // Upstream MCP servers (m2-mcp-gateway): the same agent token, `Host` allowlist and rmcp
+        // log cap as `/mcp`; an unknown name and one without a relay grant are the same `404`.
+        .route(mcp_upstream::PATH, mcp_upstream::route(&state))
         .merge(mcp)
         .with_state(state)
 }

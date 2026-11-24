@@ -19,10 +19,12 @@ use tower::ServiceExt;
 const ORG: &str = "11111111-1111-4111-8111-111111111111";
 const SECRET: &str = "22222222-2222-4222-8222-222222222222";
 
+type Wrapped = HashMap<Vec<u8>, (Binding, [u8; 32])>;
+
 /// Remembers each wrapped blob's binding and key, the way a KMS would authenticate them.
 #[derive(Default)]
 struct FakeKms {
-    wrapped: Mutex<HashMap<Vec<u8>, (Binding, [u8; 32])>>,
+    wrapped: Mutex<Wrapped>,
     seen_keys: Mutex<Vec<[u8; 32]>>,
     fail: Option<WrapError>,
 }

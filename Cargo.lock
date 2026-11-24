@@ -2976,6 +2976,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ls-oauth"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "serde",
+ "serde_json",
+ "toml",
+ "uuid",
+]
+
+[[package]]
 name = "ls-pg-test"
 version = "0.0.1-alpha.4"
 dependencies = [

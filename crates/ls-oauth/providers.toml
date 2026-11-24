@@ -1,0 +1,13 @@
+# Provider registry (C1 design decision 3). Embedded at build time and validated at load.
+# Empty until task 2.2 fills GitHub, Google, Slack, Linear and Atlassian.
+#
+# [[provider]]
+# id = "github"
+# name = "GitHub"
+# authorize_url = "https://..."
+# token_url = "https://..."
+# revoke_url = "https://..."      # optional; none means the console links to the provider
+# account_url = "https://..."
+# refresh = "rotating"            # rotating | static | none
+# api_hosts = ["api.github.com"]
+# default_scopes = ["..."]

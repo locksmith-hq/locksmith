@@ -65,6 +65,7 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just psql` opens a database shell.
 - `just api` and `just gateway` run the services against the stack.
 - `just relay-smoke`, `just connector-smoke` and `just audit-smoke` are the smoke tests that need `just up` and `just api`. `just audit-smoke` also runs `oha` at 200 relays/s when it is installed (`AUDIT_SMOKE_LOAD=0` skips that).
+- `just agent-smoke <name>` (`client`, `vercel-ai`, `openai-agents`, `langchain`; needs `just up` and `just api`) runs that agent example as the agent against a real gateway and WireMock, asserts the credential reached WireMock, and scans the artifacts and `target/agent-smoke/<name>/transcript.jsonl` for the canary and the enrolment secret.
 - `just test-e2e` runs every e2e test.
 - `just audit-export`, `just audit-verify` and `just audit-tamper-test` export, verify and tamper-test the audit ledger.
 - `just leak-scan` checks for leaked canary secrets after a run.

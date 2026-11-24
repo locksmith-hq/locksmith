@@ -338,6 +338,10 @@ sdk-gen:
 sdk-smoke:
     bash scripts/sdk-smoke.sh
 
+# Agent framework example (`client` or an integrations/agent-<name>) against `just up` + `just api`, then leak scans.
+agent-smoke name:
+    bash scripts/agent-smoke.sh {{name}}
+
 # End-to-end tests against the local stack (needs `just up`).
 test-e2e:
     cargo nextest run -p ls-e2e

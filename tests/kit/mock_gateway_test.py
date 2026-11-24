@@ -37,7 +37,7 @@ class Mock:
             return e.code, json.loads(e.read() or b"null")
 
     def token(self):
-        return self.call("POST", "/v1/agent-tokens", {})[1]["access_token"]
+        return self.call("POST", "/v1/agent-tokens", {"enrollment_secret": "canary-enroll"})[1]["access_token"]
 
     def mcp(self, token, method, params=None, mid=1):
         return self.call("POST", "/mcp", {"jsonrpc": "2.0", "id": mid, "method": method,
@@ -59,7 +59,7 @@ class T(unittest.TestCase):
 
     def test_token_grants_relay_round_trip(self):
         self.m = Mock()
-        st, tok = self.m.call("POST", "/v1/agent-tokens", {})
+        st, tok = self.m.call("POST", "/v1/agent-tokens", {"enrollment_secret": "canary-enroll"})
         self.assertEqual(st, 200)
         self.assertEqual(tok["token_type"], "Bearer")
         st, grants = self.m.call("GET", "/v1/grants", token=tok["access_token"])

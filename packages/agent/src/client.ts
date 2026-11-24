@@ -1,3 +1,4 @@
+import type { components } from "@locksmith/sdk";
 import {
   AgentError,
   GATEWAY_SLUGS,
@@ -7,6 +8,9 @@ import {
   type RelayRequest,
   type RelayResponse,
 } from "./types";
+
+type AgentToken = components["schemas"]["AgentToken"];
+type AgentTokenRequest = components["schemas"]["AgentTokenRequest"];
 
 const RENEW_BEFORE_MS = 60_000;
 
@@ -66,15 +70,15 @@ export function createAgentClient(opts: AgentClientOptions = {}): AgentClient {
     try {
       res = await doFetch(`${controlPlane}/v1/agent-tokens`, {
         method: "POST",
-        headers: { authorization: `Bearer ${enrollment}`, "content-type": "application/json" },
-        body: "{}",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enrollment_secret: enrollment ?? "" } satisfies AgentTokenRequest),
       });
     } catch {
       throw new AgentError("transport", 0);
     }
     const body = await res.json().catch(() => null);
     if (!res.ok) throw new AgentError(slugOf(res.status, body), res.status);
-    const t = body as { access_token?: string; expires_at?: string };
+    const t = body as Partial<AgentToken> | null;
     if (typeof t?.access_token !== "string") throw new AgentError("transport", res.status);
     token = t.access_token;
     const exp = Date.parse(t.expires_at ?? "");

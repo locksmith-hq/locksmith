@@ -113,9 +113,15 @@ def make_handler(state):
         def do_POST(self):
             path = self.path.split("?")[0]
             if path == "/v1/agent-tokens":
-                self.body()
+                raw = self.body()
+                try:
+                    secret = json.loads(raw).get("enrollment_secret")
+                except (ValueError, AttributeError):
+                    secret = None
                 if state.fail:
                     self.fail(state.fail)
+                elif not isinstance(secret, str) or not secret:
+                    self.fail("bad_request")
                 else:
                     self.send_json(200, state.issue())
             elif path == "/v1/relay":

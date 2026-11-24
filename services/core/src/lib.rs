@@ -3,6 +3,7 @@
 //! plaintext secrets or key bytes.
 
 pub mod app;
+pub mod audit_api;
 pub mod audit_event;
 pub mod auth;
 pub mod config;

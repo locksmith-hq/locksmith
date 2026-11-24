@@ -6,6 +6,7 @@ use secrecy::SecretString;
 
 pub const ENV_BIND: &str = "LOCKSMITH_CORE_BIND";
 pub const ENV_SERVICE_TOKEN: &str = "LOCKSMITH_CORE_SERVICE_TOKEN";
+pub const ENV_DATABASE_URL: &str = "LOCKSMITH_CORE_DATABASE_URL";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 const DEFAULT_BIND: &str = "127.0.0.1:8090";
 
@@ -30,6 +31,8 @@ impl std::error::Error for ConfigError {}
 pub struct Config {
     pub bind: SocketAddr,
     pub service_token: SecretString,
+    /// Postgres URL of the `locksmith_app` role (RLS applies). Holds a password: secret.
+    pub database_url: Option<SecretString>,
     pub otlp_endpoint: Option<String>,
 }
 
@@ -48,9 +51,13 @@ impl Config {
             .parse()
             .map_err(|_| ConfigError::Invalid(ENV_BIND))?;
         let otlp_endpoint = get(ENV_OTLP_ENDPOINT).filter(|v| !v.trim().is_empty());
+        let database_url = get(ENV_DATABASE_URL)
+            .filter(|v| !v.trim().is_empty())
+            .map(SecretString::from);
         Ok(Self {
             bind,
             service_token,
+            database_url,
             otlp_endpoint,
         })
     }

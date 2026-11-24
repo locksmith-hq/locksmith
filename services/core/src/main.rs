@@ -35,7 +35,22 @@ async fn main() -> ExitCode {
         Ok(t) => t,
         Err(_) => return ExitCode::FAILURE,
     };
-    let state = AppState::new(ServiceToken::new(config.service_token));
+    let mut state = AppState::new(ServiceToken::new(config.service_token));
+    if let Some(url) = &config.database_url {
+        use secrecy::ExposeSecret as _;
+        let Ok(options) = url
+            .expose_secret()
+            .parse::<sqlx_postgres::PgConnectOptions>()
+        else {
+            tracing::error!("invalid database url");
+            return ExitCode::FAILURE;
+        };
+        state = state.with_pool(
+            sqlx_postgres::PgPoolOptions::new()
+                .max_connections(8)
+                .connect_lazy_with(options),
+        );
+    }
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {

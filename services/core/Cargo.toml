@@ -37,9 +37,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1.29", features = ["serde"] }
 # The ledger's allow-listed event types (the core turns request strings into these).
-ls-audit = { path = "../../crates/ls-audit" }
+ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
+sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "uuid"] }
+sqlx-postgres = { version = "0.9.0", default-features = false, features = ["uuid"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 
 [dev-dependencies]
+ls-pg-test = { path = "../../crates/ls-pg-test" }
 opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }
 http-body-util = "0.1"

@@ -25,6 +25,7 @@ ARTIFACT_DIR; the adversarial runner reads it and deletes it.
 """
 import base64
 import json
+import os
 import sys
 import threading
 import urllib.request
@@ -143,7 +144,7 @@ def make_handler(mode, headers_log, redirect_url):
 
         def _record(self):
             line = json.dumps({"method": self.command, "path": self.path, "headers": dict(self.headers.items())})
-            with lock, open(headers_log, "a") as f:
+            with lock, os.fdopen(os.open(headers_log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as f:
                 f.write(line + "\n")
 
         def _send(self, status, body=b"", ctype="application/json", extra=()):
@@ -222,7 +223,6 @@ def post(port, msg, headers=None, query=""):
 
 
 def selftest():
-    import os
     import tempfile
     canary = "canary-credential-0123456789abcdef"
     with tempfile.TemporaryDirectory() as tmp:

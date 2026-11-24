@@ -881,6 +881,7 @@ pub enum McpUpstreamOutcome {
 /// result or the upstream credential.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)] // Contract only: the handler answers 501 until the proxy lands (m2 group 2).
 pub struct NewMcpUpstreamCall {
     pub phase: McpUpstreamPhase,
     /// The agent whose verified token made the call (the event's actor).

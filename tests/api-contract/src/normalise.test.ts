@@ -36,6 +36,17 @@ describe("normalise", () => {
     });
   });
 
+  it("replaces JWKS key material", () => {
+    const n = new Normaliser();
+    expect(n.json({ kid: "abc", x: "def", kty: "OKP" })).toEqual({ kid: "<key-1>", x: "<key-2>", kty: "OKP" });
+  });
+
+  it("replaces a registered per-run literal", () => {
+    const n = new Normaliser();
+    n.literal("x1y2", "<run>");
+    expect(n.json({ name: "contract-a-x1y2" })).toEqual({ name: "contract-a-<run>" });
+  });
+
   it("sorts object keys and leaves other values alone", () => {
     const n = new Normaliser();
     expect(JSON.stringify(n.json({ z: 1, a: [true, null, "x"] }))).toBe('{"a":[true,null,"x"],"z":1}');

@@ -1,8 +1,6 @@
 // Paths with no scenario yet, each with the reason it is excluded. A scenario file that covers a
 // path must delete its row here: the coverage test fails on a row that is already covered.
 export const EXCLUDED: Record<string, string> = {
-  "GET /.well-known/jwks.json": "pending: scenarios land in task 2.1",
-  "GET /healthz": "pending: scenarios land in task 2.1",
   "GET /internal/v1/agents/{agent_id}/grants": "pending: scenarios land in task 3.4",
   "POST /internal/v1/audit/events": "pending: scenarios land in task 3.4",
   "PUT /internal/v1/gateway/bindings": "pending: scenarios land in task 3.4",
@@ -11,7 +9,6 @@ export const EXCLUDED: Record<string, string> = {
   "GET /internal/v1/mcp/agent-tool-settings": "pending: scenarios land in task 3.4",
   "GET /internal/v1/mcp/revoked-agent-clients": "pending: scenarios land in task 3.4",
   "GET /internal/v1/secrets/{secret_id}/versions/{version}/material": "pending: scenarios land in task 3.4",
-  "GET /readyz": "pending: scenarios land in task 2.1",
   "POST /v1/agent-tokens": "pending: scenarios land in task 3.1",
   "GET /v1/agents": "pending: scenarios land in task 3.1",
   "POST /v1/agents": "pending: scenarios land in task 3.1",
@@ -23,16 +20,11 @@ export const EXCLUDED: Record<string, string> = {
   "DELETE /v1/agents/{agent_id}/grants/{grant_id}": "pending: scenarios land in task 3.1",
   "GET /v1/audit/events": "pending: scenarios land in task 3.3",
   "GET /v1/audit/status": "pending: scenarios land in task 3.3",
-  "POST /v1/auth/sign-in": "pending: scenarios land in task 2.1",
-  "POST /v1/auth/sign-out": "pending: scenarios land in task 2.1",
   "GET /v1/bindings": "pending: scenarios land in task 3.2",
   "GET /v1/mcp/clients": "pending: scenarios land in task 3.3",
   "POST /v1/mcp/clients/{client_row_id}/revoke": "pending: scenarios land in task 3.3",
   "GET /v1/mcp/tools": "pending: scenarios land in task 3.3",
   "PUT /v1/mcp/tools/{layer}/{tool}": "pending: scenarios land in task 3.3",
-  "POST /v1/orgs": "pending: scenarios land in task 2.1",
-  "GET /v1/orgs/current": "pending: scenarios land in task 2.1",
-  "GET /v1/orgs/{org_id}": "pending: scenarios land in task 2.1",
   "GET /v1/projects": "pending: scenarios land in task 2.2",
   "POST /v1/projects": "pending: scenarios land in task 2.2",
   "DELETE /v1/projects/{project_id}": "pending: scenarios land in task 2.2",

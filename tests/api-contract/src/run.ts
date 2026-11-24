@@ -11,6 +11,7 @@ async function record(url: string, out: string): Promise<void> {
   process.env.API_CONTRACT_URL = url;
   const rec = new Recorder();
   const s = await seed();
+  rec.norm.literal(s.run, "<run>");
   for (const sc of await loadScenarios()) await sc.run(new Ctx(rec, s, sc.id));
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, `${JSON.stringify(rec.exchanges, null, 2)}\n`);

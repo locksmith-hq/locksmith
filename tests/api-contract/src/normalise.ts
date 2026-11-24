@@ -7,6 +7,8 @@ const IS_UUID = new RegExp(`^${UUID.source}$`, "i");
 const TIMESTAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g;
 const JWT = /eyJ[\w-]+\.[\w-]+\.[\w-]*/g;
 const SECRET_KEY = /(token|secret|password|authorization)$/i;
+// JWKS public key material differs per process; the shape is what the contract pins.
+const KEY_FIELD = /^(kid|x)$/;
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
@@ -29,8 +31,16 @@ export class Normaliser {
     return out;
   }
 
+  private readonly literals = new Map<string, string>();
+
+  /** Registers a value that is unique to this run (for example the seed suffix in names). */
+  literal(value: string, placeholder: string): void {
+    this.literals.set(value, placeholder);
+  }
+
   /** Replaces every id, timestamp and token inside one string. */
   text(s: string): string {
+    for (const [value, placeholder] of this.literals) s = s.split(value).join(placeholder);
     return s
       .replace(JWT, (m) => this.placeholder("token", m))
       .replace(TIMESTAMP, (m) => this.placeholder("ts", m))
@@ -40,6 +50,7 @@ export class Normaliser {
   /** Walks a JSON value; string values under a token, secret or password key are redacted. */
   json(value: Json, key = ""): Json {
     if (typeof value === "string") {
+      if (value !== "" && KEY_FIELD.test(key)) return this.placeholder("key", value);
       if (value !== "" && SECRET_KEY.test(key) && !IS_UUID.test(value)) {
         return this.placeholder("token", value);
       }

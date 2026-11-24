@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, test, vi } from "vitest";
 import { ApiError, bindingDetails, createClient } from "./index";
-import { bindingSummaries, invites, mcpClients, mcpToolSettings, memberList, myOrgs } from "./fixtures";
+import { bindingSummaries, invites, memberList, myOrgs } from "./fixtures";
 
 const B = "http://cp.test";
 const json = (body: unknown, status = 200) =>

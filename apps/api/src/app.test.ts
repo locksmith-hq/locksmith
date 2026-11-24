@@ -54,6 +54,20 @@ describe("health and log redaction", () => {
     const out = lines.join("");
     expect(out).toContain("req");
     expect(out).not.toContain("PLANTED-CANARY");
+    const rec = JSON.parse(lines.filter((l) => l.includes('"req"')).at(-1) as string);
+    expect(rec.req.headers.authorization).toBe("[redacted]");
+    expect(rec.req.headers.cookie).toBe("[redacted]");
+    expect(rec.req.url).toBe("/healthz");
+  });
+
+  it("keeps error message and stack, and scrubs query-string tokens", () => {
+    const sink: string[] = [];
+    const log = pino(pinoOptions, new Writable({ write(c, _e, cb) { sink.push(c.toString()); cb(); } }));
+    log.error({ err: new Error("boom"), url: "http://x/y?access_token=PLANTED-U&a=1" }, "m");
+    const rec = JSON.parse(sink.join(""));
+    expect(rec.err.message).toBe("boom");
+    expect(rec.err.stack).toContain("boom");
+    expect(rec.url).toBe("http://x/y?access_token=[redacted]&a=1");
   });
 
   it("redacts fields named like secrets or tokens", () => {

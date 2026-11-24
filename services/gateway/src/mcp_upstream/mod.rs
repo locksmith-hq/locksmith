@@ -16,20 +16,23 @@
 //!
 //! Task 2.3: the upstream hop ([`hop`]) is built: per request it checks egress, decrypts,
 //! injects the credential and runs one rmcp client exchange (`initialize`, then `ping`,
-//! `tools/list` or `tools/call`), refusing upstream sampling, elicitation and roots. The handler
-//! calls it through one seam, [`UpstreamMcp::raw_forwarding`], which is **off on every
-//! production path** ([`route`]): until the catalogue and policy (group 3, design decisions 5-7)
-//! and redaction (task 2.4, decision 11) land, forwarding would let an agent call any upstream
-//! tool, hidden ones included, and read unredacted upstream text that can carry the credential.
-//! So with the seam off `tools/list` stays empty and `tools/call` answers `unknown_tool` (fail
-//! closed); only tests turn it on, to drive the hop end to end. Group 3 and 2.4 replace the
-//! flag with policy and redaction at the marked seams.
+//! `tools/list` or `tools/call`), refusing upstream sampling, elicitation and roots; task 2.4
+//! redacts every upstream message inside it.
 //!
+//! Group 3 (design decisions 5-7): the handler holds an `Arc<dyn ToolPolicy>` (set in `main.rs`,
+//! [`policy::StaticToolPolicy`]; without one every tool is hidden and every call refused) and a
+//! per-upstream [`catalogue::Catalogue`] cached in a `TtlCell` (at most `MAX_CACHE_TTL`).
+//! `tools/list` shows the catalogue minus `hide`; `tools/call` for a name outside the catalogue
+//! or decided `hide` is one `unknown_tool` error, `deny` is `tool_denied`, `hold` is
+//! `approval_required` (no approver until M3) and only `allow` reaches the upstream. A failed
+//! catalogue fetch is a fixed hop error, never a stale list.
+
 //! Spike 2.1: the rmcp client transport runs over the gateway's own pinned HTTP client
 //! (`http_client.rs`: no redirects, no env proxy, pinned addresses); see the spike test.
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::rejection::PathRejection;
@@ -37,6 +40,7 @@ use axum::extract::{Path, Request, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::{MethodRouter, any};
+use ls_mcp_server::upstream::{ToolDecision, ToolPolicy, ToolQuery};
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, InitializeRequestParams, InitializeResult,
     ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig,
@@ -48,7 +52,9 @@ use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+pub mod catalogue;
 pub mod hop;
+pub mod policy;
 
 use crate::app::AppState;
 use crate::auth::AgentIdentity;
@@ -56,6 +62,10 @@ use crate::config::McpUpstream;
 use crate::grants::allows_relay;
 use crate::mcp_endpoint::{admit, unauthorized};
 use crate::relay::{Relay, error};
+use crate::ttl::{MAX_CACHE_TTL, TtlCell};
+
+use catalogue::Catalogue;
+use policy::StaticToolPolicy;
 
 /// The route the upstreams are served at.
 pub const PATH: &str = "/mcp/upstream/{name}";
@@ -78,7 +88,12 @@ struct Upstreams {
 }
 
 impl Upstreams {
-    fn new(relay: &Arc<Relay>, allowed_hosts: &[String], raw_forwarding: bool) -> Self {
+    fn new(
+        relay: &Arc<Relay>,
+        allowed_hosts: &[String],
+        policy: &Arc<dyn ToolPolicy>,
+        catalogue_ttl: Duration,
+    ) -> Self {
         let by_name = relay
             .bindings()
             .mcp_upstreams
@@ -90,7 +105,8 @@ impl Upstreams {
                 let handler = UpstreamMcp {
                     relay: relay.clone(),
                     upstream: Arc::new(b.clone()),
-                    raw_forwarding,
+                    policy: policy.clone(),
+                    catalogue: Arc::new(TtlCell::new(catalogue_ttl)),
                 };
                 let service = StreamableHttpService::new(
                     move || Ok(handler.clone()),
@@ -112,20 +128,23 @@ impl Upstreams {
 /// bindings and the `Host` allowlist from the `/mcp` endpoint; without an endpoint every request
 /// is `401` (fail closed, as `/mcp`), and without a relay (no grants to read) every name is `404`.
 pub fn route(state: &AppState) -> MethodRouter<AppState> {
-    // The seam stays closed in production: nothing unpoliced or unredacted is relayed.
-    route_with(state, false)
+    route_with(state, MAX_CACHE_TTL)
 }
 
-/// [`route`] with the upstream forwarded raw (no policy, no redaction): tests of the hop only.
+/// [`route`] with another catalogue TTL (clamped to `MAX_CACHE_TTL`): tests of the cache.
 #[cfg(test)]
-pub(crate) fn route_forwarding_raw_for_tests(state: &AppState) -> MethodRouter<AppState> {
-    route_with(state, true)
+pub(crate) fn route_with_ttl_for_tests(state: &AppState, ttl: Duration) -> MethodRouter<AppState> {
+    route_with(state, ttl)
 }
 
-fn route_with(state: &AppState, raw_forwarding: bool) -> MethodRouter<AppState> {
+fn route_with(state: &AppState, catalogue_ttl: Duration) -> MethodRouter<AppState> {
+    // No policy configured: an empty static one, which fails closed for every upstream.
+    let policy = state
+        .tool_policy()
+        .unwrap_or_else(|| Arc::new(StaticToolPolicy::default()));
     let upstreams = Arc::new(match (state.mcp(), state.relay()) {
         (Some(endpoint), Some(relay)) => {
-            Upstreams::new(&relay, endpoint.allowed_hosts(), raw_forwarding)
+            Upstreams::new(&relay, endpoint.allowed_hosts(), &policy, catalogue_ttl)
         }
         _ => Upstreams::default(),
     });
@@ -181,16 +200,21 @@ async fn serve(
     upstream.service.handle(request).await.map(Body::new)
 }
 
+/// The one error for a name outside the catalogue and for a `hide` tool.
+fn unknown_tool() -> McpError {
+    McpError::invalid_params("unknown_tool", None)
+}
+
 /// The MCP server an agent talks to at `/mcp/upstream/{name}`. Only the tools capability is
 /// advertised, so prompts, resources, completions, logging and tasks are method-not-found.
 #[derive(Clone)]
 struct UpstreamMcp {
     relay: Arc<Relay>,
     upstream: Arc<McpUpstream>,
-    /// The seam (see the module header): `false` on every production path, so `tools/list` is
-    /// empty and `tools/call` is `unknown_tool` until policy (group 3) and redaction (task 2.4)
-    /// sit here. `true` only from [`route_forwarding_raw_for_tests`].
-    raw_forwarding: bool,
+    /// Decides every catalogue tool; the handler never reads the binding's table itself.
+    policy: Arc<dyn ToolPolicy>,
+    /// The upstream's catalogue, shared by every session and agent of this upstream.
+    catalogue: Arc<TtlCell<Arc<Catalogue>>>,
 }
 
 impl UpstreamMcp {
@@ -216,6 +240,40 @@ impl UpstreamMcp {
             .copied()
             .ok_or_else(|| McpError::invalid_request("unauthenticated", None))
     }
+
+    /// The current catalogue: cached for at most `MAX_CACHE_TTL`; an error is never cached.
+    async fn catalogue(&self, agent: AgentIdentity) -> Result<Arc<Catalogue>, McpError> {
+        self.catalogue
+            .get_or_fetch(|| async {
+                catalogue::fetch(&self.deps(), &self.upstream, agent)
+                    .await
+                    .map(Arc::new)
+            })
+            .await
+            .map_err(Self::hop_error)
+    }
+
+    /// The policy's decision for every catalogue tool; a tool it does not name is hidden. An
+    /// evaluator error is `None` (the caller hides everything and refuses the call).
+    async fn decisions(
+        &self,
+        agent: AgentIdentity,
+        catalogue: &Catalogue,
+    ) -> Option<std::collections::HashMap<String, ToolDecision>> {
+        let query = ToolQuery {
+            org: agent.org_id.to_string(),
+            agent: agent.agent_id.to_string(),
+            upstream: self.upstream.name.clone(),
+            catalogue: catalogue.entries(),
+        };
+        match self.policy.decide(&query).await {
+            Ok(d) => Some(d),
+            Err(e) => {
+                tracing::warn!(upstream = %self.upstream.name, reason = e.code, "tool policy unavailable");
+                None
+            }
+        }
+    }
 }
 
 impl ServerHandler for UpstreamMcp {
@@ -237,19 +295,29 @@ impl ServerHandler for UpstreamMcp {
 
     async fn list_tools(
         &self,
-        request: Option<PaginatedRequestParams>,
+        _request: Option<PaginatedRequestParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         let agent = Self::agent(&context)?;
-        // Seam (group 3 policy, 3.2 catalogue): closed, the agent sees no tool.
-        if !self.raw_forwarding {
+        let catalogue = self.catalogue(agent).await?;
+        // The upstream's own paging is folded into the catalogue; the agent gets one page.
+        let Some(decisions) = self.decisions(agent, &catalogue).await else {
             return Ok(ListToolsResult::default());
-        }
-        let tools = hop::list_tools(&self.deps(), &self.upstream, agent, request)
-            .await
-            .map_err(Self::hop_error)?;
-        // Seam (task 2.4): redact the upstream's names, descriptions and schemas here.
-        Ok(tools)
+        };
+        let tools = catalogue
+            .tools()
+            .iter()
+            .filter(|t| {
+                decisions
+                    .get(t.name.as_ref())
+                    .is_some_and(|d| *d != ToolDecision::Hide)
+            })
+            .cloned()
+            .collect();
+        Ok(ListToolsResult {
+            tools,
+            ..ListToolsResult::default()
+        })
     }
 
     async fn call_tool(
@@ -258,15 +326,28 @@ impl ServerHandler for UpstreamMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let agent = Self::agent(&context)?;
-        // Seam (3.3 decisions, 4.2 audit): closed, the catalogue is empty so every name is
-        // unknown (design decision 7).
-        if !self.raw_forwarding {
-            return Err(McpError::invalid_params("unknown_tool", None));
+        let catalogue = self.catalogue(agent).await?;
+        if !catalogue.contains(&request.name) {
+            return Err(unknown_tool());
+        }
+        let Some(decisions) = self.decisions(agent, &catalogue).await else {
+            return Err(McpError::internal_error("policy_unavailable", None));
+        };
+        // Seam (4.2 audit): every refusal below and the pending event before the forward.
+        match decisions.get(request.name.as_ref()) {
+            Some(ToolDecision::Allow) => {}
+            Some(ToolDecision::Deny) => {
+                return Err(McpError::invalid_request("tool_denied", None));
+            }
+            Some(ToolDecision::Hold) => {
+                // No approver until M3: fail closed.
+                return Err(McpError::invalid_request("approval_required", None));
+            }
+            Some(ToolDecision::Hide) | None => return Err(unknown_tool()),
         }
         let result = hop::call_tool(&self.deps(), &self.upstream, agent, request)
             .await
             .map_err(Self::hop_error)?;
-        // Seam (task 2.4): redact the result and re-check here.
         Ok(CallToolResponse::Complete(result))
     }
 }

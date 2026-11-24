@@ -44,7 +44,7 @@ use crate::egress::testkit::StubResolver;
 use crate::grants::testkit::StubGrants;
 use crate::mcp_endpoint::McpEndpoint;
 use crate::mcp_upstream::tests::{
-    AGENT, HOST, INITIALIZE, ORG, grant, send, signer, token as agent_token,
+    AGENT, HOST, INITIALIZE, ORG, grant, signer, token as agent_token,
 };
 use crate::relay::{Relay, RelayOptions};
 
@@ -454,7 +454,7 @@ async fn hop_does_not_follow_a_redirect() {
     assert!(!redirector.received_requests().await.unwrap().is_empty());
 }
 
-/// Through the router with the seam opened for tests: the agent's `Authorization` and its other
+/// Through the router with `echo` allowed: the agent's `Authorization` and its other
 /// headers never reach the upstream; only the four methods cross.
 #[tokio::test]
 async fn hop_through_the_route_forwards_no_agent_header_and_no_other_method() {
@@ -473,8 +473,15 @@ async fn hop_through_the_route_forwards_no_agent_header_and_no_other_method() {
         aws_bindings: Vec::new(),
         pg: Vec::new(),
         git_bindings: Vec::new(),
-        mcp_upstreams: vec![binding(&up.url, "Authorization", "Bearer {secret}", true)],
+        mcp_upstreams: vec![{
+            let mut b = binding(&up.url, "Authorization", "Bearer {secret}", true);
+            b.tools.insert("echo".to_owned(), ToolDecision::Allow);
+            b
+        }],
     };
+    let policy = Arc::new(crate::mcp_upstream::policy::StaticToolPolicy::new(
+        &bindings.mcp_upstreams,
+    ));
     let relay = Relay::new(
         auth.clone(),
         grants,
@@ -486,11 +493,12 @@ async fn hop_through_the_route_forwards_no_agent_header_and_no_other_method() {
     );
     let state = AppState::new(Arc::new(ReadyFlag::new(true)))
         .with_relay(Arc::new(relay))
-        .with_mcp(McpEndpoint::new(auth, &[HOST.to_owned()]));
+        .with_mcp(McpEndpoint::new(auth, &[HOST.to_owned()]))
+        .with_tool_policy(policy);
     let app = Router::new()
         .route(
             crate::mcp_upstream::PATH,
-            crate::mcp_upstream::route_forwarding_raw_for_tests(&state),
+            crate::mcp_upstream::route(&state),
         )
         .with_state(state);
 
@@ -617,76 +625,6 @@ async fn hop_through_the_route_forwards_no_agent_header_and_no_other_method() {
         let body = h.body.as_ref().map(Value::to_string).unwrap_or_default();
         assert!(!body.contains(&t), "agent token in the upstream body");
     }
-}
-
-/// The production route keeps the seam closed: with a live upstream behind the binding, the
-/// agent sees no tool, a call is `unknown_tool`, and the upstream is never called.
-#[tokio::test]
-async fn production_route_keeps_the_seam_closed() {
-    let up = upstream().await;
-    let (decryptor, material) = decryptor();
-    let auth = Arc::new(AgentAuth::new(
-        ORG,
-        Arc::new(StubJwks::with(vec![signer().jwk().clone()])),
-        JwksSettings::default(),
-    ));
-    let grants = Arc::new(StubGrants::default());
-    grants.set(AGENT, vec![grant(SECRET, "relay", None)]);
-    let bindings = Bindings {
-        org_id: ORG,
-        bindings: Vec::new(),
-        aws_bindings: Vec::new(),
-        pg: Vec::new(),
-        git_bindings: Vec::new(),
-        mcp_upstreams: vec![binding(&up.url, "Authorization", "Bearer {secret}", true)],
-    };
-    let relay = Relay::new(
-        auth.clone(),
-        grants,
-        bindings,
-        decryptor,
-        Arc::new(StubResolver::default()),
-        Arc::new(MemoryAudit::default()),
-        RelayOptions::default(),
-    );
-    let state = AppState::new(Arc::new(ReadyFlag::new(true)))
-        .with_relay(Arc::new(relay))
-        .with_mcp(McpEndpoint::new(auth, &[HOST.to_owned()]));
-    let app = crate::app::build(state);
-    let t = agent_token(600);
-    let auth = format!("Bearer {t}");
-    let a = send(
-        &app,
-        "/mcp/upstream/github",
-        Some(&auth),
-        HOST,
-        None,
-        INITIALIZE,
-    )
-    .await;
-    let sid = a.session().expect("session");
-    let list = send(
-        &app,
-        "/mcp/upstream/github",
-        Some(&auth),
-        HOST,
-        Some(&sid),
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
-    )
-    .await;
-    assert_eq!(list.message()["result"]["tools"], serde_json::json!([]));
-    let call = send(
-        &app,
-        "/mcp/upstream/github",
-        Some(&auth),
-        HOST,
-        Some(&sid),
-        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{}}}"#,
-    )
-    .await;
-    assert_eq!(call.message()["error"]["message"], "unknown_tool");
-    assert!(up.seen.hits().is_empty(), "upstream called");
-    assert_eq!(material.fetches.load(Ordering::SeqCst), 0, "secret touched");
 }
 
 /// A forwarded answer built around `VALUE` in several places and encodings.

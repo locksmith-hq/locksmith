@@ -352,7 +352,7 @@ async fn mcp_upstream_with_grant_initializes_with_only_the_tools_capability() {
 }
 
 #[tokio::test]
-async fn mcp_upstream_lists_no_tools_and_refuses_calls_and_other_methods() {
+async fn mcp_upstream_without_a_catalogue_lists_nothing_and_refuses_other_methods() {
     let h = harness();
     h.grants.set(AGENT, vec![grant(SECRET, "relay", None)]);
     let t = token(600);
@@ -374,14 +374,16 @@ async fn mcp_upstream_lists_no_tools_and_refuses_calls_and_other_methods() {
     let msg = rpc(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
         .await
         .message();
-    assert_eq!(msg["result"]["tools"], serde_json::json!([]), "{msg}");
+    // The catalogue cannot be read here (no control plane or upstream): a fixed error, no tool.
+    assert_eq!(msg["error"]["message"], "upstream_unreachable", "{msg}");
+    assert!(msg["result"].is_null(), "{msg}");
 
     let msg = rpc(
         r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_issues","arguments":{}}}"#,
     )
     .await
     .message();
-    assert_eq!(msg["error"]["message"], "unknown_tool", "{msg}");
+    assert_eq!(msg["error"]["message"], "upstream_unreachable", "{msg}");
 
     for (id, method) in [
         (4, "resources/list"),

@@ -77,17 +77,9 @@ api-types-check:
 tree-check:
     scripts/tree-check.sh
 
-# Agents on change branches may only tick OpenSpec tasks, not rewrite them.
+# Merge-review tier selftest (the task-edit guard moved to claude-ai-crew).
 task-guard:
-    scripts/check-task-edits.test.sh
-    scripts/change-status.test.sh
-    scripts/agent-identity.sh selftest
-    scripts/route.sh selftest
-    scripts/worker-has-work.test.sh
-    scripts/run-lock.test.sh
     scripts/review-tier.sh selftest
-    scripts/check-task-edits.sh
-    scripts/check-agent-docs.sh
 
 # Public-readiness hygiene: licences, root docs, links, denylist, secret canary.
 public-check:
@@ -246,6 +238,11 @@ api:
     set -a; . "$root/infra/compose/.env.example"; set +a
     export LOCKSMITH_DEV_AUTH=1 LOCKSMITH_ALLOW_DEV_AUTH=1 LOCKSMITH_BIND=127.0.0.1:8080 LOCKSMITH_MCP_RESOURCE_URL=http://127.0.0.1:8080/mcp OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
     cd "$root" && exec cargo run -q -p ls-control-plane --bin locksmith-api
+
+# B4 API contract suite: `just api-contract <url>` records a normalised transcript under target/api-contract/;
+# `just api-contract --diff <url-a> <url-b>` compares two servers (needs `just up` and `just api`).
+api-contract *args:
+    bash scripts/api-contract.sh {{args}}
 
 # T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
 # Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.

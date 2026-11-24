@@ -1,4 +1,4 @@
-# Append-only logs: a merge keeps both sides' new lines instead of conflicting (scripts/check-task-edits.sh `kept`).
+# Append-only logs: a merge keeps both sides' new lines instead of conflicting.
 openspec/decisions.md merge=union
 docs/agents/owner.md merge=union
 openspec/changes/**/progress.md merge=union

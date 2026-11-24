@@ -117,10 +117,10 @@ owner action. Ready-to-paste prompt for a scheduled cloud routine in the `locksm
 environment (needs `ANTHROPIC_API_KEY` there):
 
 ```text
-Nightly S6 adversarial gate for Locksmith. Check out origin/main. Use the run-start skill. Run
-`just up`, then start `just api` in the background (scripts/bg.sh) and wait for
+Nightly S6 adversarial gate for Locksmith. Check out origin/main. Use the crew's run-start skill (claude-ai-crew). Run
+`just up`, then start `just api` in the background (claude-ai-crew scripts/bg.sh) and wait for
 http://127.0.0.1:8080/readyz. Run `ADVERSARIAL_REQUIRE_ALL=1 just adversarial-gate --agent claude`
-with scripts/bg.sh (timeout 5400 s) and wait for it. Post one comment on the `agent-log` issue:
+with claude-ai-crew scripts/bg.sh (timeout 5400 s) and wait for it. Post one comment on the `agent-log` issue:
 "adversarial-gate nightly <date> <sha>: PASS|FAIL", the summary line, every FAIL, STALE RESIDUAL
 and RESIDUAL line, and `skip live` if it appears. Never paste a canary, a token or a log body:
 only the labels, case ids and file names the gate prints. If the gate fails for a reason other

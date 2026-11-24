@@ -78,3 +78,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 ## 2026-11-24 (worker-b)
 - Verified task 2.1 on PR #674: `apps/api` is private, ESM, AGPL-3.0-only, tsconfig extends `packages/tsconfig/base.json`, turbo tasks build/test/typecheck run, `docs/testing.md` lists it; `npm test --workspace apps/api` 18 pass. 2.1 left unticked: tree-check.sh accepts apps/api only by default, with no explicit entry (evaluator caveat); needs a small tree-check edit.
 - Next: 2.3 (Kysely codegen and `just api-types`), 2.5 (isolation tests), 1.4 to 1.6 (contract suite). Auto-merge not enabled: tasks remain.
+## 2026-11-24 (PM, split for parallel work)
+- T2, T6, T7, T8 and N1 now need only `b1-nestjs-api:contract` (this change's group 1), not the whole port. Tasks 1.4 to 1.6 (scenario suite, runner, verify) are also planned as `b4-api-contract-suite` (no deps) for a second worker; when it merges, run 1.6 here and tick 1.4 to 1.6 only if it passes. Task text unchanged. Landing 1.3 (route table, #674) on main also counts: `change-status.sh` reads B1 ticks from main or `claude/change-b1-nestjs-api`, not the `-r2` branch.
+
+## 2026-11-24 (worker-b, from b4-api-contract-suite)
+- B4 is implemented on `claude/change-b4-api-contract-suite`: `just api-contract <url>` records a deterministic 238-exchange transcript and `just api-contract --diff <a> <b>` compares two servers. After it merges, B1 tasks 1.4 to 1.6 can be verified and ticked by the B1 worker; this completes `b1-nestjs-api:contract`.

@@ -19,4 +19,4 @@ pub mod problem;
 pub mod readiness;
 pub mod telemetry;
 pub mod users;
-pub mod workload;
+pub use ls_oidc_verify::workload;

@@ -10,6 +10,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/locksmith-mcp` | Rust bin | `just test locksmith-mcp` | no | `just test-rust` | MCP server; exercised end to end by `just connector-smoke` |
 | `crates/locksmithd` | Rust bin | `just test locksmithd` | no | `just test-rust` | Local daemon; Postgres-backed tests build their own state |
 | `crates/ls-agent-token` | Rust lib | `just test ls-agent-token` | no | `just test-rust` | Agent tokens: EdDSA JWTs minted by the control plane, verified by the gateway; tests must not print token values |
+| `crates/ls-oidc-verify` | Rust lib | `just test ls-oidc-verify` | no | `just test-rust` | External OIDC token verification (JWKS, workload policies, abuse limits) shared by the control plane and core; tests must not print token values |
 | `crates/ls-broker` | Rust lib | `just test ls-broker` | no | `just test-rust` |  |
 | `crates/ls-connector` | Rust lib | `just test ls-connector` | no | `just test-rust` | Agent connector client |
 | `crates/ls-core` | Rust lib | `just test ls-core` | no | `just test-rust` |  |

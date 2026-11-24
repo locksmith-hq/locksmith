@@ -70,6 +70,23 @@ async fn main() -> ExitCode {
             }
         }
     }
+    match ls_oidc_verify::issuers::IssuerRegistry::new(ls_oidc_verify::issuers::IssuerAccess {
+        allow_private_hosts: config.workload_allow_private_issuers,
+    }) {
+        Ok(registry) => {
+            state = state.with_workload_verifier(ls_oidc_verify::external::ExternalVerifier::new(
+                registry,
+                ls_oidc_verify::external::DEFAULT_MAX_LIFETIME,
+            ));
+        }
+        Err(e) => {
+            tracing::error!(
+                reason = e.label(),
+                "could not build the workload issuer client"
+            );
+            return ExitCode::FAILURE;
+        }
+    }
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {

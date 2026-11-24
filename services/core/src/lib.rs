@@ -10,3 +10,4 @@ pub mod auth;
 pub mod checkpoint_api;
 pub mod config;
 pub mod telemetry;
+pub mod workload_api;

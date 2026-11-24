@@ -2783,6 +2783,7 @@ dependencies = [
  "ls-envelope",
  "ls-http",
  "ls-mcp-server",
+ "ls-oidc-verify",
  "ls-pg-test",
  "ls-proxy",
  "ls-tenant-lint",
@@ -2834,11 +2835,13 @@ dependencies = [
  "ls-agent-token",
  "ls-audit",
  "ls-envelope",
+ "ls-oidc-verify",
  "ls-pg-test",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "p256",
  "rustls",
  "secrecy",
  "serde",
@@ -2854,6 +2857,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]
@@ -3024,6 +3028,27 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "rmcp",
  "serde_json",
+]
+
+[[package]]
+name = "ls-oidc-verify"
+version = "0.0.1-alpha.4"
+dependencies = [
+ "base64 0.22.1",
+ "http",
+ "jsonwebtoken",
+ "ls-http",
+ "ls-proxy",
+ "moka",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
 ]
 
 [[package]]

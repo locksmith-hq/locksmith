@@ -7,12 +7,9 @@
 //! service, authenticated by a static bearer token compared in constant time (S3 design
 //! decision 2), which names the org it acts for in [`SERVICE_ORG_HEADER`].
 
-pub mod abuse;
-pub mod external;
 pub mod human;
-pub mod issuers;
-pub mod jwks;
-pub mod jwt;
+
+pub use ls_oidc_verify::{abuse, external, issuers, jwks, jwt};
 
 use axum::extract::FromRequestParts;
 use axum::http::header;

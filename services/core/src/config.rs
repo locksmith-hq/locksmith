@@ -10,6 +10,9 @@ pub const ENV_DATABASE_URL: &str = "LOCKSMITH_CORE_DATABASE_URL";
 pub const ENV_OPENBAO_ADDR: &str = "LOCKSMITH_CORE_OPENBAO_ADDR";
 pub const ENV_OPENBAO_TOKEN: &str = "LOCKSMITH_CORE_OPENBAO_TOKEN";
 pub const ENV_AGENT_SIGNING_KEY: &str = "LOCKSMITH_CORE_AGENT_SIGNING_KEY";
+/// Local development only: `1` lets workload issuers live on loopback or private addresses.
+pub const ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS: &str =
+    "LOCKSMITH_CORE_WORKLOAD_ALLOW_PRIVATE_ISSUERS";
 pub const ENV_CHECKPOINT_KEY: &str = "LOCKSMITH_CORE_CHECKPOINT_KEY";
 pub const DEFAULT_CHECKPOINT_KEY: &str = "audit-checkpoint";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
@@ -43,6 +46,8 @@ pub struct Config {
     pub checkpoint_kms: Option<CheckpointKms>,
     /// Base64 32-byte Ed25519 seed for agent tokens. Secret.
     pub agent_signing_key: Option<SecretString>,
+    /// Whether workload issuers may be on private addresses (local development only).
+    pub workload_allow_private_issuers: bool,
 }
 
 /// No `Debug`, `Display` or `Clone`: it holds the OpenBao token (sign-only policy).
@@ -85,7 +90,14 @@ impl Config {
             (Some(_), None) => return Err(ConfigError::Missing(ENV_OPENBAO_TOKEN)),
             (None, Some(_)) => return Err(ConfigError::Missing(ENV_OPENBAO_ADDR)),
         };
+        let workload_allow_private_issuers =
+            match get(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS).as_deref() {
+                None | Some("" | "0") => false,
+                Some("1") => true,
+                Some(_) => return Err(ConfigError::Invalid(ENV_WORKLOAD_ALLOW_PRIVATE_ISSUERS)),
+            };
         Ok(Self {
+            workload_allow_private_issuers,
             bind,
             service_token,
             database_url,

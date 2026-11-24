@@ -7,12 +7,15 @@ use axum::middleware;
 use axum::routing::{get, post};
 use http::StatusCode;
 use ls_agent_token::AgentTokenSigner;
+use ls_oidc_verify::abuse::AbuseGuard;
+use ls_oidc_verify::external::ExternalVerifier;
 use sqlx_postgres::PgPool;
 
 use crate::agent_token_api;
 use crate::audit_api;
 use crate::auth::{self, ServiceToken};
 use crate::checkpoint_api::{self, CheckpointSigner};
+use crate::workload_api;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +23,8 @@ pub struct AppState {
     pool: Option<PgPool>,
     signer: Option<Arc<dyn CheckpointSigner>>,
     agent_signer: Option<Arc<AgentTokenSigner>>,
+    workload_verifier: Option<Arc<ExternalVerifier>>,
+    workload_abuse: Arc<AbuseGuard>,
 }
 
 impl AppState {
@@ -29,6 +34,8 @@ impl AppState {
             pool: None,
             signer: None,
             agent_signer: None,
+            workload_verifier: None,
+            workload_abuse: Arc::new(AbuseGuard::default()),
         }
     }
 
@@ -48,6 +55,20 @@ impl AppState {
     pub fn with_agent_signer(mut self, signer: Arc<AgentTokenSigner>) -> Self {
         self.agent_signer = Some(signer);
         self
+    }
+
+    /// Verifier for external workload tokens (issuer discovery and JWKS).
+    pub fn with_workload_verifier(mut self, verifier: ExternalVerifier) -> Self {
+        self.workload_verifier = Some(Arc::new(verifier));
+        self
+    }
+
+    pub(crate) fn workload_verifier(&self) -> Option<&Arc<ExternalVerifier>> {
+        self.workload_verifier.as_ref()
+    }
+
+    pub(crate) fn workload_abuse(&self) -> &AbuseGuard {
+        &self.workload_abuse
     }
 
     pub(crate) fn agent_signer(&self) -> Option<&Arc<AgentTokenSigner>> {
@@ -81,6 +102,7 @@ pub fn router(state: AppState) -> Router {
             "/v1/workload-tokens/mint",
             post(agent_token_api::mint_workload),
         )
+        .route("/v1/workload-tokens/verify", post(workload_api::verify))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_service_token,

@@ -2810,9 +2810,11 @@ name = "ls-core-service"
 version = "0.0.1-alpha.4"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "http",
  "http-body-util",
  "ls-audit",
+ "ls-envelope",
  "ls-pg-test",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -2825,6 +2827,7 @@ dependencies = [
  "sqlx-core",
  "sqlx-postgres",
  "subtle",
+ "time",
  "tokio",
  "tower",
  "tracing",

@@ -7,6 +7,10 @@ use secrecy::SecretString;
 pub const ENV_BIND: &str = "LOCKSMITH_CORE_BIND";
 pub const ENV_SERVICE_TOKEN: &str = "LOCKSMITH_CORE_SERVICE_TOKEN";
 pub const ENV_DATABASE_URL: &str = "LOCKSMITH_CORE_DATABASE_URL";
+pub const ENV_OPENBAO_ADDR: &str = "LOCKSMITH_CORE_OPENBAO_ADDR";
+pub const ENV_OPENBAO_TOKEN: &str = "LOCKSMITH_CORE_OPENBAO_TOKEN";
+pub const ENV_CHECKPOINT_KEY: &str = "LOCKSMITH_CORE_CHECKPOINT_KEY";
+pub const DEFAULT_CHECKPOINT_KEY: &str = "audit-checkpoint";
 pub const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 const DEFAULT_BIND: &str = "127.0.0.1:8090";
 
@@ -34,6 +38,15 @@ pub struct Config {
     /// Postgres URL of the `locksmith_app` role (RLS applies). Holds a password: secret.
     pub database_url: Option<SecretString>,
     pub otlp_endpoint: Option<String>,
+    /// OpenBao transit signing for audit checkpoints. `None` when the address or token is unset.
+    pub checkpoint_kms: Option<CheckpointKms>,
+}
+
+/// No `Debug`, `Display` or `Clone`: it holds the OpenBao token (sign-only policy).
+pub struct CheckpointKms {
+    pub addr: String,
+    pub token: SecretString,
+    pub key: String,
 }
 
 impl Config {
@@ -54,11 +67,27 @@ impl Config {
         let database_url = get(ENV_DATABASE_URL)
             .filter(|v| !v.trim().is_empty())
             .map(SecretString::from);
+        let checkpoint_kms = match (
+            get(ENV_OPENBAO_ADDR).filter(|v| !v.trim().is_empty()),
+            get(ENV_OPENBAO_TOKEN).filter(|v| !v.trim().is_empty()),
+        ) {
+            (Some(addr), Some(token)) => Some(CheckpointKms {
+                addr,
+                token: SecretString::from(token),
+                key: get(ENV_CHECKPOINT_KEY)
+                    .filter(|v| !v.trim().is_empty())
+                    .unwrap_or_else(|| DEFAULT_CHECKPOINT_KEY.to_owned()),
+            }),
+            (None, None) => None,
+            (Some(_), None) => return Err(ConfigError::Missing(ENV_OPENBAO_TOKEN)),
+            (None, Some(_)) => return Err(ConfigError::Missing(ENV_OPENBAO_ADDR)),
+        };
         Ok(Self {
             bind,
             service_token,
             database_url,
             otlp_endpoint,
+            checkpoint_kms,
         })
     }
 }
@@ -80,6 +109,36 @@ mod tests {
     fn defaults_to_loopback() {
         let c = Config::from_lookup(|k| (k == ENV_SERVICE_TOKEN).then(|| "t".into())).unwrap();
         assert!(c.bind.ip().is_loopback());
+    }
+
+    #[test]
+    fn kms_needs_both_address_and_token() {
+        let with = |extra: &'static [(&'static str, &'static str)]| {
+            Config::from_lookup(|k| {
+                if k == ENV_SERVICE_TOKEN {
+                    return Some("t".into());
+                }
+                extra
+                    .iter()
+                    .find(|(n, _)| *n == k)
+                    .map(|(_, v)| (*v).into())
+            })
+        };
+        assert!(with(&[]).unwrap().checkpoint_kms.is_none());
+        assert_eq!(
+            with(&[(ENV_OPENBAO_ADDR, "http://bao:8200")]).err(),
+            Some(ConfigError::Missing(ENV_OPENBAO_TOKEN))
+        );
+        assert_eq!(
+            with(&[(ENV_OPENBAO_TOKEN, "x")]).err(),
+            Some(ConfigError::Missing(ENV_OPENBAO_ADDR))
+        );
+        let c = with(&[
+            (ENV_OPENBAO_ADDR, "http://bao:8200"),
+            (ENV_OPENBAO_TOKEN, "x"),
+        ])
+        .unwrap();
+        assert_eq!(c.checkpoint_kms.unwrap().key, DEFAULT_CHECKPOINT_KEY);
     }
 
     #[test]

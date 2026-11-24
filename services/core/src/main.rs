@@ -51,6 +51,15 @@ async fn main() -> ExitCode {
                 .connect_lazy_with(options),
         );
     }
+    if let Some(kms) = &config.checkpoint_kms {
+        match ls_core_service::checkpoint_api::openbao(kms) {
+            Ok(signer) => state = state.with_signer(signer),
+            Err(_) => {
+                tracing::error!("invalid checkpoint signing configuration");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {

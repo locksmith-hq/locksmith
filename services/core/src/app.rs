@@ -10,11 +10,13 @@ use sqlx_postgres::PgPool;
 
 use crate::audit_api;
 use crate::auth::{self, ServiceToken};
+use crate::checkpoint_api::{self, CheckpointSigner};
 
 #[derive(Clone)]
 pub struct AppState {
     token: Arc<ServiceToken>,
     pool: Option<PgPool>,
+    signer: Option<Arc<dyn CheckpointSigner>>,
 }
 
 impl AppState {
@@ -22,6 +24,7 @@ impl AppState {
         Self {
             token: Arc::new(token),
             pool: None,
+            signer: None,
         }
     }
 
@@ -29,6 +32,16 @@ impl AppState {
     pub fn with_pool(mut self, pool: PgPool) -> Self {
         self.pool = Some(pool);
         self
+    }
+
+    /// The transit signer audit checkpoints are signed with.
+    pub fn with_signer(mut self, signer: Arc<dyn CheckpointSigner>) -> Self {
+        self.signer = Some(signer);
+        self
+    }
+
+    pub(crate) fn signer(&self) -> Option<&Arc<dyn CheckpointSigner>> {
+        self.signer.as_ref()
     }
 
     pub(crate) fn pool(&self) -> Option<&PgPool> {
@@ -44,6 +57,10 @@ pub fn router(state: AppState) -> Router {
     // Authenticated operations are mounted here from task 3.1.
     let internal = Router::new()
         .route("/v1/audit/events", post(audit_api::append_event))
+        .route(
+            "/v1/audit/checkpoints",
+            post(checkpoint_api::sign_checkpoint),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_service_token,

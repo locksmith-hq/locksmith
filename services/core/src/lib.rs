@@ -6,5 +6,6 @@ pub mod app;
 pub mod audit_api;
 pub mod audit_event;
 pub mod auth;
+pub mod checkpoint_api;
 pub mod config;
 pub mod telemetry;

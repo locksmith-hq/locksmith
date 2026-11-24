@@ -7,7 +7,14 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   DATABASE_URL: z.string().min(1),
   JOBS_DATABASE_URL: z.string().min(1).optional(),
-});
+  // Human tokens (same names as the Rust control plane): all three or none. None refuses every token.
+  LOCKSMITH_OIDC_ISSUER: z.string().min(1).optional(),
+  LOCKSMITH_OIDC_AUDIENCE: z.string().min(1).optional(),
+  LOCKSMITH_OIDC_JWKS_URL: z.url({ protocol: /^https?$/ }).optional(),
+}).refine(
+  (e) => [e.LOCKSMITH_OIDC_ISSUER, e.LOCKSMITH_OIDC_AUDIENCE, e.LOCKSMITH_OIDC_JWKS_URL].filter(Boolean).length % 3 === 0,
+  { message: "LOCKSMITH_OIDC_ISSUER, LOCKSMITH_OIDC_AUDIENCE and LOCKSMITH_OIDC_JWKS_URL are set together or not at all" },
+);
 
 export type Env = z.infer<typeof envSchema>;
 

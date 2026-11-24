@@ -18,7 +18,7 @@
     "harness-blocker": { "from": ["lead"], "to": "lead", "on_close": "worker-a" }
   },
   "default_worker": "worker-a",
-  "dispatch": { "shadow": false, "since": "2026-11-23T07:00:00Z", "slots": 2, "max_5h": 6, "max_day": 24, "run_minutes": 45, "workers": ["worker-a", "worker-b", "worker-c"] },
+  "dispatch": { "engine": "aws-tooling", "slots": 2, "max_5h": 30, "max_day": 120, "run_minutes": 45, "workers": ["worker-a", "worker-b", "worker-c"] },
   "mentions": { "@locksmith-lead": "lead", "@locksmith-pm": "pm", "@locksmith-research": "research", "@locksmith-worker": "worker-a", "@locksmith-worker-a": "worker-a", "@locksmith-worker-b": "worker-b", "@locksmith-worker-c": "worker-c", "@locksmith-hq/lead": "lead", "@locksmith-hq/pm": "pm" },
   "local": { "optimizer": { "name": "Doctor Strange", "title": "Optimizer", "blurb": "Bends the team's schedules and prompts toward more shipped work", "avatar": "doctor-strange.png" } }
 }

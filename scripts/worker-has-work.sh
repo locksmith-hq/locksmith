@@ -4,9 +4,13 @@
 set -uo pipefail
 repo=locksmith-hq/locksmith
 work=()
+# An open harness-blocker labelled hold-workers stops every worker run (owner tags excepted, worker.md step 0) and the
+# AWS tooling dispatcher, which runs this script per worker before it fires one.
+[ "$(gh api "repos/$repo/issues?labels=harness-blocker,hold-workers&state=open&per_page=1" -q length 2>/dev/null)" = 1 ] && { echo idle; exit 1; }
 git fetch -q origin 2>/dev/null
-# A worker acts only on PRs it opened (owner 2026-11-20); without a persona (identities paused) count every PR.
-AGENT_PERSONA=${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}  # agent-identity.sh records it; later shells lose the export
+# A worker acts only on PRs it opened (owner 2026-11-20); without a persona count every PR (2026-11-23: the PM's
+# review-failed #614 woke every worker that ran this before agent-start.sh).
+AGENT_PERSONA=${1:-${AGENT_PERSONA:-$(cat "${AGENT_ID_DIR:-$HOME/.config/locksmith-agent}/persona" 2>/dev/null)}}  # $1 (worker.md step 0 runs before agent-start.sh records it)
 me=${AGENT_PERSONA:+$(bash "$(dirname "$0")/agent-identity.sh" logins "$AGENT_PERSONA")}  # one login per line
 # shellcheck disable=SC2016 # jq variables
 mine='select(env.me == "" or (.user.login as $l | env.me | split("\n") | index($l)))'; export me
@@ -19,8 +23,11 @@ n=$(gh api "repos/$repo/issues?labels=review-failed&state=open" -q "[.[]|select(
 c=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&per_page=1" -q '.workflow_runs[0].conclusion // ""')
 [ "$c" = failure ] && work+=("main CI is red")
 
-# Open change PRs whose latest ci run failed (worker.md step 0 fixes them first)
+# Open change PRs whose latest ci run failed (worker.md step 0 fixes them first), unless an open needs-rescue issue
+# names the change (matched like change-status.sh): the lead has it, so waking a worker for it is wasted.
+rescues=$(gh api "repos/$repo/issues?labels=needs-rescue&state=open&per_page=100" -q '.[]|(.title+" "+(.body // ""))|gsub("\n";" ")' 2>/dev/null)
 for b in $(gh api "repos/$repo/pulls?state=open&per_page=100" -q ".[]|$mine|.head.ref|select(startswith(\"claude/change-\"))"); do
+  [ -n "$rescues" ] && grep -qF -- "${b#claude/change-}" <<<"$rescues" && continue
   r=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=$b&per_page=1" -q '.workflow_runs[0].conclusion // ""')
   [ "$r" = failure ] && work+=("CI is red on $b")
 done

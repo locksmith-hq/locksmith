@@ -68,13 +68,16 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 |---|---|---|---|---|
 | T1 | `t1-human-auth` | Human sign-up and sign-in with email and password (verified email, reset), Google and GitHub: Amazon Cognito in our cloud, Keycloak locally, any OIDC issuer for self-hosters. GitHub is OAuth 2.0 rather than OIDC, so the design picks how Cognito and Keycloak broker it. Sign-up creates a personal org. Services only verify JWTs through JWKS (A0 decision 15). | - | ☑ |
 | T3 | `t3-console-mvp` | React console shell on the real API, built from the mockup in `apps/web/src/mockup`: hub home, projects, environments, secret names and versions, agents, grants and activity. Design tokens move to `packages/ui`. No secret value entry yet. Playwright e2e. | t1-human-auth:contract | ☑ |
-| B1 | `b1-nestjs-api` | The control-plane API on NestJS 12 built the way Infisical builds its backend, with Rust kept for plaintext secrets, keys, proxies and audit signing; a strangler migration with contract tests, and oxlint, oxfmt and knip for all TypeScript (OC-8). Gates G1–G3 answered (OC-9, OC-10). On the critical path: T6, T7, T8, T2 and N1 are built on it (OC-9). | - | ◐ |
-| T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. | t1-human-auth:contract, t3-console-mvp, b1-nestjs-api | ☐ |
-| T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. | t3-console-mvp, b1-nestjs-api | ☐ |
-| T8 | `t8-sessions-and-revoke` | Live agent sessions are listed in the console; revoke one, revoke all, or pause every agent, and it takes effect within seconds. | t3-console-mvp, b1-nestjs-api | ☐ |
-| T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. | t6-org-members:contract, b1-nestjs-api | ☐ |
+| B1 | `b1-nestjs-api` | The control-plane API on NestJS 12 built the way Infisical builds its backend, with Rust kept for plaintext secrets, keys, proxies and audit signing; a strangler migration with contract tests, and oxlint, oxfmt and knip for all TypeScript (OC-8). Gates G1–G3 answered (OC-9, OC-10). On the critical path: T6, T7, T8, T2 and N1 are built on it (OC-9) and start from its Contract group (`b1-nestjs-api:contract`; B4 finishes that group in parallel). | - | ◐ |
+| B2 | `b2-rust-core` | The internal Rust core (audit append and checkpoint signing, token mint and verify, DEK wrap) behind `services/core/openapi.json` and `packages/core-client`, split out of B1 group 5 so the NestJS API never holds key bytes (OC-9 G1). | - | ◐ |
+| B3 | `b3-ts-tooling` | oxlint, oxfmt and knip on every TypeScript package through Turborepo, split out of B1 group 3 (OC-8). | - | ☑ |
+| B4 | `b4-api-contract-suite` | `just api-contract <url>`: an HTTP scenario suite over every `openapi.json` path with a normalised transcript and a two-server diff, split out of B1 tasks 1.4 to 1.6; it completes `b1-nestjs-api:contract`, which T2, T6, T7, T8 and N1 need. | - | ☑ |
+| T6 | `t6-org-members` | Organizations for teams: create an org, invite members by email, accept, remove or leave, and owner/admin/member roles that T2 policies build on. Web console and desktop pages. | t1-human-auth:contract, t3-console-mvp, b1-nestjs-api:contract | ☐ |
+| T7 | `t7-secret-write` [opus] | Add a secret or a new version from the browser, sealed in the browser before it is sent (decision H1-1). Changes the `envelope-encryption` spec: the API accepts only ciphertext. | t3-console-mvp, b1-nestjs-api:contract | ☐ |
+| T8 | `t8-sessions-and-revoke` | Live agent sessions are listed in the console; revoke one, revoke all, or pause every agent, and it takes effect within seconds. | t3-console-mvp, b1-nestjs-api:contract | ☐ |
+| T2 | `t2-policy-engine` [opus] | RBAC and ABAC using Cedar in-process. Usage modes per binding: relay, delegate, inject. | t6-org-members:contract, b1-nestjs-api:contract | ☐ |
 | T4 | `t4-access-proposals` | An agent requests access, a human approves in the console or CLI, and the grant is time-boxed. Kill switch. | t2-policy-engine:contract, t3-console-mvp | ☐ |
-| N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). | t3-console-mvp, b1-nestjs-api | ☐ |
+| N1 | `n1-notifications` | A notification inbox in the console plus Slack and email, driven by an outbox table and one rules matrix (which event goes to which channel and to whom). | t3-console-mvp, b1-nestjs-api:contract | ☐ |
 | M1 | `m1-remote-mcp` | Hub MCP (signs in as a person) and Agent MCP (signs in as an enrolled agent) over HTTP, with a switch per tool. No tool returns a stored secret value (decision H1-2). | t1-human-auth:contract | ☑ |
 | T5 | `t5-honey-tokens` | Canary secrets that alert on any use and name the agent and its source. | n1-notifications:contract | ☐ |
 
@@ -83,7 +86,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
 | D1 | `d1-git-delegation` | The agent pushes to GitHub with no token in reach. | - | ☑ |
-| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on Floci first. | t3-console-mvp | ◐ |
+| D2 | `d2-aws-sts` [opus] | The agent uses the AWS CLI through short-lived STS credentials. Tested on Floci first. | t3-console-mvp | ☑ |
 | D3 | `d3-db-relay` [opus] | Postgres relay with no password on the agent host (pgwire). | - | ☑ |
 | D4 | `d4-workload-identity` | GitHub Actions and Kubernetes OIDC federation for CI and machine identities. | t1-human-auth:contract | ☑ |
 
@@ -91,7 +94,7 @@ Order set by owner decision H1-3 ([#363](https://github.com/locksmith-hq/locksmi
 
 | # | Change | Usable outcome | Needs | Status |
 |---|---|---|---|---|
-| P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ◐ |
+| P3 | `p3-agent-plugins` | Plugins or skills for the widely used agent frameworks on top of the existing local `locksmith-mcp` and `smith hook` (as `integrations/claude-code`, `codex` and `cursor` already do): add Gemini CLI, GitHub Copilot (VS Code agent mode and CLI), Windsurf and Cline, generated from `crates/smith-cli/src/agents.rs`, each with a live or recorded smoke test and a `just test <name>` recipe, plus a generic MCP setup for any other MCP client. | - | ☑ |
 | P2 | `p2-packaging` | One-command self-host (compose and Helm), signed releases, `smith` installers. | - | ◐ |
 | P4 | `p4-sdks` | SDKs generated from OpenAPI, and the plugins switched to the remote Agent MCP where it helps. | m1-remote-mcp:contract | ☑ |
 

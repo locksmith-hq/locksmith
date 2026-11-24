@@ -1,0 +1,1 @@
+{"workspaceRoots":["__CWD__"],"preToolUse":{"toolName":"list_files","parameters":{"path":"."}},"tool_call":{"name":"read_file","input":{"path":".env"}}}

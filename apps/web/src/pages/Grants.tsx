@@ -23,7 +23,10 @@ export function Grants({ client, agent, onError }: { client: Client; agent: Agen
             {grants.map((g) => (
               <li key={g.id}>
                 {g.secret_name} ({g.mode}) {g.expires_at ? `expires ${g.expires_at}` : "no expiry"}
-                <button className="btn sm quiet danger-text" onClick={() => void act(() => client.revokeGrant(agent.id, g.id))}>
+                <button
+                  className="btn sm quiet danger-text"
+                  onClick={() => void act(() => client.revokeGrant(agent.id, g.id))}
+                >
                   Revoke {g.secret_name}
                 </button>
               </li>
@@ -41,13 +44,26 @@ export function Grants({ client, agent, onError }: { client: Client; agent: Agen
               mode: "relay",
               expires_at: expires ? new Date(expires).toISOString() : null,
             });
-            setSecretId(""); setExpires("");
+            setSecretId("");
+            setExpires("");
           });
         }}
       >
-        <input aria-label={`Secret id for ${agent.name}`} required value={secretId} onChange={(e) => setSecretId(e.target.value.trim())} />
-        <input aria-label={`Expiry for ${agent.name}`} type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} />
-        <button type="submit" className="btn sm primary">Grant {agent.name}</button>
+        <input
+          aria-label={`Secret id for ${agent.name}`}
+          required
+          value={secretId}
+          onChange={(e) => setSecretId(e.target.value.trim())}
+        />
+        <input
+          aria-label={`Expiry for ${agent.name}`}
+          type="datetime-local"
+          value={expires}
+          onChange={(e) => setExpires(e.target.value)}
+        />
+        <button type="submit" className="btn sm primary">
+          Grant {agent.name}
+        </button>
       </form>
     </div>
   );
@@ -60,10 +76,21 @@ export function GrantsPage({ client }: { client: Client }) {
   return (
     <section aria-label="Grants">
       <Head title="Grants" />
-      {error && <p role="alert" className="state">{error}</p>}
+      {error && (
+        <p role="alert" className="state">
+          {error}
+        </p>
+      )}
       <QueryState query={q} empty="No agents yet, so no grants.">
         {(agents: Agent[]) => (
-          <ul className="list">{agents.map((a) => <li key={a.id} className="row"><strong>{a.name}</strong><Grants client={client} agent={a} onError={setError} /></li>)}</ul>
+          <ul className="list">
+            {agents.map((a) => (
+              <li key={a.id} className="row">
+                <strong>{a.name}</strong>
+                <Grants client={client} agent={a} onError={setError} />
+              </li>
+            ))}
+          </ul>
         )}
       </QueryState>
     </section>

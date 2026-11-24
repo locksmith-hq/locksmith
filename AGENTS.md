@@ -37,6 +37,7 @@ CI jobs call the same `just` recipes as `just ci`, so run `just quick` locally a
 - Agents never receive secret values. Use relay, delegation, or short-lived scoped credentials.
 - Never block unlock or export because of licensing, billing or update failures.
 - Use Rust for anything that touches plaintext secrets, keys or proxies. The NestJS API never receives plaintext secrets or key bytes; it calls the Rust core.
+- Exception (OC-11): crew tooling that holds only the crew's own credentials (GitHub App keys, routine fire tokens), never customer secrets, may be Node (TypeScript or JS). It reads them from a secret store at run time, never logs them, and has a test that scans logs and outputs for planted fake secrets.
 - Any test that needs an AWS API (STS, S3, DynamoDB, SQS, Cognito, KMS...) runs against Floci (https://github.com/floci-io/floci, `floci` in compose, `localhost:4566`), never real AWS, moto or LocalStack. Humans, workers, the lead and the PM all follow this.
 
 ## How we work

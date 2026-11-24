@@ -1,0 +1,2 @@
+#!/bin/sh
+command -v smith >/dev/null 2>&1 || { echo '{"cancel":true,"errorMessage":"Locksmith hook unavailable: run smith doctor"}'; exit 0; }; smith hook cline PreToolUse

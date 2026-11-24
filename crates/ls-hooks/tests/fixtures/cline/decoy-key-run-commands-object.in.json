@@ -1,0 +1,1 @@
+{"hookName":"PreToolUse","cwd":"__CWD__","tool_call":{"name":"run_commands","input":{"commands":[{"command":"cat .env"}]}}}

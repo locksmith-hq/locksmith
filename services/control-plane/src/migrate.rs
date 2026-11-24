@@ -72,18 +72,23 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     ),
     (
         15,
-        "memberships",
-        include_str!("../migrations/0015_memberships.sql"),
+        "grant delegate",
+        include_str!("../migrations/0015_grant_delegate.sql"),
     ),
     (
         16,
-        "org member read",
-        include_str!("../migrations/0016_org_member_read.sql"),
+        "memberships",
+        include_str!("../migrations/0016_memberships.sql"),
     ),
     (
         17,
+        "org member read",
+        include_str!("../migrations/0017_org_member_read.sql"),
+    ),
+    (
+        18,
         "member emails",
-        include_str!("../migrations/0017_member_emails.sql"),
+        include_str!("../migrations/0018_member_emails.sql"),
     ),
 ];
 

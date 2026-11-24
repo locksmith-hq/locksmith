@@ -3,12 +3,15 @@
 //! `tests/fixtures/README.md`. The engine (`decide`) never sees JSON.
 
 pub mod claude_code;
+pub mod cline;
 pub mod codex;
+pub mod copilot;
 pub mod cursor;
+pub mod gemini_cli;
 
 use crate::{Decision, Event, Vault, decide};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What the hook process prints and its exit code.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +60,29 @@ pub(crate) fn field<'a>(v: &'a Value, k: &str) -> Option<&'a str> {
     v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty())
 }
 
+/// The path and glob of a doc-derived search tool's arguments, or `None` (the caller denies) when
+/// the arguments cannot be trusted: not an object, the path or glob key holds a non-string, neither
+/// is set, or a key outside `path_key`, `glob_key` and `other` holds a string, array or object.
+/// Such a key may be a misnamed path or glob (decision P3-2: a wrong guess must deny); a bool,
+/// number or null cannot name a file, so option flags and counts pass.
+pub(crate) fn search_args(
+    args: &Value,
+    path_key: &str,
+    glob_key: &str,
+    other: &[&str],
+) -> Option<(Option<PathBuf>, Option<String>)> {
+    let known = args.as_object()?.iter().all(|(k, v)| {
+        if k == path_key || k == glob_key {
+            v.is_string()
+        } else {
+            other.contains(&k.as_str()) || v.is_boolean() || v.is_number() || v.is_null()
+        }
+    });
+    let path = field(args, path_key).map(PathBuf::from);
+    let glob = field(args, glob_key).map(String::from);
+    (known && (path.is_some() || glob.is_some())).then_some((path, glob))
+}
+
 pub(crate) fn cwd_of(v: &Value) -> PathBuf {
     PathBuf::from(field(v, "cwd").unwrap_or("."))
 }
@@ -71,6 +97,7 @@ pub fn target_of(ev: &Event) -> String {
             .or_else(|| glob.clone())
             .unwrap_or_default(),
         Event::Prompt { .. } => "prompt".into(),
+        Event::Arg { arg, .. } => arg.clone(),
     }
 }
 
@@ -87,6 +114,9 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
         ),
         "cursor" => (cursor::parse, cursor::render, cursor::malformed),
         "codex" => (codex::parse, codex::render, codex::malformed),
+        "gemini-cli" => (gemini_cli::parse, gemini_cli::render, gemini_cli::malformed),
+        "copilot" => (copilot::parse, copilot::render, copilot::malformed),
+        "cline" => (cline::parse, cline::render, cline::malformed),
         _ => return None,
     };
     let bad_in = || Handled {
@@ -104,19 +134,167 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
     if !json.is_object() {
         return Some(bad_in());
     }
-    Some(match parse(event, &json) {
-        None => Handled {
-            out: render(event, &Decision::Allow),
-            decision: Decision::Allow,
-            target: String::new(),
-        },
-        Some(ev) => {
-            let decision = decide(&ev, v);
-            Handled {
-                out: render(event, &decision),
-                target: target_of(&ev),
-                decision,
+    // A tool call may yield several events (several files, or every string in its input); the
+    // first one that is not allowed decides.
+    let events = match guard(agent).map(|g| ((g.call)(event, &json), g)) {
+        Some((Call::Unrecognised, _)) => return Some(bad_in()),
+        Some((Call::Tool { name, input, cwd }, g)) => {
+            match guarded_events(&g, &name, &input, cwd) {
+                Some(events) => events,
+                None => return Some(bad_in()),
             }
         }
+        Some((Call::NotTool, _)) | None => parse(event, &json).into_iter().collect(),
+    };
+    let mut first = None;
+    for ev in &events {
+        let decision = decide(ev, v);
+        if decision != Decision::Allow {
+            return Some(Handled {
+                out: render(event, &decision),
+                target: target_of(ev),
+                decision,
+            });
+        }
+        first.get_or_insert(ev);
+    }
+    Some(Handled {
+        out: render(event, &Decision::Allow),
+        decision: Decision::Allow,
+        target: first.map(target_of).unwrap_or_default(),
     })
+}
+
+/// A pre-tool payload of a doc-derived adapter (Gemini CLI, Copilot, Cline; decision P3-2),
+/// reduced to the tool name and its input.
+pub(crate) enum Call {
+    /// Not a tool event (a prompt event): the adapter's `parse` handles it.
+    NotTool,
+    /// A tool event whose tool name or input object is not under the expected keys, or that
+    /// carries two namings at once. Always denies: a tool that cannot be identified never
+    /// passes as an unknown one.
+    Unrecognised,
+    /// `input` is always a JSON object.
+    Tool {
+        name: String,
+        input: Value,
+        cwd: PathBuf,
+    },
+}
+
+/// A tool input as a JSON object: an object, or a string holding one; anything else is `None`.
+pub(crate) fn input_object(v: Option<&Value>) -> Option<Value> {
+    let v = match v? {
+        Value::String(s) => serde_json::from_str::<Value>(s).ok()?,
+        o => o.clone(),
+    };
+    v.is_object().then_some(v)
+}
+
+/// The fail-closed checks of a doc-derived adapter.
+struct Guard {
+    call: fn(&str, &Value) -> Call,
+    /// Tools whose input is checked; any other tool name passes as unknown.
+    known: &'static [&'static str],
+    /// The events of a known tool's primary arguments, or `None` (deny) when they do not parse.
+    primary: fn(&str, &Value, PathBuf) -> Option<Vec<Event>>,
+    /// Keys of a known tool that hold a shell command (only keys that tool uses).
+    shell: fn(&str) -> &'static [&'static str],
+    /// Keys of a known tool that hold content or a search pattern, not a file name (only keys
+    /// that tool uses).
+    content: fn(&str) -> &'static [&'static str],
+}
+
+fn guard(agent: &str) -> Option<Guard> {
+    Some(match agent {
+        "gemini-cli" => Guard {
+            call: gemini_cli::call,
+            known: gemini_cli::KNOWN_TOOLS,
+            primary: gemini_cli::primary,
+            shell: gemini_cli::shell_keys,
+            content: gemini_cli::content_keys,
+        },
+        "copilot" => Guard {
+            call: copilot::call,
+            known: copilot::KNOWN_TOOLS,
+            primary: copilot::primary,
+            shell: copilot::shell_keys,
+            content: copilot::content_keys,
+        },
+        "cline" => Guard {
+            call: cline::call,
+            known: cline::KNOWN_TOOLS,
+            primary: cline::primary,
+            shell: cline::shell_keys,
+            content: cline::content_keys,
+        },
+        _ => return None,
+    })
+}
+
+/// Which keys of a known tool decide how its strings are judged.
+struct Keys<'k> {
+    /// Keys that hold a shell command: every string under one, at any depth, is a shell command.
+    shell: &'k [&'k str],
+    /// Keys that hold content or a search pattern: a string held directly by one is skipped.
+    content: &'k [&'k str],
+}
+
+/// Every non-empty string in a tool input at any depth (arrays included), turned into events:
+/// a shell command when it sits anywhere under a `shell` key, nothing when held directly by a
+/// `content` key (an array's items count as held by the array's key), otherwise an `Arg`. In a
+/// shell tool (one with shell keys) such an `Arg` is also shell-analysed, since a command under a
+/// misnamed key would run just the same.
+fn input_events(
+    v: &Value,
+    key: Option<&str>,
+    in_shell: bool,
+    k: &Keys,
+    cwd: &Path,
+    out: &mut Vec<Event>,
+) {
+    let in_shell = in_shell || key.is_some_and(|key| k.shell.contains(&key));
+    match v {
+        Value::String(s) if s.is_empty() => {}
+        Value::String(s) if in_shell => out.push(Event::Shell {
+            command: s.clone(),
+            cwd: cwd.to_path_buf(),
+        }),
+        Value::String(s) if !key.is_some_and(|key| k.content.contains(&key)) => {
+            out.push(Event::Arg {
+                arg: s.clone(),
+                cwd: cwd.to_path_buf(),
+            });
+            if !k.shell.is_empty() {
+                out.push(Event::Shell {
+                    command: s.clone(),
+                    cwd: cwd.to_path_buf(),
+                });
+            }
+        }
+        Value::Array(a) => a
+            .iter()
+            .for_each(|e| input_events(e, key, in_shell, k, cwd, out)),
+        Value::Object(o) => o
+            .iter()
+            .for_each(|(key, e)| input_events(e, Some(key), in_shell, k, cwd, out)),
+        _ => {}
+    }
+}
+
+/// The events of a doc-derived tool call: its primary arguments, every string under one of the
+/// tool's shell keys as a shell command, and every other string judged as a path or glob, so a
+/// command or path under a misnamed key beside a decoy one still meets the policy (decision
+/// P3-2). `None` denies.
+fn guarded_events(g: &Guard, name: &str, input: &Value, cwd: PathBuf) -> Option<Vec<Event>> {
+    if !g.known.contains(&name) {
+        return Some(Vec::new());
+    }
+    let mut events = (g.primary)(name, input, cwd.clone())?;
+    let keys = Keys {
+        shell: (g.shell)(name),
+        content: (g.content)(name),
+    };
+    input_events(input, None, false, &keys, &cwd, &mut events);
+    Some(events)
 }

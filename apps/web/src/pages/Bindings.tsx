@@ -14,13 +14,23 @@ export function Bindings({ client }: { client: Client }) {
       <QueryState query={q} empty="The gateway has not published any bindings yet.">
         {(bindings: BindingSummary[]) => (
           <table className="grid">
-            <thead><tr><th>Name</th><th>Kind</th><th>Details</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Kind</th>
+                <th>Details</th>
+              </tr>
+            </thead>
             <tbody>
               {bindings.map((b) => (
                 <tr key={`${b.kind}:${b.name}`}>
                   <td>{b.name}</td>
                   <td>{KIND[b.kind] ?? b.kind}</td>
-                  <td>{bindingDetails(b).map(([l, v]) => `${l}: ${v}`).join(" · ")}</td>
+                  <td>
+                    {bindingDetails(b)
+                      .map(([l, v]) => `${l}: ${v}`)
+                      .join(" · ")}
+                  </td>
                 </tr>
               ))}
             </tbody>

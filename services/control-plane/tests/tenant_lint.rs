@@ -74,7 +74,7 @@ fn mcp_tables_are_seen_by_the_migration_lint() {
 #[test]
 fn membership_tables_are_seen_by_the_migration_lint() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
-    let sql = std::fs::read_to_string(dir.join("0015_memberships.sql")).expect("0015");
+    let sql = std::fs::read_to_string(dir.join("0016_memberships.sql")).expect("0016");
     for table in ["memberships", "invites"] {
         assert!(sql.contains(&format!("CREATE TABLE {table}")), "{table}");
         assert!(

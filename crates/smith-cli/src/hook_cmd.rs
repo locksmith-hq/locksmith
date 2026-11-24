@@ -26,7 +26,9 @@ pub fn run(agent: &str, event: &str) -> Result<ExitCode, Fail> {
     let Some(h) = handle(agent, event, &input, &vault) else {
         return Err(Fail(
             ExitCode::Usage,
-            format!("unknown agent `{agent}` (claude-code, cursor, codex)"),
+            format!(
+                "unknown agent `{agent}` (claude-code, cursor, codex, gemini-cli, copilot, cline)"
+            ),
         ));
     };
     vault.audit(agent, event, &h.decision, &h.target);

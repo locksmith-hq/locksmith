@@ -31,7 +31,7 @@ if command -v helm >/dev/null 2>&1; then
   helm lint "$chart" "${demo_set[@]}" >/dev/null && ok "helm lint (defaults + secret names)" || bad "helm lint"
   helm lint "$chart" -f "$chart/tests/good-values.yaml" >/dev/null && ok "helm lint (good-values.yaml)" || bad "helm lint good-values.yaml"
   rendered=$(mktemp); trap 'rm -f "$rendered"' EXIT
-  helm template locksmith "$chart" "${demo_set[@]}" --set migration.enabled=true --set ingress.enabled=true \
+  helm template locksmith "$chart" --kube-version 1.31.0 "${demo_set[@]}" --set migration.enabled=true --set 'migration.args={migrate-only}' --set ingress.enabled=true \
     --set ingress.host=locksmith.example.com >"$rendered" && ok "helm template" || { bad "helm template"; rendered=""; }
   if [ -n "$rendered" ]; then
     # Literal-secret hygiene: the rendered manifests carry no Secret object and only secretKeyRef for credentials.

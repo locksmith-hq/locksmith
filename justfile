@@ -378,8 +378,8 @@ test name:
 
 # Build the control-plane and gateway images for the host architecture (P2). Extra flags (proxy, CA secret) go in IMAGE_BUILD_ARGS. Check: scripts/image-check.sh.
 images:
-    docker build $IMAGE_BUILD_ARGS -f infra/docker/control-plane.Dockerfile -t locksmith-control-plane:dev .
-    docker build $IMAGE_BUILD_ARGS -f infra/docker/gateway.Dockerfile -t locksmith-gateway:dev .
+    docker build ${IMAGE_BUILD_ARGS:-} -f infra/docker/control-plane.Dockerfile -t locksmith-control-plane:dev .
+    docker build ${IMAGE_BUILD_ARGS:-} -f infra/docker/gateway.Dockerfile -t locksmith-gateway:dev .
 
 # Self-host compose bundle (P2). Bootstraps secrets into infra/compose/selfhost/.env, then `up --wait`.
 # Args go to bootstrap.sh: --external-keys, --tls, --demo-oidc. Images come from .env (LOCKSMITH_VERSION or *_IMAGE).

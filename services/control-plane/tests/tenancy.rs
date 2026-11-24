@@ -88,7 +88,10 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             .fetch_all(&mut admin)
             .await
             .unwrap();
-    assert_eq!(applied, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    assert_eq!(
+        applied,
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    );
 
     // Restart: once the roles exist, locksmith_owner itself can run the (no-op) migrations.
     migrate::run(pg.options("locksmith_owner", OWNER_PASSWORD))
@@ -98,7 +101,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
         .fetch_one(&mut admin)
         .await
         .unwrap();
-    assert_eq!(count, 15);
+    assert_eq!(count, 16);
 
     let tables: Vec<(String, String, bool, bool)> = sql::query_as(
         "SELECT c.relname::text, pg_get_userbyid(c.relowner)::text, c.relrowsecurity, c.relforcerowsecurity
@@ -125,6 +128,11 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
             "gateway_bindings",
             "mcp_clients",
             "mcp_tool_settings",
+            "oauth_connection_grants",
+            "oauth_connections",
+            "oauth_flows",
+            "oauth_providers",
+            "oauth_token_material",
             "orgs",
             "projects",
             "secret_versions",
@@ -143,7 +151,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(policies, 18);
+    assert_eq!(policies, 23);
 
     let value_like: Vec<String> = sql::query_scalar(
         "SELECT table_name || '.' || column_name FROM information_schema.columns
@@ -153,10 +161,14 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_all(&mut admin)
     .await
     .unwrap();
-    // Only S2's envelope ciphertext (design decision 6) is allowed; never a plaintext column.
+    // Only envelope ciphertext is allowed (S2 decision 6; C1 `oauth_token_material`, sealed token
+    // sets readable by the gateway role alone); never a plaintext column.
     assert_eq!(
         value_like,
-        ["secret_versions.ciphertext"],
+        [
+            "secret_versions.ciphertext",
+            "oauth_token_material.ciphertext"
+        ],
         "value-like columns: {value_like:?}"
     );
     let version_cols: Vec<(String, String)> = sql::query_as(
@@ -758,4 +770,125 @@ async fn gateway_audit_is_isolated_and_read_only() {
     }
     assert_eq!(count(a).await, 1);
     db.close().await;
+}
+
+/// C1 task 3.1 (design decision 7): `oauth_token_material` and `oauth_flows` are readable and
+/// writable only by `locksmith_gateway`; `locksmith_app` reads connection metadata, writes
+/// connection grants and has no privilege at all on the token tables. RLS isolates orgs.
+#[tokio::test]
+async fn oauth_tables_follow_the_gateway_role_split() {
+    let pg = Pg::migrated().await;
+    let app = pg.app_db(PoolSettings {
+        max_connections: 2,
+        ..PoolSettings::default()
+    });
+    let gw = Database::connect_lazy(
+        pg.gateway(),
+        PoolSettings {
+            max_connections: 2,
+            ..PoolSettings::default()
+        },
+    );
+    let a = create_org(&app, "org-a").await;
+    let b = create_org(&app, "org-b").await;
+    let user = Uuid::now_v7();
+    let conn = Uuid::now_v7();
+    let mut admin = pg.admin().await;
+    sql::query(
+        "INSERT INTO users (id, issuer, subject, personal_org_id) VALUES ($1, 'i', 's', $2)",
+    )
+    .bind(user)
+    .bind(a)
+    .execute(&mut admin)
+    .await
+    .unwrap();
+
+    // The gateway writes the connection and its sealed material (opaque bytes here).
+    gw.with_org(a, move |c| {
+        Box::pin(async move {
+            sql::query(
+                "INSERT INTO oauth_connections (id, org_id, user_id, provider, account_id, status)
+                 VALUES ($1, current_org_id(), $2, 'mock', 'acct', 'connected')",
+            )
+            .bind(conn)
+            .bind(user)
+            .execute(&mut *c)
+            .await?;
+            sql::query(
+                "INSERT INTO oauth_token_material
+                     (org_id, connection_id, generation, ciphertext, wrapped_dek, key_id)
+                 VALUES (current_org_id(), $1, 1, '\\x00', '\\x01', 'oauth-connections')",
+            )
+            .bind(conn)
+            .execute(&mut *c)
+            .await
+        })
+    })
+    .await
+    .unwrap();
+
+    // The app sees the metadata of its own org only, and nothing of the token tables.
+    let count = |db: Database, org: Uuid, query: &'static str| async move {
+        db.with_org(org, move |c| {
+            Box::pin(async move { sql::query_scalar::<_, i64>(query).fetch_one(c).await })
+        })
+        .await
+    };
+    assert_eq!(
+        count(app.clone(), a, "SELECT count(*) FROM oauth_connections")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        count(app.clone(), b, "SELECT count(*) FROM oauth_connections")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        count(gw.clone(), a, "SELECT count(*) FROM oauth_token_material")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        count(gw.clone(), b, "SELECT count(*) FROM oauth_token_material")
+            .await
+            .unwrap(),
+        0
+    );
+    for (table, query) in [
+        (
+            "oauth_token_material",
+            "SELECT count(*) FROM oauth_token_material",
+        ),
+        ("oauth_flows", "SELECT count(*) FROM oauth_flows"),
+    ] {
+        let err = count(app.clone(), a, query).await.expect_err(table);
+        assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{table}: {err}");
+    }
+    for stmt in [
+        "UPDATE oauth_connections SET status = 'revoked'",
+        "DELETE FROM oauth_connections",
+    ] {
+        let err = app
+            .with_org(a, move |c| {
+                Box::pin(async move { sql::query(stmt).execute(c).await })
+            })
+            .await
+            .expect_err(stmt);
+        assert_eq!(sqlstate(&err).as_deref(), Some("42501"), "{stmt}: {err}");
+    }
+
+    // The gateway role is neither superuser nor BYPASSRLS.
+    let (sup, bypass): (bool, bool) = sql::query_as(
+        "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'locksmith_gateway'",
+    )
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    assert!(!sup && !bypass);
+    app.close().await;
+    gw.close().await;
 }

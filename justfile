@@ -256,7 +256,7 @@ mcp-e2e:
 
 # Run locksmith-gateway against `just up` and `just api`. Needs LOCKSMITH_GATEWAY_BINDINGS (a TOML
 # file naming the org and bindings; see tests/e2e/tests/relay.rs for the shape). The gateway connects
-# as locksmith_app until the locksmith_gateway role lands (S3 progress notes).
+# as locksmith_gateway (migration 0016, C1) through LOCKSMITH_GATEWAY_DATABASE_URL.
 gateway:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -264,6 +264,7 @@ gateway:
     set -a; . "$root/infra/compose/.env.example"; set +a
     : "${LOCKSMITH_GATEWAY_BINDINGS:?set LOCKSMITH_GATEWAY_BINDINGS to a bindings TOML file}"
     export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    export DATABASE_URL="$LOCKSMITH_GATEWAY_DATABASE_URL"
     cd "$root" && exec cargo run -q -p ls-gateway --bin locksmith-gateway
 
 # S3 relay smoke test (needs `just up` and `just api`): the test starts its own gateway, relays a

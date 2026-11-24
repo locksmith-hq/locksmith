@@ -75,6 +75,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "grant delegate",
         include_str!("../migrations/0015_grant_delegate.sql"),
     ),
+    (
+        16,
+        "oauth_connections",
+        include_str!("../migrations/0016_oauth_connections.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.
@@ -168,7 +173,8 @@ mod tests {
             for banned in ["value ", "plaintext"] {
                 assert!(!code.contains(banned), "migration defines `{banned}`");
             }
-            if version != 3 {
+            // 16: C1 `oauth_token_material`, sealed OAuth token sets (gateway role only).
+            if version != 3 && version != 16 {
                 assert!(!code.contains("ciphertext"), "migration {version}");
             }
         }

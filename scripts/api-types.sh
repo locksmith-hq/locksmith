@@ -40,6 +40,8 @@ DATABASE_OWNER_URL="$url" cargo run -q -p ls-control-plane --bin locksmith-migra
 tmp=$(mktemp "$PWD/apps/api/src/db/.types.XXXXXX.ts")
 (cd apps/api && DATABASE_URL="$url" npx kysely-codegen --dialect postgres --url env\(DATABASE_URL\) \
   --exclude-pattern '_sqlx_migrations' --out-file "${tmp#"$PWD/apps/api/"}")
+# The committed file is oxfmt-formatted (same pinned version as `just api-types`); format before comparing.
+npx --yes oxfmt@0.79.0 -c .oxfmtrc.json "$tmp" >/dev/null
 
 if [ "$mode" = "--check" ]; then
   if diff -u "$out" "$tmp" >/dev/null; then echo "api-types: $out is up to date"; exit 0; fi

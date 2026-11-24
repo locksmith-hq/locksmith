@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 /** One API operation, described once with zod schemas; the OpenAPI operation is generated from it. */
 export interface RouteDef {
@@ -37,7 +37,7 @@ function fields(obj: z.ZodObject, where: "path" | "query"): Operation["parameter
   }));
 }
 
-export function buildOperation(r: RouteDef): Operation {
+function buildOperation(r: RouteDef): Operation {
   return {
     parameters: [...(r.params ? fields(r.params, "path") : []), ...(r.query ? fields(r.query, "query") : [])],
     ...(r.body

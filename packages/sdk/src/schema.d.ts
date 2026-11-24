@@ -181,6 +181,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/mcp/upstream-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append an `mcp.upstream_call` or `mcp.upstream_outcome` event (gateway only)
+         * @description The gateway records every call through its MCP upstream proxy: the agent, the upstream's configured name, the tool, the decision and the outcome with a static reason; never arguments, results or the upstream credential. Unknown fields are a `400`. Contract only for now: it answers `501` until the proxy lands.
+         */
+        post: operations["append_mcp_upstream_call"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/secrets/{secret_id}/versions/{version}/material": {
         parameters: {
             query?: never;
@@ -938,7 +958,7 @@ export interface components {
          * @description What a binding lets the gateway do.
          * @enum {string}
          */
-        BindingKind: "http" | "git" | "pg" | "aws";
+        BindingKind: "http" | "git" | "pg" | "aws" | "mcp";
         /** @description Every binding the gateway reports for the org. */
         BindingList: {
             items: components["schemas"]["BindingSummary"][];
@@ -956,6 +976,7 @@ export interface components {
             allowed_actions?: string[] | null;
             /** @description `pg`: the bound database. */
             database?: string | null;
+            default_decision?: components["schemas"]["ToolDecision"] | null;
             /** @description `http`: the header the secret is injected into (never its value or template). */
             header?: string | null;
             /** @description `pg`, `git`: the upstream host. */
@@ -982,6 +1003,8 @@ export interface components {
             /** @description `aws`: the role ARN. */
             role?: string | null;
             tls?: components["schemas"]["BindingTls"] | null;
+            /** @description `mcp`: the per-tool rules, in name order. Refused on every other kind. */
+            tools?: components["schemas"]["ToolRule"][] | null;
             /** @description `pg`: the bound database user. */
             user?: string | null;
             /** @description `aws`: whether short-lived credentials may be vended. */
@@ -1103,6 +1126,21 @@ export interface components {
         McpToolSettingUpdate: {
             enabled: boolean;
         };
+        /**
+         * @description The decision the gateway's tool policy took for an upstream call.
+         * @enum {string}
+         */
+        McpUpstreamDecision: "allow" | "hide" | "deny" | "hold";
+        /**
+         * @description How an upstream call stands.
+         * @enum {string}
+         */
+        McpUpstreamOutcome: "pending" | "ok" | "denied" | "error";
+        /**
+         * @description Which of the two upstream-call ledger events a request appends.
+         * @enum {string}
+         */
+        McpUpstreamPhase: "call" | "outcome";
         NewAgent: {
             description?: string;
             name: string;
@@ -1154,6 +1192,34 @@ export interface components {
              *     `unknown`.
              */
             tool: string;
+        };
+        /**
+         * @description One MCP upstream proxy call, as the gateway records it. There is no field for arguments, a
+         *     result or the upstream credential.
+         */
+        NewMcpUpstreamCall: {
+            /**
+             * Format: uuid
+             * @description The agent whose verified token made the call (the event's actor).
+             */
+            agent_id: string;
+            /**
+             * Format: uuid
+             * @description Links an `outcome` event to its `call` event; required with phase `outcome`.
+             */
+            attempt_id?: string | null;
+            decision: components["schemas"]["McpUpstreamDecision"];
+            outcome: components["schemas"]["McpUpstreamOutcome"];
+            phase: components["schemas"]["McpUpstreamPhase"];
+            /** @description Why a call was `denied` or `error`: a fixed slug. */
+            reason?: string | null;
+            /**
+             * @description The tool name from the upstream catalogue; recorded only when it is a valid tool name
+             *     present in that catalogue, else `unknown`.
+             */
+            tool: string;
+            /** @description The upstream's configured name. */
+            upstream: string;
         };
         NewOrg: {
             name: string;
@@ -1445,6 +1511,7 @@ export interface components {
         PublishedBinding: {
             /** @description `pg`: the bound database. */
             database?: string | null;
+            default_decision?: components["schemas"]["ToolDecision"] | null;
             /** @description `http`: the header the secret is injected into (never its value or template). */
             header?: string | null;
             /** @description `pg`, `git`: the upstream host. */
@@ -1476,6 +1543,8 @@ export interface components {
              */
             secret_id?: string | null;
             tls?: components["schemas"]["BindingTls"] | null;
+            /** @description `mcp`: the per-tool rules, in name order. Refused on every other kind. */
+            tools?: components["schemas"]["ToolRule"][] | null;
             /** @description `pg`: the bound database user. */
             user?: string | null;
             /** @description `aws`: whether short-lived credentials may be vended. */
@@ -1563,6 +1632,16 @@ export interface components {
          * @enum {string}
          */
         SessionCloseReason: "client_closed" | "upstream_closed" | "revoked" | "expired" | "error";
+        /**
+         * @description What the gateway's tool policy does with an MCP tool (`mcp` bindings).
+         * @enum {string}
+         */
+        ToolDecision: "allow" | "hide" | "deny" | "hold";
+        /** @description One per-tool rule of an `mcp` binding. The tool name is the upstream's own, never a value. */
+        ToolRule: {
+            decision: components["schemas"]["ToolDecision"];
+            name: string;
+        };
         /**
          * @description A trust policy. The `handle` is the non-secret routing value a workload sends to the
          *     exchange route.
@@ -2155,6 +2234,105 @@ export interface operations {
             };
             /** @description Not found (including another org's secret) */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    append_mcp_upstream_call: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the event belongs to (the agent token's `org`) */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewMcpUpstreamCall"];
+            };
+        };
+        responses: {
+            /** @description `mcp.upstream_outcome` already recorded for this `attempt_id` with the same fields; nothing appended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendedEvent"];
+                };
+            };
+            /** @description Appended */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendedEvent"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not implemented yet */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };

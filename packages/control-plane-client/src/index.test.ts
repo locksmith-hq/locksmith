@@ -71,7 +71,7 @@ describe("console client", () => {
   it("lists bindings with a GET and the fixtures carry no secret fields", async () => {
     const f = stub(json({ items: bindingSummaries }));
     const got = await createClient("org").listBindings();
-    expect(got.map((b) => b.kind)).toEqual(["http", "git", "pg", "aws"]);
+    expect(got.map((b) => b.kind)).toEqual(["http", "git", "pg", "aws", "mcp"]);
     expect(`${(f.mock.calls[0]![1] as RequestInit).method} ${f.mock.calls[0]![0]}`).toBe("GET /v1/bindings");
     expect(JSON.stringify(bindingSummaries)).not.toMatch(/password|template|secret|token|key/i);
   });
@@ -96,6 +96,13 @@ describe("console client", () => {
     expect(by.aws).toContainEqual(["Max duration", "900s"]);
     expect(by.aws).toContainEqual(["Allowed actions", "s3:GetObject, s3:PutObject"]);
     expect(bindingDetails({ kind: "aws", name: "r", allowed_actions: [] })).toEqual([["Allowed actions", "none"]]);
+    expect(by.mcp).toEqual([
+      ["Upstream", "https://api.githubcopilot.com/mcp/"],
+      ["Other tools", "hide"],
+      ["Allow", "list_issues"],
+      ["Hold", "create_issue"],
+      ["Deny", "delete_repository"],
+    ]);
     expect(by.pg!.map(([l]) => l)).not.toContain("Allowed actions");
   });
 });

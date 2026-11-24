@@ -151,6 +151,7 @@ impl Harness {
                 aws_bindings: bindings,
                 pg: Vec::new(),
                 git_bindings: Vec::new(),
+                mcp_upstreams: Vec::new(),
             },
             decryptor,
             Arc::new(StubResolver::default()),

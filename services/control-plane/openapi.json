@@ -500,7 +500,8 @@
           "http",
           "git",
           "pg",
-          "aws"
+          "aws",
+          "mcp"
         ],
         "type": "string"
       },
@@ -555,6 +556,17 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "default_decision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolDecision",
+                "description": "`mcp`: the decision for a tool without a rule. Refused on every other kind."
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "header": {
@@ -633,6 +645,17 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "tools": {
+            "description": "`mcp`: the per-tool rules, in name order. Refused on every other kind.",
+            "items": {
+              "$ref": "#/components/schemas/ToolRule"
+            },
+            "maxItems": 500,
+            "type": [
+              "array",
+              "null"
             ]
           },
           "user": {
@@ -949,6 +972,34 @@
         ],
         "type": "object"
       },
+      "McpUpstreamDecision": {
+        "description": "The decision the gateway's tool policy took for an upstream call.",
+        "enum": [
+          "allow",
+          "hide",
+          "deny",
+          "hold"
+        ],
+        "type": "string"
+      },
+      "McpUpstreamOutcome": {
+        "description": "How an upstream call stands.",
+        "enum": [
+          "pending",
+          "ok",
+          "denied",
+          "error"
+        ],
+        "type": "string"
+      },
+      "McpUpstreamPhase": {
+        "description": "Which of the two upstream-call ledger events a request appends.",
+        "enum": [
+          "call",
+          "outcome"
+        ],
+        "type": "string"
+      },
       "NewAgent": {
         "additionalProperties": false,
         "properties": {
@@ -1069,6 +1120,64 @@
         "required": [
           "agent_id",
           "tool",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "NewMcpUpstreamCall": {
+        "additionalProperties": false,
+        "description": "One MCP upstream proxy call, as the gateway records it. There is no field for arguments, a\nresult or the upstream credential.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent whose verified token made the call (the event's actor).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "attempt_id": {
+            "description": "Links an `outcome` event to its `call` event; required with phase `outcome`.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decision": {
+            "$ref": "#/components/schemas/McpUpstreamDecision"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/McpUpstreamOutcome"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/McpUpstreamPhase"
+          },
+          "reason": {
+            "description": "Why a call was `denied` or `error`: a fixed slug.",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tool": {
+            "description": "The tool name from the upstream catalogue; recorded only when it is a valid tool name\npresent in that catalogue, else `unknown`.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "upstream": {
+            "description": "The upstream's configured name.",
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[a-z0-9-]+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase",
+          "agent_id",
+          "upstream",
+          "tool",
+          "decision",
           "outcome"
         ],
         "type": "object"
@@ -1876,6 +1985,17 @@
               "null"
             ]
           },
+          "default_decision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolDecision",
+                "description": "`mcp`: the decision for a tool without a rule. Refused on every other kind."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "header": {
             "description": "`http`: the header the secret is injected into (never its value or template).",
             "type": [
@@ -1960,6 +2080,17 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "tools": {
+            "description": "`mcp`: the per-tool rules, in name order. Refused on every other kind.",
+            "items": {
+              "$ref": "#/components/schemas/ToolRule"
+            },
+            "maxItems": 500,
+            "type": [
+              "array",
+              "null"
             ]
           },
           "user": {
@@ -2199,6 +2330,36 @@
           "error"
         ],
         "type": "string"
+      },
+      "ToolDecision": {
+        "description": "What the gateway's tool policy does with an MCP tool (`mcp` bindings).",
+        "enum": [
+          "allow",
+          "hide",
+          "deny",
+          "hold"
+        ],
+        "type": "string"
+      },
+      "ToolRule": {
+        "additionalProperties": false,
+        "description": "One per-tool rule of an `mcp` binding. The tool name is the upstream's own, never a value.",
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ToolDecision"
+          },
+          "name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "decision"
+        ],
+        "type": "object"
       },
       "WorkloadIdentity": {
         "description": "A trust policy. The `handle` is the non-secret routing value a workload sends to the\nexchange route.",
@@ -3050,6 +3211,135 @@
           }
         ],
         "summary": "List the agents whose MCP access is revoked (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/mcp/upstream-calls": {
+      "post": {
+        "description": "The gateway records every call through its MCP upstream proxy: the agent, the upstream's configured name, the tool, the decision and the outcome with a static reason; never arguments, results or the upstream credential. Unknown fields are a `400`. Contract only for now: it answers `501` until the proxy lands.",
+        "operationId": "append_mcp_upstream_call",
+        "parameters": [
+          {
+            "description": "The org the event belongs to (the agent token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMcpUpstreamCall"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendedEvent"
+                }
+              }
+            },
+            "description": "`mcp.upstream_outcome` already recorded for this `attempt_id` with the same fields; nothing appended"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendedEvent"
+                }
+              }
+            },
+            "description": "Appended"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "501": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not implemented yet"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Append an `mcp.upstream_call` or `mcp.upstream_outcome` event (gateway only)",
         "tags": [
           "internal"
         ]

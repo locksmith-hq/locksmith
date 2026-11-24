@@ -847,6 +847,86 @@ pub async fn append_agent_mcp_call(
     ))
 }
 
+/// Which of the two upstream-call ledger events a request appends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpUpstreamPhase {
+    /// `mcp.upstream_call`: before forwarding (`pending`), or alone when refused (`denied`).
+    Call,
+    /// `mcp.upstream_outcome`: how a forwarded call ended (`ok` or `error`); needs `attempt_id`.
+    Outcome,
+}
+
+/// The decision the gateway's tool policy took for an upstream call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpUpstreamDecision {
+    Allow,
+    Hide,
+    Deny,
+    Hold,
+}
+
+/// How an upstream call stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpUpstreamOutcome {
+    Pending,
+    Ok,
+    Denied,
+    Error,
+}
+
+/// One MCP upstream proxy call, as the gateway records it. There is no field for arguments, a
+/// result or the upstream credential.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NewMcpUpstreamCall {
+    pub phase: McpUpstreamPhase,
+    /// The agent whose verified token made the call (the event's actor).
+    pub agent_id: Uuid,
+    /// The upstream's configured name.
+    #[schema(min_length = 1, max_length = 32, pattern = "^[a-z0-9-]+$")]
+    pub upstream: String,
+    /// The tool name from the upstream catalogue; recorded only when it is a valid tool name
+    /// present in that catalogue, else `unknown`.
+    #[schema(max_length = 200)]
+    pub tool: String,
+    pub decision: McpUpstreamDecision,
+    pub outcome: McpUpstreamOutcome,
+    /// Why a call was `denied` or `error`: a fixed slug.
+    #[schema(max_length = 64, pattern = "^[a-z][a-z0-9_]*$")]
+    pub reason: Option<String>,
+    /// Links an `outcome` event to its `call` event; required with phase `outcome`.
+    pub attempt_id: Option<Uuid>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/mcp/upstream-calls",
+    operation_id = "append_mcp_upstream_call",
+    tag = "internal",
+    summary = "Append an `mcp.upstream_call` or `mcp.upstream_outcome` event (gateway only)",
+    description = "The gateway records every call through its MCP upstream proxy: the agent, the upstream's configured name, the tool, the decision and the outcome with a static reason; never arguments, results or the upstream credential. Unknown fields are a `400`. Contract only for now: it answers `501` until the proxy lands.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to (the agent token's `org`)"),
+    ),
+    request_body = NewMcpUpstreamCall,
+    responses(
+        (status = 200, description = "`mcp.upstream_outcome` already recorded for this `attempt_id` with the same fields; nothing appended", body = AppendedEvent),
+        (status = 201, description = "Appended", body = AppendedEvent),
+        (status = 501, description = "Not implemented yet", body = Problem, content_type = "application/problem+json"),
+        InternalWriteErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn append_mcp_upstream_call(
+    _org: ServiceOrgBinding,
+    ApiJson(_input): ApiJson<NewMcpUpstreamCall>,
+) -> Result<(StatusCode, Json<AppendedEvent>), ApiError> {
+    Err(ApiError::bare(Kind::NotImplemented))
+}
+
 /// Body of `POST /internal/v1/mcp/agent-clients`: the agent that just initialized an MCP session.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

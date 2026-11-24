@@ -81,4 +81,15 @@ export const bindingSummaries: BindingSummary[] = [
     max_duration_secs: 900,
     allowed_actions: ["s3:GetObject", "s3:PutObject"],
   },
+  {
+    kind: "mcp",
+    name: "github",
+    origin: "https://api.githubcopilot.com/mcp/",
+    default_decision: "hide",
+    tools: [
+      { name: "create_issue", decision: "hold" },
+      { name: "delete_repository", decision: "deny" },
+      { name: "list_issues", decision: "allow" },
+    ],
+  },
 ];

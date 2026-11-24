@@ -3,10 +3,11 @@
 //!
 //! No type here derives `Debug` or `Clone` where it holds a token or a URL with credentials.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::net::SocketAddr;
 
+use ls_mcp_server::upstream::{ToolDecision, valid_tool_name};
 use secrecy::SecretString;
 use serde::Deserialize;
 use url::Url;
@@ -58,6 +59,11 @@ pub enum ConfigError {
         index: usize,
         field: &'static str,
     },
+    /// An `[[mcp_upstream]]` is invalid; names the upstream's index and the field.
+    McpUpstream {
+        index: usize,
+        field: &'static str,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -76,6 +82,9 @@ impl fmt::Display for ConfigError {
             }
             Self::PgBinding { index, field } => {
                 write!(f, "pg binding #{index} has an invalid `{field}`")
+            }
+            Self::McpUpstream { index, field } => {
+                write!(f, "mcp upstream #{index} has an invalid `{field}`")
             }
         }
     }
@@ -177,6 +186,75 @@ pub struct PgBinding {
     pub allow_private_hosts: bool,
 }
 
+fn default_mcp_decision() -> ToolDecision {
+    ToolDecision::Hide
+}
+
+/// One upstream MCP server the gateway proxies at `/mcp/upstream/{name}` (change m2-mcp-gateway).
+/// The credential is the secret `secret_id`, injected per request; it is never published in the
+/// inventory.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpUpstream {
+    /// `[a-z0-9-]{1,32}`, unique: the path segment and the ledger code.
+    pub name: String,
+    /// Exact Streamable HTTP endpoint: https, no credentials, query or fragment (http only with
+    /// `allow_private_hosts`).
+    pub url: String,
+    /// The agent needs an unexpired `relay` grant on this secret.
+    pub secret_id: Uuid,
+    pub header: String,
+    /// Header value with exactly one `{secret}` placeholder.
+    pub template: String,
+    /// Decision for a tool without a rule in `tools`. Default `hide`.
+    #[serde(default = "default_mcp_decision")]
+    pub default: ToolDecision,
+    #[serde(default)]
+    pub allow_private_hosts: bool,
+    /// Per-tool decisions; keys are exact, case-sensitive tool names.
+    #[serde(default)]
+    pub tools: BTreeMap<String, ToolDecision>,
+}
+
+fn valid_mcp_name(name: &str) -> bool {
+    (1..=32).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+impl McpUpstream {
+    fn validate(&self) -> Result<(), &'static str> {
+        if !valid_mcp_name(&self.name) {
+            return Err("name");
+        }
+        let url = Url::parse(&self.url).map_err(|_| "url")?;
+        let scheme_ok =
+            url.scheme() == "https" || (url.scheme() == "http" && self.allow_private_hosts);
+        if !scheme_ok
+            || url.host_str().is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err("url");
+        }
+        if !valid_header_name(&self.header) {
+            return Err("header");
+        }
+        if self.template.matches("{secret}").count() != 1
+            || self.template.chars().any(|c| c.is_control())
+        {
+            return Err("template");
+        }
+        if !self.tools.keys().all(|k| valid_tool_name(k)) {
+            return Err("tools");
+        }
+        Ok(())
+    }
+}
+
 /// The bindings file: the org the gateway acts for, and its bindings.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -192,6 +270,9 @@ pub struct Bindings {
     /// Git repositories a secret may be used for through `/git/...` (D1).
     #[serde(default, rename = "git_binding")]
     pub git_bindings: Vec<crate::git::GitBinding>,
+    /// Upstream MCP servers proxied at `/mcp/upstream/{name}`; none by default.
+    #[serde(default, rename = "mcp_upstream")]
+    pub mcp_upstreams: Vec<McpUpstream>,
 }
 
 impl Bindings {
@@ -249,6 +330,18 @@ impl Bindings {
                 || b.template.chars().any(|c| c.is_control())
             {
                 return Err(bad("template"));
+            }
+        }
+        let mut mcp_names = HashSet::new();
+        let mut mcp_secrets = HashSet::new();
+        for (index, m) in self.mcp_upstreams.iter().enumerate() {
+            let bad = |field| ConfigError::McpUpstream { index, field };
+            m.validate().map_err(bad)?;
+            if !mcp_names.insert(m.name.as_str()) {
+                return Err(bad("name"));
+            }
+            if !mcp_secrets.insert(m.secret_id) {
+                return Err(bad("secret_id"));
             }
         }
         let mut names = HashSet::new();
@@ -611,5 +704,113 @@ mod tests {
             load(&env(), &bindings_toml("unknown = 1")).err(),
             Some(ConfigError::BindingsUnreadable)
         );
+    }
+
+    const MCP_SECRET: &str = "0197c1f0-0000-7000-8000-0000000000aa";
+
+    fn mcp_toml(body: &str) -> String {
+        format!(
+            "org_id = \"{ORG}\"\n[[mcp_upstream]]\nname = \"github\"\nurl = \"https://api.githubcopilot.com/mcp/\"\nsecret_id = \"{MCP_SECRET}\"\nheader = \"Authorization\"\ntemplate = \"Bearer {{secret}}\"\n{body}"
+        )
+    }
+
+    fn mcp_err(toml: &str) -> Option<ConfigError> {
+        Bindings::parse(toml).err()
+    }
+
+    fn mcp_bad(field: &'static str) -> Option<ConfigError> {
+        Some(ConfigError::McpUpstream { index: 0, field })
+    }
+
+    #[test]
+    fn mcp_upstream_parses_with_defaults_and_rules() {
+        let b = Bindings::parse(&mcp_toml(
+            "default = \"deny\"\n[mcp_upstream.tools]\nlist_issues = \"allow\"\ncreate_issue = \"hold\"\ndelete_repository = \"deny\"\n",
+        ))
+        .expect("valid");
+        let m = &b.mcp_upstreams[0];
+        assert_eq!(m.default, ToolDecision::Deny);
+        assert_eq!(m.tools["create_issue"], ToolDecision::Hold);
+        assert!(!m.allow_private_hosts);
+        let d = Bindings::parse(&mcp_toml("")).unwrap();
+        assert_eq!(d.mcp_upstreams[0].default, ToolDecision::Hide);
+        assert!(d.mcp_upstreams[0].tools.is_empty());
+    }
+
+    #[test]
+    fn mcp_upstream_rejects_bad_fields() {
+        for name in ["", "Github", "git_hub", "a b", &"x".repeat(33), "g\u{e9}"] {
+            let t = mcp_toml("").replace("name = \"github\"", &format!("name = \"{name}\""));
+            assert_eq!(mcp_err(&t), mcp_bad("name"), "{name:?}");
+        }
+        for url in [
+            "http://api.example.com/mcp",
+            "ftp://api.example.com/mcp",
+            "https://user:pw@api.example.com/mcp",
+            "https://api.example.com/mcp?x=1",
+            "https://api.example.com/mcp#f",
+            "api.example.com/mcp",
+        ] {
+            let t = mcp_toml("").replace("https://api.githubcopilot.com/mcp/", url);
+            assert_eq!(mcp_err(&t), mcp_bad("url"), "{url}");
+        }
+        let t = mcp_toml("allow_private_hosts = true").replace(
+            "https://api.githubcopilot.com/mcp/",
+            "http://127.0.0.1:9000/mcp",
+        );
+        assert!(Bindings::parse(&t).is_ok());
+        let t = mcp_toml("").replace("Authorization", "Bad Header");
+        assert_eq!(mcp_err(&t), mcp_bad("header"));
+        for tpl in ["no placeholder", "{secret}{secret}", "Bearer {secret}\\n"] {
+            let t = mcp_toml("").replace("Bearer {secret}", tpl);
+            assert_eq!(mcp_err(&t), mcp_bad("template"), "{tpl}");
+        }
+        let t = mcp_toml("[mcp_upstream.tools]\n\"bad name\" = \"allow\"\n");
+        assert_eq!(mcp_err(&t), mcp_bad("tools"));
+        for bad in [
+            "default = \"permit\"",
+            "default = \"Allow\"",
+            "[mcp_upstream.tools]\nx = \"maybe\"",
+            "extra = 1",
+        ] {
+            assert_eq!(
+                mcp_err(&mcp_toml(bad)),
+                Some(ConfigError::BindingsUnreadable),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_upstream_names_and_secrets_are_unique() {
+        let one = mcp_toml("");
+        let dup_name = format!(
+            "{one}\n[[mcp_upstream]]\nname = \"github\"\nurl = \"https://b.example.com/mcp\"\nsecret_id = \"{SECRET}\"\nheader = \"X-Key\"\ntemplate = \"{{secret}}\"\n"
+        );
+        assert_eq!(
+            mcp_err(&dup_name),
+            Some(ConfigError::McpUpstream {
+                index: 1,
+                field: "name"
+            })
+        );
+        let dup_secret = format!(
+            "{one}\n[[mcp_upstream]]\nname = \"other\"\nurl = \"https://b.example.com/mcp\"\nsecret_id = \"{MCP_SECRET}\"\nheader = \"X-Key\"\ntemplate = \"{{secret}}\"\n"
+        );
+        assert_eq!(
+            mcp_err(&dup_secret),
+            Some(ConfigError::McpUpstream {
+                index: 1,
+                field: "secret_id"
+            })
+        );
+    }
+
+    #[test]
+    fn mcp_upstream_error_never_shows_a_value() {
+        let t = mcp_toml("").replace("Bearer {secret}", "tok-12345-no-placeholder");
+        let e = mcp_err(&t).unwrap().to_string();
+        assert_eq!(e, "mcp upstream #0 has an invalid `template`");
+        assert!(!e.contains("tok-12345"));
     }
 }

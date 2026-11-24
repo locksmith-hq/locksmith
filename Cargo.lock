@@ -2972,7 +2972,9 @@ name = "ls-mcp-server"
 version = "0.0.1-alpha.4"
 dependencies = [
  "rmcp",
+ "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

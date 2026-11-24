@@ -1197,6 +1197,7 @@ mod tests {
             aws_bindings: Vec::new(),
             pg: Vec::new(),
             git_bindings: Vec::new(),
+            mcp_upstreams: Vec::new(),
         };
         let control_plane =
             ControlPlane::new(cp.uri().parse().unwrap(), ORG, "s".repeat(32).into()).unwrap();
@@ -1973,6 +1974,7 @@ mod tests {
                 aws_bindings: Vec::new(),
                 pg: Vec::new(),
                 git_bindings: Vec::new(),
+                mcp_upstreams: Vec::new(),
             },
             Decryptor::new(
                 ORG,

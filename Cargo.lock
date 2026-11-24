@@ -2979,10 +2979,14 @@ dependencies = [
 name = "ls-oauth"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "ls-oauth",
+ "reqwest",
  "serde",
  "serde_json",
+ "tokio",
  "toml",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]
@@ -4266,6 +4270,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

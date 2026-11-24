@@ -1,5 +1,5 @@
 # Provider registry (C1 design decision 3). Embedded at build time and validated at load.
-# Empty until task 2.2 fills GitHub, Google, Slack, Linear and Atlassian.
+# Task 2.2 fills GitHub, Google, Slack, Linear and Atlassian; only the dev mock is here so far.
 #
 # [[provider]]
 # id = "github"
@@ -11,3 +11,16 @@
 # refresh = "rotating"            # rotating | static | none
 # api_hosts = ["api.github.com"]
 # default_scopes = ["..."]
+
+# Dev-only mock provider: the Keycloak client `locksmith-oauth-mock` (infra/compose/keycloak).
+# The gateway enables it only when LOCKSMITH_OAUTH_MOCK_ISSUER is configured (C1 task 3.3).
+[[provider]]
+id = "mock"
+name = "Mock provider (dev)"
+authorize_url = "http://localhost:8180/realms/locksmith/protocol/openid-connect/auth"
+token_url = "http://localhost:8180/realms/locksmith/protocol/openid-connect/token"
+revoke_url = "http://localhost:8180/realms/locksmith/protocol/openid-connect/revoke"
+account_url = "http://localhost:8180/realms/locksmith/protocol/openid-connect/userinfo"
+refresh = "static"
+api_hosts = ["localhost:8180"]
+default_scopes = ["openid", "offline_access"]

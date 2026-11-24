@@ -105,8 +105,12 @@ fn error_slugs_are_closed_and_match_their_wire_form() {
 }
 
 #[test]
-fn embedded_registry_parses_and_is_empty_for_now() {
-    assert!(Registry::embedded().unwrap().provider.is_empty());
+fn embedded_registry_has_only_the_dev_mock_for_now() {
+    let r = Registry::embedded().unwrap();
+    assert_eq!(r.provider.len(), 1);
+    let mock = r.get("mock").unwrap();
+    assert!(mock.revoke_url.is_some());
+    assert!(mock.default_scopes.contains(&"offline_access".to_string()));
 }
 
 #[test]

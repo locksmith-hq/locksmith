@@ -169,6 +169,37 @@
       ]
     },
     {
+      "clientId": "locksmith-oauth-mock",
+      "name": "Mock third-party OAuth provider client for C1 OAuth connections (confidential, PKCE S256, refresh tokens, revocation; dev only)",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "locksmith-oauth-mock-dev-only",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "consentRequired": true,
+      "redirectUris": [
+        "http://127.0.0.1:8090/oauth/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "display.on.consent.screen": "true"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    },
+    {
       "clientId": "locksmith-mcp",
       "name": "Locksmith Hub MCP (pre-registered public client, loopback redirect, consent required)",
       "enabled": true,

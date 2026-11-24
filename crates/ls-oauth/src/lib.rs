@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod registry;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub use registry::{ProviderDef, RefreshKind, Registry, RegistryError};
 

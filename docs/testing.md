@@ -23,7 +23,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/ls-ipc` | Rust lib | `just test ls-ipc` | no | `just test-rust` | `just api-types` regenerates `packages/api-types` from it |
 | `crates/ls-platform` | Rust lib | `just test ls-platform` | no | `just test-rust` |  |
 | `crates/ls-proxy` | Rust lib | `just test ls-proxy` | no | `just test-rust` |  |
-| `crates/ls-oauth` | Rust lib | `just test ls-oauth` | no | `just test-rust` | OAuth connections contract and provider registry; no type carries a token |
+| `crates/ls-oauth` | Rust lib | `just test ls-oauth` | no | `just test-rust` | OAuth connections contract, provider registry and (feature `testing`) per-provider wiremock fakes; no type carries a token |
 | `crates/ls-redact` | Rust lib | `just test ls-redact` | no | `just test-rust` |  |
 | `crates/ls-tenant-lint` | Rust lib | `just test ls-tenant-lint` | no | `just test-rust` |  |
 | `crates/ls-update` | Rust lib | `just test ls-update` | no | `just test-rust` |  |

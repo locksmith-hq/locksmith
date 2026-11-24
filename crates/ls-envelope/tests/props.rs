@@ -25,7 +25,11 @@ fn plaintext(seed: u64, len: usize) -> Vec<u8> {
 }
 
 fn purpose() -> impl Strategy<Value = Purpose> {
-    prop_oneof![Just(Purpose::SecretPayload), Just(Purpose::DekWrap)]
+    prop_oneof![
+        Just(Purpose::SecretPayload),
+        Just(Purpose::DekWrap),
+        Just(Purpose::OAuthToken)
+    ]
 }
 
 fn binding() -> impl Strategy<Value = Binding> {
@@ -107,7 +111,8 @@ proptest! {
         let s = seal(&b, seed, 32);
         let other = match b.purpose {
             Purpose::SecretPayload => Purpose::DekWrap,
-            Purpose::DekWrap => Purpose::SecretPayload,
+            Purpose::DekWrap => Purpose::OAuthToken,
+            Purpose::OAuthToken => Purpose::SecretPayload,
         };
         let moved = Binding { purpose: other, ..b };
         prop_assert_eq!(open_err(s.dek(), &moved, s.ciphertext()), EnvelopeError::Integrity);

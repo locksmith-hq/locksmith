@@ -41,6 +41,7 @@ services:
       BAO_TOKEN: ${OPENBAO_DEV_ROOT_TOKEN:-dev-only-root}
       OPENBAO_CONTROL_PLANE_TOKEN: ${OPENBAO_CONTROL_PLANE_TOKEN:-dev-only-control-plane}
       OPENBAO_GATEWAY_TOKEN: ${OPENBAO_GATEWAY_TOKEN:-dev-only-gateway}
+      OPENBAO_GATEWAY_OAUTH_TOKEN: ${OPENBAO_GATEWAY_OAUTH_TOKEN:-dev-only-gateway-oauth}
       OPENBAO_AUDIT_CHECKPOINT_TOKEN: ${OPENBAO_AUDIT_CHECKPOINT_TOKEN:-dev-only-audit-checkpoint}
     volumes: ["./openbao-init.sh:/openbao-init.sh:ro"]
     ports: ["127.0.0.1:8200:8200"]

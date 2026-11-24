@@ -35,6 +35,9 @@ pub enum Purpose {
     SecretPayload,
     /// A data key wrapped by a gateway or KMS key.
     DekWrap,
+    /// An OAuth connection's token set (access token, refresh token, expiry, scopes) for one
+    /// generation, sealed by the gateway.
+    OAuthToken,
 }
 
 impl Purpose {
@@ -42,6 +45,7 @@ impl Purpose {
         match self {
             Purpose::SecretPayload => b"secret-payload",
             Purpose::DekWrap => b"dek-wrap",
+            Purpose::OAuthToken => b"oauth-token",
         }
     }
 }

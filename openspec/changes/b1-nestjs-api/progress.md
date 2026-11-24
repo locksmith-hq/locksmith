@@ -64,3 +64,8 @@ Append-only session log. Read the last entries and `git log` before starting.
 - Verified: vitest 11 passed, tsc clean, `scripts/api-types.sh --check` OK against real docker, cargo check of the bin OK. Evaluator FAIL on first pass (api-types recipe change would break ci.yml); fixed.
 - 2.3 left UNTICKED: the drift check is only in the justfile `ci` recipe; ci.yml does not call it and `.github/workflows` is trust root. Needs a harness-backlog item: add `just api-types-check` after `npm ci` in a ci.yml job with docker. Then tick 2.3.
 - Notes for next session: 2.4 next (wire DbModule into AppModule then).
+
+## 2026-11-24 worker-b (ci-fix)
+- PR #674 had conflicts with main: merged origin/main (took main's turbo.json and package-lock.json, reran `npm i`), added `apps/api` to `knip.json` (new //#knip gate), un-exported `envSchema` and `redactDeep`.
+- Verified: apps/api `tsc --noEmit` clean, vitest 11 passed, `just quick` OK.
+- Notes for next session: tasks 2.1 and 2.3 still wait on the lead/owner items above; next new task is 2.4. PR #674 is not ready for auto-merge.

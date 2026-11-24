@@ -1,5 +1,5 @@
 //! d2-aws-sts task 1.2 spike: `ls-proxy::aws::sts::assume_role` against Floci 2.5.0. Records
-//! what Floci enforces; the findings are in `openspec/changes/d2-aws-sts/design.md` (decision 6).
+//! what Floci enforces.
 //!
 //! - `assume_role_returns_usable_keys` uses the compose Floci (`docker compose -f
 //!   infra/compose/compose.yaml up -d --wait floci`, 127.0.0.1:4566 or `FLOCI_URL`), which runs

@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-11-22
-# PM 2026-11-24: OC-9, first group needs only B1's contract
-x-depends_on: [t3-console-mvp, b1-nestjs-api:contract]

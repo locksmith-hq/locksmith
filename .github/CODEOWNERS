@@ -1,13 +1,11 @@
 # Code-owner review is required on main (ruleset main-threads). Paths listed here wait for the owner's approval;
 # everything else merges through auto-merge once the required checks pass (.github/workflows/claude-review.yml).
 
-# Agent system and trust root: the weekly harness release or a hotfix, merged by the owner (#470).
+# Trust root: CI, repo config and contributor instructions.
 /.github/ @tomer555
 /.claude/ @tomer555
 /AGENTS.md @tomer555
 /CLAUDE.md @tomer555
-/openspec/config.yaml @tomer555
-/docs/agents/ @tomer555
 /scripts/review-tier.sh @tomer555
 
 # Crates that hold or move secrets.
@@ -21,6 +19,3 @@
 /ee/ @tomer555
 /LICENSING.md @tomer555
 /crates/ls-entitlements/ @tomer555
-
-# Agents append approved owner decisions here (merge-review checks each line's evidence).
-/docs/agents/owner.md

@@ -58,7 +58,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 
 ## Dev environment
 
-The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev-harness.md](dev-harness.md); cloud and scheduled sessions are in [cloud-dev.md](cloud-dev.md).
+The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev-harness.md](dev-harness.md).
 
 - `just up` starts the stack, `just down` stops it and `just reset` wipes it.
 - `just ps` and `just logs` show what runs.

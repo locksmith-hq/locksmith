@@ -3,7 +3,7 @@ name = "ls-oidc-verify"
 description = "External OIDC token verification: JWKS cache, guarded issuer fetches, workload-token verification, abuse limits (shared by the control plane and the core service)."
 edition.workspace = true
 version.workspace = true
-license = "AGPL-3.0-only"
+license.workspace = true
 publish.workspace = true
 
 [lints]

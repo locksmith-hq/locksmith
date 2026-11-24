@@ -68,9 +68,7 @@ fn app() -> axum::Router {
         "test-token".to_owned(),
     )))
     .with_signer(Arc::new(FakeSigner))
-    .with_agent_signer(Arc::new(
-        AgentTokenSigner::from_base64_seed(&seed).unwrap(),
-    ))
+    .with_agent_signer(Arc::new(AgentTokenSigner::from_base64_seed(&seed).unwrap()))
     .with_dek_kms(Arc::new(FakeKms::default()));
     router(s)
 }
@@ -176,11 +174,7 @@ async fn chained_operations_match_the_contract() {
     )
     .await;
     assert_eq!(st, StatusCode::OK);
-    let (st, v) = call(
-        "/v1/agent-tokens/verify",
-        json!({"token": minted["token"]}),
-    )
-    .await;
+    let (st, v) = call("/v1/agent-tokens/verify", json!({"token": minted["token"]})).await;
     assert_eq!(st, StatusCode::OK);
     assert_eq!(v["valid"], true);
     assert_matches_contract("/v1/agent-tokens/verify", 200, &v);

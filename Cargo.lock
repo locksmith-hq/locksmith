@@ -4316,6 +4316,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "rand 0.10.3",
+ "reqwest",
  "schemars 1.2.3",
  "serde",
  "serde_json",

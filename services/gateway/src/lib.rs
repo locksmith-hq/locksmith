@@ -21,6 +21,7 @@ pub mod http_client;
 pub mod mcp_clients;
 pub mod mcp_endpoint;
 pub mod mcp_settings;
+pub mod mcp_upstream;
 mod mcp_tools;
 pub mod pg;
 pub mod relay;

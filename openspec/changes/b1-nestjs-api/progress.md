@@ -23,3 +23,6 @@ Append-only session log. Read the last entries and `git log` before starting.
 
 ## 2026-11-23 (PM, split for parallel work)
 - Workers were idle with an empty ready queue (#670) while this 44-task change is held by one worker (#653). Group 3 (TypeScript tooling) is now also planned as `b3-ts-tooling`, and tasks 5.2 and 5.3 (core API contract and Rust service) as `b2-rust-core`; both have no deps, so two more workers can start today. This change's task text is unchanged: when one of those changes merges, run the matching verify task here (3.5, or the 5.2/5.3 outputs) and tick it only if it passes. Task 5.4 calls `packages/core-client` from `b2-rust-core`. The lead may drop the duplicated task lines on a planning branch (#653).
+
+## 2026-11-24 (PM, split for parallel work)
+- T2, T6, T7, T8 and N1 now need only `b1-nestjs-api:contract` (this change's group 1), not the whole port. Tasks 1.4 to 1.6 (scenario suite, runner, verify) are also planned as `b4-api-contract-suite` (no deps) for a second worker; when it merges, run 1.6 here and tick 1.4 to 1.6 only if it passes. Task text unchanged. Landing 1.3 (route table, #674) on main also counts: `change-status.sh` reads B1 ticks from main or `claude/change-b1-nestjs-api`, not the `-r2` branch.

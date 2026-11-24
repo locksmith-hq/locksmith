@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-11-24
+# Split out of b1-nestjs-api tasks 1.4-1.6 (PM 2026-11-24): the rest of B1's Contract group, which every
+# Phase 2 row now needs as `b1-nestjs-api:contract`. Runs against the Rust control plane only.
+x-priority: Urgent  # PM 2026-11-24: unblocks T2, T6, T7, T8 and N1 (via b1-nestjs-api:contract)
+x-depends_on: []

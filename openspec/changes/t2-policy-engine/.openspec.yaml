@@ -1,3 +1,4 @@
 schema: spec-driven
 created: 2026-11-22
-x-depends_on: [t6-org-members:contract, b1-nestjs-api]
+# PM 2026-11-24: OC-9, first group needs only B1's contract
+x-depends_on: [t6-org-members:contract, b1-nestjs-api:contract]

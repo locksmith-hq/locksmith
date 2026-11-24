@@ -82,7 +82,7 @@ export const myOrgs: MyOrg[] = [
   },
 ];
 
-export const members: Member[] = [
+const members: Member[] = [
   {
     user_id: "0192f0a0-0000-7000-8000-0000000000c1",
     email: "owner@example.test",

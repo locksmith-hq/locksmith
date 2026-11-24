@@ -19,13 +19,14 @@ while IFS= read -r f; do
 done < <(find . "${prune[@]}" -name package.json -type f -print | sed 's|^\./||' | grep -E '^(crates|services)/' || true)
 
 # Every workflow job needs timeout-minutes: GitHub's default is 6 hours, and a stuck job burns quota.
+# A job that calls a reusable workflow (`uses:`) cannot set it; the called workflow's own jobs must.
 while IFS= read -r j; do
   echo "tree-check: workflow job without timeout-minutes: $j" >&2
   fail=1
 done < <(for w in .github/workflows/*.yml; do
   awk -v f="$w" '/^jobs:/{j=1; next} /^[^ #]/{j=0}
     j && /^  [A-Za-z0-9_-]+:[[:space:]]*$/{if (job && !t) print f": "job; job=$1; t=0}
-    j && /^    timeout-minutes:/{t=1} END{if (job && !t) print f": "job}' "$w"
+    j && /^    (timeout-minutes|uses):/{t=1} END{if (job && !t) print f": "job}' "$w"
 done)
 
 # AWS infrastructure code lives in the private locksmith-cloud repo (owner 2026-11-22).

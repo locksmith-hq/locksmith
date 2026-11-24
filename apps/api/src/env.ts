@@ -19,7 +19,9 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 export function validateEnv(raw: Record<string, unknown>): Env {
-  const parsed = envSchema.safeParse(raw);
+  // Empty counts as unset, as in the Rust config.
+  const clean = Object.fromEntries(Object.entries(raw).filter(([k, v]) => !(k.startsWith("LOCKSMITH_OIDC_") && v === "")));
+  const parsed = envSchema.safeParse(clean);
   if (!parsed.success) {
     // Report names and reasons only, never values.
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);

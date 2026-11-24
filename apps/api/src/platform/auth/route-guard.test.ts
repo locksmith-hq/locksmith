@@ -10,6 +10,7 @@ import { IS_PUBLIC } from "./public.decorator.js";
 
 // Every controller registered in AppModule. Add new controllers here and to the module.
 const CONTROLLERS: { prototype: object }[] = [HealthController];
+// The list above must match AppModule: the first test fails if a controller is added there and not here.
 // Routes allowed to be open. Anything else must sit behind the global AuthGuard.
 const PUBLIC_ALLOWLIST = new Set(["GET /healthz", "GET /readyz"]);
 const METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "ALL", "OPTIONS", "HEAD"];
@@ -38,6 +39,7 @@ describe("route guard coverage", () => {
     const providers = Reflect.getMetadata("providers", AuthModule) as { provide?: unknown; useClass?: unknown }[];
     expect(providers.some((p) => p.provide === APP_GUARD && p.useClass === AuthGuard)).toBe(true);
     expect(Reflect.getMetadata("imports", AppModule)).toContain(AuthModule);
+    expect(Reflect.getMetadata("controllers", AppModule)).toEqual(CONTROLLERS);
   });
 
   it("finds the registered routes", () => {

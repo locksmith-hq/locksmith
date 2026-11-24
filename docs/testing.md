@@ -82,3 +82,5 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 | `npm run typecheck` | tsc | each package's `tsconfig.json` | `npm run typecheck -w <package>` |
 
 `just quick` runs all four when a TypeScript file changed. CI calls `just lint`, so it enforces the same gates.
+
+<!-- merge-gate smoke test 2026-11-24: safe to delete -->

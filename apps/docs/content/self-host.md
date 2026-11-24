@@ -53,4 +53,4 @@ helm install locksmith infra/helm/locksmith \
   --set keyProvider.address=https://openbao.example.internal:8200
 ```
 
-A hook Job applies migrations; pods run non-root with a read-only root filesystem and dropped capabilities, and a NetworkPolicy limits traffic. Upgrade with `helm upgrade` and a new image digest. Back up the Postgres database and your key provider as above.
+The control plane applies migrations on start (an optional hook Job, `migration.enabled`, is off by default); pods run non-root with a read-only root filesystem and dropped capabilities, and a NetworkPolicy limits traffic. Upgrade with `helm upgrade` and a new image digest. Back up the Postgres database and your key provider as above.

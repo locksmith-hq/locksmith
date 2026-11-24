@@ -5,8 +5,12 @@ use ls_oauth::testing::{
 };
 use serde_json::Value;
 
+fn client() -> reqwest::Client {
+    ls_http::builder().unwrap().build().unwrap()
+}
+
 async fn post_form(url: &str, form: &[(&str, &str)], accept: Option<&str>) -> (u16, String) {
-    let mut r = reqwest::Client::new().post(url).form(form);
+    let mut r = client().post(url).form(form);
     if let Some(a) = accept {
         r = r.header("accept", a);
     }
@@ -17,7 +21,7 @@ async fn post_form(url: &str, form: &[(&str, &str)], accept: Option<&str>) -> (u
 async fn exchange(f: &FakeProvider) -> Value {
     let form = [("grant_type", "authorization_code"), ("code", CODE)];
     let (s, body) = if f.kind() == Kind::Atlassian {
-        let resp = reqwest::Client::new()
+        let resp = client()
             .post(f.token_url())
             .json(&serde_json::json!({"grant_type": "authorization_code", "code": CODE}))
             .send()
@@ -33,7 +37,7 @@ async fn exchange(f: &FakeProvider) -> Value {
 
 async fn refresh(f: &FakeProvider) -> (u16, Value) {
     let (s, body) = if f.kind() == Kind::Atlassian {
-        let resp = reqwest::Client::new()
+        let resp = client()
             .post(f.token_url())
             .json(&serde_json::json!({"grant_type": "refresh_token", "refresh_token": REFRESH_1}))
             .send()
@@ -82,13 +86,13 @@ async fn every_provider_exchanges_refreshes_revokes_and_names_the_account() {
         );
 
         let account = if kind == Kind::Linear {
-            reqwest::Client::new()
+            client()
                 .post(f.account_url())
                 .json(&serde_json::json!({"query": "{viewer{id}}"}))
                 .send()
                 .await
         } else {
-            reqwest::Client::new().get(f.account_url()).send().await
+            client().get(f.account_url()).send().await
         }
         .unwrap();
         assert_eq!(account.status(), 200, "{kind:?}");
@@ -96,7 +100,7 @@ async fn every_provider_exchanges_refreshes_revokes_and_names_the_account() {
         match f.revoke_url() {
             None => assert_eq!(kind, Kind::Atlassian),
             Some(url) => {
-                let c = reqwest::Client::new();
+                let c = client();
                 let r = if kind == Kind::Github {
                     c.delete(url)
                 } else {
@@ -170,7 +174,9 @@ async fn a_revoked_refresh_token_is_refused_by_every_provider() {
 #[tokio::test]
 async fn the_fakes_never_serve_a_token_on_the_account_or_revoke_paths() {
     let f = FakeProvider::start(Kind::Google).await;
-    let body = reqwest::get(f.account_url())
+    let body = client()
+        .get(f.account_url())
+        .send()
         .await
         .unwrap()
         .text()

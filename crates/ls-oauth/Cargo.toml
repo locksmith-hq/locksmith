@@ -23,5 +23,6 @@ uuid = { version = "1.29", features = ["serde"] }
 [dev-dependencies]
 serde_json = "1"
 ls-oauth = { path = ".", features = ["testing"] }
+ls-http = { path = "../ls-http" }
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "form"] }
 tokio = { version = "1.54", features = ["rt", "macros"] }

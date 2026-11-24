@@ -2979,6 +2979,7 @@ dependencies = [
 name = "ls-oauth"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "ls-http",
  "ls-oauth",
  "reqwest",
  "serde",

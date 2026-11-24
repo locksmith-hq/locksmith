@@ -1,10 +1,10 @@
 # Tasks: B4 API contract suite
 
 ## 1. Runner and coverage [sonnet]
-- [ ] 1.1 `tests/api-contract` npm workspace (private, ESM, vitest, AGPL-3.0-only; add it to the root `workspaces`), base URL from `API_CONTRACT_URL`, a seeding helper that creates two users in two orgs through dev auth (as `just api` enables), and the normaliser (ids, timestamps, tokens to placeholders in order of first appearance) with unit tests; `scripts/tree-check.sh` and `docs/testing.md` entries.
-- [ ] 1.2 `scripts/api-contract.sh <base-url>` runs the suite and writes the normalised transcript under `target/api-contract/`; `--diff <url-a> <url-b>` runs both and prints the first differing status, header or body field per path, exiting non-zero on any difference; `just api-contract`; `scripts/api-contract.test.sh` covers the diff on two planted transcripts.
-- [ ] 1.3 Coverage test: reads `services/control-plane/openapi.json` and fails, naming the path, when a path and method has no scenario and is not in an exclusion list with a reason.
-- [ ] 1.4 Verify: `npm test --workspace tests/api-contract -- normalise coverage` and `bash scripts/api-contract.test.sh`.
+- [x] 1.1 `tests/api-contract` npm workspace (private, ESM, vitest, AGPL-3.0-only; add it to the root `workspaces`), base URL from `API_CONTRACT_URL`, a seeding helper that creates two users in two orgs through dev auth (as `just api` enables), and the normaliser (ids, timestamps, tokens to placeholders in order of first appearance) with unit tests; `scripts/tree-check.sh` and `docs/testing.md` entries.
+- [x] 1.2 `scripts/api-contract.sh <base-url>` runs the suite and writes the normalised transcript under `target/api-contract/`; `--diff <url-a> <url-b>` runs both and prints the first differing status, header or body field per path, exiting non-zero on any difference; `just api-contract`; `scripts/api-contract.test.sh` covers the diff on two planted transcripts.
+- [x] 1.3 Coverage test: reads `services/control-plane/openapi.json` and fails, naming the path, when a path and method has no scenario and is not in an exclusion list with a reason.
+- [x] 1.4 Verify: `npm test --workspace tests/api-contract -- normalise coverage` and `bash scripts/api-contract.test.sh`.
 
 ## 2. Scenarios: tenancy and secrets [sonnet]
 - [ ] 2.1 Scenarios for `/v1/auth/sign-in`, `/v1/auth/sign-out`, `/v1/orgs`, `/v1/orgs/current`, `/v1/orgs/{org_id}`, `/healthz`, `/readyz` and `/.well-known/jwks.json`: success, validation error, missing-token 401, cross-tenant 404 or 403 where the path is tenant-scoped.

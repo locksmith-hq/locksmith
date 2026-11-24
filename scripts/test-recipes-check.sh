@@ -10,7 +10,7 @@ fail=0
 
 # Component directories: one level under these, plus the three test suites.
 dirs=$(for d in crates/* services/* apps/* packages/* integrations/*; do [ -d "$d" ] && echo "$d"; done
-  for d in tests/e2e tests/adversarial tests/kit; do [ -d "$d" ] && echo "$d"; done)
+  for d in tests/e2e tests/adversarial tests/kit tests/api-contract; do [ -d "$d" ] && echo "$d"; done)
 rows=$(sed -n 's/^| `\([a-z0-9_/.-]*\)` |.*/\1/p' "$doc")
 
 for d in $dirs; do

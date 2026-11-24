@@ -4,7 +4,8 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "integrations/*"
+    "integrations/*",
+    "tests/api-contract"
   ],
   "scripts": {
     "build": "turbo run build",

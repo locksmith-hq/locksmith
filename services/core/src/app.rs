@@ -77,6 +77,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/agent-tokens/mint", post(agent_token_api::mint))
         .route("/v1/agent-tokens/verify", post(agent_token_api::verify))
+        .route(
+            "/v1/workload-tokens/mint",
+            post(agent_token_api::mint_workload),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_service_token,

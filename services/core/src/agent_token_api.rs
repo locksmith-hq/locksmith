@@ -96,6 +96,31 @@ pub async fn mint(State(state): State<AppState>, body: Bytes) -> Response {
     mint_response(signer, req.agent_id, req.org_id)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkloadMintRequest {
+    agent_id: Uuid,
+    org_id: Uuid,
+    /// Recorded by the caller on its own ledger; the token format has no policy claim.
+    #[allow(dead_code)]
+    policy_id: Uuid,
+}
+
+/// `POST /v1/workload-tokens/mint`: the same token as `mint`, for the agent bound to a workload
+/// identity policy whose external token the caller already verified.
+pub async fn mint_workload(State(state): State<AppState>, body: Bytes) -> Response {
+    let Ok(req) = serde_json::from_slice::<WorkloadMintRequest>(&body) else {
+        return problem(StatusCode::BAD_REQUEST, "malformed request");
+    };
+    let Some(signer) = state.agent_signer() else {
+        return problem(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "agent signing key not configured",
+        );
+    };
+    mint_response(signer, req.agent_id, req.org_id)
+}
+
 fn refused(reason: &'static str) -> Response {
     no_store(Verdict {
         valid: false,

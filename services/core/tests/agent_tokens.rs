@@ -162,3 +162,47 @@ async fn unauthenticated_malformed_and_unconfigured_are_refused() {
     .await;
     assert_eq!(st, StatusCode::SERVICE_UNAVAILABLE);
 }
+
+#[tokio::test]
+async fn workload_mint_gives_a_verifiable_agent_token() {
+    let app = app(Some(1));
+    let policy = "33333333-3333-4333-8333-333333333333";
+    let (st, cache, v) = post(
+        &app,
+        "/v1/workload-tokens/mint",
+        Some(AUTH),
+        json!({"agent_id": AGENT, "org_id": ORG, "policy_id": policy}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(cache.as_deref(), Some("no-store"));
+    assert_eq!(v["expires_in"], 900);
+    let (_, _, verdict) = post(
+        &app,
+        "/v1/agent-tokens/verify",
+        Some(AUTH),
+        json!({ "token": v["token"] }),
+    )
+    .await;
+    assert_eq!(verdict["valid"], true);
+    assert_eq!(verdict["agent_id"], AGENT);
+    let path = "/v1/workload-tokens/mint";
+    let (st, _, _) = post(&app, path, None, json!({})).await;
+    assert_eq!(st, StatusCode::UNAUTHORIZED);
+    let (st, _, _) = post(
+        &app,
+        path,
+        Some(AUTH),
+        json!({"agent_id": AGENT, "org_id": ORG}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST, "policy_id is required");
+    let (st, _, _) = post(
+        &self::app(None),
+        path,
+        Some(AUTH),
+        json!({"agent_id": AGENT, "org_id": ORG, "policy_id": policy}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::SERVICE_UNAVAILABLE);
+}

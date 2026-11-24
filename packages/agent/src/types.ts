@@ -2,38 +2,40 @@
 // names a secret, a relay response is already redacted by the gateway.
 
 /** Gateway error slugs (`tests/kit/agent-contract/errors.json`; one per gateway status code). */
-export type GatewaySlug =
-  | "bad_request"
-  | "unauthenticated"
-  | "denied"
-  | "denied_address"
-  | "no_grant"
-  | "not_found"
-  | "audit_failed"
-  | "internal"
-  | "grants_unavailable"
-  | "response_withheld"
-  | "secret_unavailable"
-  | "secret_unusable"
-  | "upstream_error"
-  | "upstream_unreachable"
-  | "audit_unavailable"
-  | "unavailable"
-  | "upstream_timeout"
-  | "invalid_request"
-  | "duration_too_short"
-  | "binding_ambiguous"
-  | "not_bound"
-  | "vend_disabled"
-  | "service_denied"
-  | "sts_error"
-  | "sts_unreachable"
-  | "redaction_failed"
-  | "token_unavailable"
-  | "upstream_unauthorized"
-  | "upstream_redirect"
-  | "too_many_credentials"
-  | "settings_unavailable";
+export const GATEWAY_SLUGS = [
+  "bad_request",
+  "unauthenticated",
+  "denied",
+  "denied_address",
+  "no_grant",
+  "not_found",
+  "audit_failed",
+  "internal",
+  "grants_unavailable",
+  "response_withheld",
+  "secret_unavailable",
+  "secret_unusable",
+  "upstream_error",
+  "upstream_unreachable",
+  "audit_unavailable",
+  "unavailable",
+  "upstream_timeout",
+  "invalid_request",
+  "duration_too_short",
+  "binding_ambiguous",
+  "not_bound",
+  "vend_disabled",
+  "service_denied",
+  "sts_error",
+  "sts_unreachable",
+  "redaction_failed",
+  "token_unavailable",
+  "upstream_unauthorized",
+  "upstream_redirect",
+  "too_many_credentials",
+  "settings_unavailable",
+] as const;
+export type GatewaySlug = (typeof GATEWAY_SLUGS)[number];
 
 /** Slugs the client itself raises. */
 export type ClientSlug = "unauthorized" | "bad_config" | "foreign_origin" | "transport";

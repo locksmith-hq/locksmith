@@ -10,7 +10,7 @@ curl -fsSL https://raw.githubusercontent.com/locksmith-hq/locksmith/main/scripts
 bash install.sh --version X.Y.Z --dir ~/.local/bin
 ```
 
-The installer needs `curl` and `minisign`. It verifies the minisign signature of `manifest.json` and the SHA-256 of the binary before installing, and stops (it never skips) if it cannot verify. It installs only the binary and reads no credential files. Homebrew users can install from the tap formula generated for each release.
+The installer needs `curl`, `minisign`, `jq` (or `python3`) and `sha256sum` (or `shasum`). It verifies the minisign signature of `manifest.json` and the SHA-256 of the binary before installing, and stops (it never skips) if it cannot verify. It installs only the binary and reads no credential files. Each release also builds a Homebrew formula (`smith.rb`, from `scripts/gen-formula.sh`) as a release artifact. Until the owner publishes it to a tap repository, install with `install.sh`; once a tap exists, `brew install <tap>/smith`.
 
 ## Verify a release by hand
 
@@ -38,6 +38,6 @@ gh attestation verify <archive> --repo locksmith-hq/locksmith
 
 1. Make the repository public.
 2. Create the repository secret `MINISIGN_SECRET_KEY` (name only here; never commit its value).
-3. Create the Homebrew tap repository and give the release workflow a token for it.
-4. Run the release workflow with `dry_run` first and check the result with `scripts/verify-release.sh`.
+3. Homebrew (optional, later): the release workflow only uploads `smith.rb` as an artifact and has no tap job or tap secret yet. Create a tap repository and copy `smith.rb` into it by hand, or add a tap step in a separate change.
+4. Run the release workflow with `dry_run` first. A dry run signs with a throwaway key and publishes nothing, so check it with `scripts/verify-release.sh <dir> --pubkey <throwaway.pub> --skip-cosign`, not the default key.
 5. Tag `vX.Y.Z`; confirm `gh attestation verify` and `cosign verify` pass on the published assets.

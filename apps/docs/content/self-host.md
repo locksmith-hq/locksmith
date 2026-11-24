@@ -39,7 +39,7 @@ Losing `openbao-keys` makes stored keys unrecoverable. Never store the backup ne
 
 ### Upgrade
 
-Set `LOCKSMITH_VERSION` (or the `*_IMAGE` variables) in `.env`, then `just selfhost-up` again. Migrations run on start; data, keys and secrets are kept. `just selfhost-down` stops the stack and keeps volumes; `just selfhost-down -v` deletes them.
+Set `LOCKSMITH_VERSION` (or the `*_IMAGE` variables) in `.env`, then `docker compose --env-file infra/compose/selfhost/.env -f infra/compose/selfhost/compose.yaml pull` and `just selfhost-up` again. Migrations run on start; data, keys and secrets are kept. `just selfhost-down` stops the stack and keeps volumes; `just selfhost-down -v` deletes them.
 
 ## Helm
 

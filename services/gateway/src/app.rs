@@ -99,6 +99,8 @@ pub fn build(state: AppState) -> Router {
         // Upstream MCP servers (m2-mcp-gateway): the same agent token, `Host` allowlist and rmcp
         // log cap as `/mcp`; an unknown name and one without a relay grant are the same `404`.
         .route(mcp_upstream::PATH, mcp_upstream::route(&state))
+        // Which upstreams the calling agent may use (task 6.1): names only.
+        .route(mcp_upstream::list::PATH, get(mcp_upstream::list::route))
         .merge(mcp)
         .with_state(state)
 }

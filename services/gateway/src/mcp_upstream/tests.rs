@@ -528,3 +528,82 @@ async fn mcp_upstream_rmcp_logs_are_capped_like_mcp() {
     );
     assert!(!below_info(&capped), "rmcp logged below info");
 }
+
+async fn get_upstreams(app: &Router, authorization: Option<&str>) -> (StatusCode, String) {
+    let mut b = Request::get("/v1/mcp/upstreams");
+    if let Some(a) = authorization {
+        b = b.header(header::AUTHORIZATION, a);
+    }
+    let resp = app
+        .clone()
+        .oneshot(b.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = resp.status();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Task 6.1: names of the upstreams with an unexpired relay grant, nothing else.
+#[tokio::test]
+async fn mcp_upstream_list_names_only_the_granted_upstreams() {
+    let h = harness();
+    let t = format!("Bearer {}", token(600));
+
+    // No grant: an empty list, not an error.
+    let (status, body) = get_upstreams(&h.app, Some(&t)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        serde_json::from_str::<Value>(&body).unwrap(),
+        serde_json::json!({"upstreams": []})
+    );
+
+    // A grant on another secret, a delegate grant and an expired relay grant do not count.
+    let past = OffsetDateTime::now_utc() - time::Duration::seconds(1);
+    h.grants.set(
+        AGENT,
+        vec![
+            grant(OTHER, "relay", None),
+            grant(SECRET, "delegate", None),
+            grant(SECRET, "relay", Some(past)),
+        ],
+    );
+    let (_, body) = get_upstreams(&h.app, Some(&t)).await;
+    assert_eq!(
+        serde_json::from_str::<Value>(&body).unwrap(),
+        serde_json::json!({"upstreams": []})
+    );
+
+    h.grants.set(AGENT, vec![grant(SECRET, "relay", None)]);
+    let (status, body) = get_upstreams(&h.app, Some(&t)).await;
+    assert_eq!(status, StatusCode::OK);
+    // Names only: no URL, header, template or secret id.
+    assert_eq!(
+        serde_json::from_str::<Value>(&body).unwrap(),
+        serde_json::json!({"upstreams": ["github"]})
+    );
+    assert!(!body.contains("upstream.test") && !body.contains(&SECRET.to_string()));
+}
+
+#[tokio::test]
+async fn mcp_upstream_list_needs_an_agent_token() {
+    let h = harness();
+    h.grants.set(AGENT, vec![grant(SECRET, "relay", None)]);
+    let (status, body) = get_upstreams(&h.app, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(!body.contains("github"));
+    let (status, _) = get_upstreams(&h.app, Some("Bearer not-a-token")).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn mcp_upstream_list_fails_closed_when_grants_cannot_be_read() {
+    let h = harness_with(StubGrants {
+        fail: true,
+        ..StubGrants::default()
+    });
+    let t = format!("Bearer {}", token(600));
+    let (status, body) = get_upstreams(&h.app, Some(&t)).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert!(!body.contains("github"));
+}

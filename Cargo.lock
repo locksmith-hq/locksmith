@@ -5045,6 +5045,7 @@ dependencies = [
  "signal-hook",
  "tokio",
  "toml",
+ "toml_edit",
  "url",
  "webpki-roots 1.0.12",
  "wiremock",
@@ -5588,6 +5589,7 @@ dependencies = [
  "indexmap 2.14.2",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 

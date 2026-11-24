@@ -60,6 +60,7 @@ use uuid::Uuid;
 pub mod audit;
 pub mod catalogue;
 pub mod hop;
+pub mod list;
 pub mod policy;
 
 use crate::app::AppState;

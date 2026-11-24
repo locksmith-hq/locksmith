@@ -12,7 +12,7 @@ on:
 
 jobs:
   review:
-    uses: locksmith-hq/claude-ai-crew/.github/workflows/review.yml@7553af63eec951ba43ef12bcbed4a68aed391044
+    uses: locksmith-hq/claude-ai-crew/.github/workflows/review.yml@5a3ead8c4f64c4c8a5d561b6a833b5843a09fcf2
     permissions:
       contents: write
       pull-requests: write
@@ -23,5 +23,5 @@ jobs:
     with:
       plan_repo: locksmith-hq/locksmith-roadmap
       harness_repo: locksmith-hq/claude-ai-crew
-      harness_ref: 7553af63eec951ba43ef12bcbed4a68aed391044
+      harness_ref: 5a3ead8c4f64c4c8a5d561b6a833b5843a09fcf2
     secrets: inherit

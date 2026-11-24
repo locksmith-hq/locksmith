@@ -7,6 +7,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out=target/api-contract
 run=(node tests/api-contract/src/run.ts)
+# Secret-write scenarios send a canary (never printed or recorded); `just canary` keeps the oracle list.
+if [ -z "${API_CONTRACT_CANARY:-}" ] && [ "${1:-}" != "--diff-files" ]; then
+  API_CONTRACT_CANARY=$(python3 -I tests/kit/oracle.py canary-new --file "${LOCKSMITH_CANARIES:-infra/compose/.canaries}")
+  export API_CONTRACT_CANARY
+fi
 case "${1:-}" in
   --diff)
     [ $# -eq 3 ] || { echo "usage: $0 --diff <url-a> <url-b>" >&2; exit 2; }

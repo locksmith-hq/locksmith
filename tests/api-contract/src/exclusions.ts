@@ -25,28 +25,6 @@ export const EXCLUDED: Record<string, string> = {
   "POST /v1/mcp/clients/{client_row_id}/revoke": "pending: scenarios land in task 3.3",
   "GET /v1/mcp/tools": "pending: scenarios land in task 3.3",
   "PUT /v1/mcp/tools/{layer}/{tool}": "pending: scenarios land in task 3.3",
-  "GET /v1/projects": "pending: scenarios land in task 2.2",
-  "POST /v1/projects": "pending: scenarios land in task 2.2",
-  "DELETE /v1/projects/{project_id}": "pending: scenarios land in task 2.2",
-  "GET /v1/projects/{project_id}": "pending: scenarios land in task 2.2",
-  "PATCH /v1/projects/{project_id}": "pending: scenarios land in task 2.2",
-  "GET /v1/projects/{project_id}/environments": "pending: scenarios land in task 2.2",
-  "POST /v1/projects/{project_id}/environments": "pending: scenarios land in task 2.2",
-  "DELETE /v1/projects/{project_id}/environments/{environment_id}": "pending: scenarios land in task 2.2",
-  "GET /v1/projects/{project_id}/environments/{environment_id}": "pending: scenarios land in task 2.2",
-  "PATCH /v1/projects/{project_id}/environments/{environment_id}": "pending: scenarios land in task 2.2",
-  "GET /v1/projects/{project_id}/environments/{environment_id}/secrets": "pending: scenarios land in task 2.3",
-  "POST /v1/projects/{project_id}/environments/{environment_id}/secrets": "pending: scenarios land in task 2.3",
-  "DELETE /v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}":
-    "pending: scenarios land in task 2.3",
-  "GET /v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}":
-    "pending: scenarios land in task 2.3",
-  "PATCH /v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}":
-    "pending: scenarios land in task 2.3",
-  "GET /v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions":
-    "pending: scenarios land in task 2.3",
-  "POST /v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions":
-    "pending: scenarios land in task 2.3",
   "GET /v1/workload-identities": "pending: scenarios land in task 3.2",
   "POST /v1/workload-identities": "pending: scenarios land in task 3.2",
   "DELETE /v1/workload-identities/{id}": "pending: scenarios land in task 3.2",

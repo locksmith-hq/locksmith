@@ -8,9 +8,9 @@
 
 ## 2. Scenarios: tenancy and secrets [sonnet]
 - [x] 2.1 Scenarios for `/v1/auth/sign-in`, `/v1/auth/sign-out`, `/v1/orgs`, `/v1/orgs/current`, `/v1/orgs/{org_id}`, `/healthz`, `/readyz` and `/.well-known/jwks.json`: success, validation error, missing-token 401, cross-tenant 404 or 403 where the path is tenant-scoped.
-- [ ] 2.2 Scenarios for projects and environments (all methods).
-- [ ] 2.3 Scenarios for secrets and versions (metadata and ciphertext only, canary values from `just canary`).
-- [ ] 2.4 Verify: `just up`, `just api`, then `just api-contract http://127.0.0.1:8080` passes for these files.
+- [x] 2.2 Scenarios for projects and environments (all methods).
+- [x] 2.3 Scenarios for secrets and versions (metadata and ciphertext only, canary values from `just canary`).
+- [x] 2.4 Verify: `just up`, `just api`, then `just api-contract http://127.0.0.1:8080` passes for these files.
 
 ## 3. Scenarios: agents, workloads, MCP and audit [sonnet]
 - [ ] 3.1 Scenarios for agents, enrollment secrets, grants and `/v1/agent-tokens`.

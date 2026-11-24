@@ -60,7 +60,7 @@ services:
     volumes:
       - ./api-proxy/caddy.json:/etc/caddy/caddy.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null --spider http://127.0.0.1:8088/ || test $$? -eq 8"]
+      test: ["CMD-SHELL", "wget -S -O /dev/null http://127.0.0.1:8088/ 2>&1 | grep -q 'HTTP/'"]
       interval: 3s
       timeout: 3s
       retries: 20

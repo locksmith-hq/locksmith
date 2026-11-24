@@ -2818,7 +2818,6 @@ dependencies = [
  "opentelemetry_sdk",
  "rustls",
  "secrecy",
- "serde_json",
  "subtle",
  "tokio",
  "tower",

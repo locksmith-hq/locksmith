@@ -406,6 +406,10 @@ release-verify:
     bash scripts/verify-release.test.sh
     bash scripts/gen-formula.test.sh
 
+# Release dry run (P2): one-triple smith build, manifest, SBOM, throwaway minisign key, then verify-release (cosign skipped locally). Says SKIP, never PASS, when a tool is missing.
+release-dry-run:
+    bash scripts/release-dry-run.sh
+
 # Installer (P2): scripts/install.sh against a local release directory with a throwaway minisign key (good install, bad signature, bad hash, missing verifier, unsupported platform, no credential reads). Needs minisign, jq and curl; says SKIP, never PASS, when missing.
 installer-test:
     bash scripts/install.test.sh

@@ -59,3 +59,19 @@ Each directory's README states what is blocked and the known gaps. Regenerate ev
 with `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents`.
 
 Test commands for each integration: [docs/testing.md](../docs/testing.md).
+
+## Agent frameworks
+
+Spike for `p5-framework-adapters` task 1.1. Checked 2026-11-24 from the npm and PyPI registries and the published package type declarations (docs sites are not reachable from agent runs). Anything not read from a source is marked **unverified**.
+
+| Framework | Package, version, released, licence | Streamable HTTP MCP client | Per-request auth hook | Tool name filter | Scripted test model |
+|---|---|---|---|---|---|
+| Vercel AI SDK | `ai` 7.0.181 (2026-11-23, Apache-2.0) with `@ai-sdk/mcp` 2.0.104 (2026-11-23, Apache-2.0); source: registry tarball `dist/index.d.ts` | yes (`type: "http"` transport) | static `headers` and `authProvider` (OAuth provider interface); no custom `fetch` seen in the transport options, so a renewing token needs an `authProvider` or a client rebuilt per renewal (**unverified** at runtime) | none on the client: filter the returned tool record | `MockLanguageModelV3` / `MockLanguageModelV4` from `ai/test` |
+| OpenAI Agents SDK (JS) | `@openai/agents` 0.22.0 (2026-11-12, MIT); source: `@openai/agents-core` `dist/mcp.d.ts` | yes (`MCPServerStreamableHttp`) | `fetch`, `requestInit` and `authProvider` options | `toolFilter` (static allow list or callback) | implement the `Model` interface (`dist/model.d.ts`) |
+| LangChain.js / LangGraph.js | `@langchain/mcp-adapters` 2.0.3 (2026-11-11, MIT), `@langchain/langgraph` 1.7.5 (2026-11-17, MIT), `@langchain/core` 1.5.1 (2026-11-24, MIT); source: `dist/types.d.ts` | yes (`MultiServerMCPClient`, `http` transport) | static `headers` and `authProvider`; no per-request `fetch` seen (**unverified** at runtime) | none in the adapter: filter the returned tools | fake chat models in `@langchain/core` (**unverified**) |
+| OpenAI Agents SDK (Python) | `openai-agents` 0.26.0 (MIT, PyPI) | **unverified** | **unverified** | **unverified** | **unverified** |
+| LangChain / LangGraph (Python) | `langchain-mcp-adapters` 0.3.2, `langgraph` 1.2.24 (MIT, PyPI) | **unverified** | **unverified** (`httpx.Auth` expected) | **unverified** | **unverified** |
+| CrewAI | `crewai` 1.15.45 (PyPI; licence field empty, **unverified**) | **unverified** | **unverified** | **unverified** | **unverified** |
+| Google ADK | `@google/adk` 2.5.0 (2026-11-12, Apache-2.0, npm); `google-adk` 2.15.0 (PyPI, licence field empty) | **unverified** | **unverified** | **unverified** | **unverified** |
+
+Underlying `@modelcontextprotocol/sdk` 1.32.2 (2026-10-23, MIT): `StreamableHTTPClientTransport` takes `requestInit`, a custom `fetch` and an `authProvider`, so a per-request token is possible wherever a framework exposes `fetch` or lets us pass a transport. Open for tasks 3.1 and 5.1: the Vercel and LangChain adapters need a token that renews, which their option lists do not show directly.

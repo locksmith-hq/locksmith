@@ -22,9 +22,9 @@ export type Kind = keyof typeof KINDS;
 
 export type Problem = { type: string; title: string; status: number; detail?: string };
 
-export const typeUri = (kind: Kind) => `urn:locksmith:problem:${kind}`;
+const typeUri = (kind: Kind) => `urn:locksmith:problem:${kind}`;
 
-export function problemBody(kind: Kind, detail?: string): Problem {
+function problemBody(kind: Kind, detail?: string): Problem {
   const { status, title } = KINDS[kind];
   return { type: typeUri(kind), title, status, ...(detail === undefined ? {} : { detail }) };
 }

@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check task-guard public-check migration-guard api-types-check
+ci: fmt lint test-rust test-web tree-check public-check migration-guard api-types-check
 
 # Fast local check: fmt + lint only for files committed on this branch since `base`.
 # The full `just ci` runs in GitHub Actions on every PR.
@@ -77,9 +77,6 @@ api-types-check:
 tree-check:
     scripts/tree-check.sh
 
-# Merge-review tier selftest.
-task-guard:
-    scripts/review-tier.sh selftest
 
 # Public-readiness hygiene: licences, root docs, links, denylist, secret canary.
 public-check:

@@ -118,5 +118,9 @@
   {
     "slug": "too_many_credentials",
     "status": 429
+  },
+  {
+    "slug": "settings_unavailable",
+    "status": 503
   }
 ]

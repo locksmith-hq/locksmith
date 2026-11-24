@@ -48,6 +48,7 @@ The postgres DSN uses `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` fro
 ## Control-plane API (`just api`)
 `just up` first, then `just api` (dev auth on, binds 127.0.0.1:8080, exports traces and logs to the LGTM container over OTLP HTTP).
 
+- API proxy (B5): `just up` also starts `api-proxy` on `127.0.0.1:8088` (`LOCKSMITH_PROXY_PORT`). It sends each path to the Rust control plane (8080, `just api`) or the NestJS API (8081, `just api-nest`) by the owner in `apps/api/route-table.json`; every route is `rust` today. Check with `curl -si localhost:8088/healthz | grep -i x-locksmith-upstream`. Point the web dev server at it with `LOCKSMITH_API_URL=http://127.0.0.1:8088 npm run dev --workspace apps/web`, and the desktop control-plane URL setting at the same address.
 - Create a project: `curl -H 'X-Locksmith-Dev-Org: <uuid>' -H 'content-type: application/json' -d '{"name":"demo"}' localhost:8080/v1/projects`
 - List: `curl -H 'X-Locksmith-Dev-Org: <uuid>' localhost:8080/v1/projects`; contract: `curl localhost:8080/openapi.json`; readiness: `curl localhost:8080/readyz`.
 - Traces: Grafana datasource proxy, e.g. `curl -s 'localhost:3000/api/datasources/proxy/uid/tempo/api/search?tags=service.name%3Dlocksmith-api'` (or the `grafana` MCP). Logs: Loki `{service_name="locksmith-api"}`.

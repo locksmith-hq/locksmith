@@ -33,6 +33,11 @@ opentelemetry_sdk = "0.33.1"
 tracing-opentelemetry = "0.34.0"
 opentelemetry-appender-tracing = "0.33.1"
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace", "logs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.29", features = ["serde"] }
+# The ledger's allow-listed event types (the core turns request strings into these).
+ls-audit = { path = "../../crates/ls-audit" }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 
 [dev-dependencies]

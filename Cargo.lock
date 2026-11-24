@@ -2812,12 +2812,15 @@ dependencies = [
  "axum",
  "http",
  "http-body-util",
+ "ls-audit",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "rustls",
  "secrecy",
+ "serde",
+ "serde_json",
  "subtle",
  "tokio",
  "tower",
@@ -2825,6 +2828,7 @@ dependencies = [
  "tracing-log",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

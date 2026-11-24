@@ -449,7 +449,7 @@ impl OAuthClient {
             }
             Quirk::Standard | Quirk::Atlassian => {
                 // RFC 7009 by hand: `oauth2` refuses a non-HTTPS revocation URL, which the
-                // fakes are; the gateway's egress guard enforces HTTPS and the host instead.
+                // fakes are; registry validation (2.2) must require HTTPS for every provider endpoint except the mock.
                 let (token, hint) = match refresh {
                     Some(r) => (r.expose_secret(), "refresh_token"),
                     None => (access.expose_secret(), "access_token"),

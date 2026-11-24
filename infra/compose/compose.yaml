@@ -28,7 +28,7 @@ services:
       retries: 60
 
   openbao:
-    image: ${OPENBAO_IMAGE:-openbao/openbao:2.7.2}
+    image: ${OPENBAO_IMAGE:-openbao/openbao:2.7.3}
     # Dev mode: in-memory and auto-unsealed. The healthcheck runs openbao-init.sh (idempotent): transit,
     # the `gateway` key, and the encrypt-only / decrypt-only policies and fixed dev-only tokens
     # (s2-envelope-crypto design decision 4), plus the Ed25519 `audit-checkpoint` key and its

@@ -53,7 +53,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `tests/adversarial` | shell harness | `just test adversarial` | no | self | `run.sh selftest`; agent cases need `--agent`; `just adversarial-gate` runs the gateway cases against `just up` |
 | `tests/api-contract` | vitest + fetch | `just test api-contract` | no (unit tests); the scenarios need `just up` and `just api` | `just api-contract <url>` | Server-agnostic HTTP scenario suite and transcript diff for the control-plane API (B4); normalised transcripts, canary values only |
 | `tests/e2e` | Rust e2e (package `ls-e2e`) | `just test e2e` | yes | self | Needs `just up` and `just api`; `just relay-smoke`, `just connector-smoke`, `just audit-smoke` |
-| `tests/kit` | shell + python | `just test kit` | no | self | `leak_scan_test.sh` |
+| `tests/kit` | shell + python | `just test kit` | no | self | `leak_scan_test.sh`, `mock_gateway_test.py` |
 
 ## Dev environment
 

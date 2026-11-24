@@ -362,7 +362,7 @@ test name:
       apps/web) run npm test --workspace apps/web ;;
       tests/e2e) run just test-e2e ;;
       tests/adversarial) run bash tests/adversarial/run.sh selftest ;;
-      tests/kit) run bash tests/kit/leak_scan_test.sh ;;
+      tests/kit) run bash tests/kit/leak_scan_test.sh; run python3 -I tests/kit/mock_gateway_test.py ;;
       *)
         pkg=$(cargo metadata --no-deps --format-version 1 | jq -r --arg m "$PWD/$dir/Cargo.toml" '.packages[]|select(.manifest_path==$m)|.name')
         if [ -n "$pkg" ]; then run cargo nextest run -p "$pkg" --no-tests pass

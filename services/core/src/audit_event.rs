@@ -161,8 +161,16 @@ mod tests {
                 "unknown target type",
             ),
             ("attrs", json!({"password": "x"}), "unknown attribute"),
-            ("attrs", json!({"mode": true}), "unsupported attribute value"),
-            ("attrs", json!({"mode": null}), "unsupported attribute value"),
+            (
+                "attrs",
+                json!({"mode": true}),
+                "unsupported attribute value",
+            ),
+            (
+                "attrs",
+                json!({"mode": null}),
+                "unsupported attribute value",
+            ),
             ("attrs", json!({"mode": [1]}), "unsupported attribute value"),
             ("attrs", json!({"mode": "bad\u{7f}"}), "bad text"),
             ("attrs", json!({"mode": "x".repeat(129)}), "bad text"),

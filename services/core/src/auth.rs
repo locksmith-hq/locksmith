@@ -3,7 +3,7 @@
 
 use axum::extract::{Request, State};
 use axum::middleware::Next;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use http::{StatusCode, header};
 use secrecy::{ExposeSecret, SecretString};
 use subtle::ConstantTimeEq;
@@ -43,6 +43,6 @@ pub async fn require_service_token(
     if ok {
         next.run(req).await
     } else {
-        StatusCode::UNAUTHORIZED.into_response()
+        crate::audit_api::problem(StatusCode::UNAUTHORIZED, "missing or invalid credentials")
     }
 }

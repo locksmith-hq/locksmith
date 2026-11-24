@@ -1,6 +1,8 @@
 //! `POST /v1/workload-tokens/verify` against a stub OIDC issuer and a real Postgres (task 3.2;
 //! needs Docker). Every credential failure is a 200 with `valid: false`.
 
+mod common;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::Body;
@@ -198,6 +200,7 @@ async fn verdicts_follow_the_policy() {
     let (s, v) = post(&app, Some(BEARER), ask(good.clone())).await;
     assert_eq!(s, StatusCode::OK, "{v}");
     assert_eq!(v["valid"], true, "{v}");
+    common::assert_matches_contract("/v1/workload-tokens/verify", 200, &v);
     assert_eq!(v["agent_id"], agent.to_string());
     assert_eq!(v["org_id"], org.to_string());
     assert_eq!(v["policy_id"], policy.to_string());

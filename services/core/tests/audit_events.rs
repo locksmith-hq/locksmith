@@ -1,5 +1,7 @@
 //! `POST /v1/audit/events` against a real Postgres (task 3.1; needs Docker).
 
+mod common;
+
 use axum::body::Body;
 use http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
@@ -113,6 +115,7 @@ async fn appends_chain_and_retries_are_idempotent() {
 
     let (s, a) = post(&app, BEARER, created()).await;
     assert_eq!(s, StatusCode::OK, "{a}");
+    common::assert_matches_contract("/v1/audit/events", 200, &a);
     assert_eq!(a["seq"], 1);
     assert_eq!(a["deduplicated"], false);
     assert_eq!(a["hash"].as_str().unwrap().len(), 64);

@@ -58,3 +58,4 @@ http-body-util = "0.1"
 wiremock = { workspace = true }
 # Sign test tokens with deterministic P-256 keys (already in the tree through jsonwebtoken).
 p256 = "0.14"
+jsonschema = { version = "0.63.1", default-features = false }

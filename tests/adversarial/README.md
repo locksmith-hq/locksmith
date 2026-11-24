@@ -1,8 +1,7 @@
 # Adversarial secret-leak suite
 
 `run.sh` runs secret-leak attacks against the broker and fails if a canary secret
-shows up in anything the attack produced. Case ids follow `A0`…`A9` from
-`docs/roadmap.md`.
+shows up in anything the attack produced. Case ids are `A0`…`A9`.
 
 Usage: `run.sh <case|selftest|all|gateway [G<n>...]>... [--agent claude]` (several targets run
 in order, e.g. `run.sh A3 A3b`)
@@ -111,19 +110,3 @@ only when its encoding is in the register. The CLI's own key is masked (literal 
 `ADVERSARIAL_LIVE_PROMPTS`, `ADVERSARIAL_LIVE_TIMEOUT` and `ADVERSARIAL_LIVE_BUDGET_USD` narrow
 a run. Without the `claude` CLI or `ANTHROPIC_API_KEY` the gate prints `skip live` and fails, so
 a missing key is visible.
-
-Nightly routine (design decision 8). Creating it, and its row in `docs/cloud-dev.md`, is an
-owner action. Ready-to-paste prompt for a scheduled cloud routine in the `locksmith-dev`
-environment (needs `ANTHROPIC_API_KEY` there):
-
-```text
-Nightly S6 adversarial gate for Locksmith. Check out origin/main. Use the run-start skill. Run
-`just up`, then start `just api` in the background (scripts/bg.sh) and wait for
-http://127.0.0.1:8080/readyz. Run `ADVERSARIAL_REQUIRE_ALL=1 just adversarial-gate --agent claude`
-with scripts/bg.sh (timeout 5400 s) and wait for it. Post one comment on the `agent-log` issue:
-"adversarial-gate nightly <date> <sha>: PASS|FAIL", the summary line, every FAIL, STALE RESIDUAL
-and RESIDUAL line, and `skip live` if it appears. Never paste a canary, a token or a log body:
-only the labels, case ids and file names the gate prints. If the gate fails for a reason other
-than `skip live`, also open a `needs-owner` issue titled "adversarial-gate nightly failed <date>"
-with the same lines. Do not change code, push or open a PR. Run `just down` at the end.
-```

@@ -1,5 +1,0 @@
-schema: spec-driven
-created: 2026-11-23
-# Split out of b1-nestjs-api task group 3 (PM 2026-11-23, #653).
-x-priority: High  # PM 2026-11-23: quality gate for every TypeScript package, including apps/api; no deps
-x-depends_on: []

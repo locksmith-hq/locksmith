@@ -53,12 +53,13 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `integrations/github-action` | CI action (composite, files) | `just test github-action` | no | `crates/smith-cli` | Thin composite action around `smith login --workload github`; login behaviour is tested by `cargo nextest run -p smith-cli workload` |
 | `integrations/windsurf` | agent plugin (files) | `just test windsurf` | no | `crates/smith-cli` | Generated legacy hook file, not protected until the Devin Desktop format is recorded; drift test `agents`, gating test in `smith-cli --test integrations` |
 | `tests/adversarial` | shell harness | `just test adversarial` | no | self | `run.sh selftest`; agent cases need `--agent`; `just adversarial-gate` runs the gateway cases against `just up` |
+| `tests/api-contract` | vitest + fetch | `just test api-contract` | no (unit tests); the scenarios need `just up` and `just api` | `just api-contract <url>` | Server-agnostic HTTP scenario suite and transcript diff for the control-plane API (B4); normalised transcripts, canary values only |
 | `tests/e2e` | Rust e2e (package `ls-e2e`) | `just test e2e` | yes | self | Needs `just up` and `just api`; `just relay-smoke`, `just connector-smoke`, `just audit-smoke` |
 | `tests/kit` | shell + python | `just test kit` | no | self | `leak_scan_test.sh` |
 
 ## Dev environment
 
-The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev-harness.md](dev-harness.md); cloud and scheduled sessions are in [cloud-dev.md](cloud-dev.md).
+The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev-harness.md](dev-harness.md).
 
 - `just up` starts the stack, `just down` stops it and `just reset` wipes it.
 - `just ps` and `just logs` show what runs.

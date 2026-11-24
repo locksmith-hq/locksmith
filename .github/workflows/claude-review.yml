@@ -1,6 +1,6 @@
 name: claude-review
 
-# The `merge-ready` commit status, a required check on main (docs/agents/merge.md). PRs merge through GitHub
+# The `merge-ready` commit status, a required check on main (merge policy: claude-ai-crew prompts/merge-policy.md). PRs merge through GitHub
 # auto-merge: the author (or the lead, on a worker PR) runs `gh pr merge --auto --merge`, which starts this job;
 # GitHub merges once every required check is green. A push to a PR with auto-merge on re-runs it.
 # The status is set only here, so a PR whose job never ran has no status and cannot merge (a skipped job would
@@ -55,10 +55,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - id: bots
-        # App bots may open PRs: the list comes from main's routing.json (never the PR's copy), so a rename is one edit there.
+        # App bots that may open PRs: the single place to edit.
         run: |
-          git fetch -q origin main
-          echo "list=$(git show origin/main:docs/agents/routing.json | jq -r '[.roles[].logins[]?|select(endswith("[bot]"))|rtrimstr("[bot]")]|unique|join(",")')" >>"$GITHUB_OUTPUT"
+          echo "list=captain-america-locksmith,hulk-locksmith,iron-man-locksmith,locksmith-ada,locksmith-alfie,locksmith-harriet,locksmith-josie,locksmith-linus,locksmith-walt,nick-fury-locksmith,spider-man-locksmith,thor-locksmith" >>"$GITHUB_OUTPUT"
       - id: pre
         run: |
           st() { gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f context=merge-ready -f state="$1" -f description="$2" \
@@ -147,7 +146,7 @@ jobs:
           vsha=$(sed -nE 's/^merge-review ([0-9a-f]{7,40}): (PASS|FAIL).*/\1/p' <<<"$v")
           res=$(sed -nE 's/^merge-review ([0-9a-f]{7,40}): (PASS|FAIL).*/\2/p' <<<"$v")
           if [ -z "$vsha" ] || [[ "$SHA" != "$vsha"* ]]; then st error "no review verdict for $SHA"; exit 1; fi
-          # Labels are informational; wake-agents wakes the PR's author when this run ends.
+          # Labels are informational; the crew's wake workflow wakes the PR's author when this run ends.
           label=review-passed; [ "$res" = PASS ] || label=review-failed
           gh api "repos/$GITHUB_REPOSITORY/issues/$N/labels" -f "labels[]=$label" >/dev/null
           if [ "$res" = PASS ]; then st success "Claude review PASS"; else st failure "Claude review FAIL: fix the findings and push"; exit 1; fi

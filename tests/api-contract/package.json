@@ -1,0 +1,18 @@
+{
+  "private": true,
+  "name": "@locksmith/api-contract",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.12"
+  }
+}

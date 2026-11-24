@@ -22,7 +22,9 @@ fn json_keys(v: &Value, out: &mut HashSet<String>) {
 }
 
 fn raw(name: &str) -> Value {
-    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(name);
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join(name);
     serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 
@@ -30,7 +32,11 @@ fn raw(name: &str) -> Value {
 fn round_trip<T: Serialize + DeserializeOwned>(name: &str) -> T {
     let v = raw(name);
     let t: T = serde_json::from_value(v.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
-    assert_eq!(serde_json::to_value(&t).unwrap(), v, "{name} does not round-trip");
+    assert_eq!(
+        serde_json::to_value(&t).unwrap(),
+        v,
+        "{name} does not round-trip"
+    );
     t
 }
 
@@ -50,7 +56,10 @@ fn fixtures_round_trip() {
     let e: ErrorBody = round_trip("error_wrong_person.json");
     assert_eq!(e.error, ErrorSlug::WrongPerson);
     round_trip::<ErrorBody>("error_forbidden_host.json");
-    assert!(matches!(round_trip("callback_pending.json"), CallbackResult::Pending(_)));
+    assert!(matches!(
+        round_trip("callback_pending.json"),
+        CallbackResult::Pending(_)
+    ));
     assert_eq!(
         round_trip::<CallbackResult>("callback_error.json"),
         CallbackResult::Error(ErrorSlug::ProviderError)
@@ -86,7 +95,10 @@ fn no_fixture_carries_a_token_shaped_field() {
 fn error_slugs_are_closed_and_match_their_wire_form() {
     let mut seen = HashSet::new();
     for s in ErrorSlug::ALL {
-        assert_eq!(serde_json::to_value(s).unwrap(), Value::String(s.as_str().into()));
+        assert_eq!(
+            serde_json::to_value(s).unwrap(),
+            Value::String(s.as_str().into())
+        );
         assert!(seen.insert(s.as_str()));
     }
     assert!(serde_json::from_value::<ErrorSlug>("invalid_grant".into()).is_err());

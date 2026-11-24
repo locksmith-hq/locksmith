@@ -36,7 +36,7 @@ the changes whose code the row needs before work can begin (`-` for none), and t
 is archived or fully ticked on its branch. `<id>:contract` means the row needs only that change's contract
 (API schema, shared types, mock data): it can start as soon as the "Contract" task group is ticked, and it
 builds against the mocks until the real code lands. The lead keeps the column right; the PM keeps the row order.
-`bash scripts/change-status.sh --plannable` prints the rows that can start today.
+`bash scripts/change-status.sh --plannable` (in `locksmith-hq/claude-ai-crew`) prints the rows that can start today.
 
 ## Phase 0: Harness (make the system observable to agents)
 

@@ -27,7 +27,7 @@ echo '[{"user":{"login":"x"},"head":{"ref":"claude/change-a1-red"},"auto_merge":
 fail=0
 check() { # <name> <hold json> <rescue json> <expected output> <expected exit>
   echo "$2" >"$t/fx/hold.json"; echo "$3" >"$t/fx/rescue.json"
-  got=$(cd "$t" && PATH="$t/bin:$PATH" FX="$t/fx" AGENT_PERSONA='' AGENT_ID_DIR=/nonexistent bash scripts/worker-has-work.sh "${6:-}" 2>/dev/null); code=$?
+  got=$(cd "$t" && env -u AGENT_PERSONA PATH="$t/bin:$PATH" FX="$t/fx" AGENT_ID_DIR=/nonexistent bash scripts/worker-has-work.sh "${6:-}" 2>/dev/null); code=$?
   if [ "$got" = "$(printf '%b' "$4")" ] && [ "$code" = "$5" ]; then echo "ok: $1"; else echo "FAIL: $1: exit $code, got '$got'"; fail=1; fi
 }
 both='work: CI is red on claude/change-a1-red\nwork: CI is red on claude/change-b2-red'
@@ -41,4 +41,7 @@ check "hold-workers blocker: idle despite work" '[{"number":1}]' '[]' 'idle' 1
 check "rescued change's red PR skipped" '[]' '[{"title":"Rescue: CI","body":"Change: a1-red\nstuck"}]' 'work: CI is red on claude/change-b2-red' 0
 check "rescue naming another change keeps both" '[]' '[{"title":"Rescue: z9-other","body":null}]' "$both" 0
 check "every red PR rescued: idle" '[]' '[{"title":"Rescue: a1-red and b2-red","body":""}]' 'idle' 1
+# change-status.sh must see the persona argument, or the worker's own change PR reads as owned by another (#691).
+printf '#!/usr/bin/env bash\n[ "${1:-}" != --plannable ] && [ -n "${AGENT_PERSONA:-}" ] && printf "b2-x\\tready\\t\\n"; exit 0\n' >"$t/scripts/change-status.sh"
+check "persona argument reaches change-status.sh" '[]' '[]' 'work: b2-x is ready' 0 worker-a
 [ "$fail" = 0 ] && echo "worker-has-work test: OK"; exit "$fail"

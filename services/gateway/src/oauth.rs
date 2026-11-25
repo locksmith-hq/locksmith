@@ -930,7 +930,7 @@ impl OAuth {
 
     /// The enabled providers as `oauth_providers` rows: id, name, scopes, the connect URL and
     /// revoke support. Never a client id or secret.
-    fn provider_rows(&self) -> Option<Vec<(String, String, Vec<String>, String, bool)>> {
+    fn provider_rows(&self) -> Option<Vec<ProviderRow>> {
         let connect_url = self.connect_url.as_ref()?.to_string();
         let mut rows: Vec<_> = self
             .providers
@@ -1097,6 +1097,9 @@ impl OAuth {
         })
     }
 }
+
+/// One `oauth_providers` row: id, name, scopes, connect URL, revoke support.
+type ProviderRow = (String, String, Vec<String>, String, bool);
 
 /// Revoke at the provider and delete one `pending_confirm` connection (its material and flow go
 /// with it), under a row lock so one replica does it once. `false` when the connection is gone,

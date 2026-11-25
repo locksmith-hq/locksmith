@@ -136,16 +136,17 @@ impl OAuth {
         Ok(active.is_some_and(|u| u > now))
     }
 
-    /// Everything a relay through `connection_id` for `agent` to `host` needs, in order. The
-    /// connection must already be known to exist (`info`).
-    pub async fn relay_access(
-        self: &Arc<Self>,
+    /// The checks before any token is opened, in order: grant, connection state, host and
+    /// scheme. Returns whether the provider is the dev mock (loopback allowed). The token is
+    /// opened later by [`Self::relay_token`], after the ledger took the attempt.
+    pub async fn authorize_relay(
+        &self,
         agent: Uuid,
         connection_id: Uuid,
         info: &ConnectionInfo,
         scheme: &str,
         host: &str,
-    ) -> Result<RelayAccess, RelayAccessError> {
+    ) -> Result<bool, RelayAccessError> {
         if !self.agent_may_use(agent, connection_id).await? {
             return Err(RelayAccessError::NoGrant);
         }
@@ -163,6 +164,16 @@ impl OAuth {
         if !allowed {
             return Err(RelayAccessError::HostNotAllowed);
         }
+        Ok(dev)
+    }
+
+    /// Open (refreshing when due) the token of an authorised relay.
+    pub async fn relay_token(
+        self: &Arc<Self>,
+        agent: Uuid,
+        connection_id: Uuid,
+        dev: bool,
+    ) -> Result<RelayAccess, RelayAccessError> {
         let t = self
             .access_token(connection_id, Some(agent))
             .await
@@ -174,5 +185,20 @@ impl OAuth {
             provider: t.provider,
             dev,
         })
+    }
+
+    /// [`Self::authorize_relay`] then [`Self::relay_token`].
+    pub async fn relay_access(
+        self: &Arc<Self>,
+        agent: Uuid,
+        connection_id: Uuid,
+        info: &ConnectionInfo,
+        scheme: &str,
+        host: &str,
+    ) -> Result<RelayAccess, RelayAccessError> {
+        let dev = self
+            .authorize_relay(agent, connection_id, info, scheme, host)
+            .await?;
+        self.relay_token(agent, connection_id, dev).await
     }
 }

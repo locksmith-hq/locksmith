@@ -59,7 +59,7 @@ use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
 use crate::egress::{self, EgressError, Resolver};
 use crate::grants::{GrantSource, allows_relay};
-use crate::oauth::{AccessError, RelayAccess, RelayAccessError};
+use crate::oauth::{AccessError, RelayAccessError};
 use secrecy::ExposeSecret as _;
 
 /// Label in redaction markers: `[REDACTED:SECRET]`.
@@ -703,6 +703,37 @@ async fn handle_scoped(
     .await
 }
 
+/// How a refused connection relay is answered and recorded.
+fn access_failure(e: RelayAccessError, unavailable: &dyn Fn() -> Failure) -> Failure {
+    match e {
+        RelayAccessError::NoGrant
+        | RelayAccessError::NotConnected
+        | RelayAccessError::UnknownConnection
+        | RelayAccessError::Token(AccessError::NotFound) => {
+            Failure::new(Outcome::NoGrant, StatusCode::FORBIDDEN, "no_grant")
+        }
+        RelayAccessError::HostNotAllowed => {
+            Failure::new(Outcome::Denied, StatusCode::FORBIDDEN, "host_not_allowed")
+        }
+        RelayAccessError::Unavailable => unavailable(),
+        RelayAccessError::Token(AccessError::NeedsReconnect) => Failure::new(
+            Outcome::MaterialError,
+            StatusCode::CONFLICT,
+            "connection_needs_reconnect",
+        ),
+        RelayAccessError::Token(AccessError::Provider) => Failure::new(
+            Outcome::MaterialError,
+            StatusCode::BAD_GATEWAY,
+            "provider_unavailable",
+        ),
+        RelayAccessError::Token(AccessError::Unavailable) => Failure::new(
+            Outcome::MaterialError,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "secret_unavailable",
+        ),
+    }
+}
+
 async fn run(
     relay: &Relay,
     call: &CallAudit,
@@ -719,7 +750,7 @@ async fn run(
         }
     }
     // 3-5. Grant, binding, origin and address guard: refused before any fetch or unwrap.
-    let mut access: Option<RelayAccess> = None;
+    let mut conn_dev: Option<(Uuid, bool)> = None;
     let binding: Binding = match req.target {
         Target::Secret { id, .. } => {
             // The expiry is re-checked because the set may come from the cache.
@@ -760,47 +791,18 @@ async fn run(
                 let _ = person.set(info.person);
             }
             let host = span_host(&req.url);
-            let got = oauth
-                .relay_access(agent_id, id, &info, req.url.scheme(), &host)
+            let dev = oauth
+                .authorize_relay(agent_id, id, &info, req.url.scheme(), &host)
                 .await
-                .map_err(|e| match e {
-                    RelayAccessError::NoGrant
-                    | RelayAccessError::NotConnected
-                    | RelayAccessError::UnknownConnection => {
-                        Failure::new(Outcome::NoGrant, StatusCode::FORBIDDEN, "no_grant")
-                    }
-                    RelayAccessError::HostNotAllowed => {
-                        Failure::new(Outcome::Denied, StatusCode::FORBIDDEN, "host_not_allowed")
-                    }
-                    RelayAccessError::Unavailable => unavailable(),
-                    RelayAccessError::Token(AccessError::NeedsReconnect) => Failure::new(
-                        Outcome::MaterialError,
-                        StatusCode::CONFLICT,
-                        "connection_needs_reconnect",
-                    ),
-                    RelayAccessError::Token(AccessError::NotFound) => {
-                        Failure::new(Outcome::NoGrant, StatusCode::FORBIDDEN, "no_grant")
-                    }
-                    RelayAccessError::Token(AccessError::Provider) => Failure::new(
-                        Outcome::MaterialError,
-                        StatusCode::BAD_GATEWAY,
-                        "provider_unavailable",
-                    ),
-                    RelayAccessError::Token(AccessError::Unavailable) => Failure::new(
-                        Outcome::MaterialError,
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "secret_unavailable",
-                    ),
-                })?;
-            // The origin is the one just checked against the provider's API hosts.
+                .map_err(|e| access_failure(e, &unavailable))?;
             let b = Binding {
                 secret_id: Uuid::nil(),
                 origin: req.url.origin().ascii_serialization(),
                 header: "authorization".to_owned(),
                 template: "Bearer {secret}".to_owned(),
-                allow_private_hosts: got.dev,
+                allow_private_hosts: dev,
             };
-            access = Some(got);
+            conn_dev = Some((id, dev));
             b
         }
     };
@@ -860,6 +862,25 @@ async fn run(
     };
     let header_name =
         HeaderName::from_bytes(binding.header.as_bytes()).map_err(|_| inject_failed())?;
+    let access = match conn_dev {
+        Some((cid, dev)) => {
+            let unavailable = || {
+                Failure::new(
+                    Outcome::GrantsUnavailable,
+                    StatusCode::BAD_GATEWAY,
+                    "grants_unavailable",
+                )
+            };
+            let oauth = relay.oauth.as_ref().ok_or_else(denied)?;
+            Some(
+                oauth
+                    .relay_token(agent_id, cid, dev)
+                    .await
+                    .map_err(|e| access_failure(e, &unavailable))?,
+            )
+        }
+        None => None,
+    };
     let (redactor, header_value) = match (req.target, access) {
         (Target::Secret { id, version }, _) => {
             let value = relay

@@ -1,4 +1,4 @@
-//! A0 spikes: throwaway proofs for the data and cloud foundations.
+//! A0 spikes: Postgres 18 RLS tenancy, tenant-context lint, versioned ciphertext header.
 //!
 //! - [`tenant`]: per-transaction tenant context (`set_config('app.org_id', $1, true)`).
 //! - [`tenant_lint`]: rejects session-level tenant settings in non-test Rust code

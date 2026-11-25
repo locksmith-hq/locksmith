@@ -1,5 +1,5 @@
 //! Kernel-backed process identity: socket peers, parent chains, executable digests, fd passing.
-//! (the kernel, not the caller, names a peer and its ancestry)
+//! The kernel, not the caller, names a peer and its ancestry.
 //!
 //! A process is named by [`ProcId`] = (pid, start time). The start time makes a recycled PID
 //! distinguishable; on Linux a pidfd additionally pins the process while we read its /proc entry.

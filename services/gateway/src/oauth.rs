@@ -64,6 +64,9 @@ use crate::audit::{AuditSink, ConnectFailure, OAuthEvent, OAuthEventKind};
 use crate::config::OAuthConfig;
 use crate::oauth_vault::{SealedTokenSet, TokenVault, VaultError};
 
+pub mod refresh;
+pub use refresh::{AccessError, AccessToken};
+
 /// How long a started flow, and then an unconfirmed `pending_confirm` flow, stays valid.
 pub const FLOW_TTL: Duration = Duration::from_secs(600);
 
@@ -1523,7 +1526,7 @@ pub fn decode_token_set(bytes: &SecretBytes) -> Option<TokenSet> {
 mod tests {
     use super::*;
     use crate::app::{self, AppState};
-    use crate::audit::MemoryAudit;
+    use crate::audit::{MemoryAudit, RefreshFailure};
     use crate::oauth_vault::test_wrapper::MemWrapper;
     use axum::Router;
     use axum::body::Body;
@@ -1536,7 +1539,7 @@ mod tests {
     use ls_control_plane::db::PoolSettings;
     use ls_control_plane::readiness::ReadyFlag;
     use ls_oauth::RefreshKind;
-    use ls_oauth::testing::{ACCESS_1, CODE, FakeProvider, Kind, REFRESH_1};
+    use ls_oauth::testing::{ACCESS_1, ACCESS_2, CODE, FakeProvider, Kind, REFRESH_1, Refresh};
     use p256::pkcs8::EncodePrivateKey as _;
     use serde_json::{Value, json};
     use std::sync::Mutex;
@@ -1619,6 +1622,10 @@ mod tests {
 
     impl Harness {
         async fn start() -> Self {
+            Self::start_with(Refresh::Works).await
+        }
+
+        async fn start_with(refresh: Refresh) -> Self {
             let pg = ls_pg_test::Pg::start().await;
             ls_control_plane::migrate::run(pg.bootstrap())
                 .await
@@ -1662,7 +1669,7 @@ mod tests {
             let vault = Arc::new(TokenVault::new(MemWrapper {
                 check_binding: true,
             }));
-            let fake = FakeProvider::start(Kind::Google).await;
+            let fake = FakeProvider::start_with(Kind::Google, refresh).await;
             let def = fake_def(&fake);
             let http =
                 crate::http_client::build(Duration::from_secs(5), Duration::from_secs(10), None)
@@ -1793,6 +1800,74 @@ mod tests {
             let location = headers["location"].to_str().unwrap().to_owned();
             let text = format!("{headers:?}{}", String::from_utf8_lossy(&body));
             (Url::parse(&location).unwrap(), text)
+        }
+
+        /// A `connected` connection of alice's.
+        async fn connected(&self) -> Uuid {
+            let flow = self.pending_flow().await;
+            let (status, body) = self.confirm(Some("alice"), &flow.to_string()).await;
+            assert_eq!(status, StatusCode::OK);
+            serde_json::from_slice::<ConnectionSummary>(&body)
+                .unwrap()
+                .id
+        }
+
+        /// Reseal the connection's token set as the next generation expiring in 10 seconds.
+        async fn make_due(&self, id: Uuid) {
+            let mut admin = self.pg.admin().await;
+            let (generation, ciphertext, wrapped): (i32, Vec<u8>, Vec<u8>) = sql::query_as(
+                "SELECT generation, ciphertext, wrapped_dek FROM oauth_token_material \
+                 WHERE connection_id = $1",
+            )
+            .bind(id)
+            .fetch_one(&mut admin)
+            .await
+            .unwrap();
+            let g = u32::try_from(generation).unwrap();
+            let opened = self
+                .vault
+                .open(ORG, id, g, &ciphertext, &wrapped)
+                .await
+                .unwrap();
+            let set = decode_token_set(&opened).unwrap();
+            let tokens = Tokens {
+                access: set.access,
+                refresh: set.refresh,
+                expires_in: Some(Duration::from_secs(10)),
+                scopes: set.scopes.clone(),
+            };
+            let plain = encode_token_set(&tokens, &set.scopes, now_unix()).unwrap();
+            let sealed = self.vault.seal(ORG, id, g + 1, &plain).await.unwrap();
+            sql::query(
+                "UPDATE oauth_token_material SET generation = $2, ciphertext = $3, \
+                     wrapped_dek = $4, key_id = $5 WHERE connection_id = $1",
+            )
+            .bind(id)
+            .bind(generation + 1)
+            .bind(sealed.ciphertext)
+            .bind(sealed.wrapped_dek)
+            .bind(sealed.key_id)
+            .execute(&mut admin)
+            .await
+            .unwrap();
+            sql::query("UPDATE oauth_connections SET generation = $2 WHERE id = $1")
+                .bind(id)
+                .bind(generation + 1)
+                .execute(&mut admin)
+                .await
+                .unwrap();
+        }
+
+        async fn refresh_calls(&self) -> usize {
+            self.fake
+                .requests()
+                .await
+                .iter()
+                .filter(|r| {
+                    r.url.path() == "/token"
+                        && String::from_utf8_lossy(&r.body).contains("grant_type=refresh_token")
+                })
+                .count()
         }
 
         async fn token_calls(&self) -> usize {
@@ -2500,6 +2575,180 @@ mod tests {
         task.abort();
         assert_eq!(h.count("SELECT count(*) FROM oauth_connections").await, 0);
         assert_eq!(h.revokes().await.len(), 2);
+    }
+
+    /// A fresh token is returned with no provider call and no lock; one within 60 s of expiry
+    /// is refreshed once: generation + 1, the new access token returned and sealed, the old
+    /// refresh token kept (Google sends none), `last_refreshed_at` set and the new token
+    /// reopened under the new generation only.
+    #[tokio::test]
+    async fn oauth_refresh_on_use_reseals_the_next_generation() {
+        let h = Harness::start().await;
+        let id = h.connected().await;
+
+        let t = h.oauth.access_token(id, None).await.ok().unwrap();
+        assert_eq!(t.token.expose_secret(), ACCESS_1);
+        assert_eq!(h.refresh_calls().await, 0, "a fresh token is not refreshed");
+
+        h.make_due(id).await;
+        let t = h.oauth.access_token(id, None).await.ok().unwrap();
+        assert_eq!(t.token.expose_secret(), ACCESS_2);
+        assert_eq!(t.provider, "fake");
+        assert_eq!(h.refresh_calls().await, 1);
+        // Now fresh again: served without another call.
+        let t = h.oauth.access_token(id, None).await.ok().unwrap();
+        assert_eq!(t.token.expose_secret(), ACCESS_2);
+        assert_eq!(h.refresh_calls().await, 1);
+
+        let mut admin = h.pg.admin().await;
+        let (generation, ciphertext, wrapped): (i32, Vec<u8>, Vec<u8>) = sql::query_as(
+            "SELECT generation, ciphertext, wrapped_dek FROM oauth_token_material \
+             WHERE connection_id = $1",
+        )
+        .bind(id)
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+        assert_eq!(generation, 3, "confirm 1, make_due 2, refresh 3");
+        assert!(
+            h.vault
+                .open(ORG, id, 2, &ciphertext, &wrapped)
+                .await
+                .is_err()
+        );
+        let opened = h
+            .vault
+            .open(ORG, id, 3, &ciphertext, &wrapped)
+            .await
+            .unwrap();
+        let set = decode_token_set(&opened).unwrap();
+        assert_eq!(set.access.expose_secret(), ACCESS_2);
+        assert_eq!(set.refresh.unwrap().expose_secret(), REFRESH_1, "kept");
+        let (conn_generation, refreshed): (i32, bool) = sql::query_as(
+            "SELECT generation, last_refreshed_at IS NOT NULL FROM oauth_connections \
+             WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+        assert_eq!((conn_generation, refreshed), (3, true));
+        assert!(
+            h.audit
+                .oauth_events()
+                .iter()
+                .all(|e| !matches!(e.kind, OAuthEventKind::RefreshFailed(_)))
+        );
+    }
+
+    /// Concurrent relays on a due token make exactly one provider refresh call and all get the
+    /// refreshed token (the others wait on the row lock and re-read the generation).
+    #[tokio::test]
+    async fn oauth_refresh_concurrent_relays_make_one_provider_call() {
+        let h = Harness::start().await;
+        let id = h.connected().await;
+        h.make_due(id).await;
+        let tasks: Vec<_> = (0..6)
+            .map(|_| {
+                let o = Arc::clone(&h.oauth);
+                tokio::spawn(async move { o.access_token(id, None).await })
+            })
+            .collect();
+        let mut results = Vec::new();
+        for t in tasks {
+            results.push(t.await.unwrap());
+        }
+        for r in results {
+            assert_eq!(r.ok().unwrap().token.expose_secret(), ACCESS_2);
+        }
+        assert_eq!(h.refresh_calls().await, 1);
+    }
+
+    /// `invalid_grant`: the connection becomes `refresh_failed`, `oauth.refresh_failed` names the
+    /// person, connection and agent, the stored generation is unchanged, and every later use
+    /// answers needs-reconnect without calling the provider again.
+    #[tokio::test]
+    async fn oauth_refresh_invalid_grant_needs_reconnect() {
+        let h = Harness::start_with(Refresh::InvalidGrant).await;
+        let alice = h.user_id("alice").await;
+        let id = h.connected().await;
+        h.make_due(id).await;
+        let agent = Uuid::from_u128(77);
+
+        let err = h.oauth.access_token(id, Some(agent)).await.err().unwrap();
+        assert_eq!(err, AccessError::NeedsReconnect);
+        assert_eq!(h.refresh_calls().await, 1);
+        let mut admin = h.pg.admin().await;
+        let (status, code, generation): (String, Option<String>, i32) = sql::query_as(
+            "SELECT status, last_error_code, generation FROM oauth_connections WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+        assert_eq!(
+            (status.as_str(), code.as_deref(), generation),
+            ("refresh_failed", Some("invalid_grant"), 2)
+        );
+        let failed: Vec<_> = h
+            .audit
+            .oauth_events()
+            .into_iter()
+            .filter(|e| matches!(e.kind, OAuthEventKind::RefreshFailed(_)))
+            .collect();
+        assert_eq!(
+            failed,
+            vec![OAuthEvent {
+                kind: OAuthEventKind::RefreshFailed(RefreshFailure::InvalidGrant),
+                person: alice,
+                provider: "fake".to_owned(),
+                connection_id: Some(id),
+                agent_id: Some(agent),
+            }]
+        );
+        let again = h.oauth.access_token(id, None).await.err().unwrap();
+        assert_eq!(again, AccessError::NeedsReconnect);
+        assert_eq!(h.refresh_calls().await, 1, "no second provider call");
+    }
+
+    /// A transient provider failure keeps the generation and the connection `connected`; the
+    /// next use, once the provider is back, refreshes. An unknown, pending or foreign-org
+    /// connection id is `NotFound`.
+    #[tokio::test]
+    async fn oauth_refresh_transient_failure_keeps_the_generation() {
+        let h = Harness::start().await;
+        let id = h.connected().await;
+        h.make_due(id).await;
+        h.fake.fail_refresh_transiently().await;
+
+        let err = h.oauth.access_token(id, None).await.err().unwrap();
+        assert_eq!(err, AccessError::Provider);
+        let mut admin = h.pg.admin().await;
+        let (status, generation): (String, i32) =
+            sql::query_as("SELECT status, generation FROM oauth_connections WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+        assert_eq!((status.as_str(), generation), ("connected", 2));
+        assert!(
+            h.audit
+                .oauth_events()
+                .iter()
+                .all(|e| !matches!(e.kind, OAuthEventKind::RefreshFailed(_)))
+        );
+
+        let missing = h.oauth.access_token(Uuid::from_u128(5), None).await.err();
+        assert_eq!(missing, Some(AccessError::NotFound));
+        let pending = h.pending_flow().await;
+        let pending_id: Uuid =
+            sql::query_scalar("SELECT connection_id FROM oauth_flows WHERE id = $1")
+                .bind(pending)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+        let err = h.oauth.access_token(pending_id, None).await.err();
+        assert_eq!(err, Some(AccessError::NotFound), "pending is not usable");
     }
 
     /// Startup publishes the enabled providers into `oauth_providers` (decision 9): id, name,

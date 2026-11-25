@@ -143,6 +143,19 @@ impl FakeProvider {
         self.server.received_requests().await.unwrap_or_default()
     }
 
+    /// From now on every refresh call answers `503` (a provider outage); code exchanges, revoke
+    /// and account calls are unchanged.
+    pub async fn fail_refresh_transiently(&self) {
+        let token_path = self.token_url().replace(&self.server.uri(), "");
+        Mock::given(method("POST"))
+            .and(path(token_path))
+            .and(body_string_contains("refresh_token"))
+            .respond_with(ResponseTemplate::new(503))
+            .with_priority(1)
+            .mount(&self.server)
+            .await;
+    }
+
     async fn mount_token(&self, refresh: Refresh) {
         let token_path = self.token_url().replace(&self.server.uri(), "");
         let exchange = body_string_contains(format!("code={CODE}"));

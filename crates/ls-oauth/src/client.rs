@@ -425,7 +425,7 @@ impl OAuthClient {
                     .build()
                     .map_err(|_| fail(Reason::Config))?;
                 let (status, _) = self.transport.send(req).await.map_err(|f| fail(f.0))?;
-                // 204 revoked; 404 means the grant is already gone.
+                // 204 revoked the whole grant (refresh token too); 404 means no grant exists any more.
                 if matches!(status, 204 | 404) {
                     Ok(())
                 } else {

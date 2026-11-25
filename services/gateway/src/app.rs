@@ -101,6 +101,10 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/v1/oauth/flows/{id}/confirm",
             post(oauth::confirm).layer(DefaultBodyLimit::max(1024)),
+        )
+        .route(
+            "/v1/oauth/connections/{id}/disconnect",
+            post(oauth::disconnect).layer(DefaultBodyLimit::max(1024)),
         );
     let oauth_routes = match &state.oauth {
         Some(o) => oauth_routes.layer(o.cors()),

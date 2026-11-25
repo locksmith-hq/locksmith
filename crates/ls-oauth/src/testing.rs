@@ -156,6 +156,17 @@ impl FakeProvider {
             .await;
     }
 
+    /// From now on every revoke call answers `503`; every other call is unchanged.
+    pub async fn fail_revoke(&self) {
+        let Some(url) = self.revoke_url() else { return };
+        let revoke_path = url.replace(&self.server.uri(), "");
+        Mock::given(path(revoke_path))
+            .respond_with(ResponseTemplate::new(503))
+            .with_priority(1)
+            .mount(&self.server)
+            .await;
+    }
+
     async fn mount_token(&self, refresh: Refresh) {
         let token_path = self.token_url().replace(&self.server.uri(), "");
         let exchange = body_string_contains(format!("code={CODE}"));

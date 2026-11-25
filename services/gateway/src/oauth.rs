@@ -60,7 +60,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::app::AppState;
-use crate::audit::{AuditSink, ConnectFailure, OAuthEvent, OAuthEventKind};
+use crate::audit::{AuditSink, ConnectFailure, DisconnectOutcome, OAuthEvent, OAuthEventKind};
 use crate::config::OAuthConfig;
 use crate::oauth_vault::{SealedTokenSet, TokenVault, VaultError};
 
@@ -331,6 +331,8 @@ enum Refusal {
     Slug(StatusCode, ErrorSlug),
     /// A body that is not `{provider, return_to}`: `400`, no body.
     Malformed,
+    /// No such connection: `404`, no body.
+    NotFound,
     /// Database or KMS failure: `503`, no body.
     Unavailable,
 }
@@ -342,6 +344,7 @@ impl Refusal {
             Self::Forbidden => "forbidden",
             Self::Bad(slug) | Self::Slug(_, slug) => slug.as_str(),
             Self::Malformed => "malformed",
+            Self::NotFound => "not_found",
             Self::Unavailable => "unavailable",
         }
     }
@@ -357,6 +360,7 @@ impl IntoResponse for Refusal {
             }
             Self::Slug(status, slug) => (status, Json(ErrorBody { error: slug })).into_response(),
             Self::Malformed => StatusCode::BAD_REQUEST.into_response(),
+            Self::NotFound => StatusCode::NOT_FOUND.into_response(),
             Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE.into_response(),
         }
     }
@@ -747,14 +751,24 @@ async fn complete(
 
 /// Best effort: tokens that cannot be kept are revoked at the provider.
 async fn revoke_quietly(provider: &Provider, tokens: &Tokens) {
-    if provider.def.revoke_url.is_some()
-        && provider
-            .client
-            .revoke(&tokens.access, tokens.refresh.as_ref())
-            .await
-            .is_err()
+    revoke_outcome(provider, tokens).await;
+}
+
+/// Revoke at the provider and say how it went. A failure is logged without any provider answer.
+async fn revoke_outcome(provider: &Provider, tokens: &Tokens) -> DisconnectOutcome {
+    if provider.def.revoke_url.is_none() {
+        return DisconnectOutcome::RevokeUnsupported;
+    }
+    match provider
+        .client
+        .revoke(&tokens.access, tokens.refresh.as_ref())
+        .await
     {
-        tracing::warn!("oauth: revoking an unkept token failed");
+        Ok(()) => DisconnectOutcome::Ok,
+        Err(_) => {
+            tracing::warn!("oauth: revoking a token failed");
+            DisconnectOutcome::RevokeFailed
+        }
     }
 }
 
@@ -900,13 +914,13 @@ impl OAuth {
         generation: i32,
         ciphertext: &[u8],
         wrapped_dek: &[u8],
-    ) {
+    ) -> DisconnectOutcome {
         let Some(provider) = self.providers.get(provider) else {
             tracing::warn!("oauth: provider no longer enabled, token not revoked");
-            return;
+            return DisconnectOutcome::RevokeFailed;
         };
         let Ok(generation) = u32::try_from(generation) else {
-            return;
+            return DisconnectOutcome::RevokeFailed;
         };
         let opened = self
             .vault
@@ -920,7 +934,7 @@ impl OAuth {
             .await;
         let Some(set) = opened.ok().as_ref().and_then(decode_token_set) else {
             tracing::warn!("oauth: sealed token set did not open, token not revoked");
-            return;
+            return DisconnectOutcome::RevokeFailed;
         };
         let tokens = Tokens {
             access: set.access,
@@ -928,7 +942,7 @@ impl OAuth {
             expires_in: None,
             scopes: Vec::new(),
         };
-        revoke_quietly(provider, &tokens).await;
+        revoke_outcome(provider, &tokens).await
     }
 
     /// The enabled providers as `oauth_providers` rows: id, name, scopes, the connect URL and
@@ -1127,7 +1141,7 @@ async fn discard(
         return Ok(false);
     };
     if let (Some(generation), Some(ciphertext), Some(wrapped)) = material {
-        oauth
+        let _ = oauth
             .revoke_sealed(provider, connection_id, generation, &ciphertext, &wrapped)
             .await;
     }
@@ -1395,6 +1409,168 @@ async fn activate(
         .execute(&mut *c)
         .await?;
     Ok(Some(old_id))
+}
+
+/// What a disconnect decided.
+enum Disconnected {
+    /// No such (non-pending) connection.
+    NotFound,
+    /// The connection belongs to another person: nothing changed.
+    OtherPerson,
+    /// Already `revoked`: nothing to do.
+    Already(ConnectionSummary),
+    Done {
+        summary: ConnectionSummary,
+        provider: String,
+        outcome: DisconnectOutcome,
+    },
+}
+
+/// `POST /v1/oauth/connections/{id}/disconnect`: the owning person revokes the connection.
+pub async fn disconnect(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(oauth) = state.oauth() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let span = tracing::info_span!(
+        "oauth.disconnect",
+        provider = tracing::field::Empty,
+        connection_id = tracing::field::Empty,
+        person = tracing::field::Empty,
+        outcome = tracing::field::Empty,
+    );
+    let result = disconnect_connection(oauth, &headers, &id)
+        .instrument(span.clone())
+        .await;
+    match result {
+        Ok(summary) => {
+            span.record("outcome", "ok");
+            (
+                [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+                Json(summary),
+            )
+                .into_response()
+        }
+        Err(refusal) => {
+            span.record("outcome", refusal.outcome());
+            refusal.into_response()
+        }
+    }
+}
+
+async fn disconnect_connection(
+    oauth: Arc<OAuth>,
+    headers: &HeaderMap,
+    id: &str,
+) -> Result<ConnectionSummary, Refusal> {
+    let user_id = oauth.person(headers).await?;
+    let connection_id = Uuid::parse_str(id).map_err(|_| Refusal::NotFound)?;
+    tracing::Span::current().record("connection_id", tracing::field::display(connection_id));
+    let o = Arc::clone(&oauth);
+    let done = oauth
+        .db
+        .with_org(oauth.org_id, move |c| {
+            Box::pin(async move { disconnect_locked(&o, c, connection_id, user_id).await })
+        })
+        .await;
+    match done {
+        Ok(Disconnected::Done {
+            summary,
+            provider,
+            outcome,
+        }) => {
+            tracing::Span::current().record("provider", provider.as_str());
+            let ev = OAuthEvent {
+                kind: OAuthEventKind::Disconnected(outcome),
+                person: user_id,
+                provider,
+                connection_id: Some(connection_id),
+                agent_id: None,
+            };
+            if !oauth.append(ev).await {
+                tracing::warn!("oauth: disconnected not recorded");
+            }
+            Ok(summary)
+        }
+        Ok(Disconnected::Already(summary)) => Ok(summary),
+        Ok(Disconnected::OtherPerson) => Err(Refusal::Forbidden),
+        Ok(Disconnected::NotFound) => Err(Refusal::NotFound),
+        Err(ConfirmError::NotFound) => Err(Refusal::NotFound),
+        Err(ConfirmError::Unavailable) => Err(Refusal::Unavailable),
+    }
+}
+
+/// In one transaction, under a row lock on the connection (so a concurrent refresh finishes
+/// first and one replica disconnects once): revoke at the provider where the registry has an
+/// endpoint, delete the sealed material and the connection's grants, and set `revoked`. A
+/// provider failure still deletes locally.
+async fn disconnect_locked(
+    oauth: &OAuth,
+    c: &mut sql::PgConnection,
+    connection_id: Uuid,
+    user_id: Uuid,
+) -> Result<Disconnected, ConfirmError> {
+    type Row = (
+        Uuid,
+        String,
+        String,
+        Option<i32>,
+        Option<Vec<u8>>,
+        Option<Vec<u8>>,
+    );
+    let row: Option<Row> = sql::query_as(
+        "SELECT c.user_id, c.provider, c.status, m.generation, m.ciphertext, m.wrapped_dek \
+         FROM oauth_connections c \
+         LEFT JOIN oauth_token_material m ON m.connection_id = c.id \
+         WHERE c.id = $1 AND c.status <> 'pending_confirm' FOR UPDATE OF c",
+    )
+    .bind(connection_id)
+    .fetch_optional(&mut *c)
+    .await?;
+    let Some((owner, provider, status, generation, ciphertext, wrapped)) = row else {
+        return Ok(Disconnected::NotFound);
+    };
+    if owner != user_id {
+        return Ok(Disconnected::OtherPerson);
+    }
+    if status == "revoked" {
+        return Ok(Disconnected::Already(
+            connection_summary(c, connection_id).await?,
+        ));
+    }
+    let outcome = match (generation, ciphertext, wrapped) {
+        (Some(generation), Some(ciphertext), Some(wrapped)) => {
+            oauth
+                .revoke_sealed(&provider, connection_id, generation, &ciphertext, &wrapped)
+                .await
+        }
+        _ => DisconnectOutcome::RevokeFailed,
+    };
+    sql::query("DELETE FROM oauth_token_material WHERE connection_id = $1")
+        .bind(connection_id)
+        .execute(&mut *c)
+        .await?;
+    sql::query("DELETE FROM oauth_connection_grants WHERE connection_id = $1")
+        .bind(connection_id)
+        .execute(&mut *c)
+        .await?;
+    sql::query(
+        "UPDATE oauth_connections SET status = 'revoked', expires_at = NULL, \
+             last_error_code = NULL WHERE id = $1",
+    )
+    .bind(connection_id)
+    .execute(&mut *c)
+    .await?;
+    let mut summary = connection_summary(c, connection_id).await?;
+    summary.revoked_at_provider = Some(outcome == DisconnectOutcome::Ok);
+    Ok(Disconnected::Done {
+        summary,
+        provider,
+        outcome,
+    })
 }
 
 /// A connection as the console sees it (timestamps RFC 3339, UTC).
@@ -1740,6 +1916,33 @@ mod tests {
                 .filter(|r| r.url.path() == "/revoke")
                 .map(|r| String::from_utf8_lossy(&r.body).into_owned())
                 .collect()
+        }
+
+        async fn disconnect(&self, sub: Option<&str>, id: &str) -> (StatusCode, Vec<u8>) {
+            let mut req = Request::post(format!("/v1/oauth/connections/{id}/disconnect"))
+                .header("origin", CONSOLE);
+            if let Some(sub) = sub {
+                req = req.header("authorization", format!("Bearer {}", self.key.mint(sub)));
+            }
+            let (status, _, body) = self.send(req.body(Body::empty()).unwrap()).await;
+            (status, body)
+        }
+
+        /// Let one agent use the connection (an `agents` row and its grant).
+        async fn grant_agent(&self, connection: Uuid, alice: Uuid) {
+            let mut admin = self.pg.admin().await;
+            sql::query(
+                "WITH a AS (INSERT INTO agents (org_id, name, enrollment_hash) \
+                     VALUES ($1, 'bot', '$argon2id$test') RETURNING id) \
+                 INSERT INTO oauth_connection_grants (org_id, agent_id, connection_id, created_by) \
+                 SELECT $1, a.id, $2, $3 FROM a",
+            )
+            .bind(ORG)
+            .bind(connection)
+            .bind(alice)
+            .execute(&mut admin)
+            .await
+            .unwrap();
         }
 
         async fn send(&self, req: Request<Body>) -> (StatusCode, HeaderMap, Vec<u8>) {
@@ -2662,6 +2865,138 @@ mod tests {
             assert_eq!(r.ok().unwrap().token.expose_secret(), ACCESS_2);
         }
         assert_eq!(h.refresh_calls().await, 1);
+    }
+
+    async fn alice_id(h: &Harness) -> Uuid {
+        let mut admin = h.pg.admin().await;
+        sql::query_scalar("SELECT id FROM users WHERE subject = 'alice'")
+            .fetch_one(&mut admin)
+            .await
+            .unwrap()
+    }
+
+    /// Disconnect by the owner: one provider revoke, material and grants gone, `revoked`, one
+    /// `oauth.disconnected` event; bob gets `403` and nothing changes; a second call changes
+    /// nothing; the next use of the connection is refused; no token is in any answer.
+    #[tokio::test]
+    async fn oauth_revoke_disconnect_revokes_deletes_and_records() {
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        h.grant_agent(id, alice).await;
+        let target = id.to_string();
+
+        assert_eq!(
+            h.disconnect(None, &target).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            h.disconnect(Some("mallory"), &target).await.0,
+            StatusCode::FORBIDDEN
+        );
+        let (status, body) = h.disconnect(Some("bob"), &target).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(body.is_empty());
+        assert_eq!(
+            h.disconnect(Some("alice"), &Uuid::now_v7().to_string())
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            h.disconnect(Some("alice"), "nope").await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert!(h.revokes().await.is_empty());
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_token_material").await,
+            1
+        );
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_connection_grants")
+                .await,
+            1
+        );
+
+        let (status, body) = h.disconnect(Some("alice"), &target).await;
+        assert_eq!(status, StatusCode::OK);
+        let text = String::from_utf8_lossy(&body).into_owned();
+        for secret in [ACCESS_1, REFRESH_1] {
+            assert!(!text.contains(secret), "a token is in the answer");
+        }
+        let summary: ConnectionSummary = serde_json::from_slice(&body).unwrap();
+        assert_eq!(summary.status, ConnectionStatus::Revoked);
+        assert_eq!(summary.revoked_at_provider, Some(true));
+        let revokes = h.revokes().await;
+        assert_eq!(revokes.len(), 1, "revoked once at the provider");
+        assert!(revokes[0].contains(REFRESH_1));
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_token_material").await,
+            0
+        );
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_connection_grants")
+                .await,
+            0
+        );
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_connections WHERE status = 'revoked'")
+                .await,
+            1
+        );
+        assert_eq!(
+            h.audit.oauth_events().last().cloned(),
+            Some(OAuthEvent {
+                kind: OAuthEventKind::Disconnected(DisconnectOutcome::Ok),
+                person: alice,
+                provider: "fake".to_owned(),
+                connection_id: Some(id),
+                agent_id: None,
+            })
+        );
+
+        let (status, body) = h.disconnect(Some("alice"), &target).await;
+        assert_eq!(status, StatusCode::OK);
+        let again: ConnectionSummary = serde_json::from_slice(&body).unwrap();
+        assert_eq!(again.status, ConnectionStatus::Revoked);
+        assert_eq!(h.revokes().await.len(), 1, "no second provider call");
+        assert!(matches!(
+            h.oauth.access_token(id, None).await,
+            Err(AccessError::NotFound)
+        ));
+        let disconnects = h
+            .audit
+            .oauth_events()
+            .into_iter()
+            .filter(|e| matches!(e.kind, OAuthEventKind::Disconnected(_)))
+            .count();
+        assert_eq!(disconnects, 1);
+    }
+
+    /// A provider that refuses the revoke does not keep the material: it is deleted anyway and
+    /// the answer and the event say the provider was not told.
+    #[tokio::test]
+    async fn oauth_revoke_provider_failure_still_deletes_locally() {
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        h.fake.fail_revoke().await;
+        let (status, body) = h.disconnect(Some("alice"), &id.to_string()).await;
+        assert_eq!(status, StatusCode::OK);
+        let summary: ConnectionSummary = serde_json::from_slice(&body).unwrap();
+        assert_eq!(summary.status, ConnectionStatus::Revoked);
+        assert_eq!(summary.revoked_at_provider, Some(false));
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_token_material").await,
+            0
+        );
+        assert_eq!(
+            h.audit.oauth_events().last().map(|e| e.kind),
+            Some(OAuthEventKind::Disconnected(
+                DisconnectOutcome::RevokeFailed
+            ))
+        );
+        assert_eq!(h.audit.oauth_events().last().map(|e| e.person), Some(alice));
     }
 
     /// `invalid_grant`: the connection becomes `refresh_failed`, `oauth.refresh_failed` names the

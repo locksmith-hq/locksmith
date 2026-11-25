@@ -20,7 +20,7 @@ export type EmailConfig = { host: string; port: number; from: string };
 /** Fixed slugs only: provider text never reaches a row, a log or a response (N1 decision 7). */
 export type EmailErrorCode = "email.smtp_unreachable" | "email.smtp_rejected" | "email.no_recipient";
 
-export function classify(err: unknown): EmailErrorCode {
+function classify(err: unknown): EmailErrorCode {
   const code = (err as { responseCode?: number } | null)?.responseCode;
   return typeof code === "number" && code >= 500 ? "email.smtp_rejected" : "email.smtp_unreachable";
 }

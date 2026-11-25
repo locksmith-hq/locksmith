@@ -15,8 +15,8 @@ use crate::aws;
 use crate::git;
 use crate::grants;
 use crate::mcp_endpoint::{self, McpEndpoint};
-use crate::oauth::{self, OAuth};
 use crate::mcp_upstream;
+use crate::oauth::{self, OAuth};
 use crate::relay::{self, Relay};
 use ls_mcp_server::upstream::ToolPolicy;
 

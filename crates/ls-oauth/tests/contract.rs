@@ -105,9 +105,8 @@ fn error_slugs_are_closed_and_match_their_wire_form() {
 }
 
 #[test]
-fn embedded_registry_has_only_the_dev_mock_for_now() {
+fn embedded_registry_has_the_dev_mock() {
     let r = Registry::embedded().unwrap();
-    assert_eq!(r.provider.len(), 1);
     let mock = r.get("mock").unwrap();
     assert!(mock.revoke_url.is_some());
     assert!(mock.default_scopes.contains(&"offline_access".to_string()));
@@ -132,4 +131,49 @@ default_scopes = ["openid"]
     assert!(Registry::parse(&format!("{ok}extra = 1")).is_err());
     assert!(Registry::parse(&ok.replace("rotating", "sometimes")).is_err());
     assert!(Registry::parse("surprise = 1").is_err());
+}
+
+#[test]
+fn embedded_registry_lists_the_five_providers_and_the_mock() {
+    let reg = Registry::embedded().unwrap();
+    let ids: Vec<&str> = reg.provider.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["github", "google", "slack", "linear", "atlassian", "mock"]
+    );
+    assert!(reg.get("atlassian").unwrap().revoke_url.is_none());
+    // Scopes and API hosts are reviewed: a change fails under `CI=true` until accepted.
+    let view: Vec<_> = reg
+        .provider
+        .iter()
+        .map(|p| (&p.id, &p.default_scopes, &p.api_hosts))
+        .collect();
+    insta::assert_json_snapshot!("provider_scopes_and_hosts", view);
+}
+
+fn provider(extra: &str) -> String {
+    format!(
+        "[[provider]]\nid = \"x\"\nname = \"X\"\nauthorize_url = \"https://a.test/a\"\n\
+         token_url = \"https://a.test/t\"\naccount_url = \"https://a.test/u\"\n\
+         refresh = \"static\"\napi_hosts = [\"api.a.test\"]\ndefault_scopes = [\"r\"]\n{extra}"
+    )
+}
+
+#[test]
+fn registry_validation_refuses_unsafe_entries() {
+    assert!(Registry::parse(&provider("")).is_ok());
+    let http = provider("").replace("https://a.test/t", "http://a.test/t");
+    assert!(Registry::parse(&http).is_err(), "http token url");
+    let wild = provider("").replace("api.a.test", "*.a.test");
+    assert!(Registry::parse(&wild).is_err(), "wildcard host");
+    let none = provider("").replace("[\"api.a.test\"]", "[]");
+    assert!(Registry::parse(&none).is_err(), "no hosts");
+    let scopes = provider("").replace("[\"r\"]", "[]");
+    assert!(Registry::parse(&scopes).is_err(), "no scopes");
+    let dup = format!("{}{}", provider(""), provider(""));
+    assert!(Registry::parse(&dup).is_err(), "duplicate id");
+    let mock = provider("")
+        .replace("id = \"x\"", "id = \"mock\"")
+        .replace("https://a.test/t", "http://a.test/t");
+    assert!(Registry::parse(&mock).is_ok(), "mock may use http");
 }

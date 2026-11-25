@@ -415,6 +415,8 @@ impl OAuthClient {
         let http = &self.transport.http;
         match self.endpoints.quirk {
             Quirk::Github => {
+                // The registry URL carries the app's client id as `{client_id}`.
+                let url = url.replace("{client_id}", &self.client_id);
                 let req = http
                     .delete(url)
                     .basic_auth(&self.client_id, Some(self.client_secret.expose_secret()))

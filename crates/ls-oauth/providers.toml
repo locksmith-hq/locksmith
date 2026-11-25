@@ -1,5 +1,7 @@
 # Provider registry (C1 design decision 3). Embedded at build time and validated at load.
-# Task 2.2 fills GitHub, Google, Slack, Linear and Atlassian; only the dev mock is here so far.
+# Facts: docs/research/oauth-connections.md. Scopes are the minimal user scopes; endpoints are HTTPS
+# (only `mock` may use http) and API hosts are exact names, never wildcards (`Registry::parse` checks).
+# `{client_id}` in a revoke_url is replaced with the app's client id.
 #
 # [[provider]]
 # id = "github"
@@ -11,6 +13,65 @@
 # refresh = "rotating"            # rotating | static | none
 # api_hosts = ["api.github.com"]
 # default_scopes = ["..."]
+
+# GitHub App with expiring user tokens: permissions are set at registration, so no scopes.
+[[provider]]
+id = "github"
+name = "GitHub"
+authorize_url = "https://github.com/login/oauth/authorize"
+token_url = "https://github.com/login/oauth/access_token"
+revoke_url = "https://api.github.com/applications/{client_id}/token"
+account_url = "https://api.github.com/user"
+refresh = "rotating"
+api_hosts = ["api.github.com"]
+default_scopes = []
+
+# Google client in Testing mode: refresh tokens last 7 days there unless only openid, email, profile.
+[[provider]]
+id = "google"
+name = "Google"
+authorize_url = "https://accounts.google.com/o/oauth2/v2/auth"
+token_url = "https://oauth2.googleapis.com/token"
+revoke_url = "https://oauth2.googleapis.com/revoke"
+account_url = "https://openidconnect.googleapis.com/v1/userinfo"
+refresh = "static"
+api_hosts = ["openidconnect.googleapis.com", "www.googleapis.com"]
+default_scopes = ["openid", "email", "profile"]
+
+# Slack v2 user token (`user_scope`); token rotation is opt-in at the app.
+[[provider]]
+id = "slack"
+name = "Slack"
+authorize_url = "https://slack.com/oauth/v2/authorize"
+token_url = "https://slack.com/api/oauth.v2.access"
+revoke_url = "https://slack.com/api/auth.revoke"
+account_url = "https://slack.com/api/openid.connect.userInfo"
+refresh = "rotating"
+api_hosts = ["slack.com"]
+default_scopes = ["openid", "profile", "email"]
+
+[[provider]]
+id = "linear"
+name = "Linear"
+authorize_url = "https://linear.app/oauth/authorize"
+token_url = "https://api.linear.app/oauth/token"
+revoke_url = "https://api.linear.app/oauth/revoke"
+account_url = "https://api.linear.app/graphql"
+refresh = "rotating"
+api_hosts = ["api.linear.app"]
+default_scopes = ["read"]
+
+# Atlassian 3LO documents no revocation endpoint: disconnect deletes locally and the console
+# points the person to their connected apps.
+[[provider]]
+id = "atlassian"
+name = "Atlassian"
+authorize_url = "https://auth.atlassian.com/authorize"
+token_url = "https://auth.atlassian.com/oauth/token"
+account_url = "https://api.atlassian.com/me"
+refresh = "rotating"
+api_hosts = ["api.atlassian.com"]
+default_scopes = ["read:me", "offline_access"]
 
 # Dev-only mock provider: the Keycloak client `locksmith-oauth-mock` (infra/compose/keycloak).
 # The gateway enables it only when LOCKSMITH_OAUTH_MOCK_ISSUER is configured (C1 task 3.3).

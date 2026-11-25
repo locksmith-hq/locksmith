@@ -28,6 +28,7 @@ export const scenarios: Scenario[] = [
       "PUT /internal/v1/gateway/bindings",
       "POST /internal/v1/mcp/agent-calls",
       "POST /internal/v1/mcp/agent-clients",
+      "POST /internal/v1/mcp/upstream-calls",
       "GET /internal/v1/mcp/agent-tool-settings",
       "GET /internal/v1/mcp/revoked-agent-clients",
       "GET /internal/v1/secrets/{secret_id}/versions/{version}/material",
@@ -158,6 +159,27 @@ export const scenarios: Scenario[] = [
       await ctx.expect("agent call invalid", 400, {
         method: "POST",
         path: "/internal/v1/mcp/agent-calls",
+        headers: internalAuth(org),
+        body: {},
+      });
+
+      await both(
+        ctx,
+        "upstream call (contract only, not implemented yet)",
+        501,
+        { method: "POST", path: "/internal/v1/mcp/upstream-calls" },
+        {
+          phase: "call",
+          agent_id: agentId,
+          upstream: "github",
+          tool: "list_issues",
+          decision: "allow",
+          outcome: "pending",
+        },
+      );
+      await ctx.expect("upstream call invalid", 400, {
+        method: "POST",
+        path: "/internal/v1/mcp/upstream-calls",
         headers: internalAuth(org),
         body: {},
       });

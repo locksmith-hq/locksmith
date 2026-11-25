@@ -49,7 +49,7 @@ fn read(p: &Path) -> Option<String> {
     std::fs::read_to_string(p).ok()
 }
 
-fn build(root: &Path, hub: Option<&str>) -> Result<Plan, Fail> {
+fn build(root: &Path, hub: Option<&str>, gateway: Option<&[String]>) -> Result<Plan, Fail> {
     let hub_url = hub
         .map(|h| agents::hub_mcp_url(h).map_err(usage))
         .transpose()?;
@@ -219,7 +219,47 @@ fn build(root: &Path, hub: Option<&str>) -> Result<Plan, Fail> {
             }
         }
         files[0].2 = Some(after);
+        // Task 6.3: swap entries for the gateway's upstreams with the stdio bridge. The preview
+        // shows the old entry with every value masked, and the token is not saved anywhere.
+        let mut masked: Option<(PathBuf, String)> = None;
+        if let Some(upstreams) = gateway {
+            if let Some(mp) = agents::mcp_path(a, root) {
+                for (f, _, after) in &mut files {
+                    if *f != mp {
+                        continue;
+                    }
+                    let text = after.clone().unwrap_or_default();
+                    let text = if text.trim().is_empty() {
+                        "{}".to_owned()
+                    } else {
+                        text
+                    };
+                    if let Some(r) = agents::rewrite_gateway_mcp(a, &text, upstreams)
+                        .map_err(|e| usage(format!("{}: {e}", mp.display())))?
+                    {
+                        p.notes.push(format!(
+                            "{}: {} now run through `smith mcp bridge`; the credential removed from {} is not saved",
+                            a.id(),
+                            r.rewritten.join(", "),
+                            mp.strip_prefix(root).unwrap_or(&mp).display()
+                        ));
+                        masked = Some((mp.clone(), r.masked_before));
+                        *after = Some(r.after);
+                    }
+                }
+            } else if let Some(h) = agents::mcp_user_hint(a) {
+                p.notes.push(format!(
+                    "{}: --mcp-gateway does not edit user-level files; replace the entries for {} in {h} with command `smith`, args `mcp bridge <name>` by hand",
+                    a.id(),
+                    upstreams.join(", ")
+                ));
+            }
+        }
         for (f, before, after) in files {
+            let before = match &masked {
+                Some((mp, text)) if *mp == f => Some(text.clone()),
+                _ => before,
+            };
             let after = after.unwrap_or_default();
             if before.as_deref() != Some(after.as_str()) {
                 let path = f.strip_prefix(root).unwrap_or(&f).to_path_buf();
@@ -304,13 +344,21 @@ pub fn run(
     binding_only: bool,
     yes: bool,
     hub: Option<&str>,
+    mcp_gateway: bool,
     dry_run: bool,
 ) -> Result<ExitCode, Fail> {
     if binding_only {
         return crate::run_cmd::init(true);
     }
     let root = repo_root()?;
-    let plan = build(&root, hub)?;
+    let upstreams = if mcp_gateway {
+        // The upstreams this agent may use, from the gateway (names only).
+        let st = ls_connector::State::load_fresh()?;
+        Some(ls_connector::mcp::upstreams(&st)?)
+    } else {
+        None
+    };
+    let plan = build(&root, hub, upstreams.as_deref())?;
     if plan.import.is_none() && plan.changes.is_empty() {
         print!("{}", preview(&plan));
         println!("already set up");

@@ -241,6 +241,11 @@ api:
 api-contract *args:
     bash scripts/api-contract.sh {{args}}
 
+# NC-1: regenerate apps/api/openapi.nest.json from the zod registry, then check it (drift test).
+api-openapi:
+    npm run openapi:emit --workspace @locksmith/api
+    npm test --workspace @locksmith/api -- src/openapi
+
 # T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
 # Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.
 web-e2e *args:
@@ -306,6 +311,15 @@ aws-vend-smoke:
     cargo build -q -p ls-gateway --bin locksmith-gateway
     cargo build -q -p smith-cli --bin smith
     cargo nextest run -p ls-e2e --test aws_smoke --no-capture
+
+# M2 MCP gateway smoke (needs `just up` and `just api`): the upstream MCP fixture, a gateway with an
+# `[[mcp_upstream]]` and `smith mcp bridge github` driven by a scripted MCP client; asserts the tool
+# list (hide absent), a redacted result, deny and hold refused, the ledger events, the Bindings row
+# and that the agent HOME holds no upstream key. Run `just leak-scan` after.
+mcp-gateway-smoke:
+    cargo build -q -p ls-gateway --bin locksmith-gateway
+    cargo build -q -p smith-cli --bin smith
+    cargo nextest run -p ls-e2e --test mcp_gateway --no-capture
 
 # D4 workload-identity smoke (needs `just up` and `just workload-smoke-api`): an in-process
 # GitHub-shaped OIDC stub issuer (TLS on loopback) and runner endpoint; `smith login --workload

@@ -19,15 +19,15 @@ export interface Call {
   body?: Json;
 }
 
-function baseUrl(): string {
-  const url = process.env.API_CONTRACT_URL;
+function baseUrl(override?: string): string {
+  const url = override ?? process.env.API_CONTRACT_URL;
   if (!url) throw new Error("API_CONTRACT_URL is not set (for example http://127.0.0.1:8080)");
   return url.replace(/\/+$/, "");
 }
 
 /** Sends one request and returns the raw status, headers and parsed body. */
-export async function send(call: Call): Promise<{ status: number; headers: Headers; body: Json | null }> {
-  const res = await fetch(baseUrl() + call.path, {
+export async function send(call: Call, base?: string): Promise<{ status: number; headers: Headers; body: Json | null }> {
+  const res = await fetch(baseUrl(base) + call.path, {
     method: call.method,
     headers: {
       ...(call.body === undefined ? {} : { "content-type": "application/json" }),

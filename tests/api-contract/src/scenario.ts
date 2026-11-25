@@ -33,13 +33,21 @@ export class Ctx {
   }
 }
 
-/** Every scenario module in `src/scenarios`, in file order; the coverage test reads `covers`. */
-export async function loadScenarios(): Promise<Scenario[]> {
+/** Scenario file stems named by a comma list (`API_CONTRACT_SCENARIOS`); empty or unset means all. */
+export function parseScenarioFilter(raw: string | undefined): string[] {
+  return (raw ?? "").split(",").map((x) => x.trim()).filter((x) => x !== "");
+}
+
+/** Every scenario module in `src/scenarios`, in file order, or only the stems in `only`; the coverage test reads `covers`. */
+export async function loadScenarios(only: string[] = parseScenarioFilter(process.env.API_CONTRACT_SCENARIOS)): Promise<Scenario[]> {
   const { readdir } = await import("node:fs/promises");
   const dir = new URL("./scenarios/", import.meta.url);
   const files = (await readdir(dir)).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).sort();
+  const unknown = only.filter((o) => !files.includes(`${o}.ts`));
+  if (unknown.length > 0) throw new Error(`unknown scenario file(s): ${unknown.join(", ")}`);
   const all: Scenario[] = [];
   for (const f of files) {
+    if (only.length > 0 && !only.includes(f.slice(0, -3))) continue;
     const mod = (await import(new URL(f, dir).href)) as { scenarios: Scenario[] };
     all.push(...mod.scenarios);
   }

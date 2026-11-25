@@ -38,7 +38,7 @@ export const GATEWAY_SLUGS = [
 export type GatewaySlug = (typeof GATEWAY_SLUGS)[number];
 
 /** Slugs the client itself raises. */
-export type ClientSlug = "unauthorized" | "bad_config" | "foreign_origin" | "transport";
+export type ClientSlug = "unauthorized" | "bad_config" | "foreign_origin" | "transport" | "unsafe_tool";
 
 export type AgentErrorSlug = GatewaySlug | ClientSlug;
 

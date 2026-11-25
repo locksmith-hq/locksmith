@@ -114,12 +114,12 @@
     {
       "method": "POST",
       "path": "/v1/auth/sign-in",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",
       "path": "/v1/auth/sign-out",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "GET",

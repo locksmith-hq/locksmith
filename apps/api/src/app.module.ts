@@ -6,6 +6,7 @@ import { JobsModule } from "./jobs/jobs.module.js";
 import { DbModule } from "./db/db.module.js";
 import { AuthModule } from "./platform/auth/auth.module.js";
 import { PermissionsModule } from "./platform/permissions/permissions.module.js";
+import { SessionModule } from "./platform/session/session.module.js";
 import { ProblemModule } from "./platform/problem/problem.module.js";
 import { TenantModule } from "./tenant/tenant.module.js";
 import { validateEnv } from "./env.js";
@@ -29,6 +30,7 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
     AuthModule,
     PermissionsModule,
     ProblemModule,
+    SessionModule,
     JobsModule,
   ],
   controllers: [HealthController],

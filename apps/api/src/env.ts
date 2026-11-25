@@ -11,16 +11,21 @@ const envSchema = z.object({
   LOCKSMITH_OIDC_ISSUER: z.string().min(1).optional(),
   LOCKSMITH_OIDC_AUDIENCE: z.string().min(1).optional(),
   LOCKSMITH_OIDC_JWKS_URL: z.url({ protocol: /^https?$/ }).optional(),
+  // Rust core (audit ledger): both or none. None makes sign-in and sign-out answer 503.
+  LOCKSMITH_CORE_URL: z.url({ protocol: /^https?$/ }).optional(),
+  LOCKSMITH_CORE_TOKEN: z.string().min(1).optional(),
 }).refine(
   (e) => [e.LOCKSMITH_OIDC_ISSUER, e.LOCKSMITH_OIDC_AUDIENCE, e.LOCKSMITH_OIDC_JWKS_URL].filter(Boolean).length % 3 === 0,
   { message: "LOCKSMITH_OIDC_ISSUER, LOCKSMITH_OIDC_AUDIENCE and LOCKSMITH_OIDC_JWKS_URL are set together or not at all" },
-);
+).refine((e) => Boolean(e.LOCKSMITH_CORE_URL) === Boolean(e.LOCKSMITH_CORE_TOKEN), {
+  message: "LOCKSMITH_CORE_URL and LOCKSMITH_CORE_TOKEN are set together or not at all",
+});
 
 export type Env = z.infer<typeof envSchema>;
 
 export function validateEnv(raw: Record<string, unknown>): Env {
   // Empty counts as unset, as in the Rust config.
-  const clean = Object.fromEntries(Object.entries(raw).filter(([k, v]) => !(k.startsWith("LOCKSMITH_OIDC_") && v === "")));
+  const clean = Object.fromEntries(Object.entries(raw).filter(([k, v]) => !((k.startsWith("LOCKSMITH_OIDC_") || k.startsWith("LOCKSMITH_CORE_")) && v === "")));
   const parsed = envSchema.safeParse(clean);
   if (!parsed.success) {
     // Report names and reasons only, never values.

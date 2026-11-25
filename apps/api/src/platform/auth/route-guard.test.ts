@@ -6,10 +6,12 @@ import { HealthController } from "../../health.controller.js";
 import { APP_GUARD } from "@nestjs/core";
 import { AuthGuard } from "./auth.guard.js";
 import { AuthModule } from "./auth.module.js";
+import { SessionModule } from "../session/session.module.js";
+import { SessionController } from "../session/session.controller.js";
 import { IS_PUBLIC } from "./public.decorator.js";
 
-// Every controller registered in AppModule. Add new controllers here and to the module.
-const CONTROLLERS: { prototype: object }[] = [HealthController];
+// Every controller registered in AppModule or a feature module it imports. Add new controllers here and to the module.
+const CONTROLLERS: { prototype: object }[] = [HealthController, SessionController];
 // The list above must match AppModule: the first test fails if a controller is added there and not here.
 // Routes allowed to be open. Anything else must sit behind the global AuthGuard.
 const PUBLIC_ALLOWLIST = new Set(["GET /healthz", "GET /readyz"]);
@@ -39,7 +41,9 @@ describe("route guard coverage", () => {
     const providers = Reflect.getMetadata("providers", AuthModule) as { provide?: unknown; useClass?: unknown }[];
     expect(providers.some((p) => p.provide === APP_GUARD && p.useClass === AuthGuard)).toBe(true);
     expect(Reflect.getMetadata("imports", AppModule)).toContain(AuthModule);
-    expect(Reflect.getMetadata("controllers", AppModule)).toEqual(CONTROLLERS);
+    expect(Reflect.getMetadata("controllers", AppModule)).toEqual([HealthController]);
+    expect(Reflect.getMetadata("imports", AppModule)).toContain(SessionModule);
+    expect(Reflect.getMetadata("controllers", SessionModule)).toEqual([SessionController]);
   });
 
   it("finds the registered routes", () => {

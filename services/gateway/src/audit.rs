@@ -25,6 +25,10 @@
 //! `credential.issued` event before the credential becomes usable: the agent, the secret, the
 //! credential's id and its expiry. Never the credential. Nothing here holds the value, a header, a
 //! body, a path or the query string. `gateway_audit` is read-only legacy (migration 0009).
+//!
+//! OAuth connections (c1-oauth-connections task 3.4) append `oauth.connected`,
+//! `oauth.connect_failed`, `oauth.refresh_failed` and `oauth.disconnected` ([`OAuthEvent`]): the
+//! person, the provider id, the connection and, for a refresh an agent's relay hit, the agent.
 
 use std::sync::{Arc, Mutex};
 
@@ -292,6 +296,120 @@ pub trait AuditSink: Send + Sync {
     /// Append an `mcp.upstream_call` or `mcp.upstream_outcome` event for one call through the MCP
     /// upstream proxy (m2-mcp-gateway task 4.2). An outcome is idempotent on its `attempt_id`.
     fn append_mcp_upstream(&self, ev: McpUpstreamEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+
+    /// Append an `oauth.*` event (c1-oauth-connections task 3.4).
+    fn append_oauth(&self, ev: OAuthEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+}
+
+/// Why an OAuth connect flow failed (`oauth.connect_failed`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectFailure {
+    /// Confirmed by someone other than the person who started the flow.
+    WrongPerson,
+    /// Not completed or confirmed in time.
+    FlowExpired,
+    /// The provider answered with an error.
+    ProviderError,
+    /// The code exchange (or storing its result) failed.
+    ExchangeFailed,
+}
+
+/// Why a refresh failed (`oauth.refresh_failed`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefreshFailure {
+    InvalidGrant,
+    ProviderError,
+}
+
+/// How a disconnect went at the provider (`oauth.disconnected`); the material is deleted in
+/// every case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisconnectOutcome {
+    /// Revoked at the provider.
+    Ok,
+    RevokeFailed,
+    RevokeUnsupported,
+}
+
+/// The kind of an `oauth.*` event with its outcome. Only the outcomes the control plane's
+/// allow-list accepts for each kind can be built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OAuthEventKind {
+    /// The person who started the flow confirmed it; outcome `ok`.
+    Connected,
+    ConnectFailed(ConnectFailure),
+    RefreshFailed(RefreshFailure),
+    Disconnected(DisconnectOutcome),
+}
+
+impl OAuthEventKind {
+    fn wire(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Connected => ("oauth.connected", "ok"),
+            Self::ConnectFailed(f) => (
+                "oauth.connect_failed",
+                match f {
+                    ConnectFailure::WrongPerson => "wrong_person",
+                    ConnectFailure::FlowExpired => "flow_expired",
+                    ConnectFailure::ProviderError => "provider_error",
+                    ConnectFailure::ExchangeFailed => "exchange_failed",
+                },
+            ),
+            Self::RefreshFailed(f) => (
+                "oauth.refresh_failed",
+                match f {
+                    RefreshFailure::InvalidGrant => "invalid_grant",
+                    RefreshFailure::ProviderError => "provider_error",
+                },
+            ),
+            Self::Disconnected(o) => (
+                "oauth.disconnected",
+                match o {
+                    DisconnectOutcome::Ok => "ok",
+                    DisconnectOutcome::RevokeFailed => "revoke_failed",
+                    DisconnectOutcome::RevokeUnsupported => "revoke_unsupported",
+                },
+            ),
+        }
+    }
+}
+
+/// One `oauth.*` event: the connection's person, the provider id, the connection and, for a
+/// refresh an agent's relay hit, the agent. Never a token, code, verifier or provider answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OAuthEvent {
+    pub kind: OAuthEventKind,
+    /// The user id of the connection's (or flow's) person.
+    pub person: Uuid,
+    /// The registry provider id (`[a-z0-9-]{1,32}`).
+    pub provider: String,
+    /// Required except for [`OAuthEventKind::ConnectFailed`].
+    pub connection_id: Option<Uuid>,
+    /// [`OAuthEventKind::RefreshFailed`] only.
+    pub agent_id: Option<Uuid>,
+}
+
+impl OAuthEvent {
+    /// Whether the control plane's allow-list takes this event's fields.
+    fn fits(&self) -> bool {
+        let refresh = matches!(self.kind, OAuthEventKind::RefreshFailed(_));
+        let failed = matches!(self.kind, OAuthEventKind::ConnectFailed(_));
+        (refresh || self.agent_id.is_none()) && (failed || self.connection_id.is_some())
+    }
+}
+
+/// The wire body of an `oauth.*` event on `POST /internal/v1/audit/events` (`NewRelayEvent`
+/// with `person`, `provider`, `connection_id` and `agent_id` only).
+#[derive(Serialize)]
+struct WireOAuthEvent<'a> {
+    kind: &'static str,
+    outcome: &'static str,
+    person: Uuid,
+    provider: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_id: Option<Uuid>,
 }
 
 /// Which of the two upstream-call events an [`McpUpstreamEvent`] is.
@@ -654,6 +772,23 @@ impl HttpAudit {
         self.append_to(MCP_UPSTREAM_CALLS_PATH, body, &[200, 201])
             .await
     }
+
+    async fn post_oauth(&self, ev: OAuthEvent) -> Result<Uuid, AuditError> {
+        if !ev.fits() {
+            return Err(AuditError::Rejected);
+        }
+        let (kind, outcome) = ev.kind.wire();
+        let body = serde_json::to_vec(&WireOAuthEvent {
+            kind,
+            outcome,
+            person: ev.person,
+            provider: &ev.provider,
+            connection_id: ev.connection_id,
+            agent_id: ev.agent_id,
+        })
+        .map_err(|_| AuditError::Rejected)?;
+        self.append_to(EVENTS_PATH, body, &[201]).await
+    }
 }
 
 impl AuditSink for HttpAudit {
@@ -671,6 +806,10 @@ impl AuditSink for HttpAudit {
 
     fn append_mcp_upstream(&self, ev: McpUpstreamEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         Box::pin(self.post_mcp_upstream(ev))
+    }
+
+    fn append_oauth(&self, ev: OAuthEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        Box::pin(self.post_oauth(ev))
     }
 }
 
@@ -698,9 +837,19 @@ pub struct MemoryAudit {
     pub fail_upstream_outcomes_first: Mutex<usize>,
     /// Every upstream-call append tried, failed ones included.
     pub upstream_tries: Mutex<usize>,
+    /// The `oauth.*` events appended. `fail` fails these too.
+    pub oauth_events: Mutex<Vec<OAuthEvent>>,
 }
 
 impl MemoryAudit {
+    /// The `oauth.*` events in order.
+    pub fn oauth_events(&self) -> Vec<OAuthEvent> {
+        self.oauth_events
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
     /// The upstream-call events with the ids the sink gave them, in order.
     pub fn mcp_upstream(&self) -> Vec<(Uuid, McpUpstreamEvent)> {
         self.mcp_upstream
@@ -752,6 +901,21 @@ impl MemoryAudit {
 }
 
 impl AuditSink for MemoryAudit {
+    fn append_oauth(&self, ev: OAuthEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        let result = if self.fail {
+            Err(AuditError::Unavailable)
+        } else if !ev.fits() {
+            Err(AuditError::Rejected)
+        } else {
+            self.oauth_events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(ev);
+            Ok(Uuid::now_v7())
+        };
+        Box::pin(async move { result })
+    }
+
     fn append_mcp_upstream(&self, ev: McpUpstreamEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         *self
             .upstream_tries
@@ -953,6 +1117,98 @@ mod append_tests {
         assert_eq!(
             a.post_mcp_call(mcp_event()).await,
             Err(AuditError::Unavailable)
+        );
+    }
+
+    fn oauth_event(kind: OAuthEventKind) -> OAuthEvent {
+        OAuthEvent {
+            kind,
+            person: Uuid::from_u128(4),
+            provider: "github".to_owned(),
+            connection_id: Some(Uuid::from_u128(5)),
+            agent_id: None,
+        }
+    }
+
+    /// The body carries the closed `oauth.*` fields only, in the shape the control plane's
+    /// allow-list takes; events it would refuse are not sent at all.
+    #[tokio::test]
+    async fn oauth_events_send_the_allow_listed_fields_only() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/internal/v1/audit/events"))
+            .respond_with(ResponseTemplate::new(201).set_body_string(appended()))
+            .mount(&server)
+            .await;
+        let a = sink(&format!("{}/", server.uri()));
+        let cases = [
+            (
+                oauth_event(OAuthEventKind::Connected),
+                serde_json::json!({"kind": "oauth.connected", "outcome": "ok",
+                    "person": Uuid::from_u128(4), "provider": "github",
+                    "connection_id": Uuid::from_u128(5)}),
+            ),
+            (
+                OAuthEvent {
+                    connection_id: None,
+                    ..oauth_event(OAuthEventKind::ConnectFailed(ConnectFailure::WrongPerson))
+                },
+                serde_json::json!({"kind": "oauth.connect_failed", "outcome": "wrong_person",
+                    "person": Uuid::from_u128(4), "provider": "github"}),
+            ),
+            (
+                OAuthEvent {
+                    agent_id: Some(Uuid::from_u128(6)),
+                    ..oauth_event(OAuthEventKind::RefreshFailed(RefreshFailure::InvalidGrant))
+                },
+                serde_json::json!({"kind": "oauth.refresh_failed", "outcome": "invalid_grant",
+                    "person": Uuid::from_u128(4), "provider": "github",
+                    "connection_id": Uuid::from_u128(5), "agent_id": Uuid::from_u128(6)}),
+            ),
+            (
+                oauth_event(OAuthEventKind::Disconnected(
+                    DisconnectOutcome::RevokeUnsupported,
+                )),
+                serde_json::json!({"kind": "oauth.disconnected", "outcome": "revoke_unsupported",
+                    "person": Uuid::from_u128(4), "provider": "github",
+                    "connection_id": Uuid::from_u128(5)}),
+            ),
+        ];
+        for (ev, want) in &cases {
+            assert_eq!(a.post_oauth(ev.clone()).await, Ok(ID));
+            let got: serde_json::Value = serde_json::from_slice(
+                &server
+                    .received_requests()
+                    .await
+                    .unwrap()
+                    .last()
+                    .unwrap()
+                    .body,
+            )
+            .unwrap();
+            assert_eq!(&got, want);
+        }
+
+        // Refused locally: an agent outside a refresh, no connection outside a failed connect.
+        let sent = server.received_requests().await.unwrap().len();
+        for ev in [
+            OAuthEvent {
+                agent_id: Some(Uuid::from_u128(6)),
+                ..oauth_event(OAuthEventKind::Connected)
+            },
+            OAuthEvent {
+                connection_id: None,
+                ..oauth_event(OAuthEventKind::Disconnected(DisconnectOutcome::Ok))
+            },
+        ] {
+            assert_eq!(a.post_oauth(ev).await, Err(AuditError::Rejected));
+        }
+        assert_eq!(server.received_requests().await.unwrap().len(), sent);
+        // 200 is not an append for these.
+        let (_s, a) = serve(200, &appended()).await;
+        assert_eq!(
+            a.post_oauth(oauth_event(OAuthEventKind::Connected)).await,
+            Err(AuditError::Rejected)
         );
     }
 }

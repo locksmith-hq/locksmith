@@ -35,11 +35,16 @@ export class Ctx {
 
 /** Scenario ids named by a comma list (`API_CONTRACT_SCENARIOS`); empty or unset means all. */
 export function parseScenarioFilter(raw: string | undefined): string[] {
-  return (raw ?? "").split(",").map((x) => x.trim()).filter((x) => x !== "");
+  return (raw ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter((x) => x !== "");
 }
 
 /** Every scenario in `src/scenarios`, in file order, or only those whose `id` is in `only`; the coverage test reads `covers`. */
-export async function loadScenarios(only: string[] = parseScenarioFilter(process.env.API_CONTRACT_SCENARIOS)): Promise<Scenario[]> {
+export async function loadScenarios(
+  only: string[] = parseScenarioFilter(process.env.API_CONTRACT_SCENARIOS),
+): Promise<Scenario[]> {
   const { readdir } = await import("node:fs/promises");
   const dir = new URL("./scenarios/", import.meta.url);
   const files = (await readdir(dir)).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).sort();

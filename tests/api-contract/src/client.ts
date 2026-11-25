@@ -26,7 +26,10 @@ function baseUrl(override?: string): string {
 }
 
 /** Sends one request and returns the raw status, headers and parsed body. */
-export async function send(call: Call, base?: string): Promise<{ status: number; headers: Headers; body: Json | null }> {
+export async function send(
+  call: Call,
+  base?: string,
+): Promise<{ status: number; headers: Headers; body: Json | null }> {
   const res = await fetch(baseUrl(base) + call.path, {
     method: call.method,
     headers: {

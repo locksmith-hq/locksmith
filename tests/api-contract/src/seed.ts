@@ -18,7 +18,10 @@ export interface Seed {
 async function createOrg(name: string): Promise<Tenant> {
   // `API_CONTRACT_SEED_URL`: create the orgs on another server (both share the dev Postgres), for a
   // target that does not serve `POST /v1/orgs` yet.
-  const res = await send({ method: "POST", path: "/v1/orgs", body: { name } }, process.env.API_CONTRACT_SEED_URL || undefined);
+  const res = await send(
+    { method: "POST", path: "/v1/orgs", body: { name } },
+    process.env.API_CONTRACT_SEED_URL || undefined,
+  );
   const body = res.body as { id?: string } | null;
   if (res.status !== 201 || typeof body?.id !== "string") {
     throw new Error(`seed: POST /v1/orgs returned ${res.status} ${JSON.stringify(res.body as Json)}`);

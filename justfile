@@ -118,7 +118,7 @@ test-floci:
     #!/usr/bin/env bash
     set -euo pipefail
     docker info >/dev/null 2>&1 || { echo "test-floci: Docker is not running (start the Docker daemon)" >&2; exit 1; }
-    command -v aws >/dev/null || { echo "test-floci: the AWS CLI is missing (pip install awscli)" >&2; exit 1; }
+    command -v aws >/dev/null || { echo "test-floci: the AWS CLI v2 is missing (install it from aws.amazon.com/cli; pip awscli is v1)" >&2; exit 1; }
     trap '{{compose}} rm -sf floci >/dev/null 2>&1 || true' EXIT
     {{compose}} up -d --wait floci
     FLOCI_URL=http://127.0.0.1:4566 cargo test -p ls-proxy -- --ignored floci

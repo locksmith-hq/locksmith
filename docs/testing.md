@@ -33,6 +33,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/smith-cli` | Rust bin | `just test smith-cli` | no | `just test-rust` | `smith` CLI; some db tests skip without Postgres |
 | `services/control-plane` | Rust service (axum) | `just test control-plane` | yes (Postgres integration tests) | `just test-e2e` (partial) | Package `ls-control-plane` |
 | `services/gateway` | Rust service (axum) | `just test gateway` | yes (`audit_pg`) | `just relay-smoke`, `just connector-smoke` | Package `ls-gateway` |
+| `apps/api` | npm NestJS API (change b1-nestjs-api) | `just test api` | no | `just test-web` | Runs `npm test --workspace apps/api`; it checks `route-table.json` against the frozen `openapi.json` and `openapi.nest.json`. `just api-openapi` regenerates `apps/api/openapi.nest.json` (Nest-only routes, NC-1) from the zod registry and checks it for drift |
 | `apps/desktop` | Tauri app (npm + Rust) | `just test desktop` | no | `just apps-build` | Runs `just desktop-test` (fmt, clippy, cargo test) plus `npm test`; not in the root Cargo workspace |
 | `apps/docs` | npm static site | `just test docs` | no | `just test-web` | No tests of its own; `npm run build` in `just test-web` builds it |
 | `apps/web` | npm web console | `just test web` | no | `just test-web` | Runs `npm test --workspace apps/web` |
@@ -92,4 +93,11 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 
 `just quick` runs all four when a TypeScript file changed. CI calls `just lint`, so it enforces the same gates.
 
+## Adding a Nest-only route
+
+1. Register its zod schemas as a `defineRoute` entry in `apps/api/src/openapi/registry.ts`.
+2. Run `just api-openapi` to emit `apps/api/openapi.nest.json`; commit it.
+3. Mark the path `nest` in `apps/api/route-table.json` (a path must be in exactly one of `services/control-plane/openapi.json` and `openapi.nest.json`).
+4. Run `just sdk-gen` to regenerate the SDK types from both documents.
+5. Add scenarios in `tests/api-contract` (or a reasoned exclusion); coverage reads both documents.
 <!-- merge-gate smoke test 2026-11-24: safe to delete -->

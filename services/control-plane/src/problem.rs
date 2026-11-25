@@ -26,6 +26,7 @@ pub enum Kind {
     UnsupportedMediaType,
     Unavailable,
     Internal,
+    NotImplemented,
 }
 
 impl Kind {
@@ -41,6 +42,7 @@ impl Kind {
             Kind::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Kind::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
             Kind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+            Kind::NotImplemented => StatusCode::NOT_IMPLEMENTED,
         }
     }
 
@@ -57,6 +59,7 @@ impl Kind {
             Kind::UnsupportedMediaType => "unsupported-media-type",
             Kind::Unavailable => "unavailable",
             Kind::Internal => "internal",
+            Kind::NotImplemented => "not-implemented",
         }
     }
 
@@ -72,6 +75,7 @@ impl Kind {
             Kind::UnsupportedMediaType => "Unsupported media type",
             Kind::Unavailable => "Service unavailable",
             Kind::Internal => "Internal error",
+            Kind::NotImplemented => "Not implemented",
         }
     }
 

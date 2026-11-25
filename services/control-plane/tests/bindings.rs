@@ -162,6 +162,41 @@ async fn bindings_snapshot_is_stored_replaced_and_isolated_per_org() {
 }
 
 #[tokio::test]
+async fn bindings_mcp_rows_are_stored_and_served_with_their_tool_rules() {
+    let pg = common::Pg::migrated().await;
+    let app = app_with(pg.app_db(PoolSettings::default()));
+    let org = new_org(&app, "mcp").await;
+    let mcp = json!({
+        "kind": "mcp", "name": "github", "origin": "https://api.githubcopilot.com/mcp/",
+        "header": "Authorization", "default_decision": "hide",
+        "tools": [
+            {"name": "create_issue", "decision": "hold"},
+            {"name": "delete_repository", "decision": "deny"},
+            {"name": "list_issues", "decision": "allow"}
+        ]
+    });
+    let snapshot = json!({"items": [http_item(), mcp]});
+    let (status, body) = put(&app, org, Some(TOKEN), snapshot.clone()).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (status, body) = list(&app, org).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(serde_json::from_str::<Value>(&body).unwrap(), snapshot);
+
+    // A `secret_id` or a template on an `mcp` row is refused, never stored.
+    for (field, value) in [
+        ("secret_id", json!(Uuid::from_u128(9).to_string())),
+        ("template", json!("Bearer {secret}")),
+    ] {
+        let mut bad = snapshot["items"][1].clone();
+        bad[field] = value;
+        let (status, _) = put(&app, org, Some(TOKEN), json!({"items": [bad]})).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{field}");
+    }
+    let (_, body) = list(&app, org).await;
+    assert_eq!(serde_json::from_str::<Value>(&body).unwrap(), snapshot);
+}
+
+#[tokio::test]
 async fn bindings_secret_material_is_refused_and_never_stored_or_served() {
     let pg = common::Pg::migrated().await;
     let app = app_with(pg.app_db(PoolSettings::default()));

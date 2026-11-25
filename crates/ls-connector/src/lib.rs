@@ -27,6 +27,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 mod workload;
 pub use workload::*;
+pub mod mcp;
 
 /// Environment variable holding the enrollment secret (alternative to stdin).
 pub const ENROLLMENT_ENV: &str = "LOCKSMITH_ENROLLMENT_SECRET";

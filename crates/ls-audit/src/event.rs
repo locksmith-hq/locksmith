@@ -120,6 +120,13 @@ pub mod kind {
     /// A remote MCP tool call (allowed, refused or failed). Records the layer, the tool name and
     /// the outcome only, never the call's arguments or result.
     pub const MCP_CALL: Code = Code::new("mcp.call");
+    /// A call through the gateway's MCP upstream proxy (change m2-mcp-gateway), recorded before it
+    /// is forwarded (outcome `pending`), or alone with outcome `denied` when it is refused. Records
+    /// the upstream's configured name, the tool, the decision and a static reason; never arguments,
+    /// results or the upstream credential.
+    pub const MCP_UPSTREAM_CALL: Code = Code::new("mcp.upstream_call");
+    /// How a forwarded MCP upstream call ended (`ok` or `error`), linked by `attempt_id`.
+    pub const MCP_UPSTREAM_OUTCOME: Code = Code::new("mcp.upstream_outcome");
     /// The gateway issued a short-lived credential to an agent (MCP
     /// `issue_short_lived_credential`, decision H1-2). Records the credential's id, the secret it
     /// is scoped to and its expiry, never the credential.
@@ -171,8 +178,15 @@ pub mod attr {
     pub const BYTES_OUT: Code = Code::new("bytes_out");
     /// The MCP server layer (`hub` or `agent`).
     pub const LAYER: Code = Code::new("layer");
-    /// The MCP tool name, from the registry (`unknown` for a name the registry does not have).
+    /// The MCP tool name: from the registry for the agent layer, a [`Text`](super::Text) that passed
+    /// the MCP tool-name rule for an upstream call; `unknown` for any other name.
     pub const TOOL: Code = Code::new("tool");
+    /// The configured name of an MCP upstream (a [`Text`](super::Text) the control plane checks
+    /// against `[a-z0-9-]{1,32}`; a name has hyphens and may start with a digit, so it is not a
+    /// [`Code`]).
+    pub const UPSTREAM: Code = Code::new("upstream");
+    /// The tool decision applied to an MCP upstream call (`allow`, `hide`, `deny` or `hold`).
+    pub const DECISION: Code = Code::new("decision");
     /// The id of a short-lived credential (never the credential itself).
     pub const CREDENTIAL_ID: Code = Code::new("credential_id");
     /// The `name=value` pairs of the verified external-token claims a workload identity policy

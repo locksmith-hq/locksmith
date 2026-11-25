@@ -242,6 +242,8 @@ pub enum Target {
     Agent(Uuid),
     Grant(Uuid),
     WorkloadIdentity(Uuid),
+    /// A person's OAuth connection (c1 task 5.1: relay events through a connection).
+    Connection(Uuid),
 }
 
 impl Target {
@@ -253,6 +255,7 @@ impl Target {
             Self::Agent(id) => ("agent", id),
             Self::Grant(id) => ("grant", id),
             Self::WorkloadIdentity(id) => ("workload", id),
+            Self::Connection(id) => ("connection", id),
         };
         format!("{t}:{}", id.hyphenated())
     }

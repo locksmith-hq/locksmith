@@ -515,15 +515,42 @@ impl NewRelayEvent {
         if self.outcome.is_oauth_only() {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
         }
-        if self.person.is_some() || self.provider.is_some() || self.connection_id.is_some() {
+        // A relay through a person's OAuth connection (c1 task 5.1) names the connection as its
+        // target and the person as an attribute, in place of a secret.
+        let mut attrs0 = Attrs::new();
+        let via_connection = self.connection_id.is_some()
+            && matches!(
+                self.kind,
+                RelayEventKind::Attempt | RelayEventKind::Outcome | RelayEventKind::Denied
+            );
+        if self.provider.is_some()
+            || (!via_connection && (self.person.is_some() || self.connection_id.is_some()))
+        {
             return Err(ApiError::validation(
                 "`person`, `provider` and `connection_id` are for `oauth.*` only",
             ));
         }
-        let (Some(agent_id), Some(secret_id)) = (self.agent_id, self.secret_id) else {
-            return Err(ApiError::validation(
-                "`agent_id` and `secret_id` are required",
-            ));
+        let (target, agent_id) = if via_connection {
+            let (Some(agent_id), Some(connection_id), Some(person), None, None) = (
+                self.agent_id,
+                self.connection_id,
+                self.person,
+                self.secret_id,
+                self.version,
+            ) else {
+                return Err(ApiError::validation(
+                    "a connection relay needs `agent_id`, `connection_id` and `person`, and takes no `secret_id` or `version`",
+                ));
+            };
+            attrs0 = attrs0.id(attr::PERSON, person);
+            (Target::Connection(connection_id), agent_id)
+        } else {
+            let (Some(agent_id), Some(secret_id)) = (self.agent_id, self.secret_id) else {
+                return Err(ApiError::validation(
+                    "`agent_id` and `secret_id` are required",
+                ));
+            };
+            (Target::Secret(secret_id), agent_id)
         };
         let ok = match self.kind {
             RelayEventKind::Attempt => self.outcome == RelayOutcome::Pending,
@@ -593,7 +620,7 @@ impl NewRelayEvent {
                 "`credential_id` and `expires_at` are for `credential.issued` only",
             ));
         }
-        let mut attrs = Attrs::new();
+        let mut attrs = attrs0;
         if self.kind.is_aws() {
             // Binding, region, duration and outcome only.
             if self.version.is_some()
@@ -631,7 +658,7 @@ impl NewRelayEvent {
             return Ok(Event {
                 kind: self.kind.code(),
                 actor: Actor::Agent(agent_id),
-                target: Some(Target::Secret(secret_id)),
+                target: Some(target),
                 outcome: self.outcome.code(),
                 attrs,
             });
@@ -694,7 +721,7 @@ impl NewRelayEvent {
         Ok(Event {
             kind: self.kind.code(),
             actor: Actor::Agent(agent_id),
-            target: Some(Target::Secret(secret_id)),
+            target: Some(target),
             outcome: self.outcome.code(),
             attrs,
         })
@@ -1483,6 +1510,54 @@ mod tests {
 
     fn attrs_json(e: &Event) -> Value {
         e.attrs.stored().to_json()
+    }
+
+    fn relay_via_connection(kind: &str, outcome: &str) -> Value {
+        json!({
+            "kind": kind, "outcome": outcome, "agent_id": AGENT,
+            "connection_id": CONN, "person": PERSON, "method": "GET",
+            "host": "api.github.com",
+        })
+    }
+
+    /// c1 task 5.1: a relay through a connection targets the connection and carries the person.
+    #[test]
+    fn connection_relay_events_target_the_connection_and_name_the_person() {
+        let mut v = relay_via_connection("relay.attempt", "pending");
+        let e = parse(v.clone()).unwrap();
+        assert_eq!(e.target, Some(Target::Connection(CONN)));
+        assert_eq!(e.actor, Actor::Agent(AGENT));
+        assert_eq!(attrs_json(&e)["person"], json!({"id": PERSON}));
+        v["attempt_id"] = json!(CONN);
+        assert!(
+            parse(with(
+                relay_via_connection("relay.outcome", "ok"),
+                "attempt_id",
+                json!(CONN)
+            ))
+            .is_ok()
+        );
+        assert!(parse(relay_via_connection("relay.denied", "no_grant")).is_ok());
+    }
+
+    #[test]
+    fn connection_relay_events_refuse_a_secret_a_missing_person_or_a_version() {
+        let ok = relay_via_connection("relay.attempt", "pending");
+        for bad in [
+            with(ok.clone(), "secret_id", json!(CONN)),
+            without(ok.clone(), "person"),
+            without(ok.clone(), "agent_id"),
+            with(ok.clone(), "version", json!(1)),
+            with(ok.clone(), "provider", json!("github")),
+        ] {
+            assert!(parse(bad).is_err());
+        }
+        // Not a relay kind: a connection stays refused outside `oauth.*`.
+        assert!(parse(relay_via_connection("git.fetch", "ok")).is_err());
+        // A secret relay still refuses a stray person.
+        let secret = json!({"kind": "relay.attempt", "outcome": "pending", "agent_id": AGENT,
+            "secret_id": CONN, "version": 1, "person": PERSON});
+        assert!(parse(secret).is_err());
     }
 
     #[test]

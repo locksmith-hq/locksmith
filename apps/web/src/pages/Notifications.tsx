@@ -15,7 +15,7 @@ import {
 import { QueryState } from "../QueryState";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
-export const INBOX_KEY = ["notifications"] as const;
+const INBOX_KEY = ["notifications"] as const;
 
 /** Bell with the unread count for the top bar. A failed poll shows no count rather than a wrong one. */
 export function NotificationBell({ client }: { client: Client }) {

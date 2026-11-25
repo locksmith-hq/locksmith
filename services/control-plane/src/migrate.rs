@@ -80,6 +80,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "mcp upstream outcome unique",
         include_str!("../migrations/0016_mcp_upstream_outcome_unique.sql"),
     ),
+    (
+        19,
+        "notifications",
+        include_str!("../migrations/0019_notifications.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

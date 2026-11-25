@@ -148,6 +148,41 @@ export interface McpToolSettings {
   updated_at: Generated<Timestamp>;
 }
 
+export interface NotificationCursors {
+  last_seq: Generated<Int8>;
+  org_id: string;
+}
+
+export interface NotificationDeliveries {
+  attempts: Generated<number>;
+  channel: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  last_error_code: string | null;
+  notification_id: string;
+  org_id: string;
+  state: Generated<string>;
+}
+
+export interface NotificationRules {
+  audience: string;
+  audience_user_id: string | null;
+  channel: string;
+  enabled: Generated<boolean>;
+  kind: string;
+  org_id: string;
+}
+
+export interface Notifications {
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  kind: string;
+  org_id: string;
+  payload: Json;
+  read_at: Timestamp | null;
+  user_id: string;
+}
+
 export interface Orgs {
   created_at: Generated<Timestamp>;
   id: Generated<string>;
@@ -223,6 +258,10 @@ export interface DB {
   gateway_bindings: GatewayBindings;
   mcp_clients: McpClients;
   mcp_tool_settings: McpToolSettings;
+  notification_cursors: NotificationCursors;
+  notification_deliveries: NotificationDeliveries;
+  notification_rules: NotificationRules;
+  notifications: Notifications;
   orgs: Orgs;
   projects: Projects;
   secret_versions: SecretVersions;

@@ -48,6 +48,16 @@
       "project": [
         "src/**/*.ts"
       ]
+    },
+    "integrations/agent-vercel-ai": {
+      "entry": [
+        "example/*.test.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "example/**/*.ts"
+      ]
     }
   }
 }

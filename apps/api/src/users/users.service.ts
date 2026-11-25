@@ -1,9 +1,10 @@
-import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { sql, type Transaction } from "kysely";
 import { AUDIT_SINK, issuerHost, type AuditSink } from "../audit/audit-sink.js";
 import type { HumanIdentity } from "../auth/human-auth.js";
 import { KYSELY, type Database } from "../db/db.module.js";
 import type { DB } from "../db/types.js";
+import { ProblemException } from "../platform/problem.js";
 
 /** Name of an auto-created personal org (Rust `users::PERSONAL_ORG_NAME`). */
 const PERSONAL_ORG_NAME = "Personal";
@@ -33,7 +34,7 @@ export class UsersService {
   ) {}
 
   async resolve(identity: HumanIdentity): Promise<ResolvedUser> {
-    if (!identity.emailVerified) throw new ForbiddenException("email verification required");
+    if (!identity.emailVerified) throw new ProblemException("email-verification-required");
     const email = identity.email?.trim() || undefined;
     const { issuer, subject } = identity;
     return this.db.transaction().execute(async (tx) => {

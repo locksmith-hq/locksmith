@@ -1,4 +1,5 @@
-import { type CanActivate, type ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { type CanActivate, type ExecutionContext, Inject, Injectable } from "@nestjs/common";
+import { ProblemException } from "../platform/problem.js";
 import type { Request } from "express";
 import { bearer, type HumanAuth, type HumanIdentity } from "./human-auth.js";
 
@@ -19,11 +20,11 @@ export class AuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<AuthedRequest>();
     const token = bearer(req.headers.authorization);
-    if (!this.auth || !token) throw new UnauthorizedException();
+    if (!this.auth || !token) throw new ProblemException("unauthenticated");
     try {
       req.identity = await this.auth.verify(token);
     } catch {
-      throw new UnauthorizedException();
+      throw new ProblemException("unauthenticated");
     }
     return true;
   }

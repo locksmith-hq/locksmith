@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ForbiddenException, ServiceUnavailableException } from "@nestjs/common";
+import { ServiceUnavailableException } from "@nestjs/common";
 import pg from "pg";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -122,7 +122,9 @@ describe("users.resolve", () => {
 
   it("refuses an unverified identity with 403 and writes nothing", async () => {
     const svc = new UsersService(db, new Recorder());
-    await expect(svc.resolve(ident("x", { emailVerified: false }))).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(svc.resolve(ident("x", { emailVerified: false }))).rejects.toMatchObject({
+      kind: "email-verification-required",
+    });
     expect(await counts()).toEqual({ users: 0, orgs: 0 });
   });
 

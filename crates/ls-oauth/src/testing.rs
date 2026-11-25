@@ -55,6 +55,9 @@ impl Kind {
 pub enum Refresh {
     /// A new access token (and, where the provider rotates, a new refresh token).
     Works,
+    /// Like `Works`, and a provider that normally keeps the refresh token (Google, Linear)
+    /// answers with a new one, so a test can check a rotated token is stored.
+    Rotates,
     /// The provider refuses the refresh token (revoked or expired by the user).
     InvalidGrant,
 }
@@ -203,7 +206,7 @@ impl FakeProvider {
                     .mount(s)
                     .await;
                 let renewed = match refresh {
-                    Refresh::Works => json(
+                    Refresh::Works | Refresh::Rotates => json(
                         200,
                         serde_json::json!({
                             "access_token": ACCESS_2, "token_type": "bearer", "scope": "",
@@ -234,6 +237,7 @@ impl FakeProvider {
                 let renewed = match refresh {
                     // Google and Linear keep the refresh token: the answer carries none.
                     Refresh::Works => json(200, tokens(ACCESS_2, None)),
+                    Refresh::Rotates => json(200, tokens(ACCESS_2, Some(REFRESH_2))),
                     Refresh::InvalidGrant => {
                         json(400, serde_json::json!({"error": "invalid_grant"}))
                     }
@@ -273,7 +277,7 @@ impl FakeProvider {
                     .mount(s)
                     .await;
                 let renewed = match refresh {
-                    Refresh::Works => json(
+                    Refresh::Works | Refresh::Rotates => json(
                         200,
                         serde_json::json!({"ok": true, "access_token": ACCESS_2, "refresh_token": REFRESH_2,
                             "token_type": "user", "expires_in": 43200, "scope": "channels:read"}),
@@ -301,7 +305,9 @@ impl FakeProvider {
                     .mount(s)
                     .await;
                 let renewed = match refresh {
-                    Refresh::Works => json(200, tokens(ACCESS_2, Some(REFRESH_2))),
+                    Refresh::Works | Refresh::Rotates => {
+                        json(200, tokens(ACCESS_2, Some(REFRESH_2)))
+                    }
                     Refresh::InvalidGrant => {
                         json(403, serde_json::json!({"error": "invalid_grant"}))
                     }

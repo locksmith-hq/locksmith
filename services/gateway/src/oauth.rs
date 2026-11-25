@@ -1715,7 +1715,9 @@ mod tests {
     use ls_control_plane::db::PoolSettings;
     use ls_control_plane::readiness::ReadyFlag;
     use ls_oauth::RefreshKind;
-    use ls_oauth::testing::{ACCESS_1, ACCESS_2, CODE, FakeProvider, Kind, REFRESH_1, Refresh};
+    use ls_oauth::testing::{
+        ACCESS_1, ACCESS_2, CODE, FakeProvider, Kind, REFRESH_1, REFRESH_2, Refresh,
+    };
     use p256::pkcs8::EncodePrivateKey as _;
     use serde_json::{Value, json};
     use std::sync::Mutex;
@@ -2059,6 +2061,39 @@ mod tests {
                 .execute(&mut admin)
                 .await
                 .unwrap();
+        }
+
+        /// A second gateway process on the same database and provider: its own pool, vault,
+        /// client and caches, the way a replica or a restarted gateway starts.
+        fn instance(&self) -> Arc<OAuth> {
+            let human = HumanAuth::new(&HumanAuthConfig {
+                issuer: ISSUER.to_owned(),
+                audience: AUDIENCE.to_owned(),
+                jwks_url: format!("{}/jwks", self._idp.uri()),
+            })
+            .unwrap();
+            let db = Database::connect_lazy(self.pg.gateway(), PoolSettings::default());
+            let vault = Arc::new(TokenVault::new(MemWrapper {
+                check_binding: true,
+            }));
+            let def = fake_def(&self.fake);
+            let http =
+                crate::http_client::build(Duration::from_secs(5), Duration::from_secs(10), None)
+                    .unwrap();
+            let client = OAuthClient::new(
+                http,
+                endpoints_for(&def),
+                "fake-client".to_owned(),
+                SecretString::from("fake-client-secret"),
+                REDIRECT_URL,
+            )
+            .unwrap();
+            Arc::new(
+                OAuth::new(ORG, db, human, vault, origins())
+                    .with_provider(def, client)
+                    .with_audit(self.audit.clone())
+                    .with_connect_url(Url::parse(CONNECT_URL).unwrap()),
+            )
         }
 
         async fn refresh_calls(&self) -> usize {
@@ -2865,6 +2900,77 @@ mod tests {
             assert_eq!(r.ok().unwrap().token.expose_secret(), ACCESS_2);
         }
         assert_eq!(h.refresh_calls().await, 1);
+    }
+
+    /// Two gateway instances on one database, concurrent relays on a due token: the row lock
+    /// serialises them, the loser re-reads the new generation, and the provider sees one refresh.
+    #[tokio::test]
+    async fn oauth_refresh_two_instances_make_one_provider_call() {
+        let h = Harness::start().await;
+        let id = h.connected().await;
+        h.make_due(id).await;
+        let other = h.instance();
+        let tasks: Vec<_> = (0..6)
+            .map(|i| {
+                let o = if i % 2 == 0 {
+                    Arc::clone(&h.oauth)
+                } else {
+                    Arc::clone(&other)
+                };
+                tokio::spawn(async move { o.access_token(id, None).await })
+            })
+            .collect();
+        for t in tasks {
+            assert_eq!(
+                t.await.unwrap().ok().unwrap().token.expose_secret(),
+                ACCESS_2
+            );
+        }
+        assert_eq!(h.refresh_calls().await, 1);
+    }
+
+    /// A provider that rotates the refresh token: the new one is stored, a restarted gateway
+    /// (a fresh instance) opens it, and the next refresh sends the rotated token, not the old.
+    #[tokio::test]
+    async fn oauth_refresh_rotated_token_survives_a_restart() {
+        let h = Harness::start_with(Refresh::Rotates).await;
+        let id = h.connected().await;
+        h.make_due(id).await;
+        assert_eq!(
+            h.oauth
+                .access_token(id, None)
+                .await
+                .ok()
+                .unwrap()
+                .token
+                .expose_secret(),
+            ACCESS_2
+        );
+        let restarted = h.instance();
+        // Due again: the restarted instance refreshes with the stored (rotated) token.
+        h.make_due(id).await;
+        let t = restarted.access_token(id, None).await.ok().unwrap();
+        assert_eq!(t.token.expose_secret(), ACCESS_2);
+        let bodies: Vec<String> = h
+            .fake
+            .requests()
+            .await
+            .iter()
+            .filter(|r| {
+                r.url.path() == "/token"
+                    && String::from_utf8_lossy(&r.body).contains("grant_type=refresh_token")
+            })
+            .map(|r| String::from_utf8_lossy(&r.body).into_owned())
+            .collect();
+        assert_eq!(bodies.len(), 2);
+        assert!(
+            bodies[0].contains(REFRESH_1),
+            "first refresh uses the issued token"
+        );
+        assert!(
+            bodies[1].contains(REFRESH_2) && !bodies[1].contains(REFRESH_1),
+            "the restarted gateway sends the rotated token"
+        );
     }
 
     async fn alice_id(h: &Harness) -> Uuid {

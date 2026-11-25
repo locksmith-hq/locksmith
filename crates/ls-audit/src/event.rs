@@ -135,6 +135,18 @@ pub mod kind {
     /// person's consent for it (m1-remote-mcp task 4.2). Outcome `ok`, or `error` when the issuer
     /// call failed (the database revoke still stands). Records the layer and a static reason only.
     pub const MCP_ISSUER_REVOKE: Code = Code::new("mcp.issuer_revoke");
+    /// A person confirmed an OAuth connect flow and the connection became active
+    /// (c1-oauth-connections task 3.4). Records the connection id, the provider id and the
+    /// `person`; never a token, code or verifier.
+    pub const OAUTH_CONNECTED: Code = Code::new("oauth.connected");
+    /// An OAuth connect flow failed (`wrong_person`, `flow_expired`, `provider_error` or
+    /// `exchange_failed`); same attributes as [`OAUTH_CONNECTED`], the connection id when known.
+    pub const OAUTH_CONNECT_FAILED: Code = Code::new("oauth.connect_failed");
+    /// The provider refused a refresh and the connection now needs a reconnect.
+    pub const OAUTH_REFRESH_FAILED: Code = Code::new("oauth.refresh_failed");
+    /// A person disconnected an OAuth connection; the outcome says whether the provider revoked
+    /// the grant.
+    pub const OAUTH_DISCONNECTED: Code = Code::new("oauth.disconnected");
 }
 
 /// Common outcomes.
@@ -192,6 +204,14 @@ pub mod attr {
     /// The `name=value` pairs of the verified external-token claims a workload identity policy
     /// names (a [`Text`](super::Text)); nothing else from the token.
     pub const CLAIMS: Code = Code::new("claims");
+    /// The user id of the person an OAuth connection belongs to (an [`AttrValue::Id`](super::AttrValue::Id),
+    /// never a name or email).
+    pub const PERSON: Code = Code::new("person");
+    /// The id of an OAuth connection.
+    pub const CONNECTION_ID: Code = Code::new("connection_id");
+    /// The provider id of an OAuth connection from the provider registry (a
+    /// [`Text`](super::Text) the control plane checks against `[a-z0-9-]{1,32}`).
+    pub const PROVIDER: Code = Code::new("provider");
 }
 
 /// Who acted.
@@ -588,6 +608,19 @@ mod tests {
         ] {
             assert_eq!(Code::try_new(bad), Err(InvalidIdentifier), "{bad}");
         }
+    }
+
+    #[test]
+    fn oauth_kinds_and_person_attr() {
+        assert_eq!(kind::OAUTH_CONNECTED.as_str(), "oauth.connected");
+        assert_eq!(kind::OAUTH_CONNECT_FAILED.as_str(), "oauth.connect_failed");
+        assert_eq!(kind::OAUTH_REFRESH_FAILED.as_str(), "oauth.refresh_failed");
+        assert_eq!(kind::OAUTH_DISCONNECTED.as_str(), "oauth.disconnected");
+        let j = Attrs::new().id(attr::PERSON, AGENT).stored().to_json();
+        assert_eq!(
+            j.to_string(),
+            r#"{"person":{"id":"0197c1f0-0000-7000-8000-0000000000a1"}}"#
+        );
     }
 
     #[test]

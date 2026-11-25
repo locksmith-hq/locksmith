@@ -1235,12 +1235,15 @@
       },
       "NewRelayEvent": {
         "additionalProperties": false,
-        "description": "One relay event from the gateway. Ids, codes, a host and numbers only: there is no field\nfor a URL, path, query string, header, body or value.",
+        "description": "One relay event from the gateway. Ids, codes, a host and numbers only: there is no field\nfor a URL, path, query string, header, body, value or token.",
         "properties": {
           "agent_id": {
-            "description": "The agent whose verified token made the call (the event's actor).",
+            "description": "The agent whose verified token made the call (the event's actor). Required for every\nkind but `oauth.*`; optional for `oauth.refresh_failed` and refused for the other\n`oauth.*` kinds.",
             "format": "uuid",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "attempt_id": {
             "description": "Links the `relay.outcome` event to its `relay.attempt` event (the `id` the attempt's\nappend returned). Required for `relay.outcome`, and its idempotency key: an outcome\nresent for the same attempt returns the stored event instead of appending another.",
@@ -1265,6 +1268,14 @@
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "connection_id": {
+            "description": "The OAuth connection (`oauth.*` only; required there except for `oauth.connect_failed`).",
+            "format": "uuid",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -1326,12 +1337,27 @@
           "outcome": {
             "$ref": "#/components/schemas/RelayOutcome"
           },
+          "person": {
+            "description": "The user id of the connection's person (`oauth.*` only, required there; the actor of\n`oauth.connected`, `oauth.connect_failed` and `oauth.disconnected`).",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "port": {
             "description": "Upstream port, when the URL names one explicitly.",
             "format": "int32",
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "provider": {
+            "description": "The OAuth provider id, `[a-z0-9-]{1,32}` (`oauth.*` only, required there).",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -1354,9 +1380,12 @@
             ]
           },
           "secret_id": {
-            "description": "The secret the call used (the event's target).",
+            "description": "The secret the call used (the event's target). Required for every kind but `oauth.*`,\nrefused there.",
             "format": "uuid",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "description": "Upstream HTTP status, when a response was received.",
@@ -1379,9 +1408,7 @@
         },
         "required": [
           "kind",
-          "outcome",
-          "agent_id",
-          "secret_id"
+          "outcome"
         ],
         "type": "object"
       },
@@ -2152,7 +2179,11 @@
           "db.session.denied",
           "db.session.opened",
           "db.session.closed",
-          "credential.issued"
+          "credential.issued",
+          "oauth.connected",
+          "oauth.connect_failed",
+          "oauth.refresh_failed",
+          "oauth.disconnected"
         ],
         "type": "string"
       },
@@ -2184,7 +2215,14 @@
           "upstream_unreachable",
           "upstream_timeout",
           "upstream_error",
-          "redaction_failed"
+          "redaction_failed",
+          "wrong_person",
+          "flow_expired",
+          "provider_error",
+          "exchange_failed",
+          "invalid_grant",
+          "revoke_failed",
+          "revoke_unsupported"
         ],
         "type": "string"
       },
@@ -2625,7 +2663,7 @@
     },
     "/internal/v1/audit/events": {
       "post": {
-        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
+        "description": "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable, and `oauth.connected`, `oauth.connect_failed`, `oauth.refresh_failed` and `oauth.disconnected` (with `person`, `provider` and `connection_id` only, and `agent_id` for a refresh an agent's relay hit). Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
         "operationId": "append_audit_event",
         "parameters": [
           {

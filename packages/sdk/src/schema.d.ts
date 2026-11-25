@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Append a relay event to the org's audit ledger (gateway only)
-         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
+         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable, and `oauth.connected`, `oauth.connect_failed`, `oauth.refresh_failed` and `oauth.disconnected` (with `person`, `provider` and `connection_id` only, and `agent_id` for a refresh an agent's relay hit). Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
          */
         post: operations["append_audit_event"];
         delete?: never;
@@ -1238,14 +1238,16 @@ export interface components {
         };
         /**
          * @description One relay event from the gateway. Ids, codes, a host and numbers only: there is no field
-         *     for a URL, path, query string, header, body or value.
+         *     for a URL, path, query string, header, body, value or token.
          */
         NewRelayEvent: {
             /**
              * Format: uuid
-             * @description The agent whose verified token made the call (the event's actor).
+             * @description The agent whose verified token made the call (the event's actor). Required for every
+             *     kind but `oauth.*`; optional for `oauth.refresh_failed` and refused for the other
+             *     `oauth.*` kinds.
              */
-            agent_id: string;
+            agent_id?: string | null;
             /**
              * Format: uuid
              * @description Links the `relay.outcome` event to its `relay.attempt` event (the `id` the attempt's
@@ -1263,6 +1265,11 @@ export interface components {
              * @description Bytes relayed upstream to client (`db.session.closed` only).
              */
             bytes_out?: number | null;
+            /**
+             * Format: uuid
+             * @description The OAuth connection (`oauth.*` only; required there except for `oauth.connect_failed`).
+             */
+            connection_id?: string | null;
             /**
              * Format: uuid
              * @description The id of the short-lived credential (`credential.issued` only; never the credential).
@@ -1292,18 +1299,27 @@ export interface components {
             method?: components["schemas"]["RelayMethod"] | null;
             outcome: components["schemas"]["RelayOutcome"];
             /**
+             * Format: uuid
+             * @description The user id of the connection's person (`oauth.*` only, required there; the actor of
+             *     `oauth.connected`, `oauth.connect_failed` and `oauth.disconnected`).
+             */
+            person?: string | null;
+            /**
              * Format: int32
              * @description Upstream port, when the URL names one explicitly.
              */
             port?: number | null;
+            /** @description The OAuth provider id, `[a-z0-9-]{1,32}` (`oauth.*` only, required there). */
+            provider?: string | null;
             reason?: components["schemas"]["SessionCloseReason"] | null;
             /** @description AWS region of the binding (`aws.credentials.*` only, required there), e.g. `us-east-1`. */
             region?: string | null;
             /**
              * Format: uuid
-             * @description The secret the call used (the event's target).
+             * @description The secret the call used (the event's target). Required for every kind but `oauth.*`,
+             *     refused there.
              */
-            secret_id: string;
+            secret_id?: string | null;
             /**
              * Format: int32
              * @description Upstream HTTP status, when a response was received.
@@ -1562,7 +1578,7 @@ export interface components {
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued" | "oauth.connected" | "oauth.connect_failed" | "oauth.refresh_failed" | "oauth.disconnected";
         /**
          * @description The upstream request method.
          * @enum {string}
@@ -1572,7 +1588,7 @@ export interface components {
          * @description The outcome of a relay event (the gateway's outcome codes, plus `pending` for an attempt).
          * @enum {string}
          */
-        RelayOutcome: "pending" | "ok" | "no_grant" | "grants_unavailable" | "denied" | "denied_address" | "material_error" | "decrypt_failed" | "inject_failed" | "upstream_unreachable" | "upstream_timeout" | "upstream_error" | "redaction_failed";
+        RelayOutcome: "pending" | "ok" | "no_grant" | "grants_unavailable" | "denied" | "denied_address" | "material_error" | "decrypt_failed" | "inject_failed" | "upstream_unreachable" | "upstream_timeout" | "upstream_error" | "redaction_failed" | "wrong_person" | "flow_expired" | "provider_error" | "exchange_failed" | "invalid_grant" | "revoke_failed" | "revoke_unsupported";
         /** @description One agent whose MCP access was revoked. */
         RevokedAgentClient: {
             /** Format: uuid */

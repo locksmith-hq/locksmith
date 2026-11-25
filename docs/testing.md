@@ -33,6 +33,7 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `crates/smith-cli` | Rust bin | `just test smith-cli` | no | `just test-rust` | `smith` CLI; some db tests skip without Postgres |
 | `services/control-plane` | Rust service (axum) | `just test control-plane` | yes (Postgres integration tests) | `just test-e2e` (partial) | Package `ls-control-plane` |
 | `services/gateway` | Rust service (axum) | `just test gateway` | yes (`audit_pg`) | `just relay-smoke`, `just connector-smoke` | Package `ls-gateway` |
+| `apps/api` | npm NestJS API (change b1-nestjs-api) | `just test api` | no | `just test-web` | Runs `npm test --workspace apps/api`; it checks `route-table.json` against the frozen `openapi.json` and `openapi.nest.json`. `just api-openapi` regenerates `apps/api/openapi.nest.json` (Nest-only routes, NC-1) from the zod registry and checks it for drift |
 | `apps/desktop` | Tauri app (npm + Rust) | `just test desktop` | no | `just apps-build` | Runs `just desktop-test` (fmt, clippy, cargo test) plus `npm test`; not in the root Cargo workspace |
 | `apps/docs` | npm static site | `just test docs` | no | `just test-web` | No tests of its own; `npm run build` in `just test-web` builds it |
 | `apps/web` | npm web console | `just test web` | no | `just test-web` | Runs `npm test --workspace apps/web` |
@@ -65,6 +66,7 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just api` and `just gateway` run the services against the stack.
 - `just relay-smoke`, `just connector-smoke` and `just audit-smoke` are the smoke tests that need `just up` and `just api`. `just audit-smoke` also runs `oha` at 200 relays/s when it is installed (`AUDIT_SMOKE_LOAD=0` skips that).
 - `just test-e2e` runs every e2e test.
+- `just test-floci` runs the Floci-backed AWS tests (`floci_assume_role`, `floci_end_to_end`; needs Docker and the AWS CLI v2), then stops Floci. It fails with a Docker message when the daemon is down.
 - `just audit-export`, `just audit-verify` and `just audit-tamper-test` export, verify and tamper-test the audit ledger.
 - `just leak-scan` checks for leaked canary secrets after a run.
 - `just adversarial-gate [--agent claude]` (needs `just up` and `just api`) runs the S6 gateway attack cases with skips counted as failures, then `just leak-scan` over the stack, the audit export and the artifacts; `--agent claude` adds the live prompts. See [tests/adversarial/README.md](../tests/adversarial/README.md).
@@ -83,4 +85,11 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 
 `just quick` runs all four when a TypeScript file changed. CI calls `just lint`, so it enforces the same gates.
 
+## Adding a Nest-only route
+
+1. Register its zod schemas as a `defineRoute` entry in `apps/api/src/openapi/registry.ts`.
+2. Run `just api-openapi` to emit `apps/api/openapi.nest.json`; commit it.
+3. Mark the path `nest` in `apps/api/route-table.json` (a path must be in exactly one of `services/control-plane/openapi.json` and `openapi.nest.json`).
+4. Run `just sdk-gen` to regenerate the SDK types from both documents.
+5. Add scenarios in `tests/api-contract` (or a reasoned exclusion); coverage reads both documents.
 <!-- merge-gate smoke test 2026-11-24: safe to delete -->

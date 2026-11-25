@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check public-check migration-guard
+ci: fmt lint test-rust test-web tree-check public-check migration-guard api-types-check
 
 # Fast local check: fmt + lint only for files committed on this branch since `base`.
 # The full `just ci` runs in GitHub Actions on every PR.
@@ -61,10 +61,18 @@ apps-build: desktop-test
 apps-build-test:
     scripts/apps-build.test.sh
 
-# Regenerate packages/api-types from crates/ls-ipc (ts-rs).
+# Regenerate packages/api-types from crates/ls-ipc (ts-rs). CI runs this one.
 api-types:
     cargo test -p ls-ipc --features ts export_bindings
     npx --yes oxfmt@0.79.0 -c .oxfmtrc.json packages/api-types/src
+
+# Regenerate apps/api/src/db/types.ts: throwaway Postgres (docker), the Rust `locksmith-migrate`, kysely-codegen.
+api-types-db:
+    scripts/api-types.sh
+
+# Fail if apps/api/src/db/types.ts differs from the migrated schema (needs docker).
+api-types-check:
+    scripts/api-types.sh --check
 
 tree-check:
     scripts/tree-check.sh
@@ -111,6 +119,17 @@ up:
 up-lite:
     {{compose}} up -d --wait
     bash scripts/audit-verifier-config.sh
+
+# Run the Floci-backed AWS tests (the `#[ignore]` ls-proxy tests `floci_assume_role` and
+# `floci_end_to_end`) against the compose `floci` service, then stop it. Needs Docker and the AWS CLI v2.
+test-floci:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker info >/dev/null 2>&1 || { echo "test-floci: Docker is not running (start the Docker daemon)" >&2; exit 1; }
+    command -v aws >/dev/null || { echo "test-floci: the AWS CLI v2 is missing (install it from aws.amazon.com/cli; pip awscli is v1)" >&2; exit 1; }
+    trap '{{compose}} rm -sf floci >/dev/null 2>&1 || true' EXIT
+    {{compose}} up -d --wait floci
+    FLOCI_URL=http://127.0.0.1:4566 cargo test -p ls-proxy -- --ignored floci
 
 down:
     {{compose}} --profile auth down
@@ -232,6 +251,11 @@ api:
 # `just api-contract --diff <url-a> <url-b>` compares two servers (needs `just up` and `just api`).
 api-contract *args:
     bash scripts/api-contract.sh {{args}}
+
+# NC-1: regenerate apps/api/openapi.nest.json from the zod registry, then check it (drift test).
+api-openapi:
+    npm run openapi:emit --workspace @locksmith/api
+    npm test --workspace @locksmith/api -- src/openapi
 
 # T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
 # Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.

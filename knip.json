@@ -43,6 +43,22 @@
       "project": [
         "src/**/*.ts"
       ]
+    },
+    "apps/api": {
+      "entry": [
+        "src/main.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignore": [
+        "src/db/types.ts"
+      ],
+      "ignoreDependencies": [
+        "kysely-codegen",
+        "@types/express"
+      ]
     }
   }
 }

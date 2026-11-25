@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check public-check migration-guard
+ci: fmt lint test-rust test-web tree-check public-check migration-guard api-types-check
 
 # Fast local check: fmt + lint only for files committed on this branch since `base`.
 # The full `just ci` runs in GitHub Actions on every PR.
@@ -61,10 +61,18 @@ apps-build: desktop-test
 apps-build-test:
     scripts/apps-build.test.sh
 
-# Regenerate packages/api-types from crates/ls-ipc (ts-rs).
+# Regenerate packages/api-types from crates/ls-ipc (ts-rs). CI runs this one.
 api-types:
     cargo test -p ls-ipc --features ts export_bindings
     npx --yes oxfmt@0.79.0 -c .oxfmtrc.json packages/api-types/src
+
+# Regenerate apps/api/src/db/types.ts: throwaway Postgres (docker), the Rust `locksmith-migrate`, kysely-codegen.
+api-types-db:
+    scripts/api-types.sh
+
+# Fail if apps/api/src/db/types.ts differs from the migrated schema (needs docker).
+api-types-check:
+    scripts/api-types.sh --check
 
 tree-check:
     scripts/tree-check.sh
@@ -243,6 +251,11 @@ api:
 # `just api-contract --diff <url-a> <url-b>` compares two servers (needs `just up` and `just api`).
 api-contract *args:
     bash scripts/api-contract.sh {{args}}
+
+# NC-1: regenerate apps/api/openapi.nest.json from the zod registry, then check it (drift test).
+api-openapi:
+    npm run openapi:emit --workspace @locksmith/api
+    npm test --workspace @locksmith/api -- src/openapi
 
 # T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
 # Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.

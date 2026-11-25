@@ -156,6 +156,13 @@ describe("humanAuthConfig", () => {
   it("is null without an issuer and requires all three values otherwise", () => {
     expect(humanAuthConfig({})).toBeNull();
     expect(() => humanAuthConfig({ LOCKSMITH_OIDC_ISSUER: KEYCLOAK })).toThrow(/AUDIENCE/);
+    expect(() =>
+      humanAuthConfig({
+        LOCKSMITH_OIDC_ISSUER: KEYCLOAK,
+        LOCKSMITH_OIDC_AUDIENCE: AUD,
+        LOCKSMITH_OIDC_JWKS_URL: "file:///etc/passwd",
+      }),
+    ).toThrow(/http/);
     expect(
       humanAuthConfig({
         LOCKSMITH_OIDC_ISSUER: KEYCLOAK,

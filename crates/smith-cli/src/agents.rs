@@ -246,7 +246,7 @@ pub fn cline_script() -> String {
 /// The OpenCode plugin: pipes `{tool, args}` to `smith hook opencode` and throws (which blocks the
 /// tool call) on a non-zero exit, a spawn failure or a timeout. No security logic lives here; the
 /// wrapper also fails closed when `smith` is missing. Targets the V1 `tool.execute.before` API; the
-/// V2 deny mechanism is unverified (task 1.1), so protection stays "unknown" until the adapter lands.
+/// V2 deny mechanism is unverified (task 1.1), so protection stays "unknown".
 pub fn opencode_plugin() -> String {
     let wrapper = serde_json::to_string(&wrapper(Agent::OpenCode, "tool.execute.before"))
         .expect("string serializes");

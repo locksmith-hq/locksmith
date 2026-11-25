@@ -85,10 +85,11 @@ fn replay(agent: &str, event: &str, command: &str) {
             .ok()
             .and_then(|v| v["hook_event_name"].as_str().map(String::from))
             .unwrap_or_else(|| {
-                if agent == "copilot" {
-                    "preToolUse"
-                } else {
-                    "BeforeTool"
+                match agent {
+                    "copilot" => "preToolUse",
+                    "opencode" => "tool.execute.before",
+                    "kiro" => "PreToolUse",
+                    _ => "BeforeTool",
                 }
                 .into()
             });
@@ -235,4 +236,123 @@ fn smith_agents_ready() -> bool {
         .output()
         .unwrap();
     o.status.success()
+}
+
+/// Kiro: the shipped hook file is a versioned list; its `PreToolUse` command is run as Kiro would
+/// (`sh -c`, JSON on stdin) and must reproduce the doc-derived decisions (non-zero exit blocks).
+#[test]
+fn kiro_integration_replays_fixtures() {
+    let v = json(&root().join("integrations/kiro/hooks/locksmith.json"));
+    assert_eq!(v["version"], "v1");
+    let hook = &v["hooks"][0];
+    assert_eq!(hook["trigger"], "PreToolUse");
+    assert_eq!(hook["action"]["type"], "command");
+    let cmd = hook["action"]["command"].as_str().unwrap();
+    replay("kiro", "PreToolUse", cmd);
+    // without `smith` the wrapper blocks (exit 2) with a visible reason
+    let (bin, work, home) = sandbox("kiro-nosmith");
+    let (code, _, err) = run_hook(cmd, &bin, &work, &home, "{}", "/usr/bin:/bin");
+    assert_eq!(code, Some(2));
+    assert!(err.contains("smith doctor"), "{err}");
+}
+
+const PLUGIN_RUNNER: &str = r#"import { pathToFileURL } from "node:url";
+const [, , plugin, payload] = process.argv;
+const { Locksmith } = await import(pathToFileURL(plugin).href);
+const hooks = await Locksmith();
+const { tool, args } = JSON.parse(payload);
+try {
+  await hooks["tool.execute.before"]({ tool }, { args });
+  console.log("ALLOW");
+} catch (e) {
+  console.log("DENY:" + e.message);
+}
+"#;
+
+/// OpenCode: the generated plugin is loaded with `node` and its `tool.execute.before` must throw
+/// exactly where `smith hook opencode` denies, and throw when `smith` is not on PATH. Skipped with
+/// a note when `node` is absent.
+#[test]
+fn opencode_plugin_runs_under_node_and_throws_on_deny() {
+    let node = std::env::var_os("PATH").and_then(|p| {
+        std::env::split_paths(&p)
+            .map(|d| d.join("node"))
+            .find(|n| n.is_file())
+    });
+    let Some(node) = node else {
+        println!("skip: `node` is not on PATH, the OpenCode plugin was not executed");
+        return;
+    };
+    let (bin, work, home) = sandbox("opencode");
+    // `.mjs` so node loads the ES module whatever its version's default for `.js` is.
+    let plugin = work.join("locksmith.mjs");
+    std::fs::copy(
+        root().join("integrations/opencode/plugins/locksmith.js"),
+        &plugin,
+    )
+    .unwrap();
+    let runner = work.join("runner.mjs");
+    std::fs::write(&runner, PLUGIN_RUNNER).unwrap();
+    let run = |payload: &str, path: &str| {
+        let o = Command::new(&node)
+            .arg(&runner)
+            .arg(&plugin)
+            .arg(payload)
+            .current_dir(&work)
+            .env("PATH", path)
+            .env("LOCKSMITH_HOME", &home)
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        String::from_utf8_lossy(&o.stdout).trim().to_string()
+    };
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let dir = root().join("crates/ls-hooks/tests/fixtures/opencode");
+    let mut n = 0;
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        let name = p.file_name().unwrap().to_string_lossy().into_owned();
+        let Some(stem) = name.strip_suffix(".in.json") else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&p)
+            .unwrap()
+            .replace("__CWD__", &work.to_string_lossy());
+        // The plugin always sends `{tool, args}`; fixtures of another shape stay in the golden test.
+        let Ok(v) = serde_json::from_str::<Value>(&input) else {
+            continue;
+        };
+        let plugin_shape = v["tool"].is_string()
+            && v["args"].is_object()
+            && v.as_object().is_some_and(|o| o.len() == 2);
+        if !plugin_shape {
+            continue;
+        }
+        let want = json(&dir.join(format!("{stem}.out.json")));
+        let got = run(&input, &path);
+        if want["code"] == 0 {
+            assert_eq!(got, "ALLOW", "opencode/{stem}");
+        } else {
+            let reason = want["stderr"].as_str().unwrap();
+            assert_eq!(got, format!("DENY:{reason}"), "opencode/{stem}");
+        }
+        n += 1;
+    }
+    assert!(n >= 8, "only {n} OpenCode fixtures ran through the plugin");
+    // without `smith` the plugin throws with the visible reason
+    let got = run(
+        r#"{"tool":"bash","args":{"command":"ls"}}"#,
+        "/usr/bin:/bin",
+    );
+    assert!(
+        got.starts_with("DENY:") && got.contains("smith doctor"),
+        "{got}"
+    );
+    // the plugin carries no policy: it only forwards to `smith hook opencode`
+    let text = std::fs::read_to_string(&plugin).unwrap();
+    assert!(text.contains("smith hook opencode tool.execute.before"));
 }

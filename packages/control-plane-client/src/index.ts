@@ -45,7 +45,12 @@ export type NotificationKind = NotificationItem["kind"];
 export type NotificationChannel = NotificationRule["channel"];
 export type NotificationAudience = NotificationRule["audience"];
 
-export const NOTIFICATION_KINDS: readonly NotificationKind[] = ["relay.denied", "git.denied", "grant.revoked", "agent.deleted"];
+export const NOTIFICATION_KINDS: readonly NotificationKind[] = [
+  "relay.denied",
+  "git.denied",
+  "grant.revoked",
+  "agent.deleted",
+];
 export const NOTIFICATION_CHANNELS: readonly NotificationChannel[] = ["inbox", "email", "slack"];
 const KIND_LABEL: Record<NotificationKind, string> = {
   "relay.denied": "Relay denied",

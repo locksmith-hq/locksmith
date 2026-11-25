@@ -44,6 +44,8 @@ CREATE TABLE oauth_providers (
 );
 
 -- One row per connected account of a person. No token, code or verifier column.
+-- `pending_confirm`: written by the callback with the sealed tokens, activated only when the
+-- person who started the flow confirms it (decision 4); several may exist next to the active one.
 CREATE TABLE oauth_connections (
     id                uuid        PRIMARY KEY DEFAULT uuidv7(),
     org_id            uuid        NOT NULL REFERENCES orgs (id),
@@ -52,15 +54,18 @@ CREATE TABLE oauth_connections (
     account_login     text        NOT NULL DEFAULT '' CHECK (length(account_login) <= 255),
     account_id        text        NOT NULL CHECK (btrim(account_id) <> '' AND length(account_id) <= 255),
     scopes            text[]      NOT NULL DEFAULT '{}',
-    status            text        NOT NULL CHECK (status IN ('connected', 'refresh_failed', 'revoked')),
+    status            text        NOT NULL
+                      CHECK (status IN ('pending_confirm', 'connected', 'refresh_failed', 'revoked')),
     generation        integer     NOT NULL DEFAULT 1 CHECK (generation >= 1),
     connected_at      timestamptz NOT NULL DEFAULT now(),
     expires_at        timestamptz,
     last_refreshed_at timestamptz,
     last_error_code   text        CHECK (last_error_code IS NULL OR length(last_error_code) <= 64),
-    UNIQUE (org_id, id),
-    UNIQUE (org_id, user_id, provider, account_id)
+    UNIQUE (org_id, id)
 );
+CREATE UNIQUE INDEX oauth_connections_account_key
+    ON oauth_connections (org_id, user_id, provider, account_id)
+    WHERE status <> 'pending_confirm';
 CREATE INDEX oauth_connections_user_idx ON oauth_connections (org_id, user_id);
 
 -- Sealed token set, one row per connection, replaced on each refresh (generation + 1).

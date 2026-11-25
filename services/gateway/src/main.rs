@@ -141,6 +141,10 @@ async fn main() -> ExitCode {
         .with_settings_source(tool_settings)
         .with_clients(clients.clone());
     let binding_count = config.bindings.bindings.len();
+    // The static per-tool rules of the MCP upstreams (m2-mcp-gateway task 3.1).
+    let tool_policy: Arc<dyn ls_mcp_server::upstream::ToolPolicy> = Arc::new(
+        ls_gateway::mcp_upstream::policy::StaticToolPolicy::new(&config.bindings.mcp_upstreams),
+    );
     if config.aws_sts_endpoint.is_some() {
         tracing::warn!(
             "{} is set: AWS credentials are requested from a non-AWS STS endpoint (local use only)",
@@ -229,7 +233,12 @@ async fn main() -> ExitCode {
         }
     };
 
-    let router = app::build(AppState::new(readiness).with_relay(relay).with_mcp(mcp));
+    let router = app::build(
+        AppState::new(readiness)
+            .with_relay(relay)
+            .with_mcp(mcp)
+            .with_tool_policy(tool_policy),
+    );
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {

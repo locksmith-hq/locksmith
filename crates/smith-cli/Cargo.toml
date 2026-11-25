@@ -29,6 +29,8 @@ semver = "1"
 serde_json = "1"
 zeroize = "1"
 toml = "1.2.1"
+# `smith init --mcp-gateway`: edit a Codex config.toml in place (comments and order kept).
+toml_edit = "0.25.19"
 serde = { version = "1.0.229", features = ["derive"] }
 ls-redact = { version = "0.0.1-alpha.4", path = "../ls-redact" }
 # S4 task 3.1: remote mode against the gateway (state file, requests and redaction shared with

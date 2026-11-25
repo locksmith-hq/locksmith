@@ -190,6 +190,7 @@ impl Harness {
                 pg("nomaterial", NOMATERIAL, "db.test", true),
             ],
             git_bindings: Vec::new(),
+            mcp_upstreams: Vec::new(),
         };
         let audit = Arc::new(audit);
         let relay = Arc::new(Relay::new(

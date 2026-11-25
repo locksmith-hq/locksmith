@@ -49,7 +49,36 @@ pub enum BindingKind {
     Pg,
     /// Vend or relay AWS access through a role.
     Aws,
+    /// Proxy an upstream MCP server with per-tool decisions. There is no `secret_id` on this kind:
+    /// the gateway keeps the upstream credential's id to itself.
+    Mcp,
 }
+
+/// What the gateway's tool policy does with an MCP tool (`mcp` bindings).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolDecision {
+    /// Listed and callable.
+    Allow,
+    /// Not listed; a call gets the unknown-tool error.
+    Hide,
+    /// Listed; a call is refused.
+    Deny,
+    /// Listed; a call needs approval.
+    Hold,
+}
+
+/// One per-tool rule of an `mcp` binding. The tool name is the upstream's own, never a value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ToolRule {
+    #[schema(min_length = 1, max_length = 128, pattern = "^[A-Za-z0-9_.-]+$")]
+    pub name: String,
+    pub decision: ToolDecision,
+}
+
+/// The most tool rules one `mcp` binding may hold.
+const MAX_TOOL_RULES: usize = 500;
 
 /// How the gateway reaches a Postgres upstream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -107,6 +136,13 @@ pub struct BindingSummary {
     /// (sorted, de-duplicated; names only, never resources). Computed on read, never published.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_actions: Option<Vec<String>>,
+    /// `mcp`: the per-tool rules, in name order. Refused on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(max_items = 500)]
+    pub tools: Option<Vec<ToolRule>>,
+    /// `mcp`: the decision for a tool without a rule. Refused on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_decision: Option<ToolDecision>,
 }
 
 /// One binding as the gateway publishes it: the [`BindingSummary`] fields plus, for `aws` only,
@@ -154,6 +190,13 @@ pub struct PublishedBinding {
     /// `aws`: the longest vended session, in seconds.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_duration_secs: Option<u32>,
+    /// `mcp`: the per-tool rules, in name order. Refused on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(max_items = 500)]
+    pub tools: Option<Vec<ToolRule>>,
+    /// `mcp`: the decision for a tool without a rule. Refused on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_decision: Option<ToolDecision>,
     /// `aws`: the base-credential secret id (an id, never a value). Refused on other kinds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret_id: Option<Uuid>,
@@ -178,6 +221,8 @@ impl PublishedBinding {
             vend: self.vend,
             max_duration_secs: self.max_duration_secs,
             allowed_actions,
+            tools: self.tools,
+            default_decision: self.default_decision,
         }
     }
 }
@@ -294,6 +339,25 @@ impl BindingSnapshot {
                     "only an `aws` binding carries a `secret_id`",
                 ));
             }
+            if b.kind != BindingKind::Mcp && (b.tools.is_some() || b.default_decision.is_some()) {
+                return Err(ApiError::validation(
+                    "only an `mcp` binding carries `tools` or `default_decision`",
+                ));
+            }
+            if let Some(tools) = &b.tools {
+                let mut seen = BTreeSet::new();
+                if tools.len() > MAX_TOOL_RULES
+                    || !tools.iter().all(|t| {
+                        (1..=128).contains(&t.name.len())
+                            && t.name.bytes().all(|c| {
+                                c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'-')
+                            })
+                            && seen.insert(t.name.as_str())
+                    })
+                {
+                    return Err(ApiError::validation("an `mcp` binding has invalid `tools`"));
+                }
+            }
         }
         Ok(())
     }
@@ -341,4 +405,77 @@ pub async fn put_snapshot(
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mcp() -> serde_json::Value {
+        serde_json::json!({
+            "kind": "mcp",
+            "name": "github",
+            "origin": "https://api.githubcopilot.com/mcp/",
+            "default_decision": "hide",
+            "tools": [
+                {"name": "create_issue", "decision": "hold"},
+                {"name": "delete_repository", "decision": "deny"},
+                {"name": "list_issues", "decision": "allow"}
+            ]
+        })
+    }
+
+    fn snapshot(items: Vec<serde_json::Value>) -> Result<BindingSnapshot, ApiError> {
+        let s: BindingSnapshot = serde_json::from_value(serde_json::json!({ "items": items }))
+            .map_err(|_| ApiError::validation("not a snapshot"))?;
+        s.validate()?;
+        Ok(s)
+    }
+
+    #[test]
+    fn mcp_binding_round_trips_to_the_served_summary_without_a_secret_id() {
+        let s = snapshot(vec![mcp()]).expect("valid");
+        let served = s.items[0].clone().summary(None);
+        assert_eq!(served.kind, BindingKind::Mcp);
+        assert_eq!(served.default_decision, Some(ToolDecision::Hide));
+        assert_eq!(served.tools.as_ref().map(Vec::len), Some(3));
+        let json = serde_json::to_value(&served).unwrap();
+        assert!(json.get("secret_id").is_none());
+        assert_eq!(json["tools"][1]["decision"], "deny");
+    }
+
+    #[test]
+    fn mcp_binding_refuses_a_secret_id_and_bad_rules() {
+        let mut with_secret = mcp();
+        with_secret["secret_id"] = "0197c1f0-0000-7000-8000-0000000000aa".into();
+        assert!(snapshot(vec![with_secret]).is_err());
+        for bad_name in ["", "has space", "caf\u{e9}", &"x".repeat(129)] {
+            let mut m = mcp();
+            m["tools"] = serde_json::json!([{"name": bad_name, "decision": "allow"}]);
+            assert!(snapshot(vec![m]).is_err(), "{bad_name:?}");
+        }
+        let mut dup = mcp();
+        dup["tools"] = serde_json::json!([
+            {"name": "a", "decision": "allow"},
+            {"name": "a", "decision": "deny"}
+        ]);
+        assert!(snapshot(vec![dup]).is_err());
+        let mut bad_decision = mcp();
+        bad_decision["tools"] = serde_json::json!([{"name": "a", "decision": "maybe"}]);
+        assert!(snapshot(vec![bad_decision]).is_err());
+    }
+
+    #[test]
+    fn tools_and_default_decision_are_refused_on_every_other_kind() {
+        for kind in ["http", "git", "pg", "aws"] {
+            for extra in [
+                ("tools", serde_json::json!([])),
+                ("default_decision", serde_json::json!("allow")),
+            ] {
+                let mut item = serde_json::json!({"kind": kind, "name": "x"});
+                item[extra.0] = extra.1;
+                assert!(snapshot(vec![item]).is_err(), "{kind} {}", extra.0);
+            }
+        }
+    }
 }

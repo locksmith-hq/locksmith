@@ -418,6 +418,7 @@ async fn start_gateway_with(
             aws_bindings: Vec::new(),
             pg: Vec::new(),
             git_bindings,
+            mcp_upstreams: Vec::new(),
         },
         decryptor,
         Arc::new(StubResolver::default()),

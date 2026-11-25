@@ -6,6 +6,7 @@
 //! stored secret value (decision D-2).
 
 pub mod explain;
+pub mod upstream;
 
 use rmcp::model::{CallToolResult, JsonObject, Tool};
 use serde_json::{Value, json};

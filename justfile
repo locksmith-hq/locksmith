@@ -112,6 +112,17 @@ up-lite:
     {{compose}} up -d --wait
     bash scripts/audit-verifier-config.sh
 
+# Run the Floci-backed AWS tests (the `#[ignore]` ls-proxy tests `floci_assume_role` and
+# `floci_end_to_end`) against the compose `floci` service, then stop it. Needs Docker and the AWS CLI v2.
+test-floci:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker info >/dev/null 2>&1 || { echo "test-floci: Docker is not running (start the Docker daemon)" >&2; exit 1; }
+    command -v aws >/dev/null || { echo "test-floci: the AWS CLI is missing (pip install awscli)" >&2; exit 1; }
+    trap '{{compose}} rm -sf floci >/dev/null 2>&1 || true' EXIT
+    {{compose}} up -d --wait floci
+    FLOCI_URL=http://127.0.0.1:4566 cargo test -p ls-proxy -- --ignored floci
+
 down:
     {{compose}} --profile auth down
 

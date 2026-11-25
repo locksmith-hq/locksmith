@@ -137,6 +137,7 @@ async fn main() -> ExitCode {
     // read on every `/mcp` request through a cache of at most 10 s, failing closed.
     let clients = Arc::new(ClientsCache::new(control_plane.clone(), MAX_CACHE_TTL));
     let audit = Arc::new(HttpAudit::new(control_plane.clone()));
+    let oauth_audit: Arc<dyn ls_gateway::audit::AuditSink> = audit.clone();
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)
         .with_settings_source(tool_settings)
@@ -243,11 +244,17 @@ async fn main() -> ExitCode {
         .with_tool_policy(tool_policy);
     // OAuth connections (C1), on when LOCKSMITH_GATEWAY_OAUTH_CONSOLE_ORIGINS is set. The flow
     // and token tables are reached through this pool, which connects as locksmith_gateway.
+    // Unconfirmed flows are revoked and deleted by a sweeper; the enabled providers are
+    // published to `oauth_providers` in the background (decision 9).
+    let mut oauth_sweeper = None;
     if let Some(oauth) = oauth_config {
         match OAuth::from_config(oauth, org_id, database.clone(), &openbao_addr) {
             Ok(o) => {
                 tracing::info!(providers = ?o.provider_ids(), "oauth connections enabled");
-                state = state.with_oauth(Arc::new(o));
+                let o = Arc::new(o.with_audit(oauth_audit));
+                o.spawn_publish_providers();
+                oauth_sweeper = Some(o.spawn_sweeper(ls_gateway::oauth::SWEEP_INTERVAL));
+                state = state.with_oauth(o);
             }
             Err(e) => {
                 tracing::error!(error = %e, "oauth connections could not be configured");
@@ -272,6 +279,9 @@ async fn main() -> ExitCode {
         .await;
     probe.abort();
     sweeper.abort();
+    if let Some(t) = oauth_sweeper {
+        t.abort();
+    }
     if let Some(t) = pg_task {
         t.abort();
     }

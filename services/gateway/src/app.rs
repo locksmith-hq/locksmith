@@ -1,7 +1,7 @@
 //! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
 //! ([`crate::grants`]), `/git/{host}/...` ([`crate::git`]), `/mcp` ([`crate::mcp_endpoint`]),
-//! `/mcp/upstream/{name}` ([`crate::mcp_upstream`]) and the OAuth connect start and callback
-//! ([`crate::oauth`]).
+//! `/mcp/upstream/{name}` ([`crate::mcp_upstream`]) and the OAuth connect start, callback and
+//! confirm ([`crate::oauth`]).
 
 use std::sync::Arc;
 
@@ -53,7 +53,8 @@ impl AppState {
         self
     }
 
-    /// Serve `/v1/oauth/connect` and `/oauth/callback` (without it both answer `503`).
+    /// Serve `/v1/oauth/connect`, `/v1/oauth/flows/{id}/confirm` and `/oauth/callback` (without
+    /// it they answer `503`).
     pub fn with_oauth(mut self, oauth: Arc<OAuth>) -> Self {
         self.oauth = Some(oauth);
         self
@@ -92,10 +93,15 @@ pub fn build(state: AppState) -> Router {
     let mcp = mcp_endpoint::router(&state);
     // OAuth connections (C1): the console calls `/v1/oauth/*` cross-origin, so CORS for the
     // configured console origins applies there only. The callback is a top-level navigation.
-    let oauth_routes = Router::new().route(
-        "/v1/oauth/connect",
-        post(oauth::connect).layer(DefaultBodyLimit::max(8 * 1024)),
-    );
+    let oauth_routes = Router::new()
+        .route(
+            "/v1/oauth/connect",
+            post(oauth::connect).layer(DefaultBodyLimit::max(8 * 1024)),
+        )
+        .route(
+            "/v1/oauth/flows/{id}/confirm",
+            post(oauth::confirm).layer(DefaultBodyLimit::max(1024)),
+        );
     let oauth_routes = match &state.oauth {
         Some(o) => oauth_routes.layer(o.cors()),
         None => oauth_routes,

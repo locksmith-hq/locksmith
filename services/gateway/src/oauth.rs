@@ -11,7 +11,22 @@
 //!   RETURNING`, so a replayed `state` finds nothing), the code is exchanged, the provider account
 //!   read, and the token set sealed into a `pending_confirm` connection (generation 1) plus a
 //!   `pending_confirm` flow row that the person confirms later (task 3.4). The answer is a `302`
-//!   to `return_to` carrying only `flow=<id>` and `result=pending_confirm|<error slug>`.
+//!   to `return_to` carrying only `flow=<id>` and `result=pending_confirm|<error slug>`. A failed
+//!   callback appends `oauth.connect_failed` (best effort).
+//! - `POST /v1/oauth/flows/{id}/confirm` with the person's bearer (task 3.4, decision 4): the
+//!   `pending_confirm` flow is consumed once. Only the person who started it activates the
+//!   connection (`connected`, or the person's existing connection to the same account takes the
+//!   new token set as its next generation) and `oauth.connected` is appended before the commit,
+//!   so a ledger that cannot take it refuses the confirm. Anyone else gets `403 wrong_person`, an
+//!   expired flow `410 flow_expired`: the tokens are revoked at the provider, the connection and
+//!   its material deleted, and `oauth.connect_failed` appended. An unknown flow is
+//!   `404 flow_not_found`. The answer is a [`ConnectionSummary`].
+//! - [`OAuth::spawn_sweeper`] revokes and deletes `pending_confirm` connections whose flow was not
+//!   confirmed within 10 minutes (appending `oauth.connect_failed` `flow_expired`) and deletes
+//!   expired `started` flows, which hold no token.
+//! - [`OAuth::spawn_publish_providers`] upserts the enabled providers into `oauth_providers` at
+//!   startup (decision 9): id, name, scopes, the public connect URL and revoke support, never a
+//!   client secret.
 //! - CORS on `/v1/oauth/*` for the console origins only ([`OAuth::cors`]).
 //!
 //! Tokens, the code, `state` and the verifier never reach a response, redirect, log, span or
@@ -26,15 +41,15 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use ls_control_plane::auth::human::HumanAuth;
 use ls_control_plane::db::{Database, sql};
 use ls_envelope::{KeyWrapper, SecretBytes, WRAPPED_DEK_LEN};
 use ls_oauth::{
-    ConnectResponse, ErrorBody, ErrorSlug, OAuthClient, ProviderDef, ProviderEndpoints, Quirk,
-    Tokens,
+    ConnectResponse, ConnectionStatus, ConnectionSummary, ErrorBody, ErrorSlug, OAuthClient,
+    ProviderDef, ProviderEndpoints, Quirk, Tokens,
 };
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
@@ -45,6 +60,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::audit::{AuditSink, ConnectFailure, OAuthEvent, OAuthEventKind};
 use crate::config::OAuthConfig;
 use crate::oauth_vault::{SealedTokenSet, TokenVault, VaultError};
 
@@ -57,6 +73,12 @@ const VERIFIER_GENERATION: u32 = 0;
 
 /// The generation of a freshly exchanged token set.
 const FIRST_GENERATION: u32 = 1;
+
+/// How often [`OAuth::spawn_sweeper`] looks for unconfirmed flows in the gateway binary.
+pub const SWEEP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Most unconfirmed connections one sweep handles (the rest wait for the next).
+const SWEEP_BATCH: i64 = 100;
 
 /// Longest accepted `return_to` (the column's limit).
 const MAX_RETURN_TO: usize = 2048;
@@ -169,6 +191,10 @@ pub struct OAuth {
     vault: Arc<dyn Sealer>,
     providers: HashMap<String, Provider>,
     console_origins: Vec<url::Origin>,
+    /// The ledger for `oauth.*` events. Without it (tests only) events are dropped.
+    audit: Option<Arc<dyn AuditSink>>,
+    /// The public `POST /v1/oauth/connect` URL published in `oauth_providers`.
+    connect_url: Option<Url>,
 }
 
 impl OAuth {
@@ -189,7 +215,21 @@ impl OAuth {
             vault,
             providers: HashMap::new(),
             console_origins,
+            audit: None,
+            connect_url: None,
         }
+    }
+
+    /// Append `oauth.*` events to `audit` (the gateway binary always sets it).
+    pub fn with_audit(mut self, audit: Arc<dyn AuditSink>) -> Self {
+        self.audit = Some(audit);
+        self
+    }
+
+    /// The public connect URL [`Self::publish_providers`] records.
+    pub fn with_connect_url(mut self, url: Url) -> Self {
+        self.connect_url = Some(url);
+        self
     }
 
     /// Enable a provider.
@@ -212,7 +252,14 @@ impl OAuth {
         let vault = TokenVault::openbao(openbao_addr, token).map_err(|_| SetupError("vault"))?;
         let http = crate::http_client::build(Duration::from_secs(5), Duration::from_secs(20), None)
             .map_err(|_| SetupError("http client"))?;
-        let mut oauth = Self::new(org_id, db, human, Arc::new(vault), config.console_origins);
+        // Next to the callback: `https://gw.example.com/oauth/callback` gives
+        // `https://gw.example.com/v1/oauth/connect` (a path prefix is kept).
+        let connect_url = config
+            .redirect_url
+            .join("../v1/oauth/connect")
+            .map_err(|_| SetupError("connect url"))?;
+        let mut oauth = Self::new(org_id, db, human, Arc::new(vault), config.console_origins)
+            .with_connect_url(connect_url);
         for p in config.providers {
             let client = OAuthClient::new(
                 http.clone(),
@@ -277,6 +324,8 @@ enum Refusal {
     Forbidden,
     /// `400` with an error slug.
     Bad(ErrorSlug),
+    /// Another status with an error slug.
+    Slug(StatusCode, ErrorSlug),
     /// A body that is not `{provider, return_to}`: `400`, no body.
     Malformed,
     /// Database or KMS failure: `503`, no body.
@@ -288,7 +337,7 @@ impl Refusal {
         match self {
             Self::Unauthorized => "unauthorized",
             Self::Forbidden => "forbidden",
-            Self::Bad(slug) => slug.as_str(),
+            Self::Bad(slug) | Self::Slug(_, slug) => slug.as_str(),
             Self::Malformed => "malformed",
             Self::Unavailable => "unavailable",
         }
@@ -303,6 +352,7 @@ impl IntoResponse for Refusal {
             Self::Bad(slug) => {
                 (StatusCode::BAD_REQUEST, Json(ErrorBody { error: slug })).into_response()
             }
+            Self::Slug(status, slug) => (status, Json(ErrorBody { error: slug })).into_response(),
             Self::Malformed => StatusCode::BAD_REQUEST.into_response(),
             Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE.into_response(),
         }
@@ -362,39 +412,47 @@ pub async fn connect(
     }
 }
 
+impl OAuth {
+    /// The bearer's person: verified with [`HumanAuth`], looked up read-only (an unknown identity
+    /// is refused, never created here) and required to belong to this gateway's org.
+    async fn person(&self, headers: &HeaderMap) -> Result<Uuid, Refusal> {
+        let token = bearer(headers).ok_or(Refusal::Unauthorized)?;
+        let identity = self
+            .human
+            .verify(token)
+            .await
+            .map_err(|_| Refusal::Unauthorized)?;
+        let (issuer, subject) = (identity.issuer.clone(), identity.subject.clone());
+        let person: Option<(Uuid, Uuid)> = self
+            .db
+            .with_login(&identity.issuer, &identity.subject, None, move |c| {
+                Box::pin(async move {
+                    sql::query_as(
+                        "SELECT id, personal_org_id FROM users WHERE issuer = $1 AND subject = $2",
+                    )
+                    .bind(issuer)
+                    .bind(subject)
+                    .fetch_optional(c)
+                    .await
+                })
+            })
+            .await
+            .map_err(|_| Refusal::Unavailable)?;
+        let (user_id, user_org) = person.ok_or(Refusal::Unauthorized)?;
+        tracing::Span::current().record("person", tracing::field::display(user_id));
+        if user_org != self.org_id {
+            return Err(Refusal::Forbidden);
+        }
+        Ok(user_id)
+    }
+}
+
 async fn start(
     oauth: &OAuth,
     headers: &HeaderMap,
     body: Result<Json<ConnectBody>, JsonRejection>,
 ) -> Result<ConnectResponse, Refusal> {
-    let token = bearer(headers).ok_or(Refusal::Unauthorized)?;
-    let identity = oauth
-        .human
-        .verify(token)
-        .await
-        .map_err(|_| Refusal::Unauthorized)?;
-    // Read-only lookup: an unknown identity is refused, never created here.
-    let (issuer, subject) = (identity.issuer.clone(), identity.subject.clone());
-    let person: Option<(Uuid, Uuid)> = oauth
-        .db
-        .with_login(&identity.issuer, &identity.subject, None, move |c| {
-            Box::pin(async move {
-                sql::query_as(
-                    "SELECT id, personal_org_id FROM users WHERE issuer = $1 AND subject = $2",
-                )
-                .bind(issuer)
-                .bind(subject)
-                .fetch_optional(c)
-                .await
-            })
-        })
-        .await
-        .map_err(|_| Refusal::Unavailable)?;
-    let (user_id, user_org) = person.ok_or(Refusal::Unauthorized)?;
-    tracing::Span::current().record("person", tracing::field::display(user_id));
-    if user_org != oauth.org_id {
-        return Err(Refusal::Forbidden);
-    }
+    let user_id = oauth.person(headers).await?;
 
     let Json(body) = body.map_err(|_| Refusal::Malformed)?;
     let provider = oauth
@@ -607,7 +665,12 @@ async fn finish(
     let result = complete(oauth, &flow, code, params.error.is_some()).await;
     let slug = match result {
         Ok(()) => "pending_confirm",
-        Err(slug) => slug.as_str(),
+        Err(slug) => {
+            oauth
+                .connect_failed(flow.user_id, &flow.provider, None, slug)
+                .await;
+            slug.as_str()
+        }
     };
     (return_to, Some(flow.id), slug)
 }
@@ -688,7 +751,7 @@ async fn revoke_quietly(provider: &Provider, tokens: &Tokens) {
             .await
             .is_err()
     {
-        tracing::warn!("oauth callback: revoking an unkept token failed");
+        tracing::warn!("oauth: revoking an unkept token failed");
     }
 }
 
@@ -784,6 +847,599 @@ async fn store_pending(
         .await
 }
 
+impl OAuth {
+    /// Append an `oauth.*` event; `false` when the ledger did not take it. Without a ledger
+    /// (tests only) nothing is appended.
+    async fn append(&self, ev: OAuthEvent) -> bool {
+        match &self.audit {
+            Some(a) => a.append_oauth(ev).await.is_ok(),
+            None => true,
+        }
+    }
+
+    /// Best effort `oauth.connect_failed` for a failure `slug`; slugs that are not connect
+    /// failures are not recorded.
+    async fn connect_failed(
+        &self,
+        person: Uuid,
+        provider: &str,
+        connection_id: Option<Uuid>,
+        slug: ErrorSlug,
+    ) {
+        let failure = match slug {
+            ErrorSlug::WrongPerson => ConnectFailure::WrongPerson,
+            ErrorSlug::FlowExpired => ConnectFailure::FlowExpired,
+            ErrorSlug::ProviderError => ConnectFailure::ProviderError,
+            ErrorSlug::ExchangeFailed => ConnectFailure::ExchangeFailed,
+            _ => return,
+        };
+        let ev = OAuthEvent {
+            kind: OAuthEventKind::ConnectFailed(failure),
+            person,
+            provider: provider.to_owned(),
+            connection_id,
+            agent_id: None,
+        };
+        if !self.append(ev).await {
+            tracing::warn!(
+                outcome = slug.as_str(),
+                "oauth: connect_failed not recorded"
+            );
+        }
+    }
+
+    /// Open a sealed token set and revoke it at the provider (best effort; a provider that is
+    /// no longer enabled cannot be reached).
+    async fn revoke_sealed(
+        &self,
+        provider: &str,
+        connection_id: Uuid,
+        generation: i32,
+        ciphertext: &[u8],
+        wrapped_dek: &[u8],
+    ) {
+        let Some(provider) = self.providers.get(provider) else {
+            tracing::warn!("oauth: provider no longer enabled, token not revoked");
+            return;
+        };
+        let Ok(generation) = u32::try_from(generation) else {
+            return;
+        };
+        let opened = self
+            .vault
+            .open(
+                self.org_id,
+                connection_id,
+                generation,
+                ciphertext,
+                wrapped_dek,
+            )
+            .await;
+        let Some(set) = opened.ok().as_ref().and_then(decode_token_set) else {
+            tracing::warn!("oauth: sealed token set did not open, token not revoked");
+            return;
+        };
+        let tokens = Tokens {
+            access: set.access,
+            refresh: set.refresh,
+            expires_in: None,
+            scopes: Vec::new(),
+        };
+        revoke_quietly(provider, &tokens).await;
+    }
+
+    /// The enabled providers as `oauth_providers` rows: id, name, scopes, the connect URL and
+    /// revoke support. Never a client id or secret.
+    fn provider_rows(&self) -> Option<Vec<(String, String, Vec<String>, String, bool)>> {
+        let connect_url = self.connect_url.as_ref()?.to_string();
+        let mut rows: Vec<_> = self
+            .providers
+            .values()
+            .map(|p| {
+                (
+                    p.def.id.clone(),
+                    p.def.name.clone(),
+                    p.def.default_scopes.clone(),
+                    connect_url.clone(),
+                    p.def.revoke_url.is_some(),
+                )
+            })
+            .collect();
+        rows.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        Some(rows)
+    }
+
+    /// Upsert the enabled providers into `oauth_providers` (decision 9). Providers that are no
+    /// longer enabled keep their row (the gateway role may not delete); answers the rows written.
+    pub async fn publish_providers(&self) -> Result<usize, SetupError> {
+        let rows = self.provider_rows().ok_or(SetupError("connect url"))?;
+        self.db
+            .with_org(self.org_id, move |c| {
+                Box::pin(async move {
+                    let n = rows.len();
+                    for (id, name, scopes, connect_url, revoke) in rows {
+                        sql::query(
+                            "INSERT INTO oauth_providers (org_id, provider, name, scopes, \
+                                 connect_url, revoke_supported, updated_at) \
+                             VALUES (current_org_id(), $1, $2, $3, $4, $5, now()) \
+                             ON CONFLICT (org_id, provider) DO UPDATE SET \
+                                 name = EXCLUDED.name, scopes = EXCLUDED.scopes, \
+                                 connect_url = EXCLUDED.connect_url, \
+                                 revoke_supported = EXCLUDED.revoke_supported, \
+                                 updated_at = now()",
+                        )
+                        .bind(id)
+                        .bind(name)
+                        .bind(scopes)
+                        .bind(connect_url)
+                        .bind(revoke)
+                        .execute(&mut *c)
+                        .await?;
+                    }
+                    Ok::<_, sql::Error>(n)
+                })
+            })
+            .await
+            .map_err(|_| SetupError("publish providers"))
+    }
+
+    /// [`Self::publish_providers`] in the background, retried with backoff (Postgres may still
+    /// be starting); a failure only logs and never blocks the gateway.
+    pub fn spawn_publish_providers(self: &Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let oauth = Arc::clone(self);
+        tokio::spawn(async move {
+            let mut wait = Duration::from_secs(1);
+            for attempt in 1..=5 {
+                match oauth.publish_providers().await {
+                    Ok(n) => {
+                        tracing::info!(providers = n, "oauth providers published");
+                        return;
+                    }
+                    Err(e) if attempt == 5 => {
+                        tracing::warn!(error = %e, "oauth providers not published");
+                    }
+                    Err(_) => {
+                        tokio::time::sleep(wait).await;
+                        wait *= 2;
+                    }
+                }
+            }
+        })
+    }
+
+    /// Revoke and delete `pending_confirm` connections whose flow was not confirmed in time (or
+    /// is gone), appending `oauth.connect_failed` `flow_expired` for each, and delete expired
+    /// `started` flows (they hold no token). Answers how many connections were discarded.
+    pub async fn sweep(self: &Arc<Self>) -> usize {
+        let started = self
+            .db
+            .with_org(self.org_id, |c| {
+                Box::pin(async move {
+                    sql::query(
+                        "DELETE FROM oauth_flows WHERE status = 'started' AND expires_at <= now()",
+                    )
+                    .execute(c)
+                    .await
+                    .map(|_| ())
+                })
+            })
+            .await;
+        if started.is_err() {
+            tracing::warn!("oauth sweep: expired flows not deleted");
+        }
+        let stale: Result<Vec<(Uuid, Uuid, String)>, sql::Error> = self
+            .db
+            .with_org(self.org_id, |c| {
+                Box::pin(async move {
+                    sql::query_as(
+                        "SELECT c.id, c.user_id, c.provider FROM oauth_connections c \
+                         WHERE c.status = 'pending_confirm' AND NOT EXISTS ( \
+                             SELECT 1 FROM oauth_flows f \
+                             WHERE f.connection_id = c.id AND f.expires_at > now()) \
+                         ORDER BY c.id LIMIT $1",
+                    )
+                    .bind(SWEEP_BATCH)
+                    .fetch_all(c)
+                    .await
+                })
+            })
+            .await;
+        let Ok(stale) = stale else {
+            tracing::warn!("oauth sweep: unconfirmed connections not read");
+            return 0;
+        };
+        let mut swept = 0;
+        for (connection_id, person, provider) in stale {
+            let oauth = Arc::clone(self);
+            let p = provider.clone();
+            let discarded = self
+                .db
+                .with_org(self.org_id, move |c| {
+                    Box::pin(async move { discard(&oauth, c, connection_id, &p).await })
+                })
+                .await;
+            match discarded {
+                Ok(true) => {
+                    swept += 1;
+                    self.connect_failed(
+                        person,
+                        &provider,
+                        Some(connection_id),
+                        ErrorSlug::FlowExpired,
+                    )
+                    .await;
+                }
+                // Another replica or a confirm holds it.
+                Ok(false) => {}
+                Err(_) => tracing::warn!("oauth sweep: an unconfirmed connection not discarded"),
+            }
+        }
+        if swept > 0 {
+            tracing::info!(
+                swept,
+                "oauth sweep: unconfirmed connections revoked and deleted"
+            );
+        }
+        swept
+    }
+
+    /// Run [`Self::sweep`] every `every` until the endpoints are dropped.
+    pub fn spawn_sweeper(self: &Arc<Self>, every: Duration) -> tokio::task::JoinHandle<()> {
+        let oauth = Arc::downgrade(self);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(every).await;
+                let Some(o) = oauth.upgrade() else { return };
+                o.sweep()
+                    .instrument(tracing::info_span!("oauth.sweep"))
+                    .await;
+            }
+        })
+    }
+}
+
+/// Revoke at the provider and delete one `pending_confirm` connection (its material and flow go
+/// with it), under a row lock so one replica does it once. `false` when the connection is gone,
+/// no longer pending or locked by someone else.
+async fn discard(
+    oauth: &OAuth,
+    c: &mut sql::PgConnection,
+    connection_id: Uuid,
+    provider: &str,
+) -> Result<bool, sql::Error> {
+    type Row = (Option<i32>, Option<Vec<u8>>, Option<Vec<u8>>);
+    let row: Option<Row> = sql::query_as(
+        "SELECT m.generation, m.ciphertext, m.wrapped_dek FROM oauth_connections c \
+         LEFT JOIN oauth_token_material m ON m.connection_id = c.id \
+         WHERE c.id = $1 AND c.status = 'pending_confirm' \
+         FOR UPDATE OF c SKIP LOCKED",
+    )
+    .bind(connection_id)
+    .fetch_optional(&mut *c)
+    .await?;
+    let Some(material) = row else {
+        return Ok(false);
+    };
+    if let (Some(generation), Some(ciphertext), Some(wrapped)) = material {
+        oauth
+            .revoke_sealed(provider, connection_id, generation, &ciphertext, &wrapped)
+            .await;
+    }
+    sql::query("DELETE FROM oauth_connections WHERE id = $1")
+        .bind(connection_id)
+        .execute(&mut *c)
+        .await?;
+    Ok(true)
+}
+
+/// Why a confirm could not finish. Carries nothing else.
+enum ConfirmError {
+    /// No such `pending_confirm` flow (or its connection is gone).
+    NotFound,
+    /// Database, KMS or ledger failure: rolled back.
+    Unavailable,
+}
+
+impl From<sql::Error> for ConfirmError {
+    fn from(_: sql::Error) -> Self {
+        Self::Unavailable
+    }
+}
+
+/// What a consumed `pending_confirm` flow turned into.
+enum Confirmed {
+    Connected(ConnectionSummary),
+    /// The connection was revoked and deleted.
+    Failed {
+        slug: ErrorSlug,
+        owner: Uuid,
+        provider: String,
+        connection_id: Uuid,
+    },
+}
+
+/// `POST /v1/oauth/flows/{id}/confirm`.
+pub async fn confirm(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(oauth) = state.oauth() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let span = tracing::info_span!(
+        "oauth.confirm",
+        provider = tracing::field::Empty,
+        flow_id = tracing::field::Empty,
+        person = tracing::field::Empty,
+        outcome = tracing::field::Empty,
+    );
+    let result = confirm_flow(oauth, &headers, &id)
+        .instrument(span.clone())
+        .await;
+    match result {
+        Ok(summary) => {
+            span.record("outcome", "ok");
+            (
+                [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+                Json(summary),
+            )
+                .into_response()
+        }
+        Err(refusal) => {
+            span.record("outcome", refusal.outcome());
+            refusal.into_response()
+        }
+    }
+}
+
+async fn confirm_flow(
+    oauth: Arc<OAuth>,
+    headers: &HeaderMap,
+    id: &str,
+) -> Result<ConnectionSummary, Refusal> {
+    let not_found = || Refusal::Slug(StatusCode::NOT_FOUND, ErrorSlug::FlowNotFound);
+    let user_id = oauth.person(headers).await?;
+    let flow_id = Uuid::parse_str(id).map_err(|_| not_found())?;
+    tracing::Span::current().record("flow_id", tracing::field::display(flow_id));
+    let o = Arc::clone(&oauth);
+    let done = oauth
+        .db
+        .with_org(oauth.org_id, move |c| {
+            Box::pin(async move { consume_flow(&o, c, flow_id, user_id).await })
+        })
+        .await;
+    match done {
+        Ok(Confirmed::Connected(summary)) => {
+            tracing::Span::current().record("provider", summary.provider.as_str());
+            Ok(summary)
+        }
+        Ok(Confirmed::Failed {
+            slug,
+            owner,
+            provider,
+            connection_id,
+        }) => {
+            tracing::Span::current().record("provider", provider.as_str());
+            oauth
+                .connect_failed(owner, &provider, Some(connection_id), slug)
+                .await;
+            let status = match slug {
+                ErrorSlug::WrongPerson => StatusCode::FORBIDDEN,
+                _ => StatusCode::GONE,
+            };
+            Err(Refusal::Slug(status, slug))
+        }
+        Err(ConfirmError::NotFound) => Err(not_found()),
+        Err(ConfirmError::Unavailable) => Err(Refusal::Unavailable),
+    }
+}
+
+/// In one transaction: consume the flow, then activate its connection for its own person, or
+/// revoke and delete it for anyone else and for an expired flow.
+async fn consume_flow(
+    oauth: &OAuth,
+    c: &mut sql::PgConnection,
+    flow_id: Uuid,
+    user_id: Uuid,
+) -> Result<Confirmed, ConfirmError> {
+    let row: Option<(Uuid, String, Option<Uuid>, bool)> = sql::query_as(
+        "DELETE FROM oauth_flows WHERE id = $1 AND status = 'pending_confirm' \
+         RETURNING user_id, provider, connection_id, expires_at <= now()",
+    )
+    .bind(flow_id)
+    .fetch_optional(&mut *c)
+    .await?;
+    let Some((owner, provider, Some(connection_id), expired)) = row else {
+        return Err(ConfirmError::NotFound);
+    };
+    let failed = if owner != user_id {
+        Some(ErrorSlug::WrongPerson)
+    } else if expired {
+        Some(ErrorSlug::FlowExpired)
+    } else {
+        None
+    };
+    if let Some(slug) = failed {
+        // Locked by the sweeper means it is being discarded already.
+        discard(oauth, c, connection_id, &provider).await?;
+        return Ok(Confirmed::Failed {
+            slug,
+            owner,
+            provider,
+            connection_id,
+        });
+    }
+    let id = activate(oauth, c, connection_id, user_id, &provider)
+        .await?
+        .ok_or(ConfirmError::NotFound)?;
+    let summary = connection_summary(c, id).await?;
+    // Before the commit: a ledger that cannot take it rolls the confirm back.
+    let recorded = oauth
+        .append(OAuthEvent {
+            kind: OAuthEventKind::Connected,
+            person: user_id,
+            provider,
+            connection_id: Some(id),
+            agent_id: None,
+        })
+        .await;
+    if !recorded {
+        tracing::warn!("oauth confirm: oauth.connected not recorded, refused");
+        return Err(ConfirmError::Unavailable);
+    }
+    Ok(Confirmed::Connected(summary))
+}
+
+/// Mark the pending connection `connected`; answers the active connection's id. When the person
+/// already has a connection to the same account (a reconnect), that one keeps its id and grants,
+/// takes the new token set resealed as its next generation, and the pending row is deleted.
+/// `None` when the pending connection is gone.
+async fn activate(
+    oauth: &OAuth,
+    c: &mut sql::PgConnection,
+    pending_id: Uuid,
+    user_id: Uuid,
+    provider: &str,
+) -> Result<Option<Uuid>, ConfirmError> {
+    let account_id: Option<String> = sql::query_scalar(
+        "SELECT account_id FROM oauth_connections \
+         WHERE id = $1 AND user_id = $2 AND status = 'pending_confirm' FOR UPDATE",
+    )
+    .bind(pending_id)
+    .bind(user_id)
+    .fetch_optional(&mut *c)
+    .await?;
+    let Some(account_id) = account_id else {
+        return Ok(None);
+    };
+    let existing: Option<(Uuid, i32)> = sql::query_as(
+        "SELECT id, generation FROM oauth_connections \
+         WHERE user_id = $1 AND provider = $2 AND account_id = $3 \
+             AND status <> 'pending_confirm' FOR UPDATE",
+    )
+    .bind(user_id)
+    .bind(provider)
+    .bind(account_id)
+    .fetch_optional(&mut *c)
+    .await?;
+    let Some((old_id, old_generation)) = existing else {
+        sql::query(
+            "UPDATE oauth_connections SET status = 'connected', connected_at = now() \
+             WHERE id = $1",
+        )
+        .bind(pending_id)
+        .execute(&mut *c)
+        .await?;
+        return Ok(Some(pending_id));
+    };
+
+    let next = old_generation
+        .checked_add(1)
+        .ok_or(ConfirmError::Unavailable)?;
+    let (generation, ciphertext, wrapped): (i32, Vec<u8>, Vec<u8>) = sql::query_as(
+        "SELECT generation, ciphertext, wrapped_dek FROM oauth_token_material \
+         WHERE connection_id = $1",
+    )
+    .bind(pending_id)
+    .fetch_one(&mut *c)
+    .await?;
+    let (Ok(generation), Ok(next_u32)) = (u32::try_from(generation), u32::try_from(next)) else {
+        return Err(ConfirmError::Unavailable);
+    };
+    let set = oauth
+        .vault
+        .open(oauth.org_id, pending_id, generation, &ciphertext, &wrapped)
+        .await
+        .map_err(|_| ConfirmError::Unavailable)?;
+    let sealed = oauth
+        .vault
+        .seal(oauth.org_id, old_id, next_u32, &set)
+        .await
+        .map_err(|_| ConfirmError::Unavailable)?;
+    drop(set);
+    sql::query(
+        "INSERT INTO oauth_token_material (org_id, connection_id, generation, ciphertext, \
+             wrapped_dek, key_id) \
+         VALUES (current_org_id(), $1, $2, $3, $4, $5) \
+         ON CONFLICT (connection_id) DO UPDATE SET generation = EXCLUDED.generation, \
+             ciphertext = EXCLUDED.ciphertext, wrapped_dek = EXCLUDED.wrapped_dek, \
+             key_id = EXCLUDED.key_id",
+    )
+    .bind(old_id)
+    .bind(next)
+    .bind(sealed.ciphertext)
+    .bind(sealed.wrapped_dek)
+    .bind(sealed.key_id)
+    .execute(&mut *c)
+    .await?;
+    sql::query(
+        "UPDATE oauth_connections o SET status = 'connected', account_login = p.account_login, \
+             scopes = p.scopes, generation = $3, connected_at = now(), \
+             expires_at = p.expires_at, last_refreshed_at = NULL, last_error_code = NULL \
+         FROM oauth_connections p WHERE o.id = $1 AND p.id = $2",
+    )
+    .bind(old_id)
+    .bind(pending_id)
+    .bind(next)
+    .execute(&mut *c)
+    .await?;
+    sql::query("DELETE FROM oauth_connections WHERE id = $1")
+        .bind(pending_id)
+        .execute(&mut *c)
+        .await?;
+    Ok(Some(old_id))
+}
+
+/// A connection as the console sees it (timestamps RFC 3339, UTC).
+async fn connection_summary(
+    c: &mut sql::PgConnection,
+    id: Uuid,
+) -> Result<ConnectionSummary, ConfirmError> {
+    type Row = (
+        Uuid,
+        String,
+        String,
+        String,
+        Vec<String>,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    );
+    let row: Row = sql::query_as(
+        "SELECT id, provider, account_login, account_id, scopes, status, \
+             to_char(connected_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), \
+             to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), \
+             to_char(last_refreshed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), \
+             last_error_code \
+         FROM oauth_connections WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&mut *c)
+    .await?;
+    let status = match row.5.as_str() {
+        "connected" => ConnectionStatus::Connected,
+        "refresh_failed" => ConnectionStatus::RefreshFailed,
+        "revoked" => ConnectionStatus::Revoked,
+        _ => return Err(ConfirmError::Unavailable),
+    };
+    Ok(ConnectionSummary {
+        id: row.0,
+        provider: row.1,
+        account_login: row.2,
+        account_id: row.3,
+        scopes: row.4,
+        status,
+        connected_at: row.6,
+        expires_at: row.7,
+        last_refreshed_at: row.8,
+        last_error_code: row.9,
+        revoked_at_provider: None,
+    })
+}
+
 /// The sealed token set's plaintext form (version 1). Serialized straight into one
 /// pre-sized buffer that [`SecretBytes`] zeroizes.
 #[derive(Serialize)]
@@ -864,6 +1520,7 @@ pub fn decode_token_set(bytes: &SecretBytes) -> Option<TokenSet> {
 mod tests {
     use super::*;
     use crate::app::{self, AppState};
+    use crate::audit::MemoryAudit;
     use crate::oauth_vault::test_wrapper::MemWrapper;
     use axum::Router;
     use axum::body::Body;
@@ -940,9 +1597,12 @@ mod tests {
         }
     }
 
-    /// A migrated `postgres:18` (ls-pg-test; needs Docker) with two orgs, alice in [`ORG`] and
-    /// mallory in [`OTHER_ORG`]; a JWKS issuer; a Google-shaped fake provider registered as
-    /// `fake`; the gateway router with OAuth on, over the `locksmith_gateway` role.
+    const CONNECT_URL: &str = "http://gateway.test/v1/oauth/connect";
+
+    /// A migrated `postgres:18` (ls-pg-test; needs Docker) with two orgs, alice and bob in
+    /// [`ORG`] and mallory in [`OTHER_ORG`]; a JWKS issuer; a Google-shaped fake provider
+    /// registered as `fake`; the gateway router with OAuth on, over the `locksmith_gateway` role,
+    /// appending `oauth.*` events to a memory ledger.
     struct Harness {
         pg: ls_pg_test::Pg,
         app: Router,
@@ -950,6 +1610,8 @@ mod tests {
         _idp: MockServer,
         key: TestKey,
         vault: Arc<TokenVault<MemWrapper>>,
+        oauth: Arc<OAuth>,
+        audit: Arc<MemoryAudit>,
     }
 
     impl Harness {
@@ -965,7 +1627,7 @@ mod tests {
                 .execute(&mut admin)
                 .await
                 .unwrap();
-            for (sub, org) in [("alice", ORG), ("mallory", OTHER_ORG)] {
+            for (sub, org) in [("alice", ORG), ("bob", ORG), ("mallory", OTHER_ORG)] {
                 sql::query(
                     "INSERT INTO users (issuer, subject, email, email_verified, personal_org_id) \
                      VALUES ($1, $2, $3, true, $4)",
@@ -1010,11 +1672,15 @@ mod tests {
                 REDIRECT_URL,
             )
             .unwrap();
-            let oauth =
-                OAuth::new(ORG, db, human, vault.clone(), origins()).with_provider(def, client);
-            let app = app::build(
-                AppState::new(Arc::new(ReadyFlag::new(true))).with_oauth(Arc::new(oauth)),
+            let audit = Arc::new(MemoryAudit::default());
+            let oauth = Arc::new(
+                OAuth::new(ORG, db, human, vault.clone(), origins())
+                    .with_provider(def, client)
+                    .with_audit(audit.clone())
+                    .with_connect_url(Url::parse(CONNECT_URL).unwrap()),
             );
+            let app =
+                app::build(AppState::new(Arc::new(ReadyFlag::new(true))).with_oauth(oauth.clone()));
             Self {
                 pg,
                 app,
@@ -1022,7 +1688,48 @@ mod tests {
                 _idp: idp,
                 key,
                 vault,
+                oauth,
+                audit,
             }
+        }
+
+        /// `POST /v1/oauth/flows/{flow}/confirm` as `sub` (no bearer for `None`).
+        async fn confirm(&self, sub: Option<&str>, flow: &str) -> (StatusCode, Vec<u8>) {
+            let mut req =
+                Request::post(format!("/v1/oauth/flows/{flow}/confirm")).header("origin", CONSOLE);
+            if let Some(sub) = sub {
+                req = req.header("authorization", format!("Bearer {}", self.key.mint(sub)));
+            }
+            let (status, _, body) = self.send(req.body(Body::empty()).unwrap()).await;
+            (status, body)
+        }
+
+        /// Start a flow as alice and complete its callback: a `pending_confirm` flow.
+        async fn pending_flow(&self) -> Uuid {
+            let (flow_id, state) = self.start_flow().await;
+            let (loc, _) = self.callback(&[("code", CODE), ("state", &state)]).await;
+            assert_eq!(redirect_params(&loc).1, "pending_confirm");
+            flow_id
+        }
+
+        async fn user_id(&self, sub: &str) -> Uuid {
+            let mut admin = self.pg.admin().await;
+            sql::query_scalar("SELECT id FROM users WHERE subject = $1")
+                .bind(sub)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap()
+        }
+
+        /// The revoke calls the fake provider received, with their bodies.
+        async fn revokes(&self) -> Vec<String> {
+            self.fake
+                .requests()
+                .await
+                .iter()
+                .filter(|r| r.url.path() == "/revoke")
+                .map(|r| String::from_utf8_lossy(&r.body).into_owned())
+                .collect()
         }
 
         async fn send(&self, req: Request<Body>) -> (StatusCode, HeaderMap, Vec<u8>) {
@@ -1316,6 +2023,28 @@ mod tests {
         );
         assert_eq!(h.token_calls().await, 1);
 
+        // Each failure is in the ledger as `oauth.connect_failed`, with alice and no connection.
+        let alice = h.user_id("alice").await;
+        let kinds: Vec<OAuthEventKind> = h
+            .audit
+            .oauth_events()
+            .into_iter()
+            .map(|e| {
+                assert_eq!((e.person, e.provider.as_str()), (alice, "fake"));
+                assert_eq!((e.connection_id, e.agent_id), (None, None));
+                e.kind
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                ConnectFailure::FlowExpired,
+                ConnectFailure::ProviderError,
+                ConnectFailure::ExchangeFailed
+            ]
+            .map(OAuthEventKind::ConnectFailed)
+        );
+
         // Every flow was consumed and nothing was connected.
         assert_eq!(h.count("SELECT count(*) FROM oauth_flows").await, 0);
         assert_eq!(h.count("SELECT count(*) FROM oauth_connections").await, 0);
@@ -1352,7 +2081,7 @@ mod tests {
             h.connect(Some("nobody"), ok_body.clone()).await.0,
             StatusCode::UNAUTHORIZED
         );
-        assert_eq!(h.count("SELECT count(*) FROM users").await, 2);
+        assert_eq!(h.count("SELECT count(*) FROM users").await, 3);
         assert_eq!(
             h.connect(Some("mallory"), ok_body.clone()).await.0,
             StatusCode::FORBIDDEN
@@ -1459,11 +2188,373 @@ mod tests {
         assert!(headers.get("access-control-allow-origin").is_none());
     }
 
-    /// Without OAuth configured both endpoints answer `503`.
+    /// A person verifier that is never called.
+    fn offline_human() -> HumanAuth {
+        HumanAuth::new(&HumanAuthConfig {
+            issuer: ISSUER.to_owned(),
+            audience: AUDIENCE.to_owned(),
+            jwks_url: "http://127.0.0.1:1/jwks".to_owned(),
+        })
+        .unwrap()
+    }
+
+    fn slug_body(body: &[u8]) -> Value {
+        serde_json::from_slice(body).unwrap()
+    }
+
+    /// The person who started the flow confirms it: the connection is `connected`, the flow is
+    /// spent, `oauth.connected` names alice, the provider and the connection, and the answer is a
+    /// summary with no token. A second full flow to the same account (a reconnect) keeps the
+    /// connection's id and reseals the new tokens as generation 2.
+    #[tokio::test]
+    async fn oauth_confirm_activates_for_the_person_who_started_it() {
+        let h = Harness::start().await;
+        let alice = h.user_id("alice").await;
+        let flow_id = h.pending_flow().await;
+
+        let (status, body) = h.confirm(Some("alice"), &flow_id.to_string()).await;
+        assert_eq!(status, StatusCode::OK);
+        let text = String::from_utf8_lossy(&body).into_owned();
+        for t in [ACCESS_1, REFRESH_1] {
+            assert!(!text.contains(t), "confirm answer leaks a token");
+        }
+        let summary: ConnectionSummary = serde_json::from_slice(&body).unwrap();
+        assert_eq!(summary.status, ConnectionStatus::Connected);
+        assert_eq!(summary.provider, "fake");
+        assert_eq!(
+            (summary.account_id.as_str(), summary.account_login.as_str()),
+            ("g-1001", "alice@example.test")
+        );
+        assert_eq!(summary.scopes, vec!["fake.scope".to_owned()]);
+        assert!(summary.connected_at.ends_with('Z'));
+        assert!(summary.expires_at.is_some());
+        assert!(summary.revoked_at_provider.is_none());
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_connections WHERE status = 'connected'")
+                .await,
+            1
+        );
+        assert_eq!(h.count("SELECT count(*) FROM oauth_flows").await, 0);
+        assert_eq!(
+            h.audit.oauth_events(),
+            vec![OAuthEvent {
+                kind: OAuthEventKind::Connected,
+                person: alice,
+                provider: "fake".to_owned(),
+                connection_id: Some(summary.id),
+                agent_id: None,
+            }]
+        );
+        assert!(h.revokes().await.is_empty(), "nothing revoked");
+
+        // Spent: a second confirm finds nothing.
+        let (status, body) = h.confirm(Some("alice"), &flow_id.to_string()).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(slug_body(&body), json!({"error": "flow_not_found"}));
+
+        // Reconnect to the same account: same connection, next generation, pending row gone.
+        let again = h.pending_flow().await;
+        let (status, body) = h.confirm(Some("alice"), &again.to_string()).await;
+        assert_eq!(status, StatusCode::OK);
+        let second: ConnectionSummary = serde_json::from_slice(&body).unwrap();
+        assert_eq!(second.id, summary.id);
+        assert_eq!(h.count("SELECT count(*) FROM oauth_connections").await, 1);
+        let mut admin = h.pg.admin().await;
+        let (generation, ciphertext, wrapped): (i32, Vec<u8>, Vec<u8>) = sql::query_as(
+            "SELECT generation, ciphertext, wrapped_dek FROM oauth_token_material \
+             WHERE connection_id = $1",
+        )
+        .bind(summary.id)
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+        assert_eq!(generation, 2);
+        let conn_generation: i32 =
+            sql::query_scalar("SELECT generation FROM oauth_connections WHERE id = $1")
+                .bind(summary.id)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+        assert_eq!(conn_generation, 2);
+        let opened = h
+            .vault
+            .open(ORG, summary.id, 2, &ciphertext, &wrapped)
+            .await
+            .unwrap();
+        assert!(decode_token_set(&opened).unwrap().access.expose_secret() == ACCESS_1);
+        assert_eq!(h.audit.oauth_events().len(), 2);
+    }
+
+    /// Confirm by anyone but the person who started the flow: a person of another org is refused
+    /// before the flow is touched; bob in the same org gets `wrong_person`, the tokens are revoked
+    /// at the provider, the connection, material and flow deleted, and `oauth.connect_failed`
+    /// names alice's flow. Alice cannot confirm it afterwards.
+    #[tokio::test]
+    async fn oauth_confirm_by_another_person_is_wrong_person_and_revokes() {
+        let h = Harness::start().await;
+        let alice = h.user_id("alice").await;
+        let flow_id = h.pending_flow().await;
+        let conn: Uuid = {
+            let mut admin = h.pg.admin().await;
+            sql::query_scalar("SELECT connection_id FROM oauth_flows WHERE id = $1")
+                .bind(flow_id)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap()
+        };
+
+        let (status, body) = h.confirm(Some("mallory"), &flow_id.to_string()).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(body.is_empty());
+        let (status, _) = h.confirm(None, &flow_id.to_string()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(h.count("SELECT count(*) FROM oauth_flows").await, 1);
+
+        let (status, body) = h.confirm(Some("bob"), &flow_id.to_string()).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(slug_body(&body), json!({"error": "wrong_person"}));
+        let revokes = h.revokes().await;
+        assert_eq!(revokes.len(), 1, "revoked once at the provider");
+        assert!(
+            revokes[0].contains(REFRESH_1),
+            "the refresh token is revoked"
+        );
+        for query in [
+            "SELECT count(*) FROM oauth_flows",
+            "SELECT count(*) FROM oauth_connections",
+            "SELECT count(*) FROM oauth_token_material",
+        ] {
+            assert_eq!(h.count(query).await, 0, "{query}");
+        }
+        assert_eq!(
+            h.audit.oauth_events(),
+            vec![OAuthEvent {
+                kind: OAuthEventKind::ConnectFailed(ConnectFailure::WrongPerson),
+                person: alice,
+                provider: "fake".to_owned(),
+                connection_id: Some(conn),
+                agent_id: None,
+            }]
+        );
+
+        let (status, body) = h.confirm(Some("alice"), &flow_id.to_string()).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(slug_body(&body), json!({"error": "flow_not_found"}));
+    }
+
+    /// Unknown, malformed and not-yet-called-back flows are `flow_not_found`; an expired pending
+    /// flow is `flow_expired`, revoked and deleted. A ledger that cannot take `oauth.connected`
+    /// refuses the confirm and leaves the flow pending.
+    #[tokio::test]
+    async fn oauth_confirm_expired_unknown_and_unrecorded_flows() {
+        let h = Harness::start().await;
+        for id in [Uuid::now_v7().to_string(), "not-a-uuid".to_owned()] {
+            let (status, body) = h.confirm(Some("alice"), &id).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{id}");
+            assert_eq!(slug_body(&body), json!({"error": "flow_not_found"}));
+        }
+        let (started, _) = h.start_flow().await;
+        let (status, _) = h.confirm(Some("alice"), &started.to_string()).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_flows WHERE status = 'started'")
+                .await,
+            1,
+            "a started flow is not consumed by a confirm"
+        );
+
+        let expired = h.pending_flow().await;
+        let mut admin = h.pg.admin().await;
+        sql::query("UPDATE oauth_flows SET expires_at = now() - interval '1 second' WHERE id = $1")
+            .bind(expired)
+            .execute(&mut admin)
+            .await
+            .unwrap();
+        let (status, body) = h.confirm(Some("alice"), &expired.to_string()).await;
+        assert_eq!(status, StatusCode::GONE);
+        assert_eq!(slug_body(&body), json!({"error": "flow_expired"}));
+        assert_eq!(h.revokes().await.len(), 1);
+        assert_eq!(h.count("SELECT count(*) FROM oauth_connections").await, 0);
+        assert_eq!(
+            h.audit
+                .oauth_events()
+                .iter()
+                .map(|e| e.kind)
+                .collect::<Vec<_>>(),
+            vec![OAuthEventKind::ConnectFailed(ConnectFailure::FlowExpired)]
+        );
+
+        // The ledger refuses: nothing is activated and the flow can be confirmed later.
+        let audit = Arc::new(MemoryAudit {
+            fail: true,
+            ..MemoryAudit::default()
+        });
+        let pending = h.pending_flow().await;
+        let o = Arc::clone(&h.oauth);
+        let pending_conn = {
+            let mut admin = h.pg.admin().await;
+            sql::query_scalar::<_, Uuid>("SELECT connection_id FROM oauth_flows WHERE id = $1")
+                .bind(pending)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap()
+        };
+        let result = {
+            let failing = Arc::new(
+                OAuth::new(
+                    ORG,
+                    o.db.clone(),
+                    offline_human(),
+                    o.vault.clone(),
+                    origins(),
+                )
+                .with_audit(audit),
+            );
+            let f = Arc::clone(&failing);
+            let alice = h.user_id("alice").await;
+            failing
+                .db
+                .with_org(ORG, move |c| {
+                    Box::pin(async move { consume_flow(&f, c, pending, alice).await })
+                })
+                .await
+        };
+        assert!(matches!(result, Err(ConfirmError::Unavailable)));
+        let status: String =
+            sql::query_scalar("SELECT status FROM oauth_connections WHERE id = $1")
+                .bind(pending_conn)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+        assert_eq!(status, "pending_confirm", "rolled back");
+        let (status, _) = h.confirm(Some("alice"), &pending.to_string()).await;
+        assert_eq!(status, StatusCode::OK, "still confirmable");
+    }
+
+    /// The sweeper revokes and deletes a `pending_confirm` connection whose flow expired (one
+    /// revoke call, `oauth.connect_failed` `flow_expired`), drops expired `started` flows, and
+    /// leaves flows still in time alone; a second sweep finds nothing.
+    #[tokio::test]
+    async fn oauth_sweep_revokes_and_deletes_unconfirmed_flows() {
+        let h = Harness::start().await;
+        let alice = h.user_id("alice").await;
+        let stale = h.pending_flow().await;
+        let fresh = h.pending_flow().await;
+        let (started, _) = h.start_flow().await;
+        let mut admin = h.pg.admin().await;
+        sql::query(
+            "UPDATE oauth_flows SET expires_at = now() - interval '1 second' \
+             WHERE id = ANY($1)",
+        )
+        .bind(vec![stale, started])
+        .execute(&mut admin)
+        .await
+        .unwrap();
+        let stale_conn: Uuid =
+            sql::query_scalar("SELECT connection_id FROM oauth_flows WHERE id = $1")
+                .bind(stale)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+
+        assert_eq!(h.oauth.sweep().await, 1);
+        assert_eq!(h.revokes().await.len(), 1);
+        let left: Vec<Uuid> = sql::query_scalar("SELECT id FROM oauth_flows ORDER BY id")
+            .fetch_all(&mut admin)
+            .await
+            .unwrap();
+        assert_eq!(left, vec![fresh], "only the flow still in time is left");
+        assert_eq!(h.count("SELECT count(*) FROM oauth_connections").await, 1);
+        assert_eq!(
+            h.count("SELECT count(*) FROM oauth_token_material").await,
+            1
+        );
+        assert_eq!(
+            h.audit.oauth_events(),
+            vec![OAuthEvent {
+                kind: OAuthEventKind::ConnectFailed(ConnectFailure::FlowExpired),
+                person: alice,
+                provider: "fake".to_owned(),
+                connection_id: Some(stale_conn),
+                agent_id: None,
+            }]
+        );
+        assert_eq!(h.oauth.sweep().await, 0);
+        assert_eq!(h.revokes().await.len(), 1);
+
+        // The background sweeper does the same once the fresh flow expires.
+        sql::query("UPDATE oauth_flows SET expires_at = now() - interval '1 second'")
+            .execute(&mut admin)
+            .await
+            .unwrap();
+        let task = h.oauth.spawn_sweeper(Duration::from_millis(20));
+        for _ in 0..200 {
+            if h.count("SELECT count(*) FROM oauth_connections").await == 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        task.abort();
+        assert_eq!(h.count("SELECT count(*) FROM oauth_connections").await, 0);
+        assert_eq!(h.revokes().await.len(), 2);
+    }
+
+    /// Startup publishes the enabled providers into `oauth_providers` (decision 9): id, name,
+    /// registry scopes, the connect URL and revoke support; never a client id or secret. A
+    /// second publish updates the same row.
+    #[tokio::test]
+    async fn oauth_providers_are_published() {
+        let h = Harness::start().await;
+        assert_eq!(h.oauth.publish_providers().await, Ok(1));
+        assert_eq!(h.oauth.publish_providers().await, Ok(1));
+        let mut admin = h.pg.admin().await;
+        let row: (Uuid, String, String, Vec<String>, String, bool) = sql::query_as(
+            "SELECT org_id, provider, name, scopes, connect_url, revoke_supported \
+             FROM oauth_providers",
+        )
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+        assert_eq!(
+            row,
+            (
+                ORG,
+                "fake".to_owned(),
+                "Fake".to_owned(),
+                vec!["fake.read".to_owned()],
+                CONNECT_URL.to_owned(),
+                true
+            )
+        );
+        let all: String =
+            sql::query_scalar("SELECT string_agg(oauth_providers::text, ',') FROM oauth_providers")
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+        assert!(!all.contains("fake-client"), "no client id or secret");
+
+        // Without a connect URL there is nothing to publish.
+        let bare = OAuth::new(
+            ORG,
+            h.oauth.db.clone(),
+            offline_human(),
+            h.oauth.vault.clone(),
+            origins(),
+        );
+        assert_eq!(
+            bare.publish_providers().await,
+            Err(SetupError("connect url"))
+        );
+    }
+
+    /// Without OAuth configured the endpoints answer `503`.
     #[tokio::test]
     async fn oauth_endpoints_off_without_configuration() {
         let app = app::build(AppState::new(Arc::new(ReadyFlag::new(true))));
         for req in [
+            Request::post(format!("/v1/oauth/flows/{}/confirm", Uuid::now_v7()))
+                .body(Body::empty())
+                .unwrap(),
             Request::post("/v1/oauth/connect")
                 .header("content-type", "application/json")
                 .body(Body::from("{}"))

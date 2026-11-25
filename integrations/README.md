@@ -2,7 +2,7 @@
 
 Thin agent, IDE and CI plugins. They call `smith hook` or `locksmith-mcp` and contain no security logic.
 
-Language rule: TypeScript/JavaScript only, managed with npm. Decisions about secrets, policy or licensing belong in Rust, not here. Framework adapters (`agent-*`) are npm packages whose tools come from the gateway; they hold no security logic and only filter the tool list.
+Language rule: TypeScript/JavaScript, managed with npm, plus Python framework adapters (`agent-*-py` and `agent-python`, managed with uv, one project per directory, no security logic). Decisions about secrets, policy or licensing belong in Rust, not here. Framework adapters (`agent-*`) are npm packages whose tools come from the gateway; they hold no security logic and only filter the tool list.
 
 Hook config files here (`claude-code/hooks/hooks.json`, `cursor/hooks.json`, `codex/config.toml`, plus the MCP snippets `claude-code/.mcp.json`, `cursor/mcp.json`, `generic-mcp/mcp.json`, and the Gemini CLI, Copilot, Windsurf and Cline files listed below)
 are generated from `crates/smith-cli/src/agents.rs`; a unit test fails on drift. Regenerate with

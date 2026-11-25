@@ -366,6 +366,17 @@ agent-smoke name:
 test-e2e:
     cargo nextest run -p ls-e2e
 
+# Python integrations: `uv run pytest` in every integrations/*/pyproject.toml (needs uv).
+test-python:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v uv >/dev/null || { echo "test-python: uv is missing (https://docs.astral.sh/uv/)" >&2; exit 1; }
+    for f in integrations/*/pyproject.toml; do
+      [ -e "$f" ] || continue
+      echo "+ uv run --directory $(dirname "$f") --locked pytest" >&2
+      uv run --directory "$(dirname "$f")" --locked pytest
+    done
+
 # Run one component's tests by directory name (see docs/testing.md): `just test control-plane`.
 test name:
     #!/usr/bin/env bash
@@ -391,6 +402,7 @@ test name:
         pkg=$(cargo metadata --no-deps --format-version 1 | jq -r --arg m "$PWD/$dir/Cargo.toml" '.packages[]|select(.manifest_path==$m)|.name')
         if [ -n "$pkg" ]; then run cargo nextest run -p "$pkg" --no-tests pass
         elif [ -f "$dir/package.json" ] && jq -e '.scripts.test' "$dir/package.json" >/dev/null; then run npm test --workspace "$dir"
+        elif [ -f "$dir/pyproject.toml" ]; then run uv run --directory "$dir" --locked pytest
         else
           cov=$(awk -F'|' -v d="\`$dir\`" '$2 ~ d {print $6}' docs/testing.md)
           echo "just test: $n has no tests of its own; covered by:$cov" >&2

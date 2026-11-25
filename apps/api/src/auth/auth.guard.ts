@@ -5,7 +5,7 @@ import { bearer, type HumanAuth, type HumanIdentity } from "./human-auth.js";
 export const HUMAN_AUTH = Symbol("HUMAN_AUTH");
 
 /** The request carries its verified identity here once the guard passes. */
-export type AuthedRequest = Request & { identity?: HumanIdentity };
+type AuthedRequest = Request & { identity?: HumanIdentity };
 
 /**
  * Verifies the bearer token against the configured issuer. Every failure is the same 401: a

@@ -10,9 +10,9 @@ import {
 /** Longest bearer token examined; anything larger is refused before parsing (Rust `MAX_TOKEN_BYTES`). */
 export const MAX_TOKEN_BYTES = 8 * 1024;
 /** Clock skew tolerated on `exp` and `nbf` (Rust `LEEWAY_SECS`). */
-export const LEEWAY_SECS = 60;
+const LEEWAY_SECS = 60;
 /** The only algorithms a token may use (Rust `ALLOWED`); never `none`, never HS*. */
-export const ALLOWED_ALGS = ["RS256", "ES256"] as const;
+const ALLOWED_ALGS = ["RS256", "ES256"] as const;
 
 /** Issuer settings, the same three values as `LOCKSMITH_OIDC_*` in the Rust control plane. */
 export interface HumanAuthConfig {

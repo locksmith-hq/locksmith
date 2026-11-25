@@ -2,7 +2,7 @@
 
 Thin agent, IDE and CI plugins. They call `smith hook` or `locksmith-mcp` and contain no security logic.
 
-Language rule: TypeScript/JavaScript only, managed with npm. Decisions about secrets, policy or licensing belong in Rust, not here.
+Language rule: TypeScript/JavaScript only, managed with npm. Decisions about secrets, policy or licensing belong in Rust, not here. Framework adapters (`agent-*`) are npm packages whose tools come from the gateway; they hold no security logic and only filter the tool list.
 
 Hook config files here (`claude-code/hooks/hooks.json`, `cursor/hooks.json`, `codex/config.toml`, plus the MCP snippets `claude-code/.mcp.json`, `cursor/mcp.json`, `generic-mcp/mcp.json`, and the Gemini CLI, Copilot, Windsurf and Cline files listed below)
 are generated from `crates/smith-cli/src/agents.rs`; a unit test fails on drift. Regenerate with
@@ -36,6 +36,18 @@ command needs.
 ## Claude Code plugin
 
 `integrations/claude-code` is a Claude Code plugin (`.claude-plugin/plugin.json`, hooks, `.mcp.json`, `skills/`, `commands/`), listed by the marketplace at `.claude-plugin/marketplace.json` in the repo root. Install with `/plugin marketplace add <repo>` then `/plugin install locksmith@locksmith`; validate with `claude plugin validate .`. `plugin.json` `version` must equal the workspace version (checked by `cargo test -p smith-cli`). Skills and commands are hand-written; only hooks and `.mcp.json` are generated.
+
+## Agent framework adapters
+
+npm packages that give an agent built on a framework the Locksmith gateway tools (`list_my_keys`, `relay_http_request`, `explain_block`). All are relay only: no tool returns a value. Each README has the quick start; run the smoke test with `just agent-smoke <name>`.
+
+| Framework | Directory | Install |
+|---|---|---|
+| Vercel AI SDK | `agent-vercel-ai` | `npm i @locksmith/agent @locksmith/agent-vercel-ai` |
+| OpenAI Agents SDK (JS) | `agent-openai-agents` | `npm i @locksmith/agent @locksmith/agent-openai-agents` |
+| LangChain.js / LangGraph.js | `agent-langchain` | `npm i @locksmith/agent @locksmith/agent-langchain` |
+
+Relay only: no tool returns a value.
 
 ## Supported agents
 

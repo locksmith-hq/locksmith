@@ -34,10 +34,19 @@ describe("agent client on the mock gateway", () => {
 
   it("renews a token that is about to expire", async () => {
     const url = await start("--token-ttl", "2");
-    const c = createAgentClient({ gatewayUrl: url, enrollmentSecret: "canary-enroll-secret" });
+    const seen: string[] = [];
+    const spy: typeof fetch = async (i, init) => {
+      const u = String(i instanceof Request ? i.url : i);
+      const res = await fetch(i, init);
+      seen.push(`${new URL(u).pathname}:${res.status}`);
+      return res;
+    };
+    const c = createAgentClient({ gatewayUrl: url, enrollmentSecret: "canary-enroll-secret", fetch: spy });
     await c.listGrants();
     await new Promise((r) => setTimeout(r, 2200));
     expect((await c.listGrants()).length).toBe(1);
+    expect(seen.filter((x) => x.startsWith("/v1/agent-tokens")).length).toBe(2);
+    expect(seen.some((x) => x.endsWith(":401"))).toBe(false);
   });
 
   it("maps gateway errors to slugs", async () => {

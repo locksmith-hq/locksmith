@@ -76,6 +76,8 @@ describe("agent client errors", () => {
   it("leaves no canary in a transcript scan", async () => {
     const url = await start();
     const enroll = randomBytes(32).toString("base64url");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errOut = vi.spyOn(console, "error").mockImplementation(() => {});
     const c = createAgentClient({ gatewayUrl: url, enrollmentSecret: enroll });
     const dir = mkdtempSync(join(tmpdir(), "agent-"));
     const lines: string[] = [];
@@ -83,10 +85,16 @@ describe("agent client errors", () => {
     lines.push(JSON.stringify({ tool: "list_my_keys", result: grants }));
     const r = await c.relay({ secretId: grants[0]!.secret_id, version: 1, method: "GET", url: "http://127.0.0.1:9/x" });
     lines.push(JSON.stringify({ tool: "relay_http_request", result: r }));
+    const tok = randomBytes(32).toString("base64url");
+    const bad = createAgentClient({ gatewayUrl: url, token: tok });
+    const e = await bad.authorizedFetch("http://example.invalid/x").catch((x) => x);
+    lines.push(JSON.stringify({ error: String(e), json: e }));
+    expect(log).not.toHaveBeenCalled();
+    expect(errOut).not.toHaveBeenCalled();
     const transcript = join(dir, "transcript.jsonl");
     writeFileSync(transcript, lines.join("\n") + "\n");
     const canaries = join(dir, "canaries");
-    writeFileSync(canaries, `${enroll}\n`);
+    writeFileSync(canaries, `${enroll}\n${tok}\n`);
     const scan = spawnSync("python3", [
       "-I",
       `${KIT}oracle.py`,

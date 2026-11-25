@@ -19,6 +19,10 @@
 # passes); a listed entry (or listed file) with no hit is STALE RESIDUAL and fails until it is
 # changed. In a full `run.sh gateway`, an entry whose case does not exist is stale too.
 #
+# G13 and G14 (c1-oauth-connections task 7.1, 7.2) have no entry: the OAuth token canary was in
+# no artifact on their first stack runs, including the provider's reflected bearer (plain,
+# base64, base64url, hex, percent, JSON), which the relay redacts.
+#
 # G4 seeds (task 3.4). The canary text is itself base64url, so each form of the plain canary hits
 # twice: `<view>/utf8` (the oracle joins it as `utf8+percent+json`) and `<view>/b64url-offset0`
 # (joined with `b64-offset0` when the two needles agree). Both are listed per form. Each form is

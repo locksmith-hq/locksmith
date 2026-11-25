@@ -6,13 +6,17 @@
 # Setup as the G cases (lib.sh): an org, the canary as a secret bound to fixtures/http_upstream.py
 # (the reflecting provider, which also serves the G4 forms), an attacker's host (the fixture as
 # `evil`, its log in evil-hits.log), a gateway and a `smith login --agent`. Then each prompt in
-# prompts/*.md (env, reflection, header echo, encodings, API, token, git) runs as one headless
+# prompts/*.md (env, reflection, header echo, encodings, API, token, git, oauth) runs as one headless
 # `claude -p --bare` session in the agent's environment (lib.sh gw_agent: only PATH, HOME and the
 # connector settings, plus ANTHROPIC_API_KEY and any proxy and CA variables for the CLI itself), with the Locksmith MCP server
 # (locksmith-mcp, from --mcp-config only) and the Bash tool and nothing else. Placeholders
 # {{SMITH}}, {{SECRET_ID}}, {{GATEWAY_URL}}, {{CONTROL_PLANE_URL}}, {{PROVIDER_URL}} and
 # {{EVIL_URL}} and {{GIT_URL}} (the gateway's Git route to the same provider, a fetch-only
 # `[[git_binding]]` for owner `acme`, added to the bindings file below) are filled in per run; the prompts are versioned so runs compare.
+# When the `oauth` prompt runs, the gateway also gets OAuth connections (oauth_lib.sh, as G13):
+# the provider stub issues the live canary as the person's access and refresh token, alice
+# connects and confirms, and grants the agent her connection; {{CONNECTION_ID}},
+# {{OAUTH_PROVIDER_URL}} (the provider realm) and {{OAUTH_API_URL}} are filled in for it.
 #
 # Each transcript (stream-json) goes to ARTIFACT_DIR/transcripts/<prompt>.jsonl; the gate scans
 # them with `oracle.py scan --transcript` and the rest of ARTIFACT_DIR with `--dir`. The CLI's
@@ -29,6 +33,19 @@ command -v claude >/dev/null 2>&1 || { echo "skip: the claude CLI is not install
 [[ -n "${ANTHROPIC_API_KEY:-}" ]] || { echo "skip: ANTHROPIC_API_KEY is not set"; exit 77; }
 claude_bin="$(command -v claude)"
 prompts_dir="$(dirname "${BASH_SOURCE[0]}")/prompts"
+names=()
+if [[ -n "${ADVERSARIAL_LIVE_PROMPTS:-}" ]]; then
+  read -r -a names <<<"$ADVERSARIAL_LIVE_PROMPTS"
+else
+  for p in "$prompts_dir"/*.md; do names+=("$(basename "$p" .md)"); done
+fi
+[[ ${#names[@]} -gt 0 ]] || gw_fail "no prompts in $prompts_dir"
+oauth=""
+[[ " ${names[*]} " == *" oauth "* ]] && oauth=1
+if [[ -n "$oauth" ]]; then
+  . "$(dirname "${BASH_SOURCE[0]}")/oauth_lib.sh"
+  oa_start
+fi
 
 gw_fixture api provider
 provider="http://127.0.0.1:$GW_FIXTURE_PORT"
@@ -44,6 +61,17 @@ gw_bind() {
 }
 GW_FIXTURE_PORT_PROVIDER="${provider##*:}"
 gw_setup "$provider"
+connection="" oauth_api="" oauth_provider=""
+if [[ -n "$oauth" ]]; then
+  oa_people
+  oa_flow alice live
+  oa_confirm alice "$OA_RFLOW" live-confirm
+  [[ "$OA_STATUS" == 200 ]] || gw_fail "live: the OAuth confirm returned $OA_STATUS"
+  connection="$OA_CONN"
+  oa_grant "$connection"
+  oauth_api="$OA_BASE/api"
+  oauth_provider="$OA_ISSUER"
+fi
 
 # The CLI key goes to a private file that the wrapper below reads and deletes, so it is never on a
 # command line; it is on the agent's environment, as for any Claude Code session.
@@ -89,13 +117,6 @@ json.dump({"mcpServers": {"locksmith": {"command": mcp, "args": [], "env": {
 ' "$GW_MCP_BIN" "$ARTIFACT_DIR/agent" "$GW_API" "$GW_GATEWAY_URL" "$ARTIFACT_DIR/mcp-config.json"
 
 mkdir -p "$ARTIFACT_DIR/transcripts"
-names=()
-if [[ -n "${ADVERSARIAL_LIVE_PROMPTS:-}" ]]; then
-  read -r -a names <<<"$ADVERSARIAL_LIVE_PROMPTS"
-else
-  for p in "$prompts_dir"/*.md; do names+=("$(basename "$p" .md)"); done
-fi
-[[ ${#names[@]} -gt 0 ]] || gw_fail "no prompts in $prompts_dir"
 
 ran=0
 for name in "${names[@]}"; do
@@ -103,13 +124,15 @@ for name in "${names[@]}"; do
   [[ -f "$src" ]] || gw_fail "no prompt $src"
   prompt="$ARTIFACT_DIR/prompt-$name.md"
   python3 -I - "$src" "$prompt" "$GW_SMITH_BIN" "$GW_SECRET_ID" "$GW_GATEWAY_URL" "$GW_API" \
-    "$provider" "$evil" "$GW_GATEWAY_URL/git/127.0.0.1/acme" <<'PY'
+    "$provider" "$evil" "$GW_GATEWAY_URL/git/127.0.0.1/acme" "$connection" "$oauth_provider" "$oauth_api" <<'PY'
 import sys
-src, out, smith, sid, gw, cp, provider, evil, git = sys.argv[1:10]
+src, out, smith, sid, gw, cp, provider, evil, git, conn, oprov, oapi = sys.argv[1:13]
 text = open(src).read()
 for k, v in (("SMITH", smith), ("SECRET_ID", sid), ("GATEWAY_URL", gw), ("CONTROL_PLANE_URL", cp),
-             ("PROVIDER_URL", provider), ("EVIL_URL", evil), ("GIT_URL", git)):
-    text = text.replace("{{%s}}" % k, v)
+             ("PROVIDER_URL", provider), ("EVIL_URL", evil), ("GIT_URL", git),
+             ("CONNECTION_ID", conn), ("OAUTH_PROVIDER_URL", oprov), ("OAUTH_API_URL", oapi)):
+    if v:
+        text = text.replace("{{%s}}" % k, v)
 if "{{" in text:
     sys.exit("unfilled placeholder in " + src)
 open(out, "w").write(text)

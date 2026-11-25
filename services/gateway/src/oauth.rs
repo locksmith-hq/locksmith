@@ -3184,6 +3184,8 @@ mod tests {
                 ),
                 Arc::new(DekCache::new(CacheSettings::default())),
             );
+            let mcp =
+                crate::mcp_endpoint::McpEndpoint::new(auth.clone(), &["gateway.test".to_owned()]);
             let relay = Relay::new(
                 auth,
                 Arc::new(GrantCache::new(
@@ -3215,13 +3217,86 @@ mod tests {
             )
             .with_oauth(oauth);
             let app = app::build(
-                AppState::new(Arc::new(ReadyFlag::new(true))).with_relay(Arc::new(relay)),
+                AppState::new(Arc::new(ReadyFlag::new(true)))
+                    .with_relay(Arc::new(relay))
+                    .with_mcp(mcp),
             );
             Self {
                 app,
                 upstream,
                 signer,
             }
+        }
+
+        /// One `tools/call` over `/mcp` as `agent`; answers the JSON-RPC message.
+        async fn mcp_tool(&self, agent: Uuid, tool: &str, args: Value) -> Value {
+            let now = time::OffsetDateTime::now_utc().unix_timestamp();
+            let token = self
+                .signer
+                .sign(&ls_control_plane::agent_token::AgentClaims {
+                    sub: agent,
+                    org: ORG,
+                    aud: ls_control_plane::agent_token::AUDIENCE.to_owned(),
+                    iat: now,
+                    exp: now + 600,
+                })
+                .unwrap();
+            let rpc = |session: Option<String>, body: Value| {
+                let app = self.app.clone();
+                let token = token.clone();
+                async move {
+                    let mut req = Request::post("/mcp")
+                        .header("host", "gateway.test")
+                        .header("content-type", "application/json")
+                        .header("accept", "application/json, text/event-stream")
+                        .header("authorization", format!("Bearer {token}"));
+                    if let Some(s) = &session {
+                        req = req
+                            .header("mcp-session-id", s)
+                            .header("mcp-protocol-version", "2025-06-18");
+                    }
+                    let res = app
+                        .oneshot(req.body(Body::from(body.to_string())).unwrap())
+                        .await
+                        .unwrap();
+                    let sid = res
+                        .headers()
+                        .get("mcp-session-id")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_owned);
+                    let text = String::from_utf8_lossy(
+                        &res.into_body().collect().await.unwrap().to_bytes(),
+                    )
+                    .into_owned();
+                    let msg = text
+                        .lines()
+                        .filter_map(|l| l.strip_prefix("data:"))
+                        .find_map(|d| serde_json::from_str::<Value>(d.trim()).ok())
+                        .or_else(|| serde_json::from_str(&text).ok())
+                        .unwrap_or(Value::Null);
+                    (sid, msg)
+                }
+            };
+            let (sid, _) = rpc(
+                None,
+                json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                    "protocolVersion":"2025-06-18","capabilities":{},
+                    "clientInfo":{"name":"test","version":"1.0"}}}),
+            )
+            .await;
+            let sid = sid.expect("session id");
+            rpc(
+                Some(sid.clone()),
+                json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+            )
+            .await;
+            rpc(
+                Some(sid),
+                json!({"jsonrpc":"2.0","id":2,"method":"tools/call",
+                       "params":{"name":tool,"arguments":args}}),
+            )
+            .await
+            .1
         }
 
         fn upstream_url(&self, path: &str) -> String {
@@ -3350,6 +3425,65 @@ mod tests {
             }
         }
         assert_eq!(events[1].status, Some(200));
+    }
+
+    /// c1 5.2 over `/mcp`: `relay_http_request` with a `connection_id` relays with the person's
+    /// token (redacted in the result), `list_my_keys` shows the connection without any token,
+    /// and a connection the agent holds no grant for is refused with a fixed code.
+    #[tokio::test]
+    async fn oauth_mcp_tools_relay_and_list_a_connection() {
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        relabel_mock(&h, id).await;
+        let agent = agent_with_grant(&h, id, alice, Some("1 hour")).await;
+        let rig = RelayRig::start(&h, true).await;
+        Mock::given(method("GET"))
+            .and(path("/me"))
+            .and(wiremock::matchers::header(
+                "authorization",
+                format!("Bearer {ACCESS_1}").as_str(),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(format!("access={ACCESS_1} ok")),
+            )
+            .mount(&rig.upstream)
+            .await;
+
+        let msg = rig
+            .mcp_tool(
+                agent,
+                "relay_http_request",
+                json!({"connection_id": id, "method": "GET", "url": rig.upstream_url("/me")}),
+            )
+            .await;
+        let out = &msg["result"]["structuredContent"];
+        assert_eq!(out["status"], 200, "{msg}");
+        assert_eq!(out["body"], "access=[REDACTED:SECRET] ok");
+        assert!(!msg.to_string().contains(ACCESS_1));
+
+        let msg = rig.mcp_tool(agent, "list_my_keys", json!({})).await;
+        let items = msg["result"]["structuredContent"]["items"]
+            .as_array()
+            .unwrap();
+        assert_eq!(items.len(), 1, "{msg}");
+        assert_eq!(items[0]["connection_id"], id.to_string());
+        assert_eq!(items[0]["mode"], "connection");
+        for t in [ACCESS_1, REFRESH_1] {
+            assert!(!msg.to_string().contains(t));
+        }
+
+        // An agent with no grant for the connection is refused, and nothing reaches upstream.
+        let before = rig.upstream_requests().await;
+        let msg = rig
+            .mcp_tool(
+                Uuid::new_v4(),
+                "relay_http_request",
+                json!({"connection_id": id, "method": "GET", "url": rig.upstream_url("/me")}),
+            )
+            .await;
+        assert_eq!(msg["result"]["isError"], true, "{msg}");
+        assert_eq!(rig.upstream_requests().await, before);
     }
 
     /// c1 5.1 through `POST /v1/relay`: every refusal is a fixed slug, the upstream sees no

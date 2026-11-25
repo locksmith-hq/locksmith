@@ -87,8 +87,15 @@ pub enum Workload {
 #[derive(Args)]
 pub struct RelayArgs {
     /// Secret id the gateway injects (must be granted to this agent).
+    #[arg(
+        long,
+        required_unless_present = "connection",
+        conflicts_with = "connection"
+    )]
+    pub secret_id: Option<String>,
+    /// A person's OAuth connection id (from `smith grants`) instead of a secret.
     #[arg(long)]
-    pub secret_id: String,
+    pub connection: Option<String>,
     /// Secret version to use.
     #[arg(long, default_value_t = 1)]
     pub version: u32,
@@ -247,9 +254,10 @@ pub fn grants(json: bool) -> Result<ExitCode, Fail> {
     let red = st.redactor();
     let empty = Vec::new();
     let rows = out["grants"].as_array().unwrap_or(&empty);
+    let conns = out["connection_grants"].as_array().unwrap_or(&empty);
     if json {
         println!("{}", ls_connector::redact_str(&red, &out.to_string()));
-    } else if rows.is_empty() {
+    } else if rows.is_empty() && conns.is_empty() {
         println!("no grants");
     } else {
         let s = |r: &serde_json::Value, k: &str| {
@@ -266,13 +274,25 @@ pub fn grants(json: bool) -> Result<ExitCode, Fail> {
             );
             println!("{}", ls_connector::redact_str(&red, &line));
         }
+        for r in conns {
+            let line = format!(
+                "{}  {}  connection  person={}  expires={}",
+                s(r, "connection_id"),
+                s(r, "provider"),
+                s(r, "person_name"),
+                s(r, "expires_at"),
+            );
+            println!("{}", ls_connector::redact_str(&red, &line));
+        }
     }
     Ok(ExitCode::Ok)
 }
 
 pub fn relay(json: bool, a: RelayArgs) -> Result<ExitCode, Fail> {
     let st = State::load_fresh()?;
-    let secret_id = ls_connector::uuid_like(&a.secret_id)?;
+    if let Some(id) = &a.secret_id {
+        ls_connector::uuid_like(id)?;
+    }
     let mut headers = Vec::new();
     for h in &a.headers {
         let (n, v) = h
@@ -296,7 +316,8 @@ pub fn relay(json: bool, a: RelayArgs) -> Result<ExitCode, Fail> {
     let r = ls_connector::relay(
         &st,
         RelayRequest {
-            secret_id,
+            secret_id: a.secret_id,
+            connection_id: a.connection,
             version: a.version,
             method: a.method,
             url: a.url,

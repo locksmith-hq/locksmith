@@ -81,6 +81,17 @@ fn key_item(g: &GrantView) -> Value {
     })
 }
 
+/// A person's connection the agent may relay through: ids, provider and the person's name.
+fn connection_item(g: &ls_oauth::ConnectionGrantListing) -> Value {
+    json!({
+        "connection_id": g.connection_id,
+        "provider": g.provider,
+        "person_name": g.person_name,
+        "mode": "connection",
+        "grant_expires_at": g.expires_at,
+    })
+}
+
 async fn list_my_keys(
     relay: &Relay,
     agent: &AgentIdentity,
@@ -104,15 +115,22 @@ async fn list_my_keys(
             return Ok(tool_error("grants_unavailable", 502));
         }
     };
+    let connections = match relay.connection_grants(agent.agent_id).await {
+        Ok(g) => g,
+        Err(_) => {
+            tracing::warn!("agent connection grants could not be read");
+            return Ok(tool_error("grants_unavailable", 502));
+        }
+    };
     let views = grants::grant_views(relay, grants);
-    let page: Vec<Value> = views
+    let all: Vec<Value> = views
         .iter()
-        .skip(offset)
-        .take(limit)
         .map(key_item)
+        .chain(connections.iter().map(connection_item))
         .collect();
-    let next = (offset + limit < views.len()).then(|| (offset + limit).to_string());
-    tracing::info!(grants = views.len(), "agent keys listed over mcp");
+    let page: Vec<Value> = all.iter().skip(offset).take(limit).cloned().collect();
+    let next = (offset + limit < all.len()).then(|| (offset + limit).to_string());
+    tracing::info!(grants = all.len(), "agent keys listed over mcp");
     Ok(CallToolResult::structured(
         json!({"items": page, "next_cursor": next}),
     ))

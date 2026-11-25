@@ -390,7 +390,26 @@ pub fn grants(st: &State) -> Result<Value> {
                 .collect()
         })
         .unwrap_or_default();
-    let out = json!({ "agent_id": v.get("agent_id"), "grants": rows });
+    let conns: Vec<Value> = v
+        .get("connection_grants")
+        .and_then(|g| g.as_array())
+        .map(|g| {
+            g.iter()
+                .map(|r| {
+                    json!({
+                        "connection_id": r.get("connection_id"),
+                        "provider": r.get("provider"),
+                        "person_name": r.get("person_name"),
+                        "expires_at": r.get("expires_at"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut out = json!({ "agent_id": v.get("agent_id"), "grants": rows });
+    if !conns.is_empty() {
+        out["connection_grants"] = conns.into();
+    }
     // Round-trip through the redactor so the token can never appear in any field.
     let red = st.redactor();
     serde_json::from_str(&redact_str(&red, &out.to_string()))
@@ -410,8 +429,11 @@ pub enum RelayBody {
 
 /// One relayed upstream request. Carries no credential: the gateway injects it.
 pub struct RelayRequest {
-    pub secret_id: String,
+    /// A vault secret (with `version`); exclusive with `connection_id`.
+    pub secret_id: Option<String>,
     pub version: u32,
+    /// A person's OAuth connection the agent holds a grant for (c1); exclusive with `secret_id`.
+    pub connection_id: Option<String>,
     pub method: String,
     pub url: String,
     pub headers: Vec<(String, String)>,
@@ -464,14 +486,14 @@ pub fn reject_credential_headers(headers: &[(String, String)]) -> Result<()> {
 
 /// `POST /v1/relay`. `req.secret_id` is validated as a UUID first.
 pub fn relay(st: &State, req: RelayRequest) -> Result<RelayOutput> {
-    let secret_id = uuid_like(&req.secret_id)?;
-    let mut body = json!({
-        "secret_id": secret_id,
-        "version": req.version,
-        "method": req.method,
-        "url": req.url,
-        "headers": req.headers,
-    });
+    let mut body = match (&req.secret_id, &req.connection_id) {
+        (Some(id), None) => json!({"secret_id": uuid_like(id)?, "version": req.version}),
+        (None, Some(id)) => json!({"connection_id": uuid_like(id)?}),
+        _ => return Err(usage("give exactly one of a secret id and a connection id")),
+    };
+    body["method"] = req.method.into();
+    body["url"] = req.url.into();
+    body["headers"] = json!(req.headers);
     match req.body {
         Some(RelayBody::Text(s)) => body["body"] = s.into(),
         Some(RelayBody::Bytes(b)) => match String::from_utf8(b) {

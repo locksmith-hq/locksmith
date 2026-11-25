@@ -162,7 +162,28 @@ async fn main() -> ExitCode {
     // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
     // only logs and never blocks the relay.
     bindings_publish::spawn_publish(control_plane, bindings_publish::summaries(&config.bindings));
-    let relay = Relay::new(
+    // OAuth connections (C1), on when LOCKSMITH_GATEWAY_OAUTH_CONSOLE_ORIGINS is set. The flow
+    // and token tables are reached through this pool, which connects as locksmith_gateway.
+    // Unconfirmed flows are revoked and deleted by a sweeper; the enabled providers are
+    // published to `oauth_providers` in the background (decision 9).
+    let mut oauth_sweeper = None;
+    let mut oauth_arc = None;
+    if let Some(oauth) = oauth_config {
+        match OAuth::from_config(oauth, org_id, database.clone(), &openbao_addr) {
+            Ok(o) => {
+                tracing::info!(providers = ?o.provider_ids(), "oauth connections enabled");
+                let o = Arc::new(o.with_audit(oauth_audit));
+                o.spawn_publish_providers();
+                oauth_sweeper = Some(o.spawn_sweeper(ls_gateway::oauth::SWEEP_INTERVAL));
+                oauth_arc = Some(o);
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "oauth connections could not be configured");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    let mut relay = Relay::new(
         auth,
         grants,
         config.bindings,
@@ -174,6 +195,9 @@ async fn main() -> ExitCode {
     // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
     .with_revoked_agents(clients)
     .with_aws(aws);
+    if let Some(o) = &oauth_arc {
+        relay = relay.with_oauth(Arc::clone(o));
+    }
 
     let relay = Arc::new(relay);
 
@@ -242,25 +266,8 @@ async fn main() -> ExitCode {
         .with_relay(relay)
         .with_mcp(mcp)
         .with_tool_policy(tool_policy);
-    // OAuth connections (C1), on when LOCKSMITH_GATEWAY_OAUTH_CONSOLE_ORIGINS is set. The flow
-    // and token tables are reached through this pool, which connects as locksmith_gateway.
-    // Unconfirmed flows are revoked and deleted by a sweeper; the enabled providers are
-    // published to `oauth_providers` in the background (decision 9).
-    let mut oauth_sweeper = None;
-    if let Some(oauth) = oauth_config {
-        match OAuth::from_config(oauth, org_id, database.clone(), &openbao_addr) {
-            Ok(o) => {
-                tracing::info!(providers = ?o.provider_ids(), "oauth connections enabled");
-                let o = Arc::new(o.with_audit(oauth_audit));
-                o.spawn_publish_providers();
-                oauth_sweeper = Some(o.spawn_sweeper(ls_gateway::oauth::SWEEP_INTERVAL));
-                state = state.with_oauth(o);
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "oauth connections could not be configured");
-                return ExitCode::FAILURE;
-            }
-        }
+    if let Some(o) = oauth_arc {
+        state = state.with_oauth(o);
     }
     let router = app::build(state);
     let listener = match tokio::net::TcpListener::bind(config.bind).await {

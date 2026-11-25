@@ -231,6 +231,7 @@ async fn issue_short_lived_credential(
             credential_id: scope.credential_id,
             expires_at: expires_at.unix_timestamp(),
         }),
+        connection: None,
     };
     if relay.audit().append(event).await.is_err() {
         tracing::error!("credential.issued event not appended; nothing issued");

@@ -250,6 +250,16 @@ pub struct RelayEvent {
     pub attempt_id: Option<Uuid>,
     /// For [`EventKind::CredentialIssued`] only: which credential, and until when.
     pub issued: Option<Issued>,
+    /// A relay through a person's OAuth connection (c1 task 5.1): the event targets the
+    /// connection and names the person, and `secret_id` (nil) and `version` are not sent.
+    pub connection: Option<ConnectionRef>,
+}
+
+/// The connection and the person a relay event is about. Ids only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConnectionRef {
+    pub connection_id: Uuid,
+    pub person: Uuid,
 }
 
 /// What a `credential.issued` event records about the credential: its id and expiry, never the
@@ -620,7 +630,12 @@ struct WireEvent {
     kind: &'static str,
     outcome: &'static str,
     agent_id: Uuid,
-    secret_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    secret_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    connection_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    person: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     version: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -702,9 +717,13 @@ impl HttpAudit {
             kind,
             outcome,
             agent_id: ev.agent_id,
-            secret_id: ev.secret_id,
-            // A short-lived credential is scoped to the secret, not to one version.
-            version: (ev.kind != EventKind::CredentialIssued).then_some(ev.version),
+            secret_id: ev.connection.is_none().then_some(ev.secret_id),
+            connection_id: ev.connection.map(|c| c.connection_id),
+            person: ev.connection.map(|c| c.person),
+            // A short-lived credential is scoped to the secret, not to one version; a
+            // connection relay has no secret version.
+            version: (ev.kind != EventKind::CredentialIssued && ev.connection.is_none())
+                .then_some(ev.version),
             method: ev.method.map(Method::as_str),
             host: ev.host,
             port: ev.port,
@@ -1037,6 +1056,7 @@ mod append_tests {
             status: None,
             attempt_id: None,
             issued: None,
+            connection: None,
         }
     }
 

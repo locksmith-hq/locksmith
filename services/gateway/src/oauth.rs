@@ -37,7 +37,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
@@ -65,7 +65,9 @@ use crate::config::OAuthConfig;
 use crate::oauth_vault::{SealedTokenSet, TokenVault, VaultError};
 
 pub mod refresh;
+pub mod relay_access;
 pub use refresh::{AccessError, AccessToken};
+pub use relay_access::{ConnectionInfo, RelayAccess, RelayAccessError};
 
 /// How long a started flow, and then an unconfirmed `pending_confirm` flow, stays valid.
 pub const FLOW_TTL: Duration = Duration::from_secs(600);
@@ -198,6 +200,8 @@ pub struct OAuth {
     audit: Option<Arc<dyn AuditSink>>,
     /// The public `POST /v1/oauth/connect` URL published in `oauth_providers`.
     connect_url: Option<Url>,
+    /// Recent connection-grant answers for the relay (at most 10 s old).
+    grant_memo: relay_access::GrantMemo,
 }
 
 impl OAuth {
@@ -220,6 +224,7 @@ impl OAuth {
             console_origins,
             audit: None,
             connect_url: None,
+            grant_memo: relay_access::GrantMemo::default(),
         }
     }
 
@@ -2979,6 +2984,87 @@ mod tests {
             .fetch_one(&mut admin)
             .await
             .unwrap()
+    }
+
+    /// A grant for a fresh agent; `expires` is an SQL interval from now (`None`: no expiry).
+    async fn agent_with_grant(
+        h: &Harness,
+        connection: Uuid,
+        alice: Uuid,
+        expires: Option<&str>,
+    ) -> Uuid {
+        let mut admin = h.pg.admin().await;
+        sql::query_scalar(
+            "WITH a AS (INSERT INTO agents (org_id, name, enrollment_hash) \
+                 VALUES ($1, 'relay-bot-' || gen_random_uuid(), '$argon2id$test') RETURNING id), \
+             g AS (INSERT INTO oauth_connection_grants \
+                 (org_id, agent_id, connection_id, expires_at, created_by) \
+                 SELECT $1, a.id, $2, now() + $4::interval, $3 FROM a) \
+             SELECT id FROM a",
+        )
+        .bind(ORG)
+        .bind(connection)
+        .bind(alice)
+        .bind(expires)
+        .fetch_one(&mut admin)
+        .await
+        .unwrap()
+    }
+
+    /// c1 5.1: a relay needs the agent's own unexpired grant, a usable connection and one of
+    /// the provider's API hosts over HTTPS; the grant answer is cached for at most 10 s, so a
+    /// fresh instance sees a revoke at once.
+    #[tokio::test]
+    async fn oauth_relay_access_checks_grant_connection_and_host() {
+        use super::relay_access::RelayAccessError as E;
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        let agent = agent_with_grant(&h, id, alice, None).await;
+        let expired = agent_with_grant(&h, id, alice, Some("-1 hour")).await;
+        let info = h.oauth.connection_info(id).await.unwrap().unwrap();
+        assert_eq!((info.person, info.provider.as_str()), (alice, "fake"));
+        assert!(
+            h.oauth
+                .connection_info(Uuid::new_v4())
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let Ok(ok) = h
+            .oauth
+            .relay_access(agent, id, &info, "https", "api.fake.test")
+            .await
+        else {
+            panic!("granted agent refused");
+        };
+        assert_eq!(ok.person, alice);
+        assert!(ok.refresh.is_some() && !ok.dev);
+
+        for (who, scheme, host, want) in [
+            (Uuid::new_v4(), "https", "api.fake.test", E::NoGrant),
+            (expired, "https", "api.fake.test", E::NoGrant),
+            (agent, "https", "evil.test", E::HostNotAllowed),
+            (agent, "https", "api.fake.test:8443", E::HostNotAllowed),
+            (agent, "http", "api.fake.test", E::HostNotAllowed),
+        ] {
+            let got = h.oauth.relay_access(who, id, &info, scheme, host).await;
+            assert_eq!(got.err(), Some(want), "{who} {scheme} {host}");
+        }
+
+        // A revoked grant: the cached answer lives at most 10 s; a new instance reads it fresh.
+        let mut admin = h.pg.admin().await;
+        sql::query("DELETE FROM oauth_connection_grants WHERE agent_id = $1")
+            .bind(agent)
+            .execute(&mut admin)
+            .await
+            .unwrap();
+        let fresh = h.instance();
+        let got = fresh
+            .relay_access(agent, id, &info, "https", "api.fake.test")
+            .await;
+        assert_eq!(got.err(), Some(E::NoGrant));
     }
 
     /// Disconnect by the owner: one provider revoke, material and grants gone, `revoked`, one

@@ -422,6 +422,7 @@ fn git_event(
         status,
         attempt_id: None,
         issued: None,
+        connection: None,
     }
 }
 

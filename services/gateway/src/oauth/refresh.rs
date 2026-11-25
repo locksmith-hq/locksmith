@@ -40,6 +40,8 @@ impl From<sql::Error> for AccessError {
 /// A connection's current access token with its provider. No `Debug`, `Display` or `Clone`.
 pub struct AccessToken {
     pub token: SecretString,
+    /// The refresh token, kept so a relay can redact it from the response too.
+    pub refresh: Option<SecretString>,
     pub provider: String,
     /// The person who owns the connection.
     pub person: Uuid,
@@ -125,6 +127,7 @@ impl OAuth {
         }
         Ok(Some(AccessToken {
             token: set.access,
+            refresh: set.refresh,
             provider,
             person,
         }))
@@ -159,6 +162,7 @@ impl OAuth {
                     if !set.expires_at.is_some_and(|e| e <= now + REFRESH_WINDOW) {
                         return Ok(Step::Ready(AccessToken {
                             token: set.access,
+                            refresh: set.refresh,
                             provider,
                             person,
                         }));
@@ -225,6 +229,7 @@ impl OAuth {
                     .await?;
                     Ok(Step::Ready(AccessToken {
                         token: merged.access,
+                        refresh: merged.refresh,
                         provider,
                         person,
                     }))

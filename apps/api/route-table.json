@@ -33,6 +33,11 @@
     },
     {
       "method": "POST",
+      "path": "/internal/v1/mcp/upstream-calls",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
       "path": "/internal/v1/mcp/agent-clients",
       "owner": "rust"
     },

@@ -37,6 +37,9 @@ pub enum Protection {
     Prevention,
     /// Actions are only observed after the fact.
     Detection,
+    /// A hook is installed but its payload schema is not recorded from a running agent, or the
+    /// agent lets a repo switch it off: Locksmith does not claim prevention (decision P3-1).
+    Unknown,
     /// No hook: MCP configuration and instructions only.
     None,
 }
@@ -46,6 +49,9 @@ impl Protection {
         match self {
             Protection::Prevention => "prevention (blocking hook)",
             Protection::Detection => "detection only (no preventing hook)",
+            Protection::Unknown => {
+                "unknown, not protected by a preventing hook (hook schema not confirmed)"
+            }
             Protection::None => "none (no preventing hook; MCP and instructions only)",
         }
     }
@@ -91,6 +97,8 @@ impl Agent {
     pub fn protection(self) -> Protection {
         if self.events().is_empty() {
             Protection::None
+        } else if matches!(self, Agent::OpenCode | Agent::Kiro) {
+            Protection::Unknown
         } else {
             Protection::Prevention
         }
@@ -147,10 +155,10 @@ pub fn binary_on_path(a: Agent) -> bool {
 }
 
 /// True once `smith hook <agent>` can parse the agent's payload. Windsurf waits for a fixture of
-/// the Devin Desktop hook format (docs/research/agent-plugin-formats.md); OpenCode and Kiro wait
-/// for their adapters (p7 task 2.1), so `smith init` does not wire a hook that always denies.
+/// the Devin Desktop hook format (docs/research/agent-plugin-formats.md), so `smith init` does not
+/// wire a hook that always denies.
 pub fn hook_handler_ready(a: Agent) -> bool {
-    !matches!(a, Agent::Windsurf | Agent::OpenCode | Agent::Kiro)
+    !matches!(a, Agent::Windsurf)
 }
 
 /// Agents the repo shows signs of using.
@@ -381,6 +389,34 @@ pub fn mcp_user_hint(a: Agent) -> Option<&'static str> {
     }
 }
 
+/// A user-level config that also applies to this agent but lives outside the repo, which
+/// `smith init` never edits (OpenCode and Kiro read a project file and a user file).
+pub fn user_level_hint(a: Agent) -> Option<&'static str> {
+    match a {
+        Agent::OpenCode => Some("~/.config/opencode/opencode.json"),
+        Agent::Kiro => Some("~/.kiro/settings/mcp.json and ~/.kiro/hooks/"),
+        _ => None,
+    }
+}
+
+/// The MCP servers object of a parsed JSON config: `mcp.servers` for OpenCode (V2), the agent's
+/// `servers_key` for the others.
+fn servers_of(a: Agent, v: &Value) -> Option<&serde_json::Map<String, Value>> {
+    if a == Agent::OpenCode {
+        v.get("mcp")?.get("servers")?.as_object()
+    } else {
+        v.get(servers_key(a))?.as_object()
+    }
+}
+
+fn servers_of_mut(a: Agent, v: &mut Value) -> Option<&mut serde_json::Map<String, Value>> {
+    if a == Agent::OpenCode {
+        v.get_mut("mcp")?.get_mut("servers")?.as_object_mut()
+    } else {
+        v.get_mut(servers_key(a))?.as_object_mut()
+    }
+}
+
 /// The JSON key that holds MCP servers (VS Code Copilot uses `servers`).
 fn servers_key(a: Agent) -> &'static str {
     if a == Agent::Copilot {
@@ -566,30 +602,38 @@ pub fn rewrite_gateway_mcp(
     let mut root: Value = serde_json::from_str(existing)
         .map_err(|e| format!("existing config is not valid JSON: {e}"))?;
     let mut masked = root.clone();
-    let key = servers_key(a);
-    let Some(servers) = root.get_mut(key).and_then(Value::as_object_mut) else {
+    let Some(servers) = servers_of_mut(a, &mut root) else {
         return Ok(None);
     };
     for name in upstreams {
         let Some(entry) = servers.get(name) else {
             continue;
         };
-        let is_bridge = entry["command"] == "smith"
-            && entry["args"] == json!(bridge_args(name))
-            && entry.as_object().is_some_and(|o| {
-                o.keys()
-                    .all(|k| matches!(k.as_str(), "command" | "args" | "type"))
-            });
+        let is_bridge = if a == Agent::OpenCode {
+            entry["command"] == json!(["smith", "mcp", "bridge", name])
+                && entry
+                    .as_object()
+                    .is_some_and(|o| o.keys().all(|k| matches!(k.as_str(), "command" | "type")))
+        } else {
+            entry["command"] == "smith"
+                && entry["args"] == json!(bridge_args(name))
+                && entry.as_object().is_some_and(|o| {
+                    o.keys()
+                        .all(|k| matches!(k.as_str(), "command" | "args" | "type"))
+                })
+        };
         if is_bridge {
             continue;
         }
         let new = if a == Agent::Copilot {
             json!({"type": "stdio", "command": "smith", "args": bridge_args(name)})
+        } else if a == Agent::OpenCode {
+            json!({"type": "local", "command": ["smith", "mcp", "bridge", name]})
         } else {
             json!({"command": "smith", "args": bridge_args(name)})
         };
         servers.insert(name.clone(), new);
-        if let Some(m) = masked.get_mut(key).and_then(|s| s.get_mut(name.as_str())) {
+        if let Some(m) = servers_of_mut(a, &mut masked).and_then(|s| s.get_mut(name.as_str())) {
             mask_json(m);
         }
         rewritten.push(name.clone());
@@ -653,16 +697,29 @@ pub fn mcp_credentials(a: Agent, text: &str) -> Vec<(String, String)> {
     let Ok(v) = serde_json::from_str::<Value>(text) else {
         return out;
     };
-    let Some(servers) = v.get(servers_key(a)).and_then(Value::as_object) else {
+    let Some(servers) = servers_of(a, &v) else {
         return out;
     };
+    // OpenCode names the environment `environment` and keeps a pre-registered OAuth client's
+    // secret under `oauth.client_secret` (task 1.1 notes).
+    let groups: &[&str] = if a == Agent::OpenCode {
+        &["headers", "env", "environment"]
+    } else {
+        &["headers", "env"]
+    };
     for (name, entry) in servers {
-        for group in ["headers", "env"] {
+        for group in groups {
             if let Some(g) = entry.get(group).and_then(Value::as_object) {
                 for (k, v) in g {
                     scan(name, k, v.as_str().is_some_and(|s| !s.is_empty()));
                 }
             }
+        }
+        if a == Agent::OpenCode {
+            let secret = entry
+                .pointer("/oauth/client_secret")
+                .and_then(Value::as_str);
+            scan(name, "client_secret", secret.is_some_and(|s| !s.is_empty()));
         }
     }
     out
@@ -1112,7 +1169,7 @@ mod tests {
         assert!(detect(&d).contains(&Agent::OpenCode) && !detect(&d).contains(&Agent::Kiro));
         std::fs::create_dir_all(d.join(".kiro")).unwrap();
         assert!(detect(&d).contains(&Agent::Kiro));
-        assert!(!hook_handler_ready(Agent::OpenCode) && !hook_handler_ready(Agent::Kiro));
+        assert!(hook_handler_ready(Agent::OpenCode) && hook_handler_ready(Agent::Kiro));
         assert!(!Agent::OpenCode.remote_mcp() && !Agent::Kiro.remote_mcp());
         assert_eq!(
             config_path(Agent::OpenCode, &d),
@@ -1173,8 +1230,22 @@ mod tests {
     #[test]
     fn protection_labels_and_paths() {
         for a in ALL {
-            assert_eq!(a.protection(), Protection::Prevention, "{a:?} has a hook");
+            let want = if matches!(a, Agent::OpenCode | Agent::Kiro) {
+                Protection::Unknown
+            } else {
+                Protection::Prevention
+            };
+            assert_eq!(a.protection(), want, "{a:?} has a hook");
         }
+        assert!(
+            Protection::Unknown
+                .label()
+                .starts_with("unknown, not protected")
+        );
+        assert!(
+            user_level_hint(Agent::OpenCode).is_some() && user_level_hint(Agent::Kiro).is_some()
+        );
+        assert!(hook_handler_ready(Agent::OpenCode) && hook_handler_ready(Agent::Kiro));
         assert!(Protection::None.label().contains("no preventing hook"));
         assert!(Protection::Detection.label().contains("no preventing hook"));
         let repo = Path::new("/r");
@@ -1442,5 +1513,49 @@ mod tests {
             vec![("a".to_owned(), "OPENAI_API_KEY".to_owned())]
         );
         assert!(mcp_credentials(Agent::ClaudeCode, "{oops").is_empty());
+    }
+
+    #[test]
+    fn opencode_credentials_and_gateway_rewrite_use_mcp_servers() {
+        let cfg = r#"{"mcp":{"servers":{
+            "a":{"type":"remote","url":"https://x","headers":{"Authorization":"Bearer t"},
+                 "oauth":{"client_id":"id","client_secret":"s"}},
+            "b":{"type":"local","command":["x"],"environment":{"API_KEY":"k","PLAIN":"v"}},
+            "c":{"type":"local","command":["y"],"environment":{"API_KEY":""}}}}}"#;
+        let mut found = mcp_credentials(Agent::OpenCode, cfg);
+        found.sort();
+        assert_eq!(
+            found,
+            vec![
+                ("a".into(), "Authorization".into()),
+                ("a".into(), "client_secret".into()),
+                ("b".into(), "API_KEY".into()),
+            ]
+        );
+        // The V1-style top-level `mcpServers` key is not an OpenCode shape: nothing is read.
+        assert!(
+            mcp_credentials(
+                Agent::OpenCode,
+                r#"{"mcpServers":{"a":{"headers":{"Authorization":"x"}}}}"#
+            )
+            .is_empty()
+        );
+        let r = rewrite_gateway_mcp(Agent::OpenCode, cfg, &["a".into(), "zz".into()])
+            .unwrap()
+            .unwrap();
+        assert_eq!(r.rewritten, vec!["a"]);
+        let after: Value = serde_json::from_str(&r.after).unwrap();
+        assert_eq!(
+            after["mcp"]["servers"]["a"],
+            json!({"type": "local", "command": ["smith", "mcp", "bridge", "a"]})
+        );
+        assert_eq!(after["mcp"]["servers"]["b"]["environment"]["API_KEY"], "k");
+        assert!(!r.masked_before.contains("Bearer t") && r.masked_before.contains("***"));
+        // Idempotent: the bridge entry is left alone.
+        assert!(
+            rewrite_gateway_mcp(Agent::OpenCode, &r.after, &["a".into()])
+                .unwrap()
+                .is_none()
+        );
     }
 }

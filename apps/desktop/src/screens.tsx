@@ -2109,7 +2109,7 @@ export function McpClients(_: ScreenProps) {
   );
 }
 
-const BINDING_KIND: Record<string, string> = { http: "HTTP", git: "Git", pg: "Postgres", aws: "AWS" };
+const BINDING_KIND: Record<string, string> = { http: "HTTP", git: "Git", pg: "Postgres", aws: "AWS", mcp: "MCP" };
 
 /** Gateway bindings, non-secret fields only (never a password or template). */
 export function Bindings(_: ScreenProps) {

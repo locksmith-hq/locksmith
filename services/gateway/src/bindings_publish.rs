@@ -4,7 +4,7 @@
 //! `PUT /internal/v1/gateway/bindings` (service token, the gateway's org), so the console can
 //! list them. The wire type [`BindingSummary`] has no field for a secret id, a header template, a
 //! password or a version: [`summaries`] copies only names, hosts, ports, users, databases, TLS
-//! modes, header names, Git repository prefixes and AWS role, region, `vend` and maximum duration
+//! modes, header names, MCP upstream origins and tool rules, Git repository prefixes and AWS role, region, `vend` and maximum duration
 //! (never the external id). An AWS row alone also carries its base-credential secret id (an id,
 //! never a value): the control plane's join key to the org's `delegate` grants, stored and never
 //! served (d2 design decision 8). A failure is retried a few times, then
@@ -17,6 +17,7 @@ use serde::Serialize;
 
 use crate::config::{Bindings, PgTls};
 use crate::decrypt::{ControlPlane, Internal};
+use ls_mcp_server::upstream::ToolDecision;
 
 const PATH: &str = "internal/v1/gateway/bindings";
 const MAX_RESPONSE: usize = 16 * 1024;
@@ -44,6 +45,14 @@ pub enum Kind {
     Git,
     Pg,
     Aws,
+    Mcp,
+}
+
+/// One per-tool rule of an `mcp` row: the upstream's tool name and the decision (never a value).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ToolRule {
+    pub name: String,
+    pub decision: ToolDecision,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -86,6 +95,12 @@ pub struct BindingSummary {
     /// `aws` only: the base-credential secret id, the join key to delegate grants.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secret_id: Option<uuid::Uuid>,
+    /// `mcp` only: the per-tool rules, in name order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolRule>>,
+    /// `mcp` only: the decision for a tool without a rule.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_decision: Option<ToolDecision>,
 }
 
 impl BindingSummary {
@@ -106,11 +121,13 @@ impl BindingSummary {
             vend: None,
             max_duration_secs: None,
             secret_id: None,
+            tools: None,
+            default_decision: None,
         }
     }
 }
 
-/// The inventory of `bindings`: HTTP, then Git, then Postgres, then AWS, each in file order.
+/// The inventory of `bindings`: HTTP, Git, Postgres, AWS, then MCP upstreams, each in file order.
 pub fn summaries(bindings: &Bindings) -> Vec<BindingSummary> {
     let mut out = Vec::new();
     for b in &bindings.bindings {
@@ -146,6 +163,23 @@ pub fn summaries(bindings: &Bindings) -> Vec<BindingSummary> {
         s.vend = Some(a.vend);
         s.max_duration_secs = Some(a.max_duration_secs);
         s.secret_id = Some(a.secret_id);
+        out.push(s);
+    }
+    for u in &bindings.mcp_upstreams {
+        let mut s = BindingSummary::new(Kind::Mcp, u.name.clone());
+        s.origin = Some(u.url.clone());
+        s.header = Some(u.header.clone());
+        s.default_decision = Some(u.default);
+        // `tools` is a BTreeMap: name order. The template, secret id and version stay behind.
+        s.tools = Some(
+            u.tools
+                .iter()
+                .map(|(name, decision)| ToolRule {
+                    name: name.clone(),
+                    decision: *decision,
+                })
+                .collect(),
+        );
         out.push(s);
     }
     out
@@ -221,6 +255,8 @@ mod bindings_publish_tests {
     const PG_SECRET_ID: &str = "0197c1f0-0000-7000-8000-0000000000ac";
     const AWS_SECRET_ID: &str = "0197c1f0-0000-7000-8000-0000000000ad";
     const EXTERNAL_ID: &str = "planted-external-id-marker";
+    const MCP_SECRET_ID: &str = "0197c1f0-0000-7000-8000-0000000000ae";
+    const MCP_TEMPLATE: &str = "Bearer {secret} planted-mcp-template-marker";
     const TEMPLATE: &str = "Bearer {secret} planted-template-marker";
 
     fn cp(base: &str) -> ControlPlane {
@@ -266,6 +302,19 @@ region = "eu-west-1"
 external_id = "{EXTERNAL_ID}"
 vend = true
 max_duration_secs = 1800
+
+[[mcp_upstream]]
+name = "github"
+url = "https://api.githubcopilot.com/mcp/"
+secret_id = "{MCP_SECRET_ID}"
+header = "Authorization"
+template = "{MCP_TEMPLATE}"
+default = "hide"
+
+[mcp_upstream.tools]
+list_issues = "allow"
+create_issue = "hold"
+delete_repository = "deny"
 "#
         ))
         .expect("valid bindings")
@@ -276,9 +325,18 @@ max_duration_secs = 1800
         let items = summaries(&config());
         let text = serde_json::to_string(&Snapshot { items: &items }).unwrap();
         // Only the AWS row carries a secret id (the grant join key); judge the rest without it.
-        let non_aws = serde_json::to_string(&items[..3]).unwrap();
+        let non_aws = serde_json::to_string(
+            &items
+                .iter()
+                .filter(|i| i.kind != Kind::Aws)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
         for secret in [
             SECRET_ID,
+            MCP_SECRET_ID,
+            MCP_TEMPLATE,
+            "planted-mcp-template-marker",
             TEMPLATE,
             "{secret}",
             "template",
@@ -292,6 +350,9 @@ max_duration_secs = 1800
         }
         for secret in [
             TEMPLATE,
+            MCP_SECRET_ID,
+            MCP_TEMPLATE,
+            "planted-mcp-template-marker",
             "{secret}",
             "password",
             "version",
@@ -312,6 +373,13 @@ max_duration_secs = 1800
                 {"kind": "aws", "name": "arn:aws:iam::123456789012:role/deploy",
                  "role": "arn:aws:iam::123456789012:role/deploy", "region": "eu-west-1",
                  "vend": true, "max_duration_secs": 1800, "secret_id": AWS_SECRET_ID},
+                {"kind": "mcp", "name": "github", "origin": "https://api.githubcopilot.com/mcp/",
+                 "header": "Authorization", "default_decision": "hide",
+                 "tools": [
+                    {"name": "create_issue", "decision": "hold"},
+                    {"name": "delete_repository", "decision": "deny"},
+                    {"name": "list_issues", "decision": "allow"},
+                 ]},
             ])
         );
     }
@@ -335,6 +403,8 @@ max_duration_secs = 1800
             SECRET_ID,
             GIT_SECRET_ID,
             PG_SECRET_ID,
+            MCP_SECRET_ID,
+            MCP_TEMPLATE,
             TEMPLATE,
             "{secret}",
             "template",
@@ -343,6 +413,7 @@ max_duration_secs = 1800
             assert!(!body.contains(secret), "{secret} in {body}");
         }
         assert!(body.contains("appdb") && body.contains("Authorization"));
+        assert!(body.contains("delete_repository") && body.contains("\"mcp\""));
     }
 
     #[tokio::test]

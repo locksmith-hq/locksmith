@@ -145,6 +145,10 @@ async fn main() -> ExitCode {
     let org_id = config.bindings.org_id;
     let openbao_addr = config.openbao.addr.clone();
     let oauth_config = config.oauth;
+    // The static per-tool rules of the MCP upstreams (m2-mcp-gateway task 3.1).
+    let tool_policy: Arc<dyn ls_mcp_server::upstream::ToolPolicy> = Arc::new(
+        ls_gateway::mcp_upstream::policy::StaticToolPolicy::new(&config.bindings.mcp_upstreams),
+    );
     if config.aws_sts_endpoint.is_some() {
         tracing::warn!(
             "{} is set: AWS credentials are requested from a non-AWS STS endpoint (local use only)",
@@ -233,7 +237,10 @@ async fn main() -> ExitCode {
         }
     };
 
-    let mut state = AppState::new(readiness).with_relay(relay).with_mcp(mcp);
+    let mut state = AppState::new(readiness)
+        .with_relay(relay)
+        .with_mcp(mcp)
+        .with_tool_policy(tool_policy);
     // OAuth connections (C1), on when LOCKSMITH_GATEWAY_OAUTH_CONSOLE_ORIGINS is set. The flow
     // and token tables are reached through this pool, which connects as locksmith_gateway.
     if let Some(oauth) = oauth_config {

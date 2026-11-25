@@ -484,6 +484,263 @@ async fn gateway_reads_agent_tool_settings_and_appends_mcp_calls() {
     );
 }
 
+/// m2-mcp-gateway task 4.1: `POST /internal/v1/mcp/upstream-calls` appends `mcp.upstream_call`
+/// (`pending`, or `denied` alone for a refusal) and `mcp.upstream_outcome` (`ok` or `error`),
+/// the outcome idempotent on `attempt_id`. Tool names are recorded only when they pass the MCP
+/// rule, every reason is a closed code, nothing else is accepted, and the chain verifies.
+#[tokio::test]
+async fn upstream_calls_append_pairs_denials_and_idempotent_outcomes() {
+    let f = Fixture::start().await;
+    let (a, b) = (f.org("upstream-a").await, f.org("upstream-b").await);
+    let auth = bearer(TOKEN);
+    let agent = Uuid::now_v7();
+    let post = |org: Option<Uuid>, auth: Option<String>, body: Value| {
+        let mut r = Request::builder()
+            .method("POST")
+            .uri("/internal/v1/mcp/upstream-calls")
+            .header("content-type", "application/json");
+        if let Some(a) = auth {
+            r = r.header("authorization", a);
+        }
+        if let Some(o) = org {
+            r = r.header("x-locksmith-org", o.to_string());
+        }
+        send(&f.app, r.body(Body::from(body.to_string())).unwrap())
+    };
+    let call = |body: Value| post(Some(a), Some(auth.clone()), body);
+    let pending = |tool: &str| {
+        json!({"phase": "call", "agent_id": agent, "upstream": "github", "tool": tool,
+            "decision": "allow", "outcome": "pending"})
+    };
+
+    // Auth first: no token, a wrong token, no org.
+    let body = pending("list_issues");
+    assert_eq!(
+        post(Some(a), None, body.clone()).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        post(Some(a), Some(bearer(WRONG)), body.clone())
+            .await
+            .status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert!(
+        post(None, Some(auth.clone()), body)
+            .await
+            .status
+            .is_client_error()
+    );
+
+    // An allowed call: pending, then its outcome; a resend is the stored event, a different
+    // outcome for the same attempt is a 409.
+    let p = call(pending("list_issues")).await;
+    assert_eq!(p.status, StatusCode::CREATED, "{}", p.raw);
+    let outcome = json!({"phase": "outcome", "agent_id": agent, "upstream": "github",
+        "tool": "list_issues", "decision": "allow", "outcome": "ok", "attempt_id": id(&p)});
+    let first = call(outcome.clone()).await;
+    assert_eq!(first.status, StatusCode::CREATED, "{}", first.raw);
+    let again = call(outcome.clone()).await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.raw);
+    assert_eq!(again.body, first.body, "the stored event, not a new one");
+    let mut other = outcome.clone();
+    other["outcome"] = json!("error");
+    other["reason"] = json!("upstream_error");
+    assert_problem(&call(other).await, StatusCode::CONFLICT, "conflict");
+
+    // A second call whose outcome is an error; every failure reason is accepted.
+    let p2 = call(pending("create_issue")).await;
+    assert_eq!(p2.status, StatusCode::CREATED, "{}", p2.raw);
+    let fail = |reason: &str, attempt: Uuid| {
+        json!({"phase": "outcome", "agent_id": agent, "upstream": "github",
+            "tool": "create_issue", "decision": "allow", "outcome": "error",
+            "reason": reason, "attempt_id": attempt})
+    };
+    let r = call(fail("upstream_timeout", id(&p2))).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+    // The other failure reasons, each on its own attempt.
+    for reason in [
+        "denied",
+        "denied_address",
+        "upstream_unreachable",
+        "secret_unavailable",
+        "secret_unusable",
+        "upstream_error",
+        "upstream_unsupported",
+        "redaction_failed",
+        "internal",
+    ] {
+        let p = call(pending("create_issue")).await;
+        let r = call(fail(reason, id(&p))).await;
+        assert_eq!(r.status, StatusCode::CREATED, "{reason}: {}", r.raw);
+    }
+
+    // Refusals: one denied call event each, the reason a refusal reason. A tool name outside the
+    // MCP rule is recorded as `unknown`, never as sent.
+    let denied = |tool: &str, decision: &str, reason: &str| {
+        json!({"phase": "call", "agent_id": agent, "upstream": "github", "tool": tool,
+            "decision": decision, "outcome": "denied", "reason": reason})
+    };
+    for body in [
+        denied("delete_repository", "deny", "deny"),
+        denied("create_issue", "hold", "hold"),
+        denied("secret_admin", "hide", "hide"),
+        denied("unknown", "hide", "unknown_tool"),
+        denied("bad name CANARY_tool_text", "hide", "unknown_tool"),
+        denied("unknown", "hide", "policy_unavailable"),
+        denied("unknown", "hide", "catalogue_unavailable"),
+    ] {
+        let r = call(body.clone()).await;
+        assert_eq!(r.status, StatusCode::CREATED, "{body}: {}", r.raw);
+    }
+
+    // Everything else is a 400: unknown fields, a name or code outside the closed sets, and
+    // fields that do not fit together (phase, outcome, decision, reason, attempt).
+    let mut with_args = pending("list_issues");
+    with_args["arguments"] = json!({"q": CANARY});
+    let mut with_result = outcome.clone();
+    with_result["result"] = json!(CANARY);
+    let mut bad_upstream = pending("list_issues");
+    bad_upstream["upstream"] = json!("Git Hub");
+    let mut long_upstream = pending("list_issues");
+    long_upstream["upstream"] = json!("a".repeat(33));
+    let mut empty_upstream = pending("list_issues");
+    empty_upstream["upstream"] = json!("");
+    let mut free_reason = denied("create_issue", "hold", "hold");
+    free_reason["reason"] = json!(CANARY);
+    let mut pending_reason = pending("list_issues");
+    pending_reason["reason"] = json!("hide");
+    let mut pending_attempt = pending("list_issues");
+    pending_attempt["attempt_id"] = json!(Uuid::now_v7());
+    let mut pending_deny = pending("list_issues");
+    pending_deny["decision"] = json!("deny");
+    let mut no_attempt = outcome.clone();
+    no_attempt.as_object_mut().unwrap().remove("attempt_id");
+    let mut ok_reason = outcome.clone();
+    ok_reason["reason"] = json!("upstream_error");
+    let mut ok_deny = outcome.clone();
+    ok_deny["decision"] = json!("deny");
+    let mut error_no_reason = fail("internal", id(&p));
+    error_no_reason.as_object_mut().unwrap().remove("reason");
+    let mut error_refusal_reason = fail("hide", id(&p));
+    error_refusal_reason["decision"] = json!("allow");
+    let mut denied_allow = denied("create_issue", "allow", "hold");
+    denied_allow["decision"] = json!("allow");
+    let mut denied_attempt = denied("create_issue", "hold", "hold");
+    denied_attempt["attempt_id"] = json!(id(&p));
+    let mut call_ok = pending("list_issues");
+    call_ok["outcome"] = json!("ok");
+    let mut outcome_denied = outcome.clone();
+    outcome_denied["outcome"] = json!("denied");
+    outcome_denied["reason"] = json!("deny");
+    for (what, bad) in [
+        ("arguments field", with_args),
+        ("result field", with_result),
+        ("upstream with a space and capitals", bad_upstream),
+        ("upstream over 32 characters", long_upstream),
+        ("empty upstream", empty_upstream),
+        ("free-text reason", free_reason),
+        ("reason on pending", pending_reason),
+        ("attempt on a call", pending_attempt),
+        ("pending with a deny decision", pending_deny),
+        ("outcome without attempt", no_attempt),
+        ("ok with a reason", ok_reason),
+        ("outcome with a deny decision", ok_deny),
+        ("error without a reason", error_no_reason),
+        ("error with a refusal reason", error_refusal_reason),
+        ("denied with decision allow", denied_allow),
+        ("denied call with an attempt", denied_attempt),
+        (
+            "denied reason hold with decision deny",
+            denied("x", "deny", "hold"),
+        ),
+        ("call phase with ok", call_ok),
+        ("outcome phase with denied", outcome_denied),
+        ("denied without a reason", {
+            let mut d = denied("x", "deny", "deny");
+            d.as_object_mut().unwrap().remove("reason");
+            d
+        }),
+        (
+            "unknown phase",
+            json!({"phase": "x", "agent_id": agent, "upstream": "github",
+            "tool": "t", "decision": "allow", "outcome": "pending"}),
+        ),
+    ] {
+        let r = call(bad).await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{what}: {}", r.raw);
+    }
+
+    // The ledger: the pairs, the denials, nothing from the 400s, the org's own chain only.
+    let rows = f.records(a).await;
+    assert_intact(&rows);
+    let seen: Vec<_> = rows
+        .iter()
+        .map(|r| (r.kind.as_str(), r.outcome.as_str()))
+        .collect();
+    let mut expected = vec![
+        ("mcp.upstream_call", "pending"),
+        ("mcp.upstream_outcome", "ok"),
+        ("mcp.upstream_call", "pending"),
+        ("mcp.upstream_outcome", "error"),
+    ];
+    for _ in 0..9 {
+        expected.push(("mcp.upstream_call", "pending"));
+        expected.push(("mcp.upstream_outcome", "error"));
+    }
+    expected.extend([("mcp.upstream_call", "denied"); 7]);
+    assert_eq!(seen, expected);
+    assert!(f.records(b).await.is_empty());
+    let attr_of = |r: &Record, key: &str| -> Option<String> {
+        r.attrs
+            .as_ref()?
+            .entries()
+            .iter()
+            .find(|(k, _, _)| k == key)
+            .map(|(_, _, v)| v.clone())
+    };
+    assert_eq!(attr_of(&rows[0], "tool").as_deref(), Some("list_issues"));
+    assert_eq!(attr_of(&rows[0], "upstream").as_deref(), Some("github"));
+    assert_eq!(attr_of(&rows[0], "decision").as_deref(), Some("allow"));
+    assert_eq!(
+        attr_of(&rows[1], "attempt_id"),
+        Some(rows[0].id.to_string())
+    );
+    assert_eq!(rows[1].actor, format!("agent:{agent}"));
+    let last = &rows[rows.len() - 3];
+    assert_eq!(
+        attr_of(last, "tool").as_deref(),
+        Some("unknown"),
+        "{last:?}"
+    );
+    let text = f.ledger_text().await;
+    for needle in [CANARY, "CANARY_tool_text", "bad name"] {
+        assert!(!text.contains(needle), "{needle} reached the ledger");
+    }
+
+    // Backstop: a direct append of a second `mcp.upstream_outcome` for the first attempt is
+    // refused by the unique index of migration 0016, and the chain is unchanged.
+    let event = ls_audit::Event {
+        kind: ls_audit::kind::MCP_UPSTREAM_OUTCOME,
+        actor: ls_audit::Actor::Agent(agent),
+        target: Some(ls_audit::Target::Org(a)),
+        outcome: ls_audit::outcome::OK,
+        attrs: ls_audit::Attrs::new().id(ls_audit::attr::ATTEMPT_ID, id(&p)),
+    };
+    let mut c = PgConnection::connect_with(&f.pg.app()).await.unwrap();
+    let mut tx = c.begin().await.unwrap();
+    ls_audit::pg::bind_org(&mut tx, a).await.unwrap();
+    let err = ls_audit::pg::append_in_tx(&mut tx, a, &event)
+        .await
+        .expect_err("second outcome for one attempt");
+    assert_eq!(
+        err.as_database_error().and_then(|d| d.code()).as_deref(),
+        Some("23505")
+    );
+    tx.rollback().await.unwrap();
+    assert_eq!(f.records(a).await.len(), rows.len());
+}
+
 /// A migrated database and the app as `locksmith_app`.
 struct Fixture {
     app: Router,

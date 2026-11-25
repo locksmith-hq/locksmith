@@ -52,13 +52,26 @@ export function bindingDetails(b: BindingSummary): Array<[label: string, value: 
               ["Host", b.host],
               ["Repo", b.repo],
             ]
-          : [
-              ["Role", b.role],
-              ["Region", b.region],
-              ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"],
-              ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`],
-              ["Allowed actions", b.allowed_actions == null ? null : b.allowed_actions.join(", ") || "none"],
-            ];
+          : b.kind === "mcp"
+            ? [
+                ["Upstream", b.origin],
+                ["Header", b.header],
+                ["Other tools", b.default_decision],
+                ...(["allow", "hold", "deny", "hide"] as const).map((d): [string, string] => [
+                  d[0]!.toUpperCase() + d.slice(1),
+                  (b.tools ?? [])
+                    .filter((t) => t.decision === d)
+                    .map((t) => t.name)
+                    .join(", "),
+                ]),
+              ]
+            : [
+                ["Role", b.role],
+                ["Region", b.region],
+                ["Vend credentials", b.vend == null ? null : b.vend ? "yes" : "no"],
+                ["Max duration", b.max_duration_secs == null ? null : `${b.max_duration_secs}s`],
+                ["Allowed actions", b.allowed_actions == null ? null : b.allowed_actions.join(", ") || "none"],
+              ];
   return rows
     .filter((r): r is [string, string | number | boolean] => r[1] != null && r[1] !== "")
     .map(([l, v]) => [l, String(v)]);

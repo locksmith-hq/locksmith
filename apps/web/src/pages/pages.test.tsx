@@ -138,9 +138,20 @@ test("bindings: lists non-secret fields per kind, never a password, and shows th
   expect(
     screen.getByText(/Host: db\.internal\.example\.com · Port: 5432 · User: app · Database: appdb · TLS: verify-full/),
   ).toBeInTheDocument();
-  expect(screen.getByText(/Header: Authorization/)).toBeInTheDocument();
+  expect(screen.getAllByText(/Header: Authorization/).length).toBeGreaterThan(0);
   expect(document.body.textContent).not.toMatch(/password/i);
   expect(r.requests).toContain("GET /v1/bindings");
+});
+
+test("bindings: an MCP row shows origin, header, default and each tool's decision, never a secret id", async () => {
+  open("/bindings");
+  const row = (await screen.findAllByText("github"))[0]!.closest("tr")!;
+  expect(row).toHaveTextContent("MCP");
+  expect(row).toHaveTextContent(
+    "Upstream: https://api.githubcopilot.com/mcp/ · Header: Authorization · Other tools: hide · Allow: list_issues · Hold: create_issue · Deny: delete_repository",
+  );
+  expect(row.textContent).not.toMatch(/secret|template|token/i);
+  expect(row.querySelector("input, button, a")).toBeNull();
 });
 
 test("bindings: empty list and a 5xx show honest states", async () => {

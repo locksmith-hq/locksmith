@@ -24,6 +24,7 @@ pub mod mcp_settings;
 mod mcp_tools;
 pub mod oauth;
 pub mod oauth_vault;
+pub mod mcp_upstream;
 pub mod pg;
 pub mod relay;
 pub mod short_lived;

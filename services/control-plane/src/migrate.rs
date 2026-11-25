@@ -77,8 +77,13 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     ),
     (
         16,
+        "mcp upstream outcome unique",
+        include_str!("../migrations/0016_mcp_upstream_outcome_unique.sql"),
+    ),
+    (
+        17,
         "oauth_connections",
-        include_str!("../migrations/0016_oauth_connections.sql"),
+        include_str!("../migrations/0017_oauth_connections.sql"),
     ),
 ];
 
@@ -173,8 +178,8 @@ mod tests {
             for banned in ["value ", "plaintext"] {
                 assert!(!code.contains(banned), "migration defines `{banned}`");
             }
-            // 16: C1 `oauth_token_material`, sealed OAuth token sets (gateway role only).
-            if version != 3 && version != 16 {
+            // 17: C1 `oauth_token_material`, sealed OAuth token sets (gateway role only).
+            if version != 3 && version != 17 {
                 assert!(!code.contains("ciphertext"), "migration {version}");
             }
         }

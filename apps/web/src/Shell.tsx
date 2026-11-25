@@ -14,6 +14,7 @@ import { Overview } from "./pages/Overview";
 import { Projects } from "./pages/Projects";
 import { McpTools } from "./pages/McpTools";
 import { McpClients } from "./pages/McpClients";
+import { Inbox, NotificationBell, NotificationSettings } from "./pages/Notifications";
 import { EmptyPage } from "./pages/EmptyPage";
 import "./shell.css";
 
@@ -128,6 +129,7 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
         </aside>
         <main className="shell-main">
           <header className="shell-top">
+            <NotificationBell client={client} />
             <OrgSwitcher name="Locksmith" />
           </header>
           <Routes>
@@ -142,6 +144,8 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
             <Route path="bindings" element={<Bindings client={client} />} />
             <Route path="tools" element={<McpTools client={client} />} />
             <Route path="clients" element={<McpClients client={client} />} />
+            <Route path="notifications" element={<Inbox client={client} />} />
+            <Route path="settings/notifications" element={<NotificationSettings client={client} />} />
             <Route path="activity" element={<Activity client={client} />} />
             <Route path="*" element={<EmptyPage title="Not found" />} />
           </Routes>

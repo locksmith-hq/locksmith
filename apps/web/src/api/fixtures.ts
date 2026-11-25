@@ -38,6 +38,34 @@ function createFixtures(opts: FixtureOptions = {}) {
   const mcpClients: { id: string; client_id: string; name: string; revoked_at: string | null }[] = opts.empty
     ? []
     : [{ id: id(30), client_id: "fixture-client", name: "Fixture MCP client", revoked_at: null }];
+  const inbox = opts.empty
+    ? []
+    : [
+        {
+          id: id(40),
+          kind: "relay.denied",
+          payload: {
+            kind: "relay.denied",
+            actor: { id: "a1", name: "ci-agent" },
+            object_name: "stripe",
+            occurred_at: now,
+            link: "/activity",
+          },
+          created_at: now,
+          read_at: null as string | null,
+        },
+        {
+          id: id(41),
+          kind: "git.denied",
+          payload: { kind: "git.denied", actor: null, object_name: "app", occurred_at: now, link: "/activity" },
+          created_at: now,
+          read_at: now as string | null,
+        },
+      ];
+  let rules: { kind: string; channel: string; audience: string; audience_user_id: null }[] = [
+    { kind: "relay.denied", channel: "inbox", audience: "owner", audience_user_id: null },
+  ];
+  const chan = { email: { enabled: false }, slack: { configured: false } };
   const requests: string[] = [];
   let seq = 100;
 
@@ -194,6 +222,21 @@ function createFixtures(opts: FixtureOptions = {}) {
             ],
         next: null,
       });
+    if (path === "/v1/notifications")
+      return reply({ items: inbox, unread_count: inbox.filter((n) => !n.read_at).length });
+    if (path === "/v1/notifications/read-all") return (inbox.forEach((n) => (n.read_at ??= now)), reply(null, 204));
+    if ((m = path.match(/^\/v1\/notifications\/([^/]+)\/read$/))) {
+      const n = inbox.find((x) => x.id === m![1]);
+      return n ? ((n.read_at ??= now), reply(null, 204)) : problem(404);
+    }
+    if (path === "/v1/notification-rules") {
+      if (method === "PUT") rules = (body as unknown as { rules: typeof rules }).rules;
+      return reply({ rules });
+    }
+    if (path === "/v1/notification-channels") {
+      if (method === "PUT") chan.email.enabled = (body as unknown as { email: { enabled: boolean } }).email.enabled;
+      return reply(chan);
+    }
     if (path === "/v1/mcp/clients") return reply({ items: mcpClients });
     if ((m = path.match(/^\/v1\/mcp\/clients\/([^/]+)\/revoke$/))) {
       const c = mcpClients.find((x) => x.id === decodeURIComponent(m![1]!));

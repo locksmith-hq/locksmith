@@ -16,6 +16,11 @@ import {
   buildWorkloadIdentity,
   hasPrefixCondition,
   isPrefixPattern,
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_KINDS,
+  notificationKindLabel,
+  notificationSummary,
+  toggleRule,
   type AuditOutcomeFilter,
   type Client,
   type Environment,
@@ -2165,6 +2170,135 @@ export function Bindings(_: ScreenProps) {
                       .map(([l, v]) => `${l}: ${v}`)
                       .join(" · ")}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The signed-in user's inbox plus the owner's rules matrix and email switch on the shared client. */
+export function Notifications(_: ScreenProps) {
+  const client = api.agentsClient();
+  const [inbox, setInbox] = useState<api.NotificationInbox | null>(null);
+  const [rules, setRules] = useState<api.NotificationRule[] | null>(null);
+  const [channels, setChannels] = useState<api.NotificationChannels | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    if (!client) return;
+    try {
+      setInbox(await client.listNotifications());
+    } catch (e) {
+      setErr(msg(e));
+    }
+    try {
+      const [r, c] = await Promise.all([client.getNotificationRules(), client.getNotificationChannels()]);
+      setRules(r.rules);
+      setChannels(c);
+    } catch (e) {
+      // A non-owner gets 403 on rules and channels: show a notice and no controls.
+      if (e instanceof ApiError && e.status === 403) setForbidden(true);
+      else setErr(msg(e));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const run = async (f: () => Promise<unknown>) => {
+    setErr("");
+    try {
+      await f();
+      await load();
+    } catch (e) {
+      setErr(msg(e));
+    }
+  };
+  return (
+    <section className="screen" aria-labelledby="h-notifications">
+      <Head id="h-notifications" title="Notifications" sub="Security events for you, and who is told about them." />
+      {err && <Alert>{err}</Alert>}
+      {!client ? (
+        <Empty icon="sessions">Connect a control plane on the Agents screen to see notifications.</Empty>
+      ) : !inbox ? (
+        err ? null : (
+          <Loading what="notifications" />
+        )
+      ) : inbox.items.length === 0 ? (
+        <Empty icon="sessions">No notifications.</Empty>
+      ) : (
+        <>
+          <p>
+            {inbox.unread_count} unread{" "}
+            <button
+              type="button"
+              className="btn"
+              disabled={inbox.unread_count === 0}
+              onClick={() => void run(() => client.markAllNotificationsRead())}
+            >
+              Mark all read
+            </button>
+          </p>
+          <ul className="plain">
+            {inbox.items.map((n) => (
+              <li key={n.id} data-unread={n.read_at === null}>
+                <b>{notificationSummary(n)}</b> <time dateTime={n.created_at}>{n.created_at}</time>{" "}
+                {n.read_at === null && (
+                  <button
+                    type="button"
+                    className="btn quiet"
+                    aria-label={`Mark read: ${notificationSummary(n)}`}
+                    onClick={() => void run(() => client.markNotificationRead(n.id))}
+                  >
+                    Mark read
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {client && forbidden && <p>Only an organization owner can change notification settings.</p>}
+      {client && rules && channels && (
+        <div aria-label="Notification settings">
+          <label>
+            <input
+              type="checkbox"
+              checked={channels.email.enabled}
+              onChange={(e) => void run(() => client.setEmailChannel(e.target.checked))}
+            />{" "}
+            Email delivery
+          </label>{" "}
+          Slack: {channels.slack.configured ? "configured" : "not configured"}
+          <table className="grid">
+            <caption className="sr-only">Notification rules</caption>
+            <thead>
+              <tr>
+                <th>Event</th>
+                {NOTIFICATION_CHANNELS.map((ch) => (
+                  <th key={ch}>{ch}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {NOTIFICATION_KINDS.map((k) => (
+                <tr key={k}>
+                  <td>{notificationKindLabel(k)}</td>
+                  {NOTIFICATION_CHANNELS.map((ch) => (
+                    <td key={ch}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${notificationKindLabel(k)} to ${ch}`}
+                        checked={rules.some((r) => r.kind === k && r.channel === ch)}
+                        disabled={ch === "slack" && !channels.slack.configured}
+                        onChange={() => void run(() => client.setNotificationRules(toggleRule(rules, k, ch)))}
+                      />
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

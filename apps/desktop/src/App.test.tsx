@@ -909,3 +909,63 @@ test("bindings: AWS rows show role, region, vend, max duration and allowed actio
   );
   expect(container.textContent).not.toMatch(/SECRET-ID-VALUE|EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
 });
+
+test("notifications: inbox with mark read, owner rules matrix, and the 403 and not-connected states", async () => {
+  const { ApiError } = await import("@locksmith/control-plane-client");
+  const item = (id: string, read: string | null) => ({
+    id,
+    kind: "relay.denied",
+    payload: {
+      kind: "relay.denied",
+      actor: { id: "a", name: "ci" },
+      object_name: "stripe",
+      occurred_at: "t",
+      link: "/x",
+    },
+    created_at: "2026-11-25T09:00:00Z",
+    read_at: read,
+  });
+  const client = {
+    listNotifications: vi.fn().mockResolvedValue({ unread_count: 1, items: [item("n1", null), item("n2", "t")] }),
+    markNotificationRead: vi.fn().mockResolvedValue(undefined),
+    markAllNotificationsRead: vi.fn().mockResolvedValue(undefined),
+    getNotificationRules: vi.fn().mockResolvedValue({ rules: [] }),
+    getNotificationChannels: vi.fn().mockResolvedValue({ email: { enabled: false }, slack: { configured: false } }),
+    setNotificationRules: vi.fn().mockResolvedValue({ rules: [] }),
+    setEmailChannel: vi.fn().mockResolvedValue({ email: { enabled: true }, slack: { configured: false } }),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  const r = render(<App />);
+  await nav("Notifications");
+  expect(await screen.findByText("1 unread")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /^Mark read: / }));
+  expect(client.markNotificationRead).toHaveBeenCalledWith("n1");
+  await userEvent.click(await screen.findByLabelText("Git access denied to email"));
+  expect(client.setNotificationRules).toHaveBeenCalledWith([
+    { kind: "git.denied", channel: "email", audience: "owner", audience_user_id: null },
+  ]);
+  await userEvent.click(screen.getByLabelText("Email delivery"));
+  expect(client.setEmailChannel).toHaveBeenCalledWith(true);
+  r.unmount();
+  m.agentsClient.mockReturnValue({
+    ...client,
+    getNotificationRules: vi.fn().mockRejectedValue(new ApiError(403, "Forbidden")),
+  } as never);
+  const r2 = render(<App />);
+  await nav("Notifications");
+  expect(await screen.findByText(/Only an organization owner/)).toBeInTheDocument();
+  expect(screen.queryByLabelText("Email delivery")).toBeNull();
+  r2.unmount();
+  m.agentsClient.mockReturnValue({
+    ...client,
+    listNotifications: vi.fn().mockResolvedValue({ unread_count: 0, items: [] }),
+  } as never);
+  const r3 = render(<App />);
+  await nav("Notifications");
+  expect(await screen.findByText("No notifications.")).toBeInTheDocument();
+  r3.unmount();
+  m.agentsClient.mockReturnValue(null as never);
+  render(<App />);
+  await nav("Notifications");
+  expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
+});

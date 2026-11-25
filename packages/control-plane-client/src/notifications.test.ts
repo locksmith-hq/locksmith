@@ -21,3 +21,12 @@ test("no fixture carries a payload field outside the allow-list", () => {
   const allowed = ["kind", "actor", "object_name", "occurred_at", "link"];
   for (const n of notificationInbox.items) expect(Object.keys(n.payload).sort()).toEqual([...allowed].sort());
 });
+
+import { notificationSummary, toggleRule } from "./index";
+
+test("summary uses allow-listed fields and toggleRule adds then removes a rule", () => {
+  expect(notificationSummary(notificationInbox.items[0]!)).toBe("Relay denied on stripe by ci-agent");
+  const added = toggleRule(notificationRules.rules, "relay.denied", "email");
+  expect(added).toHaveLength(5);
+  expect(toggleRule(added, "relay.denied", "email")).toEqual(notificationRules.rules);
+});

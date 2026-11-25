@@ -43,6 +43,9 @@ export {
   type BindingSummary,
   type McpClient,
   type McpToolSetting,
+  type NotificationChannels,
+  type NotificationInbox,
+  type NotificationRule,
 } from "@locksmith/control-plane-client";
 const CP_URL = "locksmith.controlPlane";
 const CP_ORG = "locksmith.org";

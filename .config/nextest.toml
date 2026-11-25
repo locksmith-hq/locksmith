@@ -22,6 +22,7 @@ not (
   | (package(ls-control-plane) & binary(/^(agents|api|audit|bindings|checkpoint|checkpoint_span|human_auth|internal|mcp|mcp_store|mcp_tools|tenancy|users|versions|workload_identities|workload_exchange)$/))
   | (package(ls-gateway) & test(/^relay::tests::(relay_events_land_in_the_ledger|outcome_resend_is_idempotent|mcp_short_lived::mcp_short_lived_issue_lands_in_the_ledger_without_value_or_credential)$/))
   | (package(ls-gateway) & test(/^mcp_upstream::audit::tests::upstream_calls_land_in_the_ledger_as_pairs_and_denials$/))
+  | (package(ls-gateway) & test(/^oauth::tests::oauth_refresh_/))
   | (package(ls-gateway) & test(/^oauth::tests::oauth_(connect_|callback_|confirm_|sweep_|providers_)/))
   | (package(ls-gateway) & test(/^pg::upstream::pg_relay::pg_relay_(cancel_|md5_|options_|raise_|scram_|wrong_password)/))
 )

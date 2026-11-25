@@ -15,7 +15,7 @@ import { createAgentClient } from "@locksmith/agent";
 import { locksmithMcpServer } from "@locksmith/agent-openai-agents";
 
 const client = createAgentClient(); // LOCKSMITH_ENROLLMENT_SECRET, LOCKSMITH_GATEWAY_URL, LOCKSMITH_CONTROL_PLANE_URL
-const server = locksmithMcpServer(client); // an `MCPServerStreamableHttp` for `new Agent({ mcpServers })`
+const server = await locksmithMcpServer(client); // an `MCPServerStreamableHttp` for `new Agent({ mcpServers })`
 ```
 
 ## Filtered tools

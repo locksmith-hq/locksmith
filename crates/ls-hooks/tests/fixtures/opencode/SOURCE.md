@@ -22,10 +22,12 @@ A single entry can serve both: default-export an object with a V2 `setup()` and 
   beside a root `opencode.json` is NOT discovered (V2).
 - V2 lets a repo disable plugins with `-<id>` in `plugins`; two built-in policy plugins ignore it.
   A repo-level plugin can therefore be switched off by config: the protection label must say so.
-- Remote MCP (V2): OAuth by default, "Pre-registered clients" section exists (https://opencode.ai/docs/mcp-servers/);
-  exact keys NOT read: unverified.
+- Remote MCP (V2): OAuth by default, V2 `mcp.servers.<name>` with `type:"remote"`, `url`, and
+  `oauth.{client_id,client_secret,scope,callback_port,redirect_uri,auth_server_metadata_url}`; a pre-registered
+  `client_id` takes priority over CIMD and DCR; OAuth is on by default unless `oauth:false`
+  (https://opencode.ai/docs/mcp-servers/, "Pre-registered clients").
 - Detection markers: `opencode.json`, `opencode.jsonc`, `.opencode/` (doc-derived).
 
 ## Unverified (no hook is built on these, decision P3-1)
 - V2 deny mechanism of `execute.before`; tool names beyond `read` and `bash`; argument keys other
-  than `filePath` (read) and `command` (bash); the V1 `mcp.<name>` entry shape; OAuth client-id keys.
+  than `filePath` (read) and `command` (bash); the V1 `mcp.<name>` entry shape and V1 OAuth keys.

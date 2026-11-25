@@ -10,19 +10,19 @@ Read from vendor docs, NOT recorded from a running agent. Checked 2026-11-25 (ho
   action that exits non-zero blocks the tool call; stderr goes to the agent; exit 0 allows
   (actions page). `matcher` is a tool ID, category (`read`, `write`, `shell`, `web`, `spec`), `@mcp`,
   `@<server>`, wildcard, or regex; blank matches every tool.
-- Command hooks get JSON on STDIN. The documented event shape is shown for `PermissionRequest`
-  and `SubagentStop`: `hook_event_name`, `cwd`, `session_id`, `tool_name`, `tool_input` (object).
-  The `PreToolUse` stdin payload is NOT printed on the pages read: assumed to match
-  (`tool_name`, `tool_input`): UNVERIFIED.
+- Command hooks get JSON on STDIN. Documented `PreToolUse` event (hook types page, "MCP tool hooks",
+  page updated 2026-11-24): `{"hook_event_name":"PreToolUse","cwd","session_id","tool_name":"mcp_<server>_<tool>","tool_input":{...}}`.
+  Built-in tools use the same keys (`PermissionRequest` shows `tool_name":"read_file"`, `tool_input.path`);
+  built-in PreToolUse payload itself: assumed identical, built-in tool names and keys beyond `read_file`/`path`: UNVERIFIED.
 - `PreToolUse` command hooks may return `hookSpecificOutput.updatedInput` (rewrites input) and
   `permissionDecision` / `permissionDecisionReason` (named on the PermissionRequest page); exit
   code 2 is "deny" there. Exact deny JSON for PreToolUse: UNVERIFIED; exit non-zero is documented.
-- Tool IDs seen: `read_file` (input `path`). Others: unverified.
+- Tool IDs seen: `read_file` (input `path`), MCP tools `mcp_<server>_<tool>`. Others: unverified.
 
 ## MCP (https://kiro.dev/docs/mcp/configuration/)
 - Workspace `.kiro/settings/mcp.json`, user `~/.kiro/settings/mcp.json`; key `mcpServers`;
-  local `{command,args,env,disabled,autoApprove,disabledTools}`; remote `{url,headers,oauth,oauthScopes,...}`.
-- Remote OAuth with a pre-registered client: `oauth.clientId` + `oauth.redirectUri` (documented);
+  local `{command,args,env,disabled,autoApprove,disabledTools}`; remote `{url,headers,oauth,...}`.
+- Remote OAuth with a pre-registered client: `oauth.clientId` + `oauth.redirectUri` + `oauth.oauthScopes` (documented);
   also `oauth.clientMetadataUrl` (CIMD). Web and Mobile ignore the `oauth` block.
 
 ## Detection markers
@@ -30,5 +30,5 @@ Read from vendor docs, NOT recorded from a running agent. Checked 2026-11-25 (ho
 
 ## Consequence
 A confirmed blocking project hook exists (`PreToolUse`, non-zero exit), but its stdin payload shape
-is unverified, so per P3-1 task 2.1 builds the Kiro adapter only from the fields above with the
+is documented only for MCP tools, so per P3-1 task 2.1 builds the Kiro adapter only from the fields above with the
 bounded fail-closed rule (shape mismatch denies), and doctor labels it per P3-2.

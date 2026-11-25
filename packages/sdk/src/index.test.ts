@@ -78,13 +78,32 @@ describe("client", () => {
   });
 });
 
+describe("mergeSpecs", () => {
+  const doc = (paths: Record<string, unknown>, schemas: Record<string, unknown> = {}) => ({
+    paths,
+    components: { schemas },
+  });
+  it("adds Nest-only paths and schemas to the frozen document", async () => {
+    const { mergeSpecs } = await import("../merge-specs.mjs");
+    const m = mergeSpecs(doc({ "/a": {} }, { A: {} }), doc({ "/b": {} }, { B: {} }));
+    expect(Object.keys(m.paths)).toEqual(["/a", "/b"]);
+    expect(Object.keys(m.components.schemas)).toEqual(["A", "B"]);
+  });
+  it("fails and names a colliding path or schema", async () => {
+    const { mergeSpecs } = await import("../merge-specs.mjs");
+    expect(() => mergeSpecs(doc({ "/a": {} }), doc({ "/a": {} }))).toThrow("/a");
+    expect(() => mergeSpecs(doc({}, { A: {} }), doc({}, { A: {} }))).toThrow("schema collision: A");
+  });
+});
+
 describe("generated schema", () => {
   it("has no drift against the OpenAPI spec", () => {
     const dir = mkdtempSync(join(tmpdir(), "sdk-gen-"));
     const out = join(dir, "schema.d.ts");
     const bin = new URL("../node_modules/.bin/openapi-typescript", import.meta.url).pathname;
     const root = new URL("../../../node_modules/.bin/openapi-typescript", import.meta.url).pathname;
-    const spec = new URL("../../../services/control-plane/openapi.json", import.meta.url).pathname;
+    const spec = join(dir, "merged.openapi.json");
+    execFileSync("node", [new URL("../merge-specs.mjs", import.meta.url).pathname, spec]);
     let tool = root;
     try {
       readFileSync(bin);

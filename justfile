@@ -241,6 +241,11 @@ api:
 api-contract *args:
     bash scripts/api-contract.sh {{args}}
 
+# NC-1: regenerate apps/api/openapi.nest.json from the zod registry, then check it (drift test).
+api-openapi:
+    npm run openapi:emit --workspace @locksmith/api
+    npm test --workspace @locksmith/api -- src/openapi
+
 # T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
 # Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.
 web-e2e *args:

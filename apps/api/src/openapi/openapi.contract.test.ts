@@ -8,10 +8,11 @@ import { routes } from "./registry.js";
 const read = (rel: string) => JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8"));
 const frozen = read("../../../../services/control-plane/openapi.json");
 const table = read("../../route-table.json") as RouteTable;
+const nestDoc = read("../../openapi.nest.json");
 
 describe("generated OpenAPI vs the frozen contract", () => {
   it("matches openapi.json for every path marked nest", () => {
-    expect(diffAgainstFrozen(routes, frozen, table)).toEqual([]);
+    expect(diffAgainstFrozen(routes, frozen, table, nestDoc)).toEqual([]);
   });
 });
 
@@ -54,6 +55,26 @@ describe("diffAgainstFrozen", () => {
     expect(d[0]).toContain("differs from the frozen contract");
   });
 
+  it("compares a nest-only path against openapi.nest.json", () => {
+    const nestDoc = {
+      paths: { "/v1/things/{id}": frozenDoc.paths["/v1/things/{id}"] },
+      components: frozenDoc.components,
+    };
+    const empty = { paths: {} };
+    expect(diffAgainstFrozen([route(Thing)], empty, tbl, nestDoc)).toEqual([]);
+    expect(diffAgainstFrozen([route(z.object({ id: z.number() }))], empty, tbl, nestDoc)[0]).toContain("differs");
+  });
+
+  it("fails and names a path that is in both documents, or in neither", () => {
+    const both = diffAgainstFrozen([route(Thing)], frozenDoc, tbl, { paths: { "/v1/things/{id}": {} } });
+    expect(both).toHaveLength(1);
+    expect(both[0]).toContain("/v1/things/{id}");
+    expect(both[0]).toContain("both");
+    const neither = diffAgainstFrozen([route(Thing)], { paths: {} }, tbl, { paths: {} });
+    expect(neither[0]).toContain("GET /v1/things/{id}");
+    expect(neither[0]).toContain("absent");
+  });
+
   it("reports a nest path with no zod route, and a zod route not marked nest", () => {
     expect(diffAgainstFrozen([], frozenDoc, tbl)[0]).toContain("no zod route is registered");
     expect(
@@ -63,6 +84,6 @@ describe("diffAgainstFrozen", () => {
 
   it("reports a nest path missing from the frozen document", () => {
     const t: RouteTable = { routes: [{ method: "GET", path: "/v1/nope", owner: "nest" }] };
-    expect(diffAgainstFrozen([], frozenDoc, t)[0]).toContain("absent from the frozen");
+    expect(diffAgainstFrozen([], frozenDoc, t)[0]).toContain("absent from openapi.json");
   });
 });

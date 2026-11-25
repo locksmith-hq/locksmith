@@ -69,3 +69,35 @@ export function buildOperations(routes: RouteDef[]): Map<string, Operation> {
   }
   return out;
 }
+
+type Doc = { paths: Record<string, Record<string, unknown>> };
+
+/**
+ * The OpenAPI document for the routes whose path the frozen Rust document does not own (NC-1): sorted
+ * keys, so the committed `openapi.nest.json` only changes when a route does.
+ */
+export function buildNestDocument(routes: RouteDef[], frozen: Doc): unknown {
+  const own = routes.filter((r) => !(r.path in frozen.paths));
+  const paths: Record<string, Record<string, unknown>> = {};
+  for (const [key, op] of buildOperations(own)) {
+    const [method, path] = [key.slice(0, key.indexOf(" ")), key.slice(key.indexOf(" ") + 1)];
+    (paths[path] ??= {})[method.toLowerCase()] = op;
+  }
+  return sortKeys({
+    openapi: "3.1.0",
+    info: { title: "Locksmith API (Nest-only routes)", version: "0.0.0" },
+    paths,
+  });
+}
+
+function sortKeys(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortKeys);
+  if (v === null || typeof v !== "object") return v;
+  return Object.fromEntries(
+    Object.entries(v as Record<string, unknown>)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, x]) => [k, sortKeys(x)]),
+  );
+}
+
+export const serialiseDocument = (doc: unknown) => `${JSON.stringify(doc, null, 2)}\n`;

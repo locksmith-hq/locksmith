@@ -19,6 +19,7 @@ mod doctor_m5;
 mod doctor_m6;
 mod doctor_m6_db;
 mod doctor_m7;
+mod doctor_mcp;
 mod doctor_workload;
 mod dotenv;
 mod git_cmd;
@@ -26,6 +27,7 @@ mod hook_cmd;
 mod http_cmd;
 mod init_cmd;
 mod input;
+mod mcp_bridge;
 mod precommit;
 mod run_cmd;
 mod scan_cmd;
@@ -91,6 +93,10 @@ enum Cmd {
         /// Also add the remote Hub MCP server (`<URL>/mcp`, OAuth) for agents that support it.
         #[arg(long, value_name = "URL")]
         hub: Option<String>,
+        /// Replace the repo's MCP entries for upstreams the gateway serves this agent (needs
+        /// `smith login --agent`) with `smith mcp bridge <name>`, which holds no credential.
+        #[arg(long)]
+        mcp_gateway: bool,
         /// Print the planned changes and exit without writing anything.
         #[arg(long)]
         dry_run: bool,
@@ -159,6 +165,12 @@ enum Cmd {
     Login(connector::LoginArgs),
     /// List the secrets this agent may use through the gateway (names and hosts, never values).
     Grants,
+    /// MCP gateway helpers: `smith mcp bridge <name>` serves an upstream MCP server that the
+    /// gateway holds the credential for, over stdio, with no credential in the agent's MCP file.
+    Mcp {
+        #[command(subcommand)]
+        cmd: McpCmd,
+    },
     /// Call an upstream through the gateway, which injects the granted secret; output is redacted.
     Relay(connector::RelayArgs),
     /// Print a shell completion script.
@@ -168,6 +180,15 @@ enum Cmd {
     Smith {
         #[command(subcommand)]
         cmd: SelfCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpCmd {
+    /// Serve the gateway's upstream MCP server `<name>` over stdio (a stdio MCP server entry).
+    Bridge {
+        /// Upstream name (see `smith init --mcp-gateway`).
+        name: String,
     },
 }
 
@@ -238,11 +259,15 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
             binding_only,
             yes,
             hub,
+            mcp_gateway,
             dry_run,
-        }) => init_cmd::run(&ro, binding_only, yes, hub.as_deref(), dry_run),
+        }) => init_cmd::run(&ro, binding_only, yes, hub.as_deref(), mcp_gateway, dry_run),
         Some(Cmd::Login(a)) => connector::login(cli.json, a),
         Some(Cmd::Grants) => connector::grants(cli.json),
         Some(Cmd::Relay(a)) => connector::relay(cli.json, a),
+        Some(Cmd::Mcp {
+            cmd: McpCmd::Bridge { name },
+        }) => mcp_bridge::run(&name),
         Some(Cmd::Hook { agent, event }) => hook_cmd::run(&agent, &event),
         Some(Cmd::Scan(a)) => scan_cmd::run(&ro, a),
         Some(Cmd::Git { cmd }) => git_cmd::run(cli.json, cmd),

@@ -3,7 +3,7 @@ import { Head } from "@locksmith/ui";
 import { bindingDetails, type BindingSummary, type Client } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
 
-const KIND: Record<string, string> = { http: "HTTP", git: "Git", pg: "Postgres", aws: "AWS" };
+const KIND: Record<string, string> = { http: "HTTP", git: "Git", pg: "Postgres", aws: "AWS", mcp: "MCP" };
 
 /** Bindings page: what the gateway can reach, non-secret fields only (never a password or template). */
 export function Bindings({ client }: { client: Client }) {

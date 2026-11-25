@@ -5,10 +5,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ \"$CLAUDE_CODE_REMOTE\" = true ] && command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && { (sudo -n service docker start || sudo -n dockerd) >/tmp/dockerd.log 2>&1 & } ; exit 0"
+            "command": "[ \"$CLAUDE_CODE_REMOTE\" = true ] && command -v docker >/dev/null && ! docker info >/dev/null 2>&1 && { sudo -n sh -c 'test -e /etc/docker/daemon.json || { mkdir -p /etc/docker && echo \"{\\\"registry-mirrors\\\":[\\\"https://mirror.gcr.io\\\"]}\" >/etc/docker/daemon.json; }'; (sudo -n service docker start || sudo -n dockerd) >/tmp/dockerd.log 2>&1 & } ; exit 0"
           }
         ]
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "locksmith-common": {
+      "source": {
+        "source": "github",
+        "repo": "locksmith-hq/locksmith-common"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "common@locksmith-common": true
   }
 }

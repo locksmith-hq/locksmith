@@ -91,3 +91,4 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 3. Mark the path `nest` in `apps/api/route-table.json` (a path must be in exactly one of `services/control-plane/openapi.json` and `openapi.nest.json`).
 4. Run `just sdk-gen` to regenerate the SDK types from both documents.
 5. Add scenarios in `tests/api-contract` (or a reasoned exclusion); coverage reads both documents.
+<!-- merge-gate smoke test 2026-11-24: safe to delete -->

@@ -24,7 +24,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use ls_audit::{Actor, Attrs, Code, Event, Host, Target, attr, kind, outcome};
+use ls_audit::{Actor, Attrs, Code, Event, Host, Target, Text, attr, kind, outcome};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
@@ -840,6 +840,299 @@ pub async fn append_agent_mcp_call(
         .map_err(ApiError::from)?;
     Ok((
         StatusCode::CREATED,
+        Json(AppendedEvent {
+            id: a.id,
+            seq: a.seq,
+        }),
+    ))
+}
+
+/// Which of the two upstream-call ledger events a request appends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpUpstreamPhase {
+    /// `mcp.upstream_call`: before forwarding (`pending`), or alone when refused (`denied`).
+    Call,
+    /// `mcp.upstream_outcome`: how a forwarded call ended (`ok` or `error`); needs `attempt_id`.
+    Outcome,
+}
+
+/// The decision the gateway's tool policy took for an upstream call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpUpstreamDecision {
+    Allow,
+    Hide,
+    Deny,
+    Hold,
+}
+
+/// How an upstream call stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpUpstreamOutcome {
+    Pending,
+    Ok,
+    Denied,
+    Error,
+}
+
+/// Why an upstream call was refused or failed: a closed set of static codes. The first group is
+/// a refusal (phase `call`, outcome `denied`); the rest is a failure after the call was forwarded
+/// (phase `outcome`, outcome `error`; the gateway's hop error slugs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpUpstreamReason {
+    /// The policy decided `hide` for the tool.
+    Hide,
+    /// The policy decided `deny` for the tool.
+    Deny,
+    /// The policy decided `hold` for the tool (no approver yet).
+    Hold,
+    /// The tool is not in the upstream's catalogue (the agent sees the same error as `hide`).
+    UnknownTool,
+    /// The tool policy could not decide (fail closed).
+    PolicyUnavailable,
+    /// The upstream's catalogue could not be fetched.
+    CatalogueUnavailable,
+    Denied,
+    DeniedAddress,
+    UpstreamUnreachable,
+    SecretUnavailable,
+    SecretUnusable,
+    UpstreamError,
+    UpstreamUnsupported,
+    UpstreamTimeout,
+    RedactionFailed,
+    Internal,
+}
+
+impl McpUpstreamReason {
+    fn code(self) -> Code {
+        match self {
+            Self::Hide => Code::new("hide"),
+            Self::Deny => Code::new("deny"),
+            Self::Hold => Code::new("hold"),
+            Self::UnknownTool => Code::new("unknown_tool"),
+            Self::PolicyUnavailable => Code::new("policy_unavailable"),
+            Self::CatalogueUnavailable => Code::new("catalogue_unavailable"),
+            Self::Denied => Code::new("denied"),
+            Self::DeniedAddress => Code::new("denied_address"),
+            Self::UpstreamUnreachable => Code::new("upstream_unreachable"),
+            Self::SecretUnavailable => Code::new("secret_unavailable"),
+            Self::SecretUnusable => Code::new("secret_unusable"),
+            Self::UpstreamError => Code::new("upstream_error"),
+            Self::UpstreamUnsupported => Code::new("upstream_unsupported"),
+            Self::UpstreamTimeout => Code::new("upstream_timeout"),
+            Self::RedactionFailed => Code::new("redaction_failed"),
+            Self::Internal => Code::new("internal"),
+        }
+    }
+
+    /// A reason for a refusal (`denied`), as against a failure after forwarding (`error`).
+    fn is_refusal(self) -> bool {
+        matches!(
+            self,
+            Self::Hide
+                | Self::Deny
+                | Self::Hold
+                | Self::UnknownTool
+                | Self::PolicyUnavailable
+                | Self::CatalogueUnavailable
+        )
+    }
+
+    /// The decision a `hide`, `deny` or `hold` reason names, if it is one of the three.
+    fn decision(self) -> Option<McpUpstreamDecision> {
+        match self {
+            Self::Hide => Some(McpUpstreamDecision::Hide),
+            Self::Deny => Some(McpUpstreamDecision::Deny),
+            Self::Hold => Some(McpUpstreamDecision::Hold),
+            _ => None,
+        }
+    }
+}
+
+impl McpUpstreamDecision {
+    fn code(self) -> Code {
+        match self {
+            Self::Allow => Code::new("allow"),
+            Self::Hide => Code::new("hide"),
+            Self::Deny => Code::new("deny"),
+            Self::Hold => Code::new("hold"),
+        }
+    }
+}
+
+/// One MCP upstream proxy call, as the gateway records it. There is no field for arguments, a
+/// result or the upstream credential.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NewMcpUpstreamCall {
+    pub phase: McpUpstreamPhase,
+    /// The agent whose verified token made the call (the event's actor).
+    pub agent_id: Uuid,
+    /// The upstream's configured name.
+    #[schema(min_length = 1, max_length = 32, pattern = "^[a-z0-9-]+$")]
+    pub upstream: String,
+    /// The tool name from the upstream catalogue; recorded only when it passes the MCP tool-name
+    /// rule (`[A-Za-z0-9_.-]{1,128}`), else `unknown`. The gateway sends `unknown` for a name
+    /// outside the catalogue.
+    #[schema(max_length = 200)]
+    pub tool: String,
+    pub decision: McpUpstreamDecision,
+    pub outcome: McpUpstreamOutcome,
+    /// Why a call was `denied` or `error`.
+    pub reason: Option<McpUpstreamReason>,
+    /// Links an `outcome` event to its `call` event; required with phase `outcome`, refused with
+    /// phase `call`.
+    pub attempt_id: Option<Uuid>,
+}
+
+/// Whether `name` is a configured upstream name: `[a-z0-9-]{1,32}`.
+fn valid_upstream_name(name: &str) -> bool {
+    (1..=32).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+impl NewMcpUpstreamCall {
+    /// The ledger event and, for an outcome, the attempt it is idempotent on; or a `400` when the
+    /// fields do not fit together. The only caller text that reaches the event is `upstream`
+    /// (pattern-checked) and `tool` (tool-name rule).
+    fn into_event(self, org_id: Uuid) -> Result<(Event, Option<Uuid>), ApiError> {
+        if !valid_upstream_name(&self.upstream) {
+            return Err(ApiError::validation(
+                "`upstream` must match `[a-z0-9-]{1,32}`",
+            ));
+        }
+        let fits = match (self.phase, self.outcome) {
+            // Before forwarding: an allowed call, no reason, no attempt.
+            (McpUpstreamPhase::Call, McpUpstreamOutcome::Pending) => {
+                self.decision == McpUpstreamDecision::Allow
+                    && self.reason.is_none()
+                    && self.attempt_id.is_none()
+            }
+            // Refused: never `allow`; the reason is a refusal and names the decision when it is
+            // one of hide, deny or hold.
+            (McpUpstreamPhase::Call, McpUpstreamOutcome::Denied) => {
+                self.decision != McpUpstreamDecision::Allow
+                    && self.attempt_id.is_none()
+                    && self.reason.is_some_and(|r| {
+                        r.is_refusal() && r.decision().is_none_or(|d| d == self.decision)
+                    })
+            }
+            (McpUpstreamPhase::Outcome, McpUpstreamOutcome::Ok) => {
+                self.decision == McpUpstreamDecision::Allow
+                    && self.reason.is_none()
+                    && self.attempt_id.is_some()
+            }
+            (McpUpstreamPhase::Outcome, McpUpstreamOutcome::Error) => {
+                self.decision == McpUpstreamDecision::Allow
+                    && self.reason.is_some_and(|r| !r.is_refusal())
+                    && self.attempt_id.is_some()
+            }
+            _ => false,
+        };
+        if !fits {
+            return Err(ApiError::validation(
+                "`phase`, `outcome`, `decision`, `reason` and `attempt_id` do not fit together",
+            ));
+        }
+        // Client text is recorded only as a tool name that passes the MCP rule.
+        let tool = if ls_mcp_server::upstream::valid_tool_name(&self.tool) {
+            Text::parse(&self.tool).map_err(|_| ApiError::validation("`tool` is not recordable"))?
+        } else {
+            Text::parse("unknown").map_err(|_| ApiError::new(Kind::Internal, "static text"))?
+        };
+        let upstream = Text::parse(&self.upstream)
+            .map_err(|_| ApiError::validation("`upstream` is not recordable"))?;
+        let mut attrs = Attrs::new()
+            .text(attr::UPSTREAM, upstream)
+            .text(attr::TOOL, tool)
+            .code(attr::DECISION, self.decision.code());
+        if let Some(r) = self.reason {
+            attrs = attrs.code(attr::REASON, r.code());
+        }
+        if let Some(a) = self.attempt_id {
+            attrs = attrs.id(attr::ATTEMPT_ID, a);
+        }
+        let event = Event {
+            kind: match self.phase {
+                McpUpstreamPhase::Call => kind::MCP_UPSTREAM_CALL,
+                McpUpstreamPhase::Outcome => kind::MCP_UPSTREAM_OUTCOME,
+            },
+            actor: Actor::Agent(self.agent_id),
+            target: Some(Target::Org(org_id)),
+            outcome: match self.outcome {
+                McpUpstreamOutcome::Pending => outcome::PENDING,
+                McpUpstreamOutcome::Ok => outcome::OK,
+                McpUpstreamOutcome::Denied => outcome::DENIED,
+                McpUpstreamOutcome::Error => outcome::ERROR,
+            },
+            attrs,
+        };
+        let once = match self.phase {
+            McpUpstreamPhase::Outcome => self.attempt_id,
+            McpUpstreamPhase::Call => None,
+        };
+        Ok((event, once))
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/mcp/upstream-calls",
+    operation_id = "append_mcp_upstream_call",
+    tag = "internal",
+    summary = "Append an `mcp.upstream_call` or `mcp.upstream_outcome` event (gateway only)",
+    description = "The gateway records every call through its MCP upstream proxy: the agent, the upstream's configured name, the tool (a valid MCP tool name, else `unknown`), the decision and the outcome with a static reason; never arguments, results or the upstream credential. Phase `call` appends `mcp.upstream_call` with outcome `pending` (decision `allow`, before forwarding) or `denied` (a refusal, with a refusal reason). Phase `outcome` appends `mcp.upstream_outcome` with outcome `ok`, or `error` and a failure reason, and needs `attempt_id` (the id of the `pending` event); it is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`. Unknown fields, and fields that do not fit together, are a `400`.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to (the agent token's `org`)"),
+    ),
+    request_body = NewMcpUpstreamCall,
+    responses(
+        (status = 200, description = "`mcp.upstream_outcome` already recorded for this `attempt_id` with the same fields; nothing appended", body = AppendedEvent),
+        (status = 201, description = "Appended", body = AppendedEvent),
+        (status = 409, description = "`mcp.upstream_outcome` already recorded for this `attempt_id` with different fields", body = Problem, content_type = "application/problem+json"),
+        InternalWriteErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn append_mcp_upstream_call(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+    ApiJson(input): ApiJson<NewMcpUpstreamCall>,
+) -> Result<(StatusCode, Json<AppendedEvent>), ApiError> {
+    let org_id = org.org_id;
+    let (event, attempt_id) = input.into_event(org_id)?;
+    let appended = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                match attempt_id {
+                    Some(a) => crate::audit::append_outcome_once(c, org_id, a, &event).await,
+                    None => crate::audit::append(c, org_id, &event)
+                        .await
+                        .map(crate::audit::Once::Appended),
+                }
+            })
+        })
+        .await
+        .map_err(ApiError::from)?;
+    let (status, a) = match appended {
+        crate::audit::Once::Appended(a) => (StatusCode::CREATED, a),
+        crate::audit::Once::Existing(a) => (StatusCode::OK, a),
+        crate::audit::Once::Conflict => {
+            return Err(ApiError::new(
+                Kind::Conflict,
+                "a different outcome is already recorded for this attempt",
+            ));
+        }
+    };
+    Ok((
+        status,
         Json(AppendedEvent {
             id: a.id,
             seq: a.seq,

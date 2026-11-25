@@ -361,6 +361,220 @@ pub fn merge_mcp(a: Agent, existing: Option<&str>) -> Result<String, String> {
     Ok(serde_json::to_string_pretty(&root).map_err(|e| e.to_string())? + "\n")
 }
 
+/// What `smith init --mcp-gateway` changed in one MCP file.
+pub struct GatewayRewrite {
+    /// The new file text.
+    pub after: String,
+    /// The old text with every value in a rewritten entry replaced by `***`, for the preview only
+    /// (the entry may hold a token; it is not saved anywhere).
+    pub masked_before: String,
+    /// The upstream names whose entry was replaced.
+    pub rewritten: Vec<String>,
+}
+
+/// The stdio entry that runs `smith mcp bridge <name>`.
+fn bridge_args(name: &str) -> [&str; 3] {
+    ["mcp", "bridge", name]
+}
+
+const MASK: &str = "***";
+
+fn mask_json(v: &mut Value) {
+    match v {
+        Value::String(s) => *s = MASK.into(),
+        Value::Array(a) => a.iter_mut().for_each(mask_json),
+        Value::Object(o) => o.values_mut().for_each(mask_json),
+        _ => {}
+    }
+}
+
+fn mask_toml(item: &mut toml_edit::Item) {
+    use toml_edit::{Item, Value as V};
+    match item {
+        Item::Value(V::String(s)) => *s = toml_edit::Formatted::new(MASK.into()),
+        Item::Value(V::Array(a)) => {
+            for v in a.iter_mut() {
+                *v = V::from(MASK);
+            }
+        }
+        Item::Value(V::InlineTable(t)) => {
+            for (_, v) in t.iter_mut() {
+                *v = V::from(MASK);
+            }
+        }
+        Item::Table(t) => {
+            for (_, v) in t.iter_mut() {
+                mask_toml(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Replace every MCP entry named like an upstream the gateway serves to this agent with the
+/// stdio bridge (`smith mcp bridge <name>`), dropping its `url`, `headers`, `env` and anything
+/// else. Other entries are untouched; an entry that already is the bridge is left alone, so the
+/// rewrite is idempotent. `None` when nothing changed.
+pub fn rewrite_gateway_mcp(
+    a: Agent,
+    existing: &str,
+    upstreams: &[String],
+) -> Result<Option<GatewayRewrite>, String> {
+    let mut rewritten = Vec::new();
+    if a == Agent::Codex {
+        let mut doc: toml_edit::DocumentMut = existing
+            .parse()
+            .map_err(|e| format!("existing config is not valid TOML: {e}"))?;
+        let mut masked = doc.clone();
+        for name in upstreams {
+            let Some(item) = doc
+                .get_mut("mcp_servers")
+                .and_then(|s| s.as_table_like_mut())
+                .and_then(|t| t.get_mut(name))
+            else {
+                continue;
+            };
+            let is_bridge = item.as_table_like().is_some_and(|t| {
+                t.len() == 2
+                    && t.get("command").and_then(|c| c.as_str()) == Some("smith")
+                    && t.get("args").and_then(|a| a.as_array()).is_some_and(|a| {
+                        a.iter()
+                            .map(|v| v.as_str().unwrap_or(""))
+                            .eq(bridge_args(name))
+                    })
+            });
+            if is_bridge {
+                continue;
+            }
+            let mut t = toml_edit::Table::new();
+            t["command"] = toml_edit::value("smith");
+            let mut args = toml_edit::Array::new();
+            bridge_args(name).iter().for_each(|x| args.push(*x));
+            t["args"] = toml_edit::value(args);
+            *item = toml_edit::Item::Table(t);
+            if let Some(m) = masked
+                .get_mut("mcp_servers")
+                .and_then(|s| s.as_table_like_mut())
+                .and_then(|t| t.get_mut(name))
+            {
+                mask_toml(m);
+            }
+            rewritten.push(name.clone());
+        }
+        if rewritten.is_empty() {
+            return Ok(None);
+        }
+        return Ok(Some(GatewayRewrite {
+            after: doc.to_string(),
+            masked_before: masked.to_string(),
+            rewritten,
+        }));
+    }
+    let mut root: Value = serde_json::from_str(existing)
+        .map_err(|e| format!("existing config is not valid JSON: {e}"))?;
+    let mut masked = root.clone();
+    let key = servers_key(a);
+    let Some(servers) = root.get_mut(key).and_then(Value::as_object_mut) else {
+        return Ok(None);
+    };
+    for name in upstreams {
+        let Some(entry) = servers.get(name) else {
+            continue;
+        };
+        let is_bridge = entry["command"] == "smith"
+            && entry["args"] == json!(bridge_args(name))
+            && entry.as_object().is_some_and(|o| {
+                o.keys()
+                    .all(|k| matches!(k.as_str(), "command" | "args" | "type"))
+            });
+        if is_bridge {
+            continue;
+        }
+        let new = if a == Agent::Copilot {
+            json!({"type": "stdio", "command": "smith", "args": bridge_args(name)})
+        } else {
+            json!({"command": "smith", "args": bridge_args(name)})
+        };
+        servers.insert(name.clone(), new);
+        if let Some(m) = masked.get_mut(key).and_then(|s| s.get_mut(name.as_str())) {
+            mask_json(m);
+        }
+        rewritten.push(name.clone());
+    }
+    if rewritten.is_empty() {
+        return Ok(None);
+    }
+    let pretty = |v: &Value| serde_json::to_string_pretty(v).map(|s| s + "\n");
+    Ok(Some(GatewayRewrite {
+        after: pretty(&root).map_err(|e| e.to_string())?,
+        masked_before: pretty(&masked).map_err(|e| e.to_string())?,
+        rewritten,
+    }))
+}
+
+/// Names of servers, in an MCP file's text, that carry a credential-like header or env value
+/// (`Authorization`, `*-key`, `*-token`, `*_KEY`, `*_TOKEN`, ...) with a non-empty value.
+/// Names only, never a value. Invalid text yields no findings.
+pub fn mcp_credentials(a: Agent, text: &str) -> Vec<(String, String)> {
+    fn credential_like(field: &str) -> bool {
+        let f = field.to_ascii_lowercase().replace('_', "-");
+        f == "authorization"
+            || f == "proxy-authorization"
+            || f == "cookie"
+            || ["key", "token", "secret", "password", "apikey"]
+                .iter()
+                .any(|s| f == *s || f.ends_with(&format!("-{s}")))
+    }
+    let mut out = Vec::new();
+    let mut scan = |server: &str, field: &str, v: bool| {
+        if v && credential_like(field) {
+            out.push((server.to_owned(), field.to_owned()));
+        }
+    };
+    if a == Agent::Codex {
+        let Ok(t) = text.parse::<toml_edit::DocumentMut>() else {
+            return out;
+        };
+        let Some(servers) = t.get("mcp_servers").and_then(|s| s.as_table_like()) else {
+            return out;
+        };
+        for (name, entry) in servers.iter() {
+            for group in ["env", "http_headers", "headers"] {
+                if let Some(g) = entry.get(group).and_then(|g| g.as_table_like()) {
+                    for (k, v) in g.iter() {
+                        scan(name, k, v.as_str().is_some_and(|s| !s.is_empty()));
+                    }
+                }
+            }
+            // A token-valued option is a credential by name, whatever it is called.
+            if entry
+                .get("bearer_token")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| !s.is_empty())
+            {
+                scan(name, "bearer_token", true);
+            }
+        }
+        return out;
+    }
+    let Ok(v) = serde_json::from_str::<Value>(text) else {
+        return out;
+    };
+    let Some(servers) = v.get(servers_key(a)).and_then(Value::as_object) else {
+        return out;
+    };
+    for (name, entry) in servers {
+        for group in ["headers", "env"] {
+            if let Some(g) = entry.get(group).and_then(Value::as_object) {
+                for (k, v) in g {
+                    scan(name, k, v.as_str().is_some_and(|s| !s.is_empty()));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Cline hook file. Ours is replaced by nothing (already current); a script someone else wrote
 /// is never overwritten, so it errors and the user adds the Locksmith call by hand.
 fn merge_cline(existing: Option<&str>) -> Result<String, String> {
@@ -858,5 +1072,128 @@ mod tests {
             "codex/config.hub.toml",
             merge_hub_mcp(Agent::Codex, None, hub).unwrap(),
         );
+    }
+
+    const TOKEN: &str = "ghp_TOKEN_CANARY_0123456789";
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn gateway_rewrite_json_replaces_only_named_entries_and_is_idempotent() {
+        let text = format!(
+            r#"{{"keep":1,"mcpServers":{{"github":{{"url":"https://x.test/mcp","headers":{{"Authorization":"Bearer {TOKEN}"}}}},"other":{{"command":"npx","env":{{"K":"v"}}}},"local":{{"command":"x"}}}}}}"#
+        );
+        for a in [Agent::ClaudeCode, Agent::Cursor, Agent::GeminiCli] {
+            let r = rewrite_gateway_mcp(a, &text, &names(&["github", "absent"]))
+                .unwrap()
+                .expect("rewritten");
+            assert_eq!(r.rewritten, ["github"]);
+            assert!(
+                !r.after.contains(TOKEN) && !r.after.contains("x.test"),
+                "{a:?}"
+            );
+            // The preview text hides every value of the replaced entry.
+            assert!(!r.masked_before.contains(TOKEN) && !r.masked_before.contains("x.test"));
+            assert!(r.masked_before.contains("***"));
+            let v: Value = serde_json::from_str(&r.after).unwrap();
+            assert_eq!(v["keep"], 1);
+            assert_eq!(
+                v["mcpServers"]["github"],
+                json!({"command":"smith","args":["mcp","bridge","github"]})
+            );
+            // Other entries are untouched, secrets in them included (doctor reports those).
+            assert_eq!(
+                v["mcpServers"]["other"],
+                json!({"command":"npx","env":{"K":"v"}})
+            );
+            assert_eq!(v["mcpServers"]["local"], json!({"command":"x"}));
+            assert!(
+                rewrite_gateway_mcp(a, &r.after, &names(&["github"]))
+                    .unwrap()
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_rewrite_copilot_uses_servers_and_a_stdio_type() {
+        let text = format!(
+            r#"{{"servers":{{"github":{{"type":"http","url":"https://x.test","headers":{{"x-api-key":"{TOKEN}"}}}}}}}}"#
+        );
+        let r = rewrite_gateway_mcp(Agent::Copilot, &text, &names(&["github"]))
+            .unwrap()
+            .unwrap();
+        let v: Value = serde_json::from_str(&r.after).unwrap();
+        assert_eq!(
+            v["servers"]["github"],
+            json!({"type":"stdio","command":"smith","args":["mcp","bridge","github"]})
+        );
+        assert!(!r.after.contains(TOKEN) && !r.masked_before.contains(TOKEN));
+        assert!(
+            rewrite_gateway_mcp(Agent::Copilot, &r.after, &names(&["github"]))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn gateway_rewrite_codex_keeps_comments_and_other_tables() {
+        let text = format!(
+            "# mine\nmodel = \"x\"\n\n[mcp_servers.github]\nurl = \"https://x.test/mcp\"\nbearer_token = \"{TOKEN}\"\n\n[mcp_servers.github.env]\nGITHUB_TOKEN = \"{TOKEN}\"\n\n[mcp_servers.other]\ncommand = \"npx\"\n"
+        );
+        let r = rewrite_gateway_mcp(Agent::Codex, &text, &names(&["github"]))
+            .unwrap()
+            .unwrap();
+        assert!(r.after.contains("# mine") && r.after.contains("[mcp_servers.other]"));
+        assert!(
+            !r.after.contains(TOKEN) && !r.after.contains("x.test"),
+            "{}",
+            r.after
+        );
+        assert!(!r.masked_before.contains(TOKEN), "{}", r.masked_before);
+        let t: toml::Table = toml::from_str(&r.after).unwrap();
+        assert_eq!(
+            t["mcp_servers"]["github"]["command"].as_str(),
+            Some("smith")
+        );
+        assert_eq!(
+            t["mcp_servers"]["github"]["args"].as_array().unwrap().len(),
+            3
+        );
+        assert!(t["mcp_servers"]["github"].get("env").is_none());
+        assert!(
+            rewrite_gateway_mcp(Agent::Codex, &r.after, &names(&["github"]))
+                .unwrap()
+                .is_none()
+        );
+        assert!(rewrite_gateway_mcp(Agent::Codex, "= =", &names(&["github"])).is_err());
+        assert!(rewrite_gateway_mcp(Agent::ClaudeCode, "{oops", &names(&["github"])).is_err());
+    }
+
+    #[test]
+    fn credential_like_values_are_reported_by_name_only() {
+        let json = format!(
+            r#"{{"mcpServers":{{"a":{{"headers":{{"Authorization":"Bearer {TOKEN}","Accept":"x"}}}},"b":{{"env":{{"GITHUB_TOKEN":"{TOKEN}","LOG":"1","API_KEY":""}}}},"c":{{"headers":{{"X-Api-Key":"{TOKEN}"}}}},"d":{{"command":"x"}}}}}}"#
+        );
+        let f = mcp_credentials(Agent::ClaudeCode, &json);
+        assert_eq!(
+            f,
+            vec![
+                ("a".to_owned(), "Authorization".to_owned()),
+                ("b".to_owned(), "GITHUB_TOKEN".to_owned()),
+                ("c".to_owned(), "X-Api-Key".to_owned()),
+            ]
+        );
+        assert!(!format!("{f:?}").contains(TOKEN));
+        let toml = format!(
+            "[mcp_servers.a]\n[mcp_servers.a.env]\nOPENAI_API_KEY = \"{TOKEN}\"\nMODE = \"x\"\n"
+        );
+        assert_eq!(
+            mcp_credentials(Agent::Codex, &toml),
+            vec![("a".to_owned(), "OPENAI_API_KEY".to_owned())]
+        );
+        assert!(mcp_credentials(Agent::ClaudeCode, "{oops").is_empty());
     }
 }

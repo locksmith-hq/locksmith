@@ -75,6 +75,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "grant delegate",
         include_str!("../migrations/0015_grant_delegate.sql"),
     ),
+    (
+        16,
+        "mcp upstream outcome unique",
+        include_str!("../migrations/0016_mcp_upstream_outcome_unique.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

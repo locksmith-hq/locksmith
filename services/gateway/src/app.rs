@@ -1,5 +1,6 @@
 //! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
-//! ([`crate::grants`]) and `/git/{host}/...` ([`crate::git`]).
+//! ([`crate::grants`]), `/git/{host}/...` ([`crate::git`]), `/mcp` ([`crate::mcp_endpoint`]) and
+//! `/mcp/upstream/{name}` ([`crate::mcp_upstream`]).
 
 use std::sync::Arc;
 
@@ -13,7 +14,9 @@ use crate::aws;
 use crate::git;
 use crate::grants;
 use crate::mcp_endpoint::{self, McpEndpoint};
+use crate::mcp_upstream;
 use crate::relay::{self, Relay};
+use ls_mcp_server::upstream::ToolPolicy;
 
 /// Shared, cheaply cloneable state.
 #[derive(Clone)]
@@ -21,6 +24,7 @@ pub struct AppState {
     readiness: Arc<dyn Readiness>,
     relay: Option<Arc<Relay>>,
     mcp: Option<Arc<McpEndpoint>>,
+    tool_policy: Option<Arc<dyn ToolPolicy>>,
 }
 
 impl AppState {
@@ -29,6 +33,7 @@ impl AppState {
             readiness,
             relay: None,
             mcp: None,
+            tool_policy: None,
         }
     }
 
@@ -42,6 +47,17 @@ impl AppState {
     pub fn with_mcp(mut self, mcp: McpEndpoint) -> Self {
         self.mcp = Some(Arc::new(mcp));
         self
+    }
+
+    /// Decide the tools of the `/mcp/upstream/{name}` servers (without it every tool is hidden
+    /// and every call refused, fail closed).
+    pub fn with_tool_policy(mut self, policy: Arc<dyn ToolPolicy>) -> Self {
+        self.tool_policy = Some(policy);
+        self
+    }
+
+    pub fn tool_policy(&self) -> Option<Arc<dyn ToolPolicy>> {
+        self.tool_policy.clone()
     }
 
     pub fn mcp(&self) -> Option<Arc<McpEndpoint>> {
@@ -80,6 +96,11 @@ pub fn build(state: AppState) -> Router {
                 .post(git::route)
                 .layer(DefaultBodyLimit::disable()),
         )
+        // Upstream MCP servers (m2-mcp-gateway): the same agent token, `Host` allowlist and rmcp
+        // log cap as `/mcp`; an unknown name and one without a relay grant are the same `404`.
+        .route(mcp_upstream::PATH, mcp_upstream::route(&state))
+        // Which upstreams the calling agent may use (task 6.1): names only.
+        .route(mcp_upstream::list::PATH, get(mcp_upstream::list::route))
         .merge(mcp)
         .with_state(state)
 }

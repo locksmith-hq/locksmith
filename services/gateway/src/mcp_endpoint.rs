@@ -43,12 +43,13 @@ use crate::relay::{Relay, error};
 /// rmcp targets that log whole JSON-RPC messages (tool results included) at `debug`/`trace`.
 const RMCP_MESSAGE_TARGETS: &[&str] = &["rmcp", "rmcp::service", "rmcp::transport"];
 
-/// Cap rmcp's logging at `info`, whatever else `filter` allows. rmcp logs every response message
-/// at `debug`, which would put an `issue_short_lived_credential` result (the credential) in the
-/// logs; the more specific directives also override a `RUST_LOG=rmcp::service=trace`.
+/// Cap rmcp's logging at `warn`, whatever else `filter` allows. rmcp logs every response message
+/// at `debug` and every notification its client receives (an upstream MCP server's, which can
+/// quote the credential it was sent) at `info`; both would put a credential in the logs. The more
+/// specific directives also override a `RUST_LOG=rmcp::service=trace`.
 pub fn cap_rmcp_logs(mut filter: tracing_subscriber::EnvFilter) -> tracing_subscriber::EnvFilter {
     for target in RMCP_MESSAGE_TARGETS {
-        if let Ok(d) = format!("{target}=info").parse() {
+        if let Ok(d) = format!("{target}=warn").parse() {
             filter = filter.add_directive(d);
         }
     }
@@ -107,6 +108,12 @@ impl McpEndpoint {
     pub fn with_clients(mut self, clients: Arc<dyn AgentClients>) -> Self {
         self.clients = clients;
         self
+    }
+
+    /// The `Host` values accepted (loopback plus the public hosts); `/mcp/upstream/{name}` uses
+    /// the same list.
+    pub(crate) fn allowed_hosts(&self) -> &[String] {
+        &self.allowed_hosts
     }
 }
 
@@ -283,7 +290,7 @@ impl GatewayMcp {
     }
 }
 
-fn unauthorized(token_presented: bool) -> Response {
+pub(crate) fn unauthorized(token_presented: bool) -> Response {
     let mut response = error(
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
@@ -330,26 +337,40 @@ async fn agent_revoked(
     revoked.contains(&agent.agent_id)
 }
 
+/// Verify the agent token on `request` and refuse a revoked agent; on success the verified
+/// [`AgentIdentity`] is inserted as a request extension and returned. The refusal is the one
+/// `401` with its challenge. Shared by `/mcp` and `/mcp/upstream/{name}` ([`crate::mcp_upstream`]).
+pub(crate) async fn admit(
+    endpoint: &McpEndpoint,
+    relay: Option<&Arc<Relay>>,
+    request: &mut Request,
+) -> Result<AgentIdentity, Box<Response>> {
+    let presented = request.headers().contains_key(header::AUTHORIZATION);
+    match endpoint.auth.authenticate(request.headers()).await {
+        Ok(identity) => {
+            // A revoked agent is refused like a bad token, on calls and on a fresh initialize.
+            if agent_revoked(endpoint, relay, &identity).await {
+                return Err(Box::new(unauthorized(true)));
+            }
+            request.extensions_mut().insert(identity);
+            Ok(identity)
+        }
+        Err(e) => {
+            // The reason is a fixed label, never token text.
+            tracing::debug!(reason = e.as_str(), "mcp request refused");
+            Err(Box::new(unauthorized(presented)))
+        }
+    }
+}
+
 async fn require_agent(
     State((endpoint, relay)): State<(Arc<McpEndpoint>, Option<Arc<Relay>>)>,
     mut request: Request,
     next: Next,
 ) -> Response {
-    let presented = request.headers().contains_key(header::AUTHORIZATION);
-    match endpoint.auth.authenticate(request.headers()).await {
-        Ok(identity) => {
-            // A revoked agent is refused like a bad token, on calls and on a fresh initialize.
-            if agent_revoked(&endpoint, relay.as_ref(), &identity).await {
-                return unauthorized(true);
-            }
-            request.extensions_mut().insert(identity);
-            next.run(request).await
-        }
-        Err(e) => {
-            // The reason is a fixed label, never token text.
-            tracing::debug!(reason = e.as_str(), "mcp request refused");
-            unauthorized(presented)
-        }
+    match admit(&endpoint, relay.as_ref(), &mut request).await {
+        Ok(_) => next.run(request).await,
+        Err(refused) => *refused,
     }
 }
 
@@ -361,7 +382,7 @@ pub fn router(state: &AppState) -> Router<AppState> {
             .route("/mcp/{*rest}", any(|| async { unauthorized(false) }));
     };
     let config = StreamableHttpServerConfig::default()
-        .with_allowed_hosts(endpoint.allowed_hosts.clone())
+        .with_allowed_hosts(endpoint.allowed_hosts().to_vec())
         .with_legacy_session_mode(true);
     let relay = state.relay();
     let settings = endpoint.settings.clone();

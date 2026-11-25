@@ -408,3 +408,17 @@ async fn token_holding_types_have_no_debug_or_clone() {
     }
     assert!(!implements!(ls_oauth::Tokens, std::fmt::Display));
 }
+
+/// GitHub answers 404 when the stored access token is not recognised (it expires after 8 h),
+/// which must not count as a revoked grant.
+#[tokio::test]
+async fn a_github_revoke_that_answers_404_is_a_failure() {
+    let s = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/revoke"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&s)
+        .await;
+    let c = client_at(&s, Quirk::Github);
+    err(c.revoke(&secret(ACCESS_1), None).await);
+}

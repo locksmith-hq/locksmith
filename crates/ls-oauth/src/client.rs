@@ -425,8 +425,10 @@ impl OAuthClient {
                     .build()
                     .map_err(|_| fail(Reason::Config))?;
                 let (status, _) = self.transport.send(req).await.map_err(|f| fail(f.0))?;
-                // 204 revoked the whole grant (refresh token too); 404 means no grant exists any more.
-                if matches!(status, 204 | 404) {
+                // Only 204 means the grant is revoked (refresh token too). A 404 cannot tell
+                // "no grant" from "token not recognised" (an expired access token), so it is a
+                // failure: the caller reports `revoked_at_provider: false`.
+                if status == 204 {
                     Ok(())
                 } else {
                     Err(fail(Reason::Rejected))

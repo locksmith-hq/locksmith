@@ -1,0 +1,28 @@
+{
+  "name": "@locksmith/agent-langchain",
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
+  },
+  "dependencies": {
+    "@langchain/core": "1.5.1",
+    "@langchain/langgraph": "1.7.5",
+    "@langchain/mcp-adapters": "2.0.3",
+    "@locksmith/agent": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.12"
+  }
+}

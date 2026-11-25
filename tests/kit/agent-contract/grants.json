@@ -1,0 +1,12 @@
+{
+  "agent_id": "0195f2c0-0000-7000-8000-000000000001",
+  "grants": [
+    {
+      "secret_id": "0195f2c0-0000-7000-8000-000000000002",
+      "secret_name": "stripe-test",
+      "mode": "relay",
+      "expires_at": null,
+      "allowed_origin": "http://127.0.0.1:9"
+    }
+  ]
+}

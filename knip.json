@@ -39,9 +39,44 @@
         "src/**/*.ts"
       ]
     },
+    "packages/agent": {
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
     "packages/sdk": {
       "project": [
         "src/**/*.ts"
+      ]
+    },
+    "integrations/agent-vercel-ai": {
+      "entry": [
+        "example/*.test.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "example/**/*.ts"
+      ]
+    },
+    "integrations/agent-openai-agents": {
+      "entry": [
+        "example/*.test.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "example/**/*.ts"
+      ]
+    },
+    "integrations/agent-langchain": {
+      "entry": [
+        "example/*.test.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "example/**/*.ts"
       ]
     }
   }

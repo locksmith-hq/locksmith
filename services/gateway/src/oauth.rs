@@ -2071,6 +2071,11 @@ mod tests {
         /// A second gateway process on the same database and provider: its own pool, vault,
         /// client and caches, the way a replica or a restarted gateway starts.
         fn instance(&self) -> Arc<OAuth> {
+            self.instance_with(fake_def(&self.fake))
+        }
+
+        /// As [`Self::instance`] with the provider registered as `def`.
+        fn instance_with(&self, def: ProviderDef) -> Arc<OAuth> {
             let human = HumanAuth::new(&HumanAuthConfig {
                 issuer: ISSUER.to_owned(),
                 audience: AUDIENCE.to_owned(),
@@ -2081,7 +2086,6 @@ mod tests {
             let vault = Arc::new(TokenVault::new(MemWrapper {
                 check_binding: true,
             }));
-            let def = fake_def(&self.fake);
             let http =
                 crate::http_client::build(Duration::from_secs(5), Duration::from_secs(10), None)
                     .unwrap();
@@ -3115,6 +3119,379 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    /// The real `POST /v1/relay` route over the OAuth harness's database: a `Relay` with the
+    /// connection path on, an in-memory ledger shared with the harness, and a mock upstream.
+    struct RelayRig {
+        app: Router,
+        upstream: MockServer,
+        signer: ls_control_plane::agent_token::AgentTokenSigner,
+    }
+
+    impl RelayRig {
+        /// `dev`: the connection's provider is the dev-only `mock` (plain HTTP and loopback
+        /// allowed) with the upstream as its one API host; otherwise the harness's `fake`
+        /// provider (HTTPS only, `api.fake.test`).
+        async fn start(h: &Harness, dev: bool) -> Self {
+            use crate::auth::testkit::StubJwks;
+            use crate::auth::{AgentAuth, JwksSettings};
+            use crate::decrypt::testkit::key;
+            use crate::decrypt::{CacheSettings, ControlPlane, Decryptor, DekCache};
+            use crate::egress::testkit::StubResolver;
+            use crate::grants::testkit::StubGrants;
+            use crate::grants::{GrantCache, GrantCacheSettings};
+            use crate::relay::{Relay, RelayOptions};
+
+            let upstream = MockServer::start().await;
+            let port = upstream.address().port();
+            let oauth = if dev {
+                let mut def = fake_def(&h.fake);
+                def.id = "mock".to_owned();
+                def.api_hosts = vec![format!("upstream.test:{port}")];
+                h.instance_with(def)
+            } else {
+                h.oauth.clone()
+            };
+            let signer = ls_control_plane::agent_token::AgentTokenSigner::from_seed(
+                zeroize::Zeroizing::new([7u8; 32]),
+            )
+            .unwrap();
+            let auth = Arc::new(AgentAuth::new(
+                ORG,
+                Arc::new(StubJwks::with(vec![signer.jwk().clone()])),
+                JwksSettings::default(),
+            ));
+            // Connection relays never touch the secret path: its dependencies point nowhere.
+            let decryptor = Decryptor::new(
+                ORG,
+                Arc::new(
+                    ControlPlane::new(
+                        "http://127.0.0.1:1".parse().unwrap(),
+                        ORG,
+                        "s".repeat(32).into(),
+                    )
+                    .unwrap(),
+                ),
+                Arc::new(
+                    ls_envelope::OpenBaoTransit::new(
+                        "http://127.0.0.1:1",
+                        key(),
+                        ls_envelope::BaoToken::new("bao".to_owned()),
+                    )
+                    .unwrap(),
+                ),
+                Arc::new(DekCache::new(CacheSettings::default())),
+            );
+            let relay = Relay::new(
+                auth,
+                Arc::new(GrantCache::new(
+                    Arc::new(StubGrants::default()),
+                    GrantCacheSettings::default(),
+                )),
+                crate::config::Bindings {
+                    org_id: ORG,
+                    bindings: Vec::new(),
+                    aws_bindings: Vec::new(),
+                    pg: Vec::new(),
+                    git_bindings: Vec::new(),
+                    mcp_upstreams: Vec::new(),
+                },
+                decryptor,
+                Arc::new(StubResolver::with(&[
+                    ("upstream.test", "127.0.0.1".parse().unwrap()),
+                    ("api.fake.test", "127.0.0.1".parse().unwrap()),
+                ])),
+                h.audit.clone(),
+                RelayOptions {
+                    connect_timeout: Duration::from_secs(2),
+                    timeout: Duration::from_secs(5),
+                    max_request_body: 64 * 1024,
+                    max_response_body: 64 * 1024,
+                    outcome_retries: 3,
+                    outcome_retry_backoff: Duration::from_millis(1),
+                },
+            )
+            .with_oauth(oauth);
+            let app = app::build(
+                AppState::new(Arc::new(ReadyFlag::new(true))).with_relay(Arc::new(relay)),
+            );
+            Self {
+                app,
+                upstream,
+                signer,
+            }
+        }
+
+        fn upstream_url(&self, path: &str) -> String {
+            format!(
+                "http://upstream.test:{}{path}",
+                self.upstream.address().port()
+            )
+        }
+
+        /// `POST /v1/relay` as `agent` with `body`; answers the status and the body text.
+        async fn call(&self, agent: Uuid, body: Value) -> (StatusCode, String) {
+            let now = time::OffsetDateTime::now_utc().unix_timestamp();
+            let token = self
+                .signer
+                .sign(&ls_control_plane::agent_token::AgentClaims {
+                    sub: agent,
+                    org: ORG,
+                    aud: ls_control_plane::agent_token::AUDIENCE.to_owned(),
+                    iat: now,
+                    exp: now + 600,
+                })
+                .unwrap();
+            let res = self
+                .app
+                .clone()
+                .oneshot(
+                    Request::post("/v1/relay")
+                        .header("content-type", "application/json")
+                        .header("authorization", format!("Bearer {token}"))
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = res.status();
+            let text =
+                String::from_utf8_lossy(&res.into_body().collect().await.unwrap().to_bytes())
+                    .into_owned();
+            (status, text)
+        }
+
+        async fn upstream_requests(&self) -> usize {
+            self.upstream
+                .received_requests()
+                .await
+                .map_or(0, |r| r.len())
+        }
+    }
+
+    /// Make the connection the dev `mock` provider's, as the rig's instance registers it.
+    async fn relabel_mock(h: &Harness, id: Uuid) {
+        let mut admin = h.pg.admin().await;
+        sql::query("UPDATE oauth_connections SET provider = 'mock' WHERE id = $1")
+            .bind(id)
+            .execute(&mut admin)
+            .await
+            .unwrap();
+    }
+
+    fn connection_body(connection: Uuid, url: &str) -> Value {
+        json!({"connection_id": connection, "method": "GET", "url": url})
+    }
+
+    /// c1 5.1 through `POST /v1/relay`: the upstream gets the connection's access token as a
+    /// bearer, an echo of the access or the refresh token is redacted, and the ledger's
+    /// `relay.attempt` and `relay.outcome` name the connection and the person, no token.
+    #[tokio::test]
+    async fn oauth_relay_route_injects_bearer_redacts_tokens_and_records() {
+        use crate::audit::{EventKind, Outcome};
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        relabel_mock(&h, id).await;
+        let agent = agent_with_grant(&h, id, alice, Some("1 hour")).await;
+        let rig = RelayRig::start(&h, true).await;
+        Mock::given(method("GET"))
+            .and(path("/me"))
+            .and(wiremock::matchers::header(
+                "authorization",
+                format!("Bearer {ACCESS_1}").as_str(),
+            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(format!("access={ACCESS_1} refresh={REFRESH_1} ok")),
+            )
+            .mount(&rig.upstream)
+            .await;
+
+        let (status, text) = rig
+            .call(agent, connection_body(id, &rig.upstream_url("/me")))
+            .await;
+        assert_eq!(status, StatusCode::OK, "{text}");
+        let reqs = rig.upstream.received_requests().await.unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(
+            reqs[0]
+                .headers
+                .get("authorization")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            format!("Bearer {ACCESS_1}")
+        );
+        let resp: crate::relay::RelayResponse = serde_json::from_str(&text).unwrap();
+        assert_eq!(resp.status, 200);
+        let body = resp.body.unwrap();
+        assert_eq!(
+            body,
+            "access=[REDACTED:SECRET] refresh=[REDACTED:SECRET] ok"
+        );
+        for t in [ACCESS_1, REFRESH_1] {
+            assert!(!text.contains(t), "response carries a token");
+        }
+
+        let events = h.audit.events();
+        let kinds: Vec<_> = events.iter().map(|e| e.kind).collect();
+        assert_eq!(kinds, [EventKind::Attempt, EventKind::Outcome(Outcome::Ok)]);
+        for e in &events {
+            let c = e.connection.expect("event names the connection");
+            assert_eq!((c.connection_id, c.person), (id, alice));
+            assert_eq!(e.agent_id, agent);
+            assert!(e.secret_id.is_nil());
+            let dump = format!("{e:?}");
+            for t in [ACCESS_1, REFRESH_1] {
+                assert!(!dump.contains(t), "ledger event carries a token");
+            }
+        }
+        assert_eq!(events[1].status, Some(200));
+    }
+
+    /// c1 5.1 through `POST /v1/relay`: every refusal is a fixed slug, the upstream sees no
+    /// request, and a refusal for a known connection is a `relay.denied` event naming the
+    /// connection and the person.
+    #[tokio::test]
+    async fn oauth_relay_route_refuses_without_grant_or_connection_or_host() {
+        use crate::audit::{EventKind, Outcome};
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        relabel_mock(&h, id).await;
+        let granted = agent_with_grant(&h, id, alice, Some("1 hour")).await;
+        let expired = agent_with_grant(&h, id, alice, Some("-1 hour")).await;
+        let rig = RelayRig::start(&h, true).await;
+        let ok_url = rig.upstream_url("/x");
+        let slug = |text: &str| -> String {
+            serde_json::from_str::<Value>(text).unwrap()["error"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+
+        // No grant at all, an expired grant, and an unknown connection id.
+        for (who, conn) in [
+            (Uuid::new_v4(), id),
+            (expired, id),
+            (granted, Uuid::new_v4()),
+        ] {
+            let (status, text) = rig.call(who, connection_body(conn, &ok_url)).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{text}");
+            assert_eq!(slug(&text), "no_grant");
+        }
+        // A host that is not the provider's API host.
+        let (status, text) = rig
+            .call(granted, connection_body(id, "http://evil.test/x"))
+            .await;
+        assert_eq!(
+            (status, slug(&text).as_str()),
+            (StatusCode::FORBIDDEN, "host_not_allowed")
+        );
+        // Both targets, neither target, a secret without its version.
+        let secret = Uuid::new_v4();
+        for body in [
+            json!({"secret_id": secret, "version": 1, "connection_id": id,
+                   "method": "GET", "url": ok_url}),
+            json!({"method": "GET", "url": ok_url}),
+            json!({"secret_id": secret, "connection_id": id, "method": "GET", "url": ok_url}),
+        ] {
+            let (status, text) = rig.call(granted, body).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
+            assert_eq!(slug(&text), "bad_request");
+        }
+
+        // The ledger: the expired grant and the foreign host are denials naming the person;
+        // the unknown connection and the unknown agent's call (known connection) as well.
+        let events = h.audit.events();
+        assert!(!events.is_empty());
+        for e in &events {
+            assert!(matches!(
+                e.kind,
+                EventKind::Denied(Outcome::NoGrant | Outcome::Denied)
+            ));
+            let c = e.connection.expect("a denial for a known connection");
+            assert_eq!((c.connection_id, c.person), (id, alice));
+        }
+        assert_eq!(
+            events.len(),
+            3,
+            "no-grant x2, host; unknown id is not recorded"
+        );
+
+        // A revoked connection is refused with the same slug.
+        let mut admin = h.pg.admin().await;
+        sql::query("UPDATE oauth_connections SET status = 'revoked' WHERE id = $1")
+            .bind(id)
+            .execute(&mut admin)
+            .await
+            .unwrap();
+        let (status, text) = rig.call(granted, connection_body(id, &ok_url)).await;
+        assert_eq!(
+            (status, slug(&text).as_str()),
+            (StatusCode::FORBIDDEN, "no_grant")
+        );
+
+        assert_eq!(
+            rig.upstream_requests().await,
+            0,
+            "the upstream saw a request"
+        );
+        assert_eq!(h.token_calls().await, 1, "no provider call but the connect");
+    }
+
+    /// c1 5.1: the token goes over HTTPS only (plain HTTP is for the dev mock): a granted
+    /// agent relaying to the provider's own host over `http` is `403 host_not_allowed`.
+    #[tokio::test]
+    async fn oauth_relay_route_refuses_plain_http_for_a_real_provider() {
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        let agent = agent_with_grant(&h, id, alice, None).await;
+        let rig = RelayRig::start(&h, false).await;
+        for url in [
+            "http://api.fake.test/x",
+            "https://evil.test/x",
+            "https://api.fake.test:8443/x",
+        ] {
+            let (status, text) = rig.call(agent, connection_body(id, url)).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{url}: {text}");
+            assert!(text.contains("\"host_not_allowed\""), "{url}: {text}");
+        }
+        assert_eq!(rig.upstream_requests().await, 0);
+        assert_eq!(h.refresh_calls().await, 0);
+    }
+
+    /// c1 5.1: a connection whose refresh the provider refuses is `409
+    /// connection_needs_reconnect`; the attempt and its failed outcome are in the ledger and
+    /// the upstream sees no request.
+    #[tokio::test]
+    async fn oauth_relay_route_needs_reconnect_after_refresh_failure() {
+        use crate::audit::{EventKind, Outcome};
+        let h = Harness::start_with(Refresh::InvalidGrant).await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        relabel_mock(&h, id).await;
+        let agent = agent_with_grant(&h, id, alice, None).await;
+        h.make_due(id).await;
+        let rig = RelayRig::start(&h, true).await;
+
+        let (status, text) = rig
+            .call(agent, connection_body(id, &rig.upstream_url("/x")))
+            .await;
+        assert_eq!(status, StatusCode::CONFLICT, "{text}");
+        assert!(text.contains("\"connection_needs_reconnect\""), "{text}");
+        assert_eq!(rig.upstream_requests().await, 0);
+        let kinds: Vec<_> = h.audit.events().iter().map(|e| e.kind).collect();
+        assert_eq!(
+            kinds,
+            [
+                EventKind::Attempt,
+                EventKind::Outcome(Outcome::MaterialError)
+            ]
         );
     }
 

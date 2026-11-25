@@ -17,6 +17,6 @@ import { JobsService, PG_BOSS, createBoss } from "./jobs.service.js";
     },
     JobsService,
   ],
-  exports: [JobsService],
+  exports: [JobsService, PG_BOSS],
 })
 export class JobsModule {}

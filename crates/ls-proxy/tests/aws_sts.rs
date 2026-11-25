@@ -301,9 +301,9 @@ fn revoke_older_sessions_put_role_policy() {
     assert_signed(&r, &b.secret_access_key, "iam", "us-east-1");
 }
 
-/// `FLOCI_URL=http://localhost:4566 cargo test -p ls-proxy --test aws_sts -- --ignored`
+/// `just test-floci` runs it with the others.
 #[test]
-#[ignore]
+#[ignore = "needs Docker (Floci) and the AWS CLI"]
 fn floci_assume_role() {
     let url = std::env::var("FLOCI_URL").expect("FLOCI_URL");
     let b = Credentials {

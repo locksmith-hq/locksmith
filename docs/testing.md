@@ -66,6 +66,7 @@ The local stack (Postgres, Grafana LGTM, OpenBao, WireMock) is described in [dev
 - `just api` and `just gateway` run the services against the stack.
 - `just relay-smoke`, `just connector-smoke` and `just audit-smoke` are the smoke tests that need `just up` and `just api`. `just audit-smoke` also runs `oha` at 200 relays/s when it is installed (`AUDIT_SMOKE_LOAD=0` skips that).
 - `just test-e2e` runs every e2e test.
+- `just test-floci` runs the Floci-backed AWS tests (`floci_assume_role`, `floci_end_to_end`; needs Docker and the AWS CLI v2), then stops Floci. It fails with a Docker message when the daemon is down.
 - `just audit-export`, `just audit-verify` and `just audit-tamper-test` export, verify and tamper-test the audit ledger.
 - `just leak-scan` checks for leaked canary secrets after a run.
 - `just adversarial-gate [--agent claude]` (needs `just up` and `just api`) runs the S6 gateway attack cases with skips counted as failures, then `just leak-scan` over the stack, the audit export and the artifacts; `--agent claude` adds the live prompts. See [tests/adversarial/README.md](../tests/adversarial/README.md).

@@ -242,7 +242,8 @@ fn clone_secret(s: &SecretString) -> SecretString {
     SecretString::from(s.expose_secret().to_owned())
 }
 
-/// The connection and its sealed material; `lock` takes the material row `FOR UPDATE`.
+/// The connection and its sealed material; `lock` takes both rows `FOR UPDATE` (the connection
+/// first, as a reconnect does, and so a waiter sees a status another refresh committed).
 async fn load(
     c: &mut sql::PgConnection,
     connection_id: Uuid,
@@ -251,7 +252,7 @@ async fn load(
     let q = if lock {
         "SELECT c.status, c.user_id, c.provider, m.generation, m.ciphertext, m.wrapped_dek \
          FROM oauth_connections c JOIN oauth_token_material m ON m.connection_id = c.id \
-         WHERE c.id = $1 FOR UPDATE OF m"
+         WHERE c.id = $1 FOR UPDATE OF c, m"
     } else {
         "SELECT c.status, c.user_id, c.provider, m.generation, m.ciphertext, m.wrapped_dek \
          FROM oauth_connections c JOIN oauth_token_material m ON m.connection_id = c.id \

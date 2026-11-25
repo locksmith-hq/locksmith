@@ -2711,9 +2711,35 @@ mod tests {
         assert_eq!(h.refresh_calls().await, 1, "no second provider call");
     }
 
+    /// Concurrent relays on a refused refresh token make one provider call and one
+    /// `oauth.refresh_failed`; all answer needs-reconnect.
+    #[tokio::test]
+    async fn oauth_refresh_concurrent_invalid_grant_fails_once() {
+        let h = Harness::start_with(Refresh::InvalidGrant).await;
+        let id = h.connected().await;
+        h.make_due(id).await;
+        let tasks: Vec<_> = (0..6)
+            .map(|_| {
+                let o = Arc::clone(&h.oauth);
+                tokio::spawn(async move { o.access_token(id, None).await })
+            })
+            .collect();
+        for t in tasks {
+            assert_eq!(t.await.unwrap().err(), Some(AccessError::NeedsReconnect));
+        }
+        assert_eq!(h.refresh_calls().await, 1);
+        let failed = h
+            .audit
+            .oauth_events()
+            .iter()
+            .filter(|e| matches!(e.kind, OAuthEventKind::RefreshFailed(_)))
+            .count();
+        assert_eq!(failed, 1);
+    }
+
     /// A transient provider failure keeps the generation and the connection `connected`; the
-    /// next use, once the provider is back, refreshes. An unknown, pending or foreign-org
-    /// connection id is `NotFound`.
+    /// next use, once the provider is back, refreshes. An unknown or pending connection id is
+    /// `NotFound`.
     #[tokio::test]
     async fn oauth_refresh_transient_failure_keeps_the_generation() {
         let h = Harness::start().await;

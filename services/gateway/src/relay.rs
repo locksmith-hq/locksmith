@@ -171,6 +171,17 @@ impl Relay {
         }
     }
 
+    /// The agent's connection grants for `GET /v1/grants`; empty without OAuth.
+    pub(crate) async fn connection_grants(
+        &self,
+        agent: Uuid,
+    ) -> Result<Vec<ls_oauth::ConnectionGrantListing>, RelayAccessError> {
+        match &self.oauth {
+            Some(o) => o.agent_connection_grants(agent).await,
+            None => Ok(Vec::new()),
+        }
+    }
+
     /// Serve `connection_id` relays through `oauth` (c1 task 5.1).
     pub fn with_oauth(mut self, oauth: Arc<crate::oauth::OAuth>) -> Self {
         self.oauth = Some(oauth);

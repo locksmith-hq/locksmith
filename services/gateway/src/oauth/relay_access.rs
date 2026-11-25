@@ -102,6 +102,56 @@ impl OAuth {
         }))
     }
 
+    /// The agent's unexpired connection grants for `GET /v1/grants`: connection id, provider,
+    /// the person's display name (the local part of their email, never the full address) and
+    /// the expiry. Only `connected` and `refresh_failed` connections are listed; no token.
+    pub async fn agent_connection_grants(
+        &self,
+        agent: Uuid,
+    ) -> Result<Vec<ls_oauth::ConnectionGrantListing>, RelayAccessError> {
+        let rows: Vec<(Uuid, String, Option<String>, Option<time::OffsetDateTime>)> = self
+            .db
+            .with_org(self.org_id, move |c| {
+                Box::pin(async move {
+                    sql::query_as(
+                        "SELECT g.connection_id, c.provider, u.email, g.expires_at \
+                         FROM oauth_connection_grants g \
+                         JOIN oauth_connections c ON c.org_id = g.org_id AND c.id = g.connection_id \
+                         JOIN users u ON u.id = c.user_id \
+                         WHERE g.agent_id = $1 \
+                         AND c.status IN ('connected', 'refresh_failed') \
+                         AND (g.expires_at IS NULL OR g.expires_at > now()) \
+                         ORDER BY g.created_at, g.id",
+                    )
+                    .bind(agent)
+                    .fetch_all(c)
+                    .await
+                })
+            })
+            .await
+            .map_err(|_| RelayAccessError::Unavailable)?;
+        Ok(rows
+            .into_iter()
+            .map(|(connection_id, provider, email, expires_at)| {
+                let person_name = email
+                    .as_deref()
+                    .and_then(|e| e.split('@').next())
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or("a person")
+                    .to_owned();
+                ls_oauth::ConnectionGrantListing {
+                    connection_id,
+                    provider,
+                    person_name,
+                    expires_at: expires_at.and_then(|t| {
+                        t.format(&time::format_description::well_known::Rfc3339)
+                            .ok()
+                    }),
+                }
+            })
+            .collect())
+    }
+
     /// Whether `agent` holds an unexpired grant for `connection_id` (cached at most
     /// [`GRANT_TTL`]).
     pub async fn agent_may_use(

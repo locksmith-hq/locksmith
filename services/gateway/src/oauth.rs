@@ -3067,6 +3067,57 @@ mod tests {
         assert_eq!(got.err(), Some(E::NoGrant));
     }
 
+    /// c1 5.1: `GET /v1/grants` lists the agent's unexpired grants on usable connections as
+    /// ids, provider and the person's display name (never the email or a token).
+    #[tokio::test]
+    async fn oauth_relay_connection_grants_listing() {
+        let h = Harness::start().await;
+        let alice = alice_id(&h).await;
+        let id = h.connected().await;
+        let agent = agent_with_grant(&h, id, alice, Some("1 hour")).await;
+        let expired = agent_with_grant(&h, id, alice, Some("-1 hour")).await;
+
+        let got = h.oauth.agent_connection_grants(agent).await.unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(
+            (got[0].connection_id, got[0].provider.as_str()),
+            (id, "fake")
+        );
+        assert!(got[0].expires_at.is_some());
+        assert!(!got[0].person_name.contains('@'), "{}", got[0].person_name);
+        let json = serde_json::to_string(&got).unwrap();
+        assert!(!json.contains("token"), "{json}");
+        assert!(
+            h.oauth
+                .agent_connection_grants(expired)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            h.oauth
+                .agent_connection_grants(Uuid::new_v4())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        // A revoked connection is not listed.
+        let mut admin = h.pg.admin().await;
+        sql::query("UPDATE oauth_connections SET status = 'revoked' WHERE id = $1")
+            .bind(id)
+            .execute(&mut admin)
+            .await
+            .unwrap();
+        assert!(
+            h.oauth
+                .agent_connection_grants(agent)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
     /// Disconnect by the owner: one provider revoke, material and grants gone, `revoked`, one
     /// `oauth.disconnected` event; bob gets `403` and nothing changes; a second call changes
     /// nothing; the next use of the connection is refused; no token is in any answer.

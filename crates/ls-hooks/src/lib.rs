@@ -1,4 +1,4 @@
-//! Agent hook decision engine (design: openspec/changes/m4-agent-guardrails/design.md).
+//! Agent hook decision engine.
 //!
 //! `decide(Event) -> Decision` is the single engine; agent adapters only translate JSON.
 //! Protection level, stated honestly: friction plus detection. A determined agent can always

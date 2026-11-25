@@ -1,5 +1,5 @@
 //! Daemon wire protocol: one length-prefixed CBOR frame per message, versioned envelope,
-//! one operation per request (design: openspec/changes/m3-daemon-sessions/design.md).
+//! one operation per request.
 //!
 //! Invariant (spec broker-daemon "No plaintext egress over IPC"): no [`Response`] carries a
 //! secret value. Secrets leave the daemon only as environment variables of a child process the

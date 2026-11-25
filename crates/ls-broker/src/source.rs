@@ -1,4 +1,4 @@
-//! Where a session's agent runs (M10d, design: openspec/changes/m10d-agent-source/design.md).
+//! Where a session's agent runs (M10d).
 //!
 //! A display hint from executable paths the kernel reports (never arguments or environment).
 //! Any process can name its binary `claude`, so nothing here is used for trust. Anything not in

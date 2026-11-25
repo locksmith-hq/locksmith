@@ -1,5 +1,4 @@
-//! Forward-secure audit ledger (design: openspec/changes/m3-daemon-sessions/design.md D4,
-//! docs/v6-review.md §2.1).
+//! Forward-secure audit ledger.
 //!
 //! Event `s` carries `prev_hash = SHA256(canonical(s-1) || mac(s-1))` and
 //! `mac = HMAC(K_s, canonical(s))`, with `K_s = HMAC(K_{s-1}, "ratchet")` and

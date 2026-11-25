@@ -1,4 +1,4 @@
-//! A0 spikes (openspec/changes/a0-data-and-cloud-foundations, tasks 2.2-2.4).
+//! A0 spikes: throwaway proofs for the data and cloud foundations.
 //!
 //! - [`tenant`]: per-transaction tenant context (`set_config('app.org_id', $1, true)`).
 //! - [`tenant_lint`]: rejects session-level tenant settings in non-test Rust code

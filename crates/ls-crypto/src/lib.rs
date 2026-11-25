@@ -1,4 +1,4 @@
-//! Key derivation, AEAD and vault-key wraps (design: openspec/changes/m1-local-vault/design.md D1, D3).
+//! Key derivation, AEAD and vault-key wraps.
 //!
 //! Every plaintext key or secret lives in [`SecretKey32`] / [`SecretBytes`]: zeroized on drop,
 //! best-effort mlocked, and deliberately without `Debug`, `Display`, `Clone` or serde.

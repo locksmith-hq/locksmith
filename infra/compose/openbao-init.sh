@@ -2,10 +2,10 @@
 # Idempotent OpenBao dev setup, run as the `openbao` compose service's healthcheck (so it repeats
 # every few seconds and must stay cheap, quiet about values, and safe to re-run).
 # Enables transit, creates the `gateway` key and the permission split from
-# openspec/changes/s2-envelope-crypto design decision 4:
+# S2 envelope-crypto permission split (decision 4):
 #   control-plane token: update on transit/encrypt/gateway only (wrap, never unwrap)
 #   gateway test token:  update on transit/decrypt/gateway only (unwrap)
-# and the S5 checkpoint signer (openspec/changes/s5-audit-ledger design decision 4):
+# and the S5 audit checkpoint signer (decision 4):
 #   key audit-checkpoint: ed25519, not exportable (only its public key can be read)
 #   audit-checkpoint token: update on transit/sign/audit-checkpoint only (sign, nothing else)
 # Token ids are fixed dev-only fixtures from .env.example, never real credentials.

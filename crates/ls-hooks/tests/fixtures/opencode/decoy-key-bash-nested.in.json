@@ -1,0 +1,1 @@
+{"tool":"bash","args":{"command":"ls","extra":{"command":"cat .env"}}}

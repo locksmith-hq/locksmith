@@ -1087,12 +1087,10 @@ mod tests {
             }
             assert!(merge_mcp(a, Some("{oops")).is_err());
         }
-        assert_eq!(
-            merge_mcp(Agent::OpenCode, None)
-                .unwrap()
-                .contains("\"command\": [\n"),
-            true
-        );
+        assert!(merge_mcp(Agent::OpenCode, None).unwrap().contains(
+            "\"command\": [
+"
+        ));
         assert!(merge_mcp(Agent::OpenCode, Some(r#"{"mcp":[]}"#)).is_err());
     }
 

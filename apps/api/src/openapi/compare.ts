@@ -76,19 +76,31 @@ function generatedShape(op: Operation, doc: Frozen) {
  * Differences between the operations generated from `routes` and the frozen openapi.json, for every
  * path the route table marks `nest`. An empty list means the Nest API honours the contract.
  */
-export function diffAgainstFrozen(routes: RouteDef[], frozen: Frozen, table: RouteTable): string[] {
+export function diffAgainstFrozen(
+  routes: RouteDef[],
+  frozen: Frozen,
+  table: RouteTable,
+  nestDoc: Frozen = { paths: {} },
+): string[] {
   const generated = buildOperations(routes);
   const diffs: string[] = [];
   const nest = table.routes.filter((r) => r.owner === "nest");
   for (const r of nest) {
     const key = routeKey(r.method, r.path);
     const g = generated.get(key);
-    const f = frozen.paths[r.path]?.[r.method.toLowerCase()] as Record<string, Json> | undefined;
-    if (!f) diffs.push(`${key}: marked nest but absent from the frozen openapi.json`);
+    const inFrozen = r.path in frozen.paths;
+    const inNest = r.path in nestDoc.paths;
+    if (inFrozen && inNest) {
+      diffs.push(`${key}: path is in both openapi.json and openapi.nest.json`);
+      continue;
+    }
+    const doc = inNest ? nestDoc : frozen;
+    const f = doc.paths[r.path]?.[r.method.toLowerCase()] as Record<string, Json> | undefined;
+    if (!f) diffs.push(`${key}: marked nest but absent from openapi.json and openapi.nest.json`);
     else if (!g) diffs.push(`${key}: marked nest but no zod route is registered`);
     else {
-      const a = JSON.stringify(frozenShape(f, frozen));
-      const b = JSON.stringify(generatedShape(g, frozen));
+      const a = JSON.stringify(frozenShape(f, doc));
+      const b = JSON.stringify(generatedShape(g, doc));
       if (a !== b)
         diffs.push(
           `${key}: generated operation differs from the frozen contract\n  frozen:    ${a}\n  generated: ${b}`,

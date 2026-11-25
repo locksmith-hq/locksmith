@@ -8,7 +8,8 @@
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "openapi:emit": "OPENAPI_EMIT=1 vitest run src/openapi/nest-document.test.ts"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.6.0",

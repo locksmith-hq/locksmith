@@ -37,7 +37,12 @@ it("with --tools unsafe the dangerous tools are not exposed", async () => {
     expect(JSON.stringify({ names, dropped: t.dropped })).not.toContain(ENROL);
     const call = (n: string, a: object) => t.tools.find((x) => x.name === n)!.invoke(a);
     const keys = await call("list_my_keys", {});
-    const out = await call("relay_http_request", { secret_id: "00000000-0000-4000-8000-000000000001", version: 1, method: "GET", url: "http://127.0.0.1:9/v1/ping" });
+    const out = await call("relay_http_request", {
+      secret_id: "00000000-0000-4000-8000-000000000001",
+      version: 1,
+      method: "GET",
+      url: "http://127.0.0.1:9/v1/ping",
+    });
     scanTranscript([{ names, dropped: t.dropped }, keys, out]);
   } finally {
     await t.close();

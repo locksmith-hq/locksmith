@@ -37,7 +37,12 @@ it("with --tools unsafe the dangerous tools are not exposed", async () => {
     expect(names).not.toContain("get_secret_value");
     expect(JSON.stringify(names)).not.toContain(ENROL);
     const keys = await server.callTool("list_my_keys", {});
-    const out = await server.callTool("relay_http_request", { secret_id: "sec_1", version: 1, method: "GET", url: "http://127.0.0.1:9/v1/ping" });
+    const out = await server.callTool("relay_http_request", {
+      secret_id: "sec_1",
+      version: 1,
+      method: "GET",
+      url: "http://127.0.0.1:9/v1/ping",
+    });
     scanTranscript([names, keys, out]);
   } finally {
     await server.close();

@@ -52,11 +52,6 @@
       "owner": "rust"
     },
     {
-      "method": "POST",
-      "path": "/internal/v1/mcp/upstream-calls",
-      "owner": "rust"
-    },
-    {
       "method": "GET",
       "path": "/internal/v1/secrets/{secret_id}/versions/{version}/material",
       "owner": "rust"

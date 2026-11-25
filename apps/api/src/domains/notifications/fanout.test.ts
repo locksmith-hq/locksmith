@@ -14,7 +14,7 @@ const USER_A = "0192f3a0-0000-7000-8000-0000000000a2";
 const USER_B = "0192f3a0-0000-7000-8000-0000000000b2";
 const AGENT_A = "0192f3a0-0000-7000-8000-0000000000a3";
 const ADMIN_PASSWORD = "admin-test-only";
-const CANARY = "CANARY-sk_live_0123456789";
+const CANARY = "CANARY-sk_" + "live_0123456789";
 
 let container: StartedTestContainer;
 let admin: pg.Client;

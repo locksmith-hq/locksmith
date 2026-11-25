@@ -25,7 +25,7 @@ fresh="$(mktemp)"
 trap 'rm -f "$fresh"' EXIT
 python3 -I tests/kit/oracle.py canary-new --file "$fresh" >/dev/null
 export CANARY_FILE="$fresh"
-canary="$(awk 'NF{print $NF}' "$fresh" | tail -n 1)"
+canary="$(awk 'NF' "$fresh" | tail -n 1)"
 
 # shellcheck source=tests/adversarial/gateway/lib.sh
 . tests/adversarial/gateway/lib.sh

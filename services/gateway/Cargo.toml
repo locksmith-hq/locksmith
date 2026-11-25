@@ -58,6 +58,10 @@ rmcp = { version = "=3.11.0", default-features = false, features = ["server", "t
 # Same versions the workspace already uses (ls-crypto, ls-envelope, ls-audit).
 getrandom = "0.2"
 sha2 = "0.10"
+# C1 task 3.3: OAuth connect and callback (provider client and wire types), and CORS for the
+# console origins on `/v1/oauth/*` (same tower-http as the control plane).
+ls-oauth = { path = "../../crates/ls-oauth" }
+tower-http = { version = "0.7.1", features = ["cors"] }
 
 [dev-dependencies]
 proptest = { workspace = true }
@@ -70,3 +74,7 @@ ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
 # D3 task 2.4: self-signed certificates for the Postgres listener tests (same build as ls-proxy).
 testcontainers = { workspace = true }
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+# C1 task 3.3: the per-provider wiremock fakes, and ES256 person tokens for the OAuth tests (same
+# p256 as the control plane's human-auth tests).
+ls-oauth = { path = "../../crates/ls-oauth", features = ["testing"] }
+p256 = "0.14"

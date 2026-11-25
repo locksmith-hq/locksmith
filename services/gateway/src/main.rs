@@ -17,6 +17,7 @@ use ls_gateway::grants::{GrantCache, GrantCacheSettings};
 use ls_gateway::mcp_clients::ClientsCache;
 use ls_gateway::mcp_endpoint::McpEndpoint;
 use ls_gateway::mcp_settings::SettingsCache;
+use ls_gateway::oauth::OAuth;
 use ls_gateway::pg::{Connector, PgListener, PgListenerOptions, PgRelayUpstream, tls_acceptor};
 use ls_gateway::relay::{Relay, RelayOptions};
 use ls_gateway::ttl::MAX_CACHE_TTL;
@@ -141,6 +142,9 @@ async fn main() -> ExitCode {
         .with_settings_source(tool_settings)
         .with_clients(clients.clone());
     let binding_count = config.bindings.bindings.len();
+    let org_id = config.bindings.org_id;
+    let openbao_addr = config.openbao.addr.clone();
+    let oauth_config = config.oauth;
     if config.aws_sts_endpoint.is_some() {
         tracing::warn!(
             "{} is set: AWS credentials are requested from a non-AWS STS endpoint (local use only)",
@@ -229,7 +233,22 @@ async fn main() -> ExitCode {
         }
     };
 
-    let router = app::build(AppState::new(readiness).with_relay(relay).with_mcp(mcp));
+    let mut state = AppState::new(readiness).with_relay(relay).with_mcp(mcp);
+    // OAuth connections (C1), on when LOCKSMITH_GATEWAY_OAUTH_CONSOLE_ORIGINS is set. The flow
+    // and token tables are reached through this pool, which connects as locksmith_gateway.
+    if let Some(oauth) = oauth_config {
+        match OAuth::from_config(oauth, org_id, database.clone(), &openbao_addr) {
+            Ok(o) => {
+                tracing::info!(providers = ?o.provider_ids(), "oauth connections enabled");
+                state = state.with_oauth(Arc::new(o));
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "oauth connections could not be configured");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    let router = app::build(state);
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {

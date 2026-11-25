@@ -156,24 +156,19 @@ fn binding(org: Uuid, connection: Uuid, generation: u32, purpose: Purpose) -> Bi
     }
 }
 
+/// Test-only key wrapper shared by this module's tests and the OAuth endpoint tests.
 #[cfg(test)]
-mod tests {
+pub(crate) mod test_wrapper {
     use super::*;
     use ls_envelope::{SecretKey32, WRAPPED_DEK_LEN};
     use sha2::{Digest, Sha256};
-
-    const ORG: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a1);
-    const OTHER_ORG: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a2);
-    const CONN: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000b1);
-    const OTHER_CONN: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000b2);
-    const CANARY: &[u8] = b"canary-oauth-token-set-5d2e9b";
 
     /// In-memory stand-in for transit. The DEK is masked and the blob carries a digest of the
     /// wrap binding, so an unwrap under another binding is refused, as transit's AAD does.
     /// With `check_binding` off the wrap layer accepts any binding, which isolates the payload
     /// AEAD's own binding in the tests.
-    struct MemWrapper {
-        check_binding: bool,
+    pub(crate) struct MemWrapper {
+        pub(crate) check_binding: bool,
     }
 
     fn mask() -> [u8; 32] {
@@ -222,6 +217,18 @@ mod tests {
             Ok(SecretKey32::from_bytes(k))
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_wrapper::MemWrapper;
+    use super::*;
+
+    const ORG: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a1);
+    const OTHER_ORG: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a2);
+    const CONN: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000b1);
+    const OTHER_CONN: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000b2);
+    const CANARY: &[u8] = b"canary-oauth-token-set-5d2e9b";
 
     fn vault(check_binding: bool) -> TokenVault<MemWrapper> {
         TokenVault::new(MemWrapper { check_binding })

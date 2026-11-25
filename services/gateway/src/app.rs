@@ -1,5 +1,6 @@
 //! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
-//! ([`crate::grants`]) and `/git/{host}/...` ([`crate::git`]).
+//! ([`crate::grants`]), `/git/{host}/...` ([`crate::git`]) and the OAuth connect start and
+//! callback ([`crate::oauth`]).
 
 use std::sync::Arc;
 
@@ -13,6 +14,7 @@ use crate::aws;
 use crate::git;
 use crate::grants;
 use crate::mcp_endpoint::{self, McpEndpoint};
+use crate::oauth::{self, OAuth};
 use crate::relay::{self, Relay};
 
 /// Shared, cheaply cloneable state.
@@ -21,6 +23,7 @@ pub struct AppState {
     readiness: Arc<dyn Readiness>,
     relay: Option<Arc<Relay>>,
     mcp: Option<Arc<McpEndpoint>>,
+    oauth: Option<Arc<OAuth>>,
 }
 
 impl AppState {
@@ -29,6 +32,7 @@ impl AppState {
             readiness,
             relay: None,
             mcp: None,
+            oauth: None,
         }
     }
 
@@ -42,6 +46,16 @@ impl AppState {
     pub fn with_mcp(mut self, mcp: McpEndpoint) -> Self {
         self.mcp = Some(Arc::new(mcp));
         self
+    }
+
+    /// Serve `/v1/oauth/connect` and `/oauth/callback` (without it both answer `503`).
+    pub fn with_oauth(mut self, oauth: Arc<OAuth>) -> Self {
+        self.oauth = Some(oauth);
+        self
+    }
+
+    pub fn oauth(&self) -> Option<Arc<OAuth>> {
+        self.oauth.clone()
     }
 
     pub fn mcp(&self) -> Option<Arc<McpEndpoint>> {
@@ -60,6 +74,16 @@ pub fn build(state: AppState) -> Router {
         .as_ref()
         .map_or(64 * 1024, |r| r.options().max_request_body * 2 + 64 * 1024);
     let mcp = mcp_endpoint::router(&state);
+    // OAuth connections (C1): the console calls `/v1/oauth/*` cross-origin, so CORS for the
+    // configured console origins applies there only. The callback is a top-level navigation.
+    let oauth_routes = Router::new().route(
+        "/v1/oauth/connect",
+        post(oauth::connect).layer(DefaultBodyLimit::max(8 * 1024)),
+    );
+    let oauth_routes = match &state.oauth {
+        Some(o) => oauth_routes.layer(o.cors()),
+        None => oauth_routes,
+    };
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
@@ -80,6 +104,8 @@ pub fn build(state: AppState) -> Router {
                 .post(git::route)
                 .layer(DefaultBodyLimit::disable()),
         )
+        .route("/oauth/callback", get(oauth::callback))
+        .merge(oauth_routes)
         .merge(mcp)
         .with_state(state)
 }

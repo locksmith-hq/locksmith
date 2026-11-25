@@ -33,6 +33,20 @@ pub const ENV_PG_TLS_KEY: &str = "LOCKSMITH_GATEWAY_PG_TLS_KEY";
 /// Comma-separated public host names (`host` or `host:port`) `/mcp` accepts in the `Host`
 /// header, on top of loopback (DNS rebinding protection). Optional.
 pub const ENV_MCP_ALLOWED_HOSTS: &str = "LOCKSMITH_GATEWAY_MCP_ALLOWED_HOSTS";
+/// Comma-separated console origins (`scheme://host[:port]`) that may start OAuth connections
+/// (C1). Setting it turns the OAuth endpoints on; unset, `/v1/oauth/*` and `/oauth/callback`
+/// answer `503`.
+pub const ENV_OAUTH_CONSOLE_ORIGINS: &str = "LOCKSMITH_GATEWAY_OAUTH_CONSOLE_ORIGINS";
+/// The gateway's public callback URL registered with every provider app
+/// (`https://gateway.example.com/oauth/callback`). Required with [`ENV_OAUTH_CONSOLE_ORIGINS`].
+pub const ENV_OAUTH_REDIRECT_URL: &str = "LOCKSMITH_GATEWAY_OAUTH_REDIRECT_URL";
+/// The OpenBao token that may encrypt and decrypt on the `oauth-connections` transit key only.
+pub const ENV_OPENBAO_OAUTH_TOKEN: &str = "OPENBAO_GATEWAY_OAUTH_TOKEN";
+/// The dev mock provider's issuer (the Keycloak realm). The registry's `mock` entry is enabled
+/// only when it is set, with every URL derived from it.
+pub const ENV_OAUTH_MOCK_ISSUER: &str = "LOCKSMITH_OAUTH_MOCK_ISSUER";
+/// Human tokens at `/v1/oauth/*` are verified with the control plane's issuer settings.
+pub use ls_control_plane::config::{ENV_OIDC_AUDIENCE, ENV_OIDC_ISSUER, ENV_OIDC_JWKS_URL};
 
 /// Shortest accepted bearer token, in bytes. Shorter values are rejected, not accepted as a
 /// guessable credential.
@@ -101,6 +115,41 @@ pub struct Config {
     pub pg_listen: Option<PgListenConfig>,
     /// Extra `Host` values `/mcp` accepts ([`ENV_MCP_ALLOWED_HOSTS`]).
     pub mcp_allowed_hosts: Vec<String>,
+    /// OAuth connections (C1), when [`ENV_OAUTH_CONSOLE_ORIGINS`] is set.
+    pub oauth: Option<OAuthConfig>,
+}
+
+/// OAuth connection settings (C1 task 3.3). No `Debug`/`Clone`: it holds client secrets and an
+/// OpenBao token.
+pub struct OAuthConfig {
+    /// Origins (`scheme://host[:port]`, no trailing slash) a `return_to` must be on. The first
+    /// is also where a callback with an unknown `state` lands.
+    pub console_origins: Vec<url::Origin>,
+    /// The callback URL registered with the providers.
+    pub redirect_url: Url,
+    /// Person tokens: the same issuer settings as the control plane (`LOCKSMITH_OIDC_*`).
+    pub human_auth: ls_control_plane::auth::human::HumanAuthConfig,
+    /// May encrypt and decrypt on the `oauth-connections` transit key only.
+    pub openbao_token: SecretString,
+    /// The enabled providers: registry entries with client credentials configured.
+    pub providers: Vec<OAuthProviderConfig>,
+}
+
+/// One enabled provider: its registry entry (the mock's URLs derived from its issuer) and the
+/// provider app's client credentials.
+pub struct OAuthProviderConfig {
+    pub def: ls_oauth::ProviderDef,
+    pub client_id: String,
+    pub client_secret: SecretString,
+}
+
+/// `LOCKSMITH_OAUTH_<ID>_CLIENT_ID` / `_CLIENT_SECRET` for registry provider `id`.
+pub fn oauth_client_vars(id: &str) -> (String, String) {
+    let id = id.to_ascii_uppercase().replace('-', "_");
+    (
+        format!("LOCKSMITH_OAUTH_{id}_CLIENT_ID"),
+        format!("LOCKSMITH_OAUTH_{id}_CLIENT_SECRET"),
+    )
 }
 
 /// Where the Postgres listener binds and the TLS files it serves (paths only; the key is read
@@ -400,6 +449,8 @@ impl Config {
             })
             .unwrap_or_default();
 
+        let oauth = oauth_from(&get)?;
+
         Ok(Self {
             bind,
             database_url,
@@ -411,8 +462,105 @@ impl Config {
             aws_sts_endpoint,
             pg_listen,
             mcp_allowed_hosts,
+            oauth,
         })
     }
+}
+
+fn http_url(v: &str) -> Option<Url> {
+    Url::parse(v).ok().filter(|u| {
+        matches!(u.scheme(), "http" | "https")
+            && u.host_str().is_some()
+            && u.username().is_empty()
+            && u.password().is_none()
+            && u.fragment().is_none()
+    })
+}
+
+/// The OAuth settings, when [`ENV_OAUTH_CONSOLE_ORIGINS`] is set. Errors name variables only.
+fn oauth_from(get: &impl Fn(&str) -> Option<String>) -> Result<Option<OAuthConfig>, ConfigError> {
+    let value = |var: &str| {
+        get(var)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    let Some(origins) = value(ENV_OAUTH_CONSOLE_ORIGINS) else {
+        return Ok(None);
+    };
+    let mut console_origins = Vec::new();
+    for o in origins.split(',').map(str::trim).filter(|o| !o.is_empty()) {
+        let url = http_url(o)
+            .filter(|u| u.path() == "/" && u.query().is_none())
+            .ok_or(ConfigError::Invalid(ENV_OAUTH_CONSOLE_ORIGINS))?;
+        console_origins.push(url.origin());
+    }
+    if console_origins.is_empty() {
+        return Err(ConfigError::Invalid(ENV_OAUTH_CONSOLE_ORIGINS));
+    }
+    let required = |var: &'static str| value(var).ok_or(ConfigError::Missing(var));
+    let redirect_url = http_url(&required(ENV_OAUTH_REDIRECT_URL)?)
+        .filter(|u| u.query().is_none())
+        .ok_or(ConfigError::Invalid(ENV_OAUTH_REDIRECT_URL))?;
+    let human_auth = ls_control_plane::auth::human::HumanAuthConfig {
+        issuer: required(ENV_OIDC_ISSUER)?,
+        audience: required(ENV_OIDC_AUDIENCE)?,
+        jwks_url: http_url(&required(ENV_OIDC_JWKS_URL)?)
+            .ok_or(ConfigError::Invalid(ENV_OIDC_JWKS_URL))?
+            .to_string(),
+    };
+    let openbao_token = SecretString::from(required(ENV_OPENBAO_OAUTH_TOKEN)?);
+
+    let registry = ls_oauth::Registry::embedded()
+        .map_err(|_| ConfigError::Invalid(ENV_OAUTH_CONSOLE_ORIGINS))?;
+    let mut providers = Vec::new();
+    for def in registry.provider {
+        let mut def = def;
+        if def.id == "mock" {
+            let Some(issuer) = value(ENV_OAUTH_MOCK_ISSUER) else {
+                continue;
+            };
+            def = mock_def(def, &issuer).ok_or(ConfigError::Invalid(ENV_OAUTH_MOCK_ISSUER))?;
+        }
+        let (id_var, secret_var) = oauth_client_vars(&def.id);
+        match (value(&id_var), value(&secret_var)) {
+            (Some(client_id), Some(secret)) => providers.push(OAuthProviderConfig {
+                def,
+                client_id,
+                client_secret: SecretString::from(secret),
+            }),
+            (None, None) if def.id != "mock" => {}
+            // The mock issuer without its client, or only half of a provider's credentials.
+            _ => return Err(ConfigError::Missing(ENV_OAUTH_CLIENT_CREDENTIALS)),
+        }
+    }
+    Ok(Some(OAuthConfig {
+        console_origins,
+        redirect_url,
+        human_auth,
+        openbao_token,
+        providers,
+    }))
+}
+
+/// Named when a provider's client credentials are incomplete (the variable names are derived
+/// from the provider id, so the error names the pattern).
+pub const ENV_OAUTH_CLIENT_CREDENTIALS: &str =
+    "LOCKSMITH_OAUTH_<PROVIDER>_CLIENT_ID and _CLIENT_SECRET";
+
+/// The `mock` entry with every URL derived from the Keycloak realm `issuer`.
+fn mock_def(mut def: ls_oauth::ProviderDef, issuer: &str) -> Option<ls_oauth::ProviderDef> {
+    let url = http_url(issuer).filter(|u| u.query().is_none())?;
+    let base = url.as_str().trim_end_matches('/');
+    let host = url.host_str()?;
+    def.authorize_url = format!("{base}/protocol/openid-connect/auth");
+    def.token_url = format!("{base}/protocol/openid-connect/token");
+    def.revoke_url = Some(format!("{base}/protocol/openid-connect/revoke"));
+    def.account_url = format!("{base}/protocol/openid-connect/userinfo");
+    def.api_hosts = vec![match url.port() {
+        Some(p) => format!("{host}:{p}"),
+        None => host.to_owned(),
+    }];
+    Some(def)
 }
 
 #[cfg(test)]
@@ -493,6 +641,112 @@ mod tests {
         e.insert(ENV_SERVICE_TOKEN, "hunter2".to_owned());
         let msg = load(&e, &bindings_toml("")).err().unwrap().to_string();
         assert!(!msg.contains("hunter2"), "{msg}");
+    }
+
+    fn oauth_env() -> HashMap<&'static str, String> {
+        let mut e = env();
+        e.insert(
+            ENV_OAUTH_CONSOLE_ORIGINS,
+            "http://localhost:5173, http://127.0.0.1:5173".to_owned(),
+        );
+        e.insert(
+            ENV_OAUTH_REDIRECT_URL,
+            "http://127.0.0.1:8090/oauth/callback".to_owned(),
+        );
+        e.insert(
+            ENV_OIDC_ISSUER,
+            "http://localhost:8180/realms/acme".to_owned(),
+        );
+        e.insert(ENV_OIDC_AUDIENCE, "locksmith-api".to_owned());
+        e.insert(
+            ENV_OIDC_JWKS_URL,
+            "http://127.0.0.1:8180/realms/acme/certs".to_owned(),
+        );
+        e.insert(ENV_OPENBAO_OAUTH_TOKEN, "bao-oauth-token".to_owned());
+        e
+    }
+
+    #[test]
+    fn oauth_config_is_off_unless_console_origins_are_set() {
+        let c = load(&env(), &bindings_toml("")).expect("valid");
+        assert!(c.oauth.is_none());
+    }
+
+    #[test]
+    fn oauth_config_loads_and_enables_the_mock_only_with_its_issuer() {
+        let c = load(&oauth_env(), &bindings_toml("")).expect("valid");
+        let o = c.oauth.expect("oauth on");
+        assert_eq!(o.console_origins.len(), 2);
+        assert_eq!(
+            o.redirect_url.as_str(),
+            "http://127.0.0.1:8090/oauth/callback"
+        );
+        assert!(o.providers.is_empty(), "no provider without credentials");
+
+        let mut e = oauth_env();
+        e.insert(
+            ENV_OAUTH_MOCK_ISSUER,
+            "http://kc.test:8180/realms/acme".to_owned(),
+        );
+        assert_eq!(
+            load(&e, &bindings_toml("")).err(),
+            Some(ConfigError::Missing(ENV_OAUTH_CLIENT_CREDENTIALS)),
+            "the mock issuer needs its client"
+        );
+        let (id_var, secret_var) = oauth_client_vars("mock");
+        assert_eq!(
+            (id_var.as_str(), secret_var.as_str()),
+            (
+                "LOCKSMITH_OAUTH_MOCK_CLIENT_ID",
+                "LOCKSMITH_OAUTH_MOCK_CLIENT_SECRET"
+            )
+        );
+        e.insert("LOCKSMITH_OAUTH_MOCK_CLIENT_ID", "acme-mock".to_owned());
+        e.insert(
+            "LOCKSMITH_OAUTH_MOCK_CLIENT_SECRET",
+            "acme-mock-secret".to_owned(),
+        );
+        let o = load(&e, &bindings_toml("")).expect("valid").oauth.unwrap();
+        assert_eq!(o.providers.len(), 1);
+        let def = &o.providers[0].def;
+        assert_eq!(def.id, "mock");
+        let base = "http://kc.test:8180/realms/acme/protocol/openid-connect";
+        assert_eq!(def.authorize_url, format!("{base}/auth"));
+        assert_eq!(def.token_url, format!("{base}/token"));
+        assert_eq!(
+            def.revoke_url.as_deref(),
+            Some(format!("{base}/revoke").as_str())
+        );
+        assert_eq!(def.account_url, format!("{base}/userinfo"));
+        assert_eq!(def.api_hosts, vec!["kc.test:8180".to_owned()]);
+    }
+
+    #[test]
+    fn oauth_config_rejects_bad_values() {
+        for (var, bad) in [
+            (ENV_OAUTH_CONSOLE_ORIGINS, "localhost:5173"),
+            (ENV_OAUTH_CONSOLE_ORIGINS, "http://localhost:5173/app"),
+            (ENV_OAUTH_CONSOLE_ORIGINS, " , "),
+            (ENV_OAUTH_REDIRECT_URL, "not a url"),
+            (ENV_OIDC_JWKS_URL, "ftp://x/certs"),
+        ] {
+            let mut e = oauth_env();
+            e.insert(var, bad.to_owned());
+            let err = load(&e, &bindings_toml("")).err();
+            assert_eq!(err, Some(ConfigError::Invalid(var)), "{var}={bad}");
+        }
+        for var in [
+            ENV_OAUTH_REDIRECT_URL,
+            ENV_OIDC_ISSUER,
+            ENV_OPENBAO_OAUTH_TOKEN,
+        ] {
+            let mut e = oauth_env();
+            e.remove(var);
+            assert_eq!(
+                load(&e, &bindings_toml("")).err(),
+                Some(ConfigError::Missing(var))
+            );
+        }
     }
 
     const PG: &str = "\n[[pg]]\nname = \"app\"\nsecret_id = \"0197c1f0-0000-7000-8000-000000000003\"\nhost = \"postgres\"\nuser = \"app_rw\"\ndatabase = \"app\"\n";

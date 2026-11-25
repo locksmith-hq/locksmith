@@ -20,6 +20,11 @@ export interface AgentClient {
   readonly mcpUrl: string;
   /** A fetch that adds the token only for requests to the gateway origin. */
   authorizedFetch: typeof fetch;
+  /**
+   * The current gateway token (renewed 60 s before expiry; `renew` forces a fresh one), for frameworks
+   * that take an auth hook instead of a fetch. Call it per request; never store the result.
+   */
+  bearerToken(renew?: boolean): Promise<string>;
   close(): void;
 }
 
@@ -133,6 +138,7 @@ export function createAgentClient(opts: AgentClientOptions = {}): AgentClient {
   return {
     mcpUrl: `${gatewayUrl}/mcp`,
     authorizedFetch,
+    bearerToken: (renew = false) => currentToken(renew),
     async listGrants() {
       const body = await json<{ grants: Grant[] }>(await authed("/v1/grants"));
       return body.grants;

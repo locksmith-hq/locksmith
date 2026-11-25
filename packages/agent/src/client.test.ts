@@ -17,6 +17,16 @@ async function start(...args: string[]): Promise<string> {
 }
 
 describe("agent client on the mock gateway", () => {
+  it("bearerToken returns the cached token and a fresh one on renew", async () => {
+    const url = await start();
+    const c = createAgentClient({ gatewayUrl: url, enrollmentSecret: "canary-enroll-secret" });
+    const a = await c.bearerToken();
+    expect(typeof a).toBe("string");
+    expect(await c.bearerToken()).toBe(a);
+    expect(JSON.stringify(c)).not.toContain(a);
+    expect(inspect(c)).not.toContain(a);
+  });
+
   it("lists grants and relays", async () => {
     const url = await start();
     const c = createAgentClient({ gatewayUrl: url, enrollmentSecret: "canary-enroll-secret" });

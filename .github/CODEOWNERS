@@ -1,26 +1,20 @@
-# Code-owner review is required on main (ruleset main-threads). Paths listed here wait for the owner's approval;
-# everything else merges through auto-merge once the required checks pass (.github/workflows/claude-review.yml).
+# Code-owner review is required on main (ruleset main-threads). Paths listed here wait for the owner's approval
+# (a review, or an `approved` comment by the owner); everything else merges through auto-merge once the required
+# checks pass (.github/workflows/claude-review.yml). Owner decisions are features, look and budget only.
+# Security-critical paths (crates/ls-crypto, ls-ipc, ls-broker, ls-update, the other workflows, .claude/, AGENTS.md,
+# CLAUDE.md) are not listed: they get the strongest merge-review tier plus a passing adversarial check instead
+# (crew.json merge.security_paths in the plan repo).
 
-# Trust root: CI, repo config and contributor instructions.
-/.github/ @tomer555
-# Workers and the lead may change workflows, except the one that sets the merge rules and flow (last match wins).
-/.github/workflows/
-/.github/workflows/claude-review.yml @tomer555
-# AWS and budget: workflows that assume an AWS role or change AWS resources, and the budget guardrail's apply.
+# This file stays owned by the owner so the gate cannot be removed by a PR.
+/.github/CODEOWNERS @tomer555
+
+# Budget: deploy workflows that assume an AWS role or change AWS resources, and infrastructure.
 /.github/workflows/web-deploy.yml @tomer555
 /.github/workflows/aws-*.yml @tomer555
-/.claude/ @tomer555
-/AGENTS.md @tomer555
-/CLAUDE.md @tomer555
+/infra/ @tomer555
 
-# Crates that hold or move secrets.
-/crates/ls-crypto/ @tomer555
-/crates/ls-ipc/ @tomer555
-/crates/ls-broker/ @tomer555
-/crates/ls-update/ @tomer555
-/crates/ls-license/ @tomer555
-
-# Licensing: the source-available layer and the licensing statement (the maintainers own the license terms).
+# Pricing and licensing: the source-available layer, the licensing statement, and the license and entitlement crates.
 /ee/ @tomer555
 /LICENSING.md @tomer555
+/crates/ls-license/ @tomer555
 /crates/ls-entitlements/ @tomer555

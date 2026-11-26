@@ -163,6 +163,8 @@ pub mod kind {
         AUTH_VERIFY_FAILED,
         ORG_PERSONAL_CREATED,
         MCP_CALL,
+        MCP_UPSTREAM_CALL,
+        MCP_UPSTREAM_OUTCOME,
         CREDENTIAL_ISSUED,
         MCP_ISSUER_REVOKE,
     ];
@@ -260,6 +262,8 @@ pub mod attr {
         LAYER,
         TOOL,
         CREDENTIAL_ID,
+        UPSTREAM,
+        DECISION,
         CLAIMS,
     ];
 

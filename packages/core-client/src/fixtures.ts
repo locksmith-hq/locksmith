@@ -2,8 +2,8 @@
 // Test data only: ids, hashes, ciphertext-shaped strings and obviously fake tokens. No real
 // token, key or secret value appears here.
 import type {
-  AgentTokenVerdict, AppendAuditEventResponse, MintedToken, Problem, SignCheckpointResponse,
-  UnwrapDekResponse, WorkloadTokenVerdict, WrapDekResponse,
+  AgentTokenVerdict, AppendAuditEventResponse, EnrollmentSecretVerdict, GeneratedEnrollmentSecret,
+  MintedToken, Problem, SignCheckpointResponse, UnwrapDekResponse, WorkloadTokenVerdict, WrapDekResponse,
 } from "./index";
 
 export const fixtureIds = {
@@ -35,6 +35,15 @@ export const verifyWorkloadToken: WorkloadTokenVerdict = {
 export const verifyWorkloadTokenInvalid: WorkloadTokenVerdict = { valid: false, reason: "not_trusted" };
 export const wrapDek: WrapDekResponse = { wrapped_dek: "Zml4dHVyZS13cmFwcGVkLWRlaw==", key_id: "gateway:v1", dek_handle: "fixture_dek_handle_0000000" };
 export const unwrapDek: UnwrapDekResponse = { dek_handle: wrapDek.dek_handle, key_id: "gateway:v1" };
+// Fake: the right shape (`lse_` + 86 base64url chars) but all zero bytes, so it names no agent.
+export const generateEnrollmentSecret: GeneratedEnrollmentSecret = {
+  enrollment_secret: "lse_" + "A".repeat(86),
+  enrollment_hash: "$argon2id$v=19$m=19456,t=2,p=1$Zml4dHVyZS1zYWx0$Zml4dHVyZS1oYXNoLW5vdC1yZWFsLWZpeHR1cmUtb25seQ",
+};
+export const verifyEnrollmentSecret: EnrollmentSecretVerdict = { valid: true, org_id: fixtureIds.org, agent_id: fixtureIds.agent };
+export const verifyEnrollmentSecretInvalid: EnrollmentSecretVerdict = {
+  valid: false, org_id: fixtureIds.org, agent_id: fixtureIds.agent, reason: "wrong_secret",
+};
 
 export const unauthorized: Problem = { type: "about:blank", title: "Unauthorized", status: 401, detail: null };
 export const badRequest: Problem = { type: "about:blank", title: "Bad Request", status: 400, detail: "invalid request" };
@@ -43,4 +52,5 @@ export const badRequest: Problem = { type: "about:blank", title: "Bad Request", 
 export const fixtures = {
   appendAuditEvent, signAuditCheckpoint, mintAgentToken, verifyAgentToken,
   mintWorkloadToken, verifyWorkloadToken, wrapDek, unwrapDek,
+  generateEnrollmentSecret, verifyEnrollmentSecret,
 } as const;

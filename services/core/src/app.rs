@@ -16,6 +16,7 @@ use crate::audit_api;
 use crate::auth::{self, ServiceToken};
 use crate::checkpoint_api::{self, CheckpointSigner};
 use crate::dek_api::{self, DekKeyWrapper, HandleStore};
+use crate::enrollment_api;
 use crate::workload_api;
 
 #[derive(Clone)]
@@ -124,6 +125,14 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/workload-tokens/verify", post(workload_api::verify))
         .route("/v1/deks/wrap", post(dek_api::wrap))
         .route("/v1/deks/unwrap", post(dek_api::unwrap))
+        .route(
+            "/v1/enrollment-secrets/generate",
+            post(enrollment_api::generate),
+        )
+        .route(
+            "/v1/enrollment-secrets/verify",
+            post(enrollment_api::verify),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_service_token,

@@ -124,6 +124,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/enrollment-secrets/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate an agent enrollment secret
+         * @description Makes an agent enrollment secret and its Argon2id hash (moved from the control plane's `enrollment.rs`). The secret is returned only here; the core keeps nothing.
+         */
+        post: operations["generateEnrollmentSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/enrollment-secrets/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify an agent enrollment secret
+         * @description Verifies a presented enrollment secret against the stored hash (or the dummy hash when `enrollment_hash` is null, so an unknown agent costs the same work). A secret that does not verify is a 200 with `valid: false` and a coarse reason, not an error. The secret is never echoed.
+         */
+        post: operations["verifyEnrollmentSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workload-tokens/mint": {
         parameters: {
             query?: never;
@@ -242,6 +282,31 @@ export interface components {
         };
         /** @enum {string} */
         DekPurpose: "secret_payload" | "dek_wrap";
+        /**
+         * @description Why a presented enrollment secret was refused.
+         * @enum {string}
+         */
+        EnrollmentSecretReason: "malformed" | "unknown_agent" | "wrong_secret";
+        /** @description Verdict on a presented enrollment secret; never echoes the secret. The routing ids are set whenever the secret is well-formed (also when `valid` is false), so they are not proof of identity unless `valid`. */
+        EnrollmentSecretVerdict: {
+            agent_id?: string | null;
+            org_id?: string | null;
+            reason?: components["schemas"]["EnrollmentSecretReason"] | null;
+            valid: boolean;
+        };
+        /** @description Make an enrollment secret for an agent the caller is registering (or rotating); the core stores nothing and makes no authorization decision. */
+        GenerateEnrollmentSecretRequest: {
+            /** Format: uuid */
+            agent_id: string;
+            /** Format: uuid */
+            org_id: string;
+        };
+        /** @description `enrollment_secret` is shown to the human once and never stored; the caller stores only `enrollment_hash`. Format: `lse_` + base64url (no padding) of `org_id(16) || agent_id(16) || random(32)`. It is an agent enrollment credential, not a vault secret. */
+        GeneratedEnrollmentSecret: {
+            /** @description Argon2id PHC string over all 64 secret bytes. */
+            enrollment_hash: string;
+            enrollment_secret: string;
+        };
         /** @description Mint for an agent the caller (the NestJS API) has already authenticated; the core makes no authorization decision. */
         MintAgentTokenRequest: {
             /** Format: uuid */
@@ -318,6 +383,11 @@ export interface components {
             dek_handle: string;
             /** @description KMS key id, `name:vN`. */
             key_id: string;
+        };
+        /** @description A presented enrollment secret and the hash the caller stored for the agent its routing ids name. `enrollment_hash` is required: `null` means no such agent, and the core then spends the same Argon2id work against a dummy hash. */
+        VerifyEnrollmentSecretRequest: {
+            enrollment_hash: string | null;
+            enrollment_secret: string;
         };
         /**
          * @description Why a token was refused. A coarse code only.
@@ -680,6 +750,112 @@ export interface operations {
                 };
             };
             /** @description A dependency (database or KMS) is unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    generateEnrollmentSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateEnrollmentSecretRequest"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    /** @description `no-store` */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneratedEnrollmentSecret"];
+                };
+            };
+            /** @description Malformed or out-of-range input. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid caller credentials; nothing was done. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A dependency (the Argon2id worker or the random source) is unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    verifyEnrollmentSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEnrollmentSecretRequest"];
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    /** @description `no-store` */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentSecretVerdict"];
+                };
+            };
+            /** @description Malformed or out-of-range input. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid caller credentials; nothing was done. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A dependency (the Argon2id worker or the random source) is unavailable; retry. */
             503: {
                 headers: {
                     [name: string]: unknown;

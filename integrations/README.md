@@ -39,13 +39,18 @@ command needs.
 
 ## Agent framework adapters
 
-npm packages that give an agent built on a framework the Locksmith gateway tools (`list_my_keys`, `relay_http_request`, `explain_block`). All are relay only: no tool returns a value. Each README has the quick start; run the smoke test with `just agent-smoke <name>`.
+npm and Python (uv) packages that give an agent built on a framework the Locksmith gateway tools (`list_my_keys`, `relay_http_request`, `explain_block`). All are relay only: no tool returns a value. Each README has the quick start; run the smoke test with `just agent-smoke <name>`.
 
 | Framework | Directory | Install |
 |---|---|---|
 | Vercel AI SDK | `agent-vercel-ai` | `npm i @locksmith/agent @locksmith/agent-vercel-ai` |
 | OpenAI Agents SDK (JS) | `agent-openai-agents` | `npm i @locksmith/agent @locksmith/agent-openai-agents` |
 | LangChain.js / LangGraph.js | `agent-langchain` | `npm i @locksmith/agent @locksmith/agent-langchain` |
+| Python client | `agent-python` | `uv add locksmith-agent` |
+| LangChain / LangGraph (Python) | `agent-langchain-py` | `uv add locksmith-agent-langchain` |
+| OpenAI Agents SDK (Python) | `agent-openai-agents-py` | `uv add locksmith-agent-openai-agents` |
+| CrewAI | `agent-crewai` | `uv add locksmith-agent-crewai` |
+| Google ADK | `agent-google-adk` | `uv add locksmith-agent-google-adk` |
 
 Relay only: no tool returns a value.
 

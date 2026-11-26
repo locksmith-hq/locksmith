@@ -24,6 +24,12 @@ quick base="origin/main":
       done
       if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
     fi
+    py=$(grep -E '^integrations/.*\.py$' <<<"$files" || true)
+    if [ -n "$py" ]; then
+      command -v uvx >/dev/null || { echo "quick: uvx is missing (https://docs.astral.sh/uv/)" >&2; exit 1; }
+      uvx ruff@0.17.6 check --line-length 110 $py
+      uvx ruff@0.17.6 format --check --line-length 110 $py
+    fi
     if grep -qE '\.(tsx?|mjs|js)$|^knip\.json$|^\.oxfmtrc\.json$|^\.oxlintrc\.json$' <<<"$files"; then npx turbo run lint format:check knip typecheck; fi
 
 fmt:

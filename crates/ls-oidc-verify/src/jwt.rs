@@ -8,7 +8,7 @@
 
 use jsonwebtoken::{Algorithm, Validation};
 
-use super::human::Refused;
+use crate::Refused;
 
 /// Clock skew tolerated on `exp`, `nbf` (and `iat` for workload tokens).
 pub const LEEWAY_SECS: u64 = 60;

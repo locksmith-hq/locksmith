@@ -25,6 +25,7 @@ export const scenarios: Scenario[] = [
     covers: [
       "GET /internal/v1/agents/{agent_id}/grants",
       "POST /internal/v1/audit/events",
+      "POST /internal/v1/budgets/lease",
       "POST /internal/v1/audit/human-events",
       "PUT /internal/v1/gateway/bindings",
       "POST /internal/v1/mcp/agent-calls",
@@ -190,6 +191,21 @@ export const scenarios: Scenario[] = [
       await ctx.expect("upstream call invalid", 400, {
         method: "POST",
         path: "/internal/v1/mcp/upstream-calls",
+        headers: internalAuth(org),
+        body: {},
+      });
+
+      const lease = { agent_id: agentId, daily_limit: 5, count: 2 };
+      await both(ctx, "budget lease", 200, { method: "POST", path: "/internal/v1/budgets/lease" }, lease);
+      await ctx.expect("budget lease unknown agent", 404, {
+        method: "POST",
+        path: "/internal/v1/budgets/lease",
+        headers: internalAuth(org),
+        body: { ...lease, agent_id: missing },
+      });
+      await ctx.expect("budget lease invalid", 400, {
+        method: "POST",
+        path: "/internal/v1/budgets/lease",
         headers: internalAuth(org),
         body: {},
       });

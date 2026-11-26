@@ -930,9 +930,13 @@ test("notifications: inbox with mark read, owner rules matrix, and the 403 and n
     markNotificationRead: vi.fn().mockResolvedValue(undefined),
     markAllNotificationsRead: vi.fn().mockResolvedValue(undefined),
     getNotificationRules: vi.fn().mockResolvedValue({ rules: [] }),
-    getNotificationChannels: vi.fn().mockResolvedValue({ email: { enabled: false }, slack: { configured: false } }),
+    getNotificationChannels: vi
+      .fn()
+      .mockResolvedValue({ email: { enabled: false, delivery_failed: false }, slack: { configured: false } }),
     setNotificationRules: vi.fn().mockResolvedValue({ rules: [] }),
-    setEmailChannel: vi.fn().mockResolvedValue({ email: { enabled: true }, slack: { configured: false } }),
+    setEmailChannel: vi
+      .fn()
+      .mockResolvedValue({ email: { enabled: true, delivery_failed: false }, slack: { configured: false } }),
   };
   m.agentsClient.mockReturnValue(client as never);
   const r = render(<App />);
@@ -946,7 +950,18 @@ test("notifications: inbox with mark read, owner rules matrix, and the 403 and n
   ]);
   await userEvent.click(screen.getByLabelText("Email delivery"));
   expect(client.setEmailChannel).toHaveBeenCalledWith(true);
+  expect(screen.queryByText(/Email delivery failed/)).toBeNull();
   r.unmount();
+  m.agentsClient.mockReturnValue({
+    ...client,
+    getNotificationChannels: vi
+      .fn()
+      .mockResolvedValue({ email: { enabled: true, delivery_failed: true }, slack: { configured: false } }),
+  } as never);
+  const rf = render(<App />);
+  await nav("Notifications");
+  expect(await screen.findByText(/Email delivery failed/)).toBeInTheDocument();
+  rf.unmount();
   m.agentsClient.mockReturnValue({
     ...client,
     getNotificationRules: vi.fn().mockRejectedValue(new ApiError(403, "Forbidden")),

@@ -220,6 +220,17 @@ test("notification settings: owner toggles a rule and email; a 403 hides the con
   expect(screen.getByText("Slack: not configured")).toBeInTheDocument();
 });
 
+test("notification settings: a failed email delivery shows a banner, otherwise none", async () => {
+  open("/settings/notifications", { deliveryFailed: true });
+  expect(await screen.findByText(/Email delivery failed/)).toBeInTheDocument();
+});
+
+test("notification settings: no banner when delivery is healthy", async () => {
+  open("/settings/notifications");
+  await screen.findByLabelText("Email delivery");
+  expect(screen.queryByText(/Email delivery failed/)).toBeNull();
+});
+
 test("notification settings: non-owner sees a notice and no controls", async () => {
   open("/settings/notifications", { fail: { "GET /v1/notification-rules": 403 } });
   expect(await screen.findByText(/Only an organization owner/)).toBeInTheDocument();

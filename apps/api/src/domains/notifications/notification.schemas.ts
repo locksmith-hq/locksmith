@@ -46,9 +46,9 @@ const NotificationRule = z.object({
 
 const NotificationRules = z.object({ rules: z.array(NotificationRule) });
 
-/** Email is a switch; Slack is shown as `configured` only, its webhook URL never reaches the API (decision 5). */
+/** Email is a switch; `delivery_failed` is true while the last delivery job ended `failed` (decision 7), so the console can show a banner; Slack is shown as `configured` only, its webhook URL never reaches the API (decision 5). */
 const NotificationChannels = z.object({
-  email: z.object({ enabled: z.boolean() }),
+  email: z.object({ enabled: z.boolean(), delivery_failed: z.boolean() }),
   slack: z.object({ configured: z.boolean() }),
 });
 

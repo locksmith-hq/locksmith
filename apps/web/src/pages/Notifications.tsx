@@ -111,18 +111,25 @@ export function NotificationSettings({ client }: { client: Client }) {
       )}
       <QueryState query={channels}>
         {(c) => (
-          <p>
-            <label>
-              <input
-                type="checkbox"
-                checked={c.email.enabled}
-                disabled={setEmail.isPending}
-                onChange={(e) => setEmail.mutate(e.target.checked)}
-              />{" "}
-              Email delivery
-            </label>{" "}
-            Slack: {c.slack.configured ? "configured" : "not configured"}
-          </p>
+          <>
+            {c.email.delivery_failed && (
+              <p role="alert" className="state">
+                Email delivery failed. Check the SMTP relay settings; inbox items are unaffected.
+              </p>
+            )}
+            <p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={c.email.enabled}
+                  disabled={setEmail.isPending}
+                  onChange={(e) => setEmail.mutate(e.target.checked)}
+                />{" "}
+                Email delivery
+              </label>{" "}
+              Slack: {c.slack.configured ? "configured" : "not configured"}
+            </p>
+          </>
         )}
       </QueryState>
       <QueryState query={rules}>

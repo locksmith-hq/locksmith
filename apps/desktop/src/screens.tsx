@@ -2265,6 +2265,9 @@ export function Notifications(_: ScreenProps) {
       {client && forbidden && <p>Only an organization owner can change notification settings.</p>}
       {client && rules && channels && (
         <div aria-label="Notification settings">
+          {channels.email.delivery_failed && (
+            <p role="alert">Email delivery failed. Check the SMTP relay settings; inbox items are unaffected.</p>
+          )}
           <label>
             <input
               type="checkbox"

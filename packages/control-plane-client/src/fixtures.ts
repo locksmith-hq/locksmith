@@ -150,9 +150,9 @@ export const notificationRules: Ok<"/v1/notification-rules", "get"> = {
   })),
 };
 
-/** Email off, Slack not configured. */
+/** Email off with no failed delivery, Slack not configured. */
 export const notificationChannels: Ok<"/v1/notification-channels", "get"> = {
-  email: { enabled: false },
+  email: { enabled: false, delivery_failed: false },
   slack: { configured: false },
 };
 

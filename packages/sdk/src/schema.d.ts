@@ -141,6 +141,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/honey/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the org's honey tokens by name, for the org's owner (gateway only)
+         * @description The gateway calls this for `smith honey plant <name>`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. That person must be the org's owner (`403` otherwise). Returns ids, names and templates of secrets of kind `honey` only, never a value.
+         */
+        get: operations["find_honey_tokens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/honey/tokens/{secret_id}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorize the owner's reveal of a honey value and record it (gateway only)
+         * @description The gateway calls this before it decrypts a honey value for `GET /v1/honey-tokens/{id}/value`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. The person must be the org's owner (`403`), the secret must exist in the org (`404`), be of kind `honey`, not be disabled and have a value (`409`). On success `honey.revealed` (the owner, the token, its version and template) is appended to the org's ledger in the same transaction, and the version to decrypt is returned. No request or response field carries the value.
+         */
+        post: operations["reveal_honey_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/mcp/agent-calls": {
         parameters: {
             query?: never;
@@ -1498,7 +1538,33 @@ export interface paths {
                         };
                     };
                 };
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1978,10 +2044,34 @@ export interface components {
             resources?: string[];
         };
         /**
+         * @description What the gateway needs to open a honey value for its owner: the version to decrypt. Never the
+         *     value (the control plane cannot decrypt).
+         */
+        HoneyReveal: {
+            /** Format: uuid */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+            /** Format: int32 */
+            version: number;
+        };
+        /**
          * @description The decoy formats the core can mint (change t5-honey-tokens).
          * @enum {string}
          */
         HoneyTemplate: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+        /** @description One honey token, as its owner names it. Never the value. */
+        HoneyTokenRef: {
+            /** @description Disabled tokens still match but cannot be revealed. */
+            disabled: boolean;
+            name: string;
+            /** Format: uuid */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+        };
+        /** @description The org's honey tokens with a given name (usually one; one per environment at most). */
+        HoneyTokenRefs: {
+            items: components["schemas"]["HoneyTokenRef"][];
+        };
         /**
          * @description The kind of a human audit event NestJS appends for a sign-in flow.
          * @enum {string}
@@ -3107,6 +3197,143 @@ export interface operations {
             };
             /** @description Unsupported media type */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    find_honey_tokens: {
+        parameters: {
+            query: {
+                /** @description The honey token's name, matched exactly across every project and environment of the org. */
+                name: string;
+            };
+            header: {
+                /** @description The org the gateway acts for */
+                "X-Locksmith-Org": string;
+                /** @description `Bearer <access token>` of the person the gateway acts for */
+                "X-Locksmith-User-Authorization": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching honey tokens (possibly none) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoneyTokenRefs"];
+                };
+            };
+            /** @description Invalid query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token, org header or user token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The user is not the org's owner, or has no verified email */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reveal_honey_token: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the gateway acts for */
+                "X-Locksmith-Org": string;
+                /** @description `Bearer <access token>` of the person the gateway acts for */
+                "X-Locksmith-User-Authorization": string;
+            };
+            path: {
+                /** @description The honey token's secret id */
+                secret_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized and recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoneyReveal"];
+                };
+            };
+            /** @description Missing or invalid service token, org header or user token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The user is not the org's owner, or has no verified email */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown secret, or one of another org */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a honey token, disabled, or without a value */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

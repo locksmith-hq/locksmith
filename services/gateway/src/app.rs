@@ -1,5 +1,5 @@
 //! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
-//! ([`crate::grants`]), `/git/{host}/...` ([`crate::git`]), `/mcp` ([`crate::mcp_endpoint`]) and
+//! ([`crate::grants`]), `GET /v1/honey-tokens/{id}/value` ([`crate::honey`]), `/git/{host}/...` ([`crate::git`]), `/mcp` ([`crate::mcp_endpoint`]) and
 //! `/mcp/upstream/{name}` ([`crate::mcp_upstream`]).
 
 use std::sync::Arc;
@@ -13,6 +13,7 @@ use ls_control_plane::readiness::Readiness;
 use crate::aws;
 use crate::git;
 use crate::grants;
+use crate::honey;
 use crate::mcp_endpoint::{self, McpEndpoint};
 use crate::mcp_upstream;
 use crate::relay::{self, Relay};
@@ -84,6 +85,9 @@ pub fn build(state: AppState) -> Router {
             post(relay::route).layer(DefaultBodyLimit::max(body_limit)),
         )
         .route("/v1/grants", get(grants::route))
+        // Owner-only honey token reveal (t5-honey-tokens task 2.4): refuses agent credentials.
+        .route("/v1/honey-tokens", get(honey::find_route))
+        .route("/v1/honey-tokens/{id}/value", get(honey::value_route))
         // AWS credential vending (D2): a small JSON request.
         .route(
             "/v1/aws/credentials",

@@ -137,6 +137,9 @@ pub struct Relay {
     /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
     /// honoured so a revoke takes effect here without waiting for `/mcp` traffic.
     revoked_agents: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
+    /// The control plane's owner-only honey routes (t5-honey-tokens task 2.4); without it the
+    /// `/v1/honey-tokens` routes answer `503`.
+    honey: Option<Arc<dyn crate::honey::HoneyOwnerSource>>,
 }
 
 impl Relay {
@@ -162,7 +165,19 @@ impl Relay {
             aws: crate::aws::AwsOptions::default(),
             short_lived: crate::short_lived::ShortLivedStore::default(),
             revoked_agents: None,
+            honey: None,
         }
+    }
+
+    /// Serve the owner-only `/v1/honey-tokens` routes through `source` (in production the
+    /// control plane client).
+    pub fn with_honey(mut self, source: Arc<dyn crate::honey::HoneyOwnerSource>) -> Self {
+        self.honey = Some(source);
+        self
+    }
+
+    pub(crate) fn honey(&self) -> Option<&dyn crate::honey::HoneyOwnerSource> {
+        self.honey.as_deref()
     }
 
     /// Check short-lived credentials against the agent MCP client registry (task 4.2): a

@@ -19,4 +19,8 @@ export const EXCLUDED: Record<string, string> = {
     "t5-honey-tokens 2.3 is implemented but needs a bound principal (B6 principal resolution) and a core with a key service; scenarios arrive with t5 6.1",
   "POST /internal/v1/honey/mint":
     "service-token-only internal route; covered by services/control-plane/tests/honey_mint.rs",
+  "GET /internal/v1/honey/tokens":
+    "service-token plus forwarded owner token internal route; covered by services/gateway/src/honey_tests.rs",
+  "POST /internal/v1/honey/tokens/{secret_id}/reveal":
+    "service-token plus forwarded owner token internal route; covered by services/gateway/src/honey_tests.rs",
 };

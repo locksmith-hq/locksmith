@@ -70,3 +70,6 @@ ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
 # D3 task 2.4: self-signed certificates for the Postgres listener tests (same build as ls-proxy).
 testcontainers = { workspace = true }
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+# t5 task 2.4: sign test human (OIDC) tokens with a deterministic P-256 key, as the control
+# plane's human-auth tests do (same version, already in the tree through jsonwebtoken).
+p256 = "0.14"

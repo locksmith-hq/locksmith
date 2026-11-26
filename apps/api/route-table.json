@@ -37,6 +37,16 @@
       "owner": "rust"
     },
     {
+      "method": "GET",
+      "path": "/internal/v1/honey/tokens",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v1/honey/tokens/{secret_id}/reveal",
+      "owner": "rust"
+    },
+    {
       "method": "POST",
       "path": "/internal/v1/mcp/agent-calls",
       "owner": "rust"

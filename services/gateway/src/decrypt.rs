@@ -169,6 +169,43 @@ impl ControlPlane {
             .await
     }
 
+    /// Send `method` to an `/internal/v1` path on behalf of a person: the service token and the
+    /// org header as usual, plus the person's own `Bearer` access token in `user_header` (marked
+    /// sensitive, so it is never logged by the client). No body. Returns the status and the body
+    /// read up to `max` bytes; `Err` only when no answer arrived.
+    pub(crate) async fn internal_as_user(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        user_header: (&'static str, &HeaderValue),
+        max: usize,
+    ) -> Result<(u16, Vec<u8>), Internal> {
+        let url = self.base.join(path).map_err(|_| Internal::BadResponse)?;
+        let mut auth = HeaderValue::try_from(format!("Bearer {}", self.token.expose_secret()))
+            .map_err(|_| Internal::Denied)?;
+        auth.set_sensitive(true);
+        let mut user = user_header.1.clone();
+        user.set_sensitive(true);
+        let mut resp = self
+            .client
+            .request(method, url)
+            .header(AUTHORIZATION, auth)
+            .header(ORG_HEADER, self.org_id.to_string())
+            .header(user_header.0, user)
+            .send()
+            .await
+            .map_err(|_| Internal::Unavailable)?;
+        let status = resp.status().as_u16();
+        let mut out = Vec::new();
+        while let Some(chunk) = resp.chunk().await.map_err(|_| Internal::Unavailable)? {
+            if out.len() + chunk.len() > max {
+                return Err(Internal::BadResponse);
+            }
+            out.extend_from_slice(&chunk);
+        }
+        Ok((status, out))
+    }
+
     async fn internal_send_json(
         &self,
         method: reqwest::Method,

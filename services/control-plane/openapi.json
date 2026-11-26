@@ -778,6 +778,29 @@
         },
         "type": "object"
       },
+      "HoneyReveal": {
+        "description": "What the gateway needs to open a honey value for its owner: the version to decrypt. Never the\nvalue (the control plane cannot decrypt).",
+        "properties": {
+          "secret_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/HoneyTemplate"
+          },
+          "version": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "secret_id",
+          "version",
+          "template"
+        ],
+        "type": "object"
+      },
       "HoneyTemplate": {
         "description": "The decoy formats the core can mint (change t5-honey-tokens).",
         "enum": [
@@ -787,6 +810,47 @@
           "generic_api_key"
         ],
         "type": "string"
+      },
+      "HoneyTokenRef": {
+        "description": "One honey token, as its owner names it. Never the value.",
+        "properties": {
+          "disabled": {
+            "description": "Disabled tokens still match but cannot be revealed.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/HoneyTemplate"
+          }
+        },
+        "required": [
+          "secret_id",
+          "name",
+          "template",
+          "disabled"
+        ],
+        "type": "object"
+      },
+      "HoneyTokenRefs": {
+        "description": "The org's honey tokens with a given name (usually one; one per environment at most).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HoneyTokenRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
       },
       "HumanEventKind": {
         "description": "The kind of a human audit event NestJS appends for a sign-in flow.",
@@ -3172,6 +3236,211 @@
           }
         ],
         "summary": "Mint and seal a honey value (NestJS API only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/honey/tokens": {
+      "get": {
+        "description": "The gateway calls this for `smith honey plant <name>`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. That person must be the org's owner (`403` otherwise). Returns ids, names and templates of secrets of kind `honey` only, never a value.",
+        "operationId": "find_honey_tokens",
+        "parameters": [
+          {
+            "description": "The honey token's name, matched exactly across every project and environment of the org.",
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The org the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`Bearer <access token>` of the person the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-User-Authorization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoneyTokenRefs"
+                }
+              }
+            },
+            "description": "Matching honey tokens (possibly none)"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid query"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token, org header or user token"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The user is not the org's owner, or has no verified email"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Find the org's honey tokens by name, for the org's owner (gateway only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/honey/tokens/{secret_id}/reveal": {
+      "post": {
+        "description": "The gateway calls this before it decrypts a honey value for `GET /v1/honey-tokens/{id}/value`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. The person must be the org's owner (`403`), the secret must exist in the org (`404`), be of kind `honey`, not be disabled and have a value (`409`). On success `honey.revealed` (the owner, the token, its version and template) is appended to the org's ledger in the same transaction, and the version to decrypt is returned. No request or response field carries the value.",
+        "operationId": "reveal_honey_token",
+        "parameters": [
+          {
+            "description": "The honey token's secret id",
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The org the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`Bearer <access token>` of the person the gateway acts for",
+            "in": "header",
+            "name": "X-Locksmith-User-Authorization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoneyReveal"
+                }
+              }
+            },
+            "description": "Authorized and recorded"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token, org header or user token"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The user is not the org's owner, or has no verified email"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unknown secret, or one of another org"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not a honey token, disabled, or without a value"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Authorize the owner's reveal of a honey value and record it (gateway only)",
         "tags": [
           "internal"
         ]

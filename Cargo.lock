@@ -3110,6 +3110,7 @@ dependencies = [
  "ls-pg-test",
  "ls-proxy",
  "ls-redact",
+ "p256",
  "pgwire",
  "proptest",
  "rcgen",

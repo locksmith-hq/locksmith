@@ -156,6 +156,7 @@ async fn main() -> ExitCode {
     };
     // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
     // only logs and never blocks the relay.
+    let honey: Arc<dyn ls_gateway::honey::HoneyOwnerSource> = control_plane.clone();
     bindings_publish::spawn_publish(control_plane, bindings_publish::summaries(&config.bindings));
     let relay = Relay::new(
         auth,
@@ -168,7 +169,9 @@ async fn main() -> ExitCode {
     )
     // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
     .with_revoked_agents(clients)
-    .with_aws(aws);
+    .with_aws(aws)
+    // Owner-only honey reveal (t5 task 2.4) through the control plane's internal honey routes.
+    .with_honey(honey);
 
     let relay = Arc::new(relay);
 

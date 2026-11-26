@@ -23,6 +23,7 @@ mod doctor_mcp;
 mod doctor_workload;
 mod dotenv;
 mod git_cmd;
+mod honey_cmd;
 mod hook_cmd;
 mod http_cmd;
 mod init_cmd;
@@ -132,6 +133,12 @@ enum Cmd {
     Aws {
         #[command(subcommand)]
         cmd: aws_cmd::AwsCmd,
+    },
+    /// Honey tokens (decoys that alert on any use): `plant <name> --into <path>` writes one into a
+    /// file for the org's owner (needs `smith login --user`); the value is never printed.
+    Honey {
+        #[command(subcommand)]
+        cmd: honey_cmd::HoneyCmd,
     },
     /// Run the GitHub CLI with a token injected (contained: visible to `gh` only, output redacted).
     Gh(git_cmd::GhArgs),
@@ -272,6 +279,7 @@ fn run(cli: Cli) -> Result<ExitCode, Fail> {
         Some(Cmd::Scan(a)) => scan_cmd::run(&ro, a),
         Some(Cmd::Git { cmd }) => git_cmd::run(cli.json, cmd),
         Some(Cmd::Gh(a)) => git_cmd::gh(a),
+        Some(Cmd::Honey { cmd }) => honey_cmd::run(cli.json, cmd),
         Some(Cmd::Aws { cmd }) => aws_cmd::run(&ro, cmd),
         Some(Cmd::Db { cmd }) => db_cmd::run(cli.json, cmd),
         Some(Cmd::Token { cmd }) => http_cmd::token(cli.json, cmd),

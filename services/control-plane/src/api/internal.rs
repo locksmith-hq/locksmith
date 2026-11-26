@@ -27,15 +27,15 @@ use base64::engine::general_purpose::STANDARD;
 use ls_audit::{Actor, Attrs, Code, Event, Host, Target, Text, attr, kind, outcome};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::agents::{GrantMode, GrantScope, grant_cols, optional_utc, scope_from_row};
-use super::extract::{ApiJson, ApiPath};
+use super::extract::{ApiJson, ApiPath, ApiQuery};
 use super::responses::{InternalReadErrors, InternalWriteErrors};
 use super::{all, exists_or_404, one};
 use crate::app::AppState;
-use crate::auth::ServiceOrgBinding;
+use crate::auth::{ForwardedOwner, ServiceOrgBinding};
 use crate::db::sql::{self, Row};
 use crate::mcp_store;
 use crate::problem::{ApiError, Kind, Problem};
@@ -1485,4 +1485,199 @@ pub async fn mint_honey(
             template,
         }),
     ))
+}
+
+impl HoneyTemplate {
+    /// The template stored in `secrets.honey_template`, if it is one the core knows.
+    fn from_column(s: &str) -> Option<Self> {
+        Some(match s {
+            "aws_access_key" => HoneyTemplate::AwsAccessKey,
+            "github_pat" => HoneyTemplate::GithubPat,
+            "slack_token" => HoneyTemplate::SlackToken,
+            "generic_api_key" => HoneyTemplate::GenericApiKey,
+            _ => return None,
+        })
+    }
+}
+
+/// Query of [`find_honey_tokens`].
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(deny_unknown_fields)]
+#[into_params(parameter_in = Query)]
+pub struct HoneyTokenQuery {
+    /// The honey token's name, matched exactly across every project and environment of the org.
+    pub name: String,
+}
+
+/// One honey token, as its owner names it. Never the value.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HoneyTokenRef {
+    pub secret_id: Uuid,
+    pub name: String,
+    pub template: HoneyTemplate,
+    /// Disabled tokens still match but cannot be revealed.
+    pub disabled: bool,
+}
+
+/// The org's honey tokens with a given name (usually one; one per environment at most).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HoneyTokenRefs {
+    pub items: Vec<HoneyTokenRef>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/internal/v1/honey/tokens",
+    operation_id = "find_honey_tokens",
+    tag = "internal",
+    summary = "Find the org's honey tokens by name, for the org's owner (gateway only)",
+    description = "The gateway calls this for `smith honey plant <name>`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. That person must be the org's owner (`403` otherwise). Returns ids, names and templates of secrets of kind `honey` only, never a value.",
+    params(
+        HoneyTokenQuery,
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the gateway acts for"),
+        ("X-Locksmith-User-Authorization" = String, Header, description = "`Bearer <access token>` of the person the gateway acts for"),
+    ),
+    responses(
+        (status = 200, description = "Matching honey tokens (possibly none)", body = HoneyTokenRefs),
+        (status = 400, description = "Invalid query", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid service token, org header or user token", body = Problem, content_type = "application/problem+json"),
+        (status = 403, description = "The user is not the org's owner, or has no verified email", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("service_token" = []))
+)]
+pub async fn find_honey_tokens(
+    State(state): State<AppState>,
+    owner: ForwardedOwner,
+    ApiQuery(query): ApiQuery<HoneyTokenQuery>,
+) -> Result<Json<HoneyTokenRefs>, ApiError> {
+    let name = query.name;
+    if name.trim().is_empty() || name.chars().count() > super::MAX_NAME_CHARS {
+        return Err(ApiError::validation("`name` must be 1 to 200 characters"));
+    }
+    let org_id = owner.org_id;
+    let rows = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let rows = sql::query(
+                    "SELECT id, name, honey_template, disabled_at IS NOT NULL AS disabled \
+                     FROM secrets WHERE org_id = $1 AND kind = 'honey' AND name = $2 ORDER BY id",
+                )
+                .bind(org_id)
+                .bind(name)
+                .fetch_all(c)
+                .await?;
+                Ok::<_, ApiError>(rows)
+            })
+        })
+        .await?;
+    let mut items = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let template: String = r.try_get("honey_template")?;
+        items.push(HoneyTokenRef {
+            secret_id: r.try_get("id")?,
+            name: r.try_get("name")?,
+            template: HoneyTemplate::from_column(&template)
+                .ok_or_else(|| ApiError::bare(Kind::Internal))?,
+            disabled: r.try_get("disabled")?,
+        });
+    }
+    Ok(Json(HoneyTokenRefs { items }))
+}
+
+/// What the gateway needs to open a honey value for its owner: the version to decrypt. Never the
+/// value (the control plane cannot decrypt).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HoneyReveal {
+    pub secret_id: Uuid,
+    pub version: u32,
+    pub template: HoneyTemplate,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/honey/tokens/{secret_id}/reveal",
+    operation_id = "reveal_honey_token",
+    tag = "internal",
+    summary = "Authorize the owner's reveal of a honey value and record it (gateway only)",
+    description = "The gateway calls this before it decrypts a honey value for `GET /v1/honey-tokens/{id}/value`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. The person must be the org's owner (`403`), the secret must exist in the org (`404`), be of kind `honey`, not be disabled and have a value (`409`). On success `honey.revealed` (the owner, the token, its version and template) is appended to the org's ledger in the same transaction, and the version to decrypt is returned. No request or response field carries the value.",
+    params(
+        ("secret_id" = Uuid, Path, description = "The honey token's secret id"),
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the gateway acts for"),
+        ("X-Locksmith-User-Authorization" = String, Header, description = "`Bearer <access token>` of the person the gateway acts for"),
+    ),
+    responses(
+        (status = 200, description = "Authorized and recorded", body = HoneyReveal),
+        (status = 401, description = "Missing or invalid service token, org header or user token", body = Problem, content_type = "application/problem+json"),
+        (status = 403, description = "The user is not the org's owner, or has no verified email", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Unknown secret, or one of another org", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Not a honey token, disabled, or without a value", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("service_token" = []))
+)]
+pub async fn reveal_honey(
+    State(state): State<AppState>,
+    owner: ForwardedOwner,
+    ApiPath(secret_id): ApiPath<Uuid>,
+) -> Result<Json<HoneyReveal>, ApiError> {
+    let org_id = owner.org_id;
+    let user_id = owner.user_id;
+    let reveal = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let row = sql::query(
+                    "SELECT kind, honey_template, disabled_at IS NOT NULL AS disabled \
+                     FROM secrets WHERE org_id = $1 AND id = $2",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .fetch_optional(&mut *c)
+                .await?
+                .ok_or_else(ApiError::not_found)?;
+                let kind: String = row.try_get("kind")?;
+                if kind != "honey" {
+                    return Err(ApiError::new(
+                        Kind::Conflict,
+                        "the secret is not a honey token",
+                    ));
+                }
+                if row.try_get::<bool, _>("disabled")? {
+                    return Err(ApiError::new(Kind::Conflict, "the honey token is disabled"));
+                }
+                let template: Option<String> = row.try_get("honey_template")?;
+                let template = template
+                    .as_deref()
+                    .and_then(HoneyTemplate::from_column)
+                    .ok_or_else(|| ApiError::bare(Kind::Internal))?;
+                let version: Option<i32> = sql::query_scalar(
+                    "SELECT max(version) FROM secret_versions WHERE org_id = $1 AND secret_id = $2",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .fetch_one(&mut *c)
+                .await?;
+                let version = version.and_then(|v| u32::try_from(v).ok()).ok_or_else(|| {
+                    ApiError::new(Kind::Conflict, "the honey token has no value yet")
+                })?;
+                let event = crate::audit::honey_revealed(
+                    user_id,
+                    secret_id,
+                    version,
+                    Code::new(template.column()),
+                );
+                crate::audit::append(c, org_id, &event).await?;
+                Ok::<_, ApiError>(HoneyReveal {
+                    secret_id,
+                    version,
+                    template,
+                })
+            })
+        })
+        .await?;
+    // Ids only: never the value (the control plane cannot decrypt it anyway).
+    tracing::info!(secret.id = %secret_id, secret.version = reveal.version, "honey reveal authorized");
+    Ok(Json(reveal))
 }

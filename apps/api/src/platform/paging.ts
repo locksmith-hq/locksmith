@@ -32,8 +32,8 @@ function decodeCursor(cursor: string): string | null {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-/** Rust `PageParams::resolve`, after the query parse. */
-export function resolvePage(raw: unknown): Page {
+/** Rust `PageParams::resolve`, after the query parse. `decode` maps a cursor to its key (null when invalid). */
+export function resolvePage(raw: unknown, decode: (cursor: string) => string | null = decodeCursor): Page {
   const parsed = PageQuery.safeParse(raw);
   if (!parsed.success) throw new ProblemException("validation", "invalid query parameters");
   const { limit: l, cursor: c } = parsed.data;
@@ -42,7 +42,7 @@ export function resolvePage(raw: unknown): Page {
   if (limit === 0 || limit > MAX_PAGE_LIMIT)
     throw new ProblemException("validation", `\`limit\` must be between 1 and ${MAX_PAGE_LIMIT}`);
   if (c === undefined) return { limit, after: null };
-  const after = decodeCursor(c);
+  const after = decode(c);
   if (after === null) throw new ProblemException("validation", "`cursor` is not valid");
   return { limit, after };
 }

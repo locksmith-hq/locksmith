@@ -114,12 +114,12 @@
     {
       "method": "GET",
       "path": "/v1/audit/events",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "GET",
       "path": "/v1/audit/status",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",
@@ -224,7 +224,7 @@
     {
       "method": "GET",
       "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",
@@ -239,7 +239,7 @@
     {
       "method": "GET",
       "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "PATCH",
@@ -249,7 +249,7 @@
     {
       "method": "GET",
       "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets/{secret_id}/versions",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",

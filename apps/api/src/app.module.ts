@@ -6,6 +6,8 @@ import { LoggerModule } from "nestjs-pino";
 import { AuthModule } from "./auth/auth.module.js";
 import { UsersModule } from "./users/users.module.js";
 import { AgentsModule } from "./agents/agents.module.js";
+import { AuditReadModule } from "./audit/audit.module.js";
+import { SecretsModule } from "./secrets/secrets.module.js";
 import { OrgsModule } from "./orgs/orgs.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
@@ -37,6 +39,8 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
     OrgsModule,
     ProjectsModule,
     AgentsModule,
+    AuditReadModule,
+    SecretsModule,
     JobsModule,
   ],
   controllers: [HealthController],

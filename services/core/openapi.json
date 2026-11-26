@@ -1,0 +1,1244 @@
+{
+  "components": {
+    "schemas": {
+      "AgentTokenVerdict": {
+        "additionalProperties": false,
+        "description": "Verdict on an agent token; ids are set only when `valid`.",
+        "properties": {
+          "agent_id": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_at": {
+            "oneOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "org_id": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/VerifyReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid"
+        ],
+        "type": "object"
+      },
+      "AppendAuditEventRequest": {
+        "additionalProperties": false,
+        "description": "One audit event to chain onto an org's ledger.",
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/AuditActor"
+          },
+          "attrs": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Allow-listed attributes: ids, integers, booleans and short codes only. The core refuses any other value; free text and secrets are never accepted.",
+            "type": "object"
+          },
+          "idempotency_key": {
+            "description": "Optional attempt id: a retry with the same key and same event appends nothing and returns the stored row.",
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "description": "Allow-listed event kind code, e.g. `agent.created`.",
+            "pattern": "^[a-z0-9_.]{1,64}$",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "Allow-listed outcome code, e.g. `ok`.",
+            "pattern": "^[a-z0-9_.]{1,64}$",
+            "type": "string"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AuditTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "actor",
+          "attrs",
+          "kind",
+          "org_id",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "AppendAuditEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deduplicated": {
+            "description": "True when `idempotency_key` matched an identical stored event.",
+            "type": "boolean"
+          },
+          "hash": {
+            "description": "SHA-256 row hash, 64 lowercase hex characters.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Position in the org's chain.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deduplicated",
+          "hash",
+          "id",
+          "seq"
+        ],
+        "type": "object"
+      },
+      "AuditActor": {
+        "description": "Who acted. Ids or a service code, never a name.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": {
+                "const": "agent"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": {
+                "const": "user"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "description": "Allow-listed service code, e.g. `gateway`.",
+                "pattern": "^[a-z0-9_.]{1,64}$",
+                "type": "string"
+              },
+              "type": {
+                "const": "service"
+              }
+            },
+            "required": [
+              "code",
+              "type"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AuditTarget": {
+        "additionalProperties": false,
+        "description": "What the event is about: a type code and an id.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "description": "Allow-listed target type code.",
+            "pattern": "^[a-z0-9_.]{1,64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "type": "object"
+      },
+      "DekBinding": {
+        "additionalProperties": false,
+        "description": "What a wrapped DEK is bound to. Ids only.",
+        "properties": {
+          "org_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/DekPurpose"
+          },
+          "secret_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "org_id",
+          "purpose",
+          "secret_id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "DekPurpose": {
+        "enum": [
+          "secret_payload",
+          "dek_wrap"
+        ],
+        "type": "string"
+      },
+      "MintAgentTokenRequest": {
+        "additionalProperties": false,
+        "description": "Mint for an agent the caller (the NestJS API) has already authenticated; the core makes no authorization decision.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "org_id"
+        ],
+        "type": "object"
+      },
+      "MintWorkloadTokenRequest": {
+        "additionalProperties": false,
+        "description": "Mint an agent token for a workload identity whose external token the caller has already had verified (`verifyWorkloadToken`).",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "policy_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "org_id",
+          "policy_id"
+        ],
+        "type": "object"
+      },
+      "MintedToken": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Lifetime in seconds.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "token": {
+            "description": "EdDSA JWT; claims `sub`, `org`, `aud` (`gateway`), `iat`, `exp`. A bearer credential: never log it.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "token_type": {
+            "const": "Bearer"
+          }
+        },
+        "required": [
+          "expires_at",
+          "expires_in",
+          "token",
+          "token_type"
+        ],
+        "type": "object"
+      },
+      "Problem": {
+        "description": "The JSON body of an error response (same shape as the control plane).",
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status"
+        ],
+        "type": "object"
+      },
+      "SignCheckpointRequest": {
+        "additionalProperties": false,
+        "description": "The public checkpoint body to sign.",
+        "properties": {
+          "at": {
+            "description": "Checkpoint time (signed as Unix microseconds).",
+            "format": "date-time",
+            "type": "string"
+          },
+          "hash": {
+            "description": "SHA-256 row hash, 64 lowercase hex characters.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "description": "The latest chain `seq` the checkpoint covers.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "at",
+          "hash",
+          "org_id",
+          "seq"
+        ],
+        "type": "object"
+      },
+      "SignCheckpointResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "description": "`<transit key>:<version>` of the signing key.",
+            "type": "string"
+          },
+          "signature": {
+            "description": "Ed25519 signature, standard base64 (64 bytes).",
+            "pattern": "^[A-Za-z0-9+/]{86}==$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "UnwrapDekRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/DekBinding"
+          },
+          "wrapped_dek": {
+            "description": "Wrapped DEK blob from `wrapDek`, standard base64.",
+            "format": "byte",
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding",
+          "wrapped_dek"
+        ],
+        "type": "object"
+      },
+      "UnwrapDekResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dek_handle": {
+            "description": "Opaque short-lived handle to the unwrapped DEK, held inside the core. The same value space as `WrapDekResponse.dek_handle`; never key bytes.",
+            "pattern": "^[A-Za-z0-9_-]{22,64}$",
+            "type": "string"
+          },
+          "key_id": {
+            "description": "KMS key id, `name:vN`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dek_handle",
+          "key_id"
+        ],
+        "type": "object"
+      },
+      "VerifyReason": {
+        "description": "Why a token was refused. A coarse code only.",
+        "enum": [
+          "expired",
+          "malformed",
+          "bad_signature",
+          "wrong_audience",
+          "unknown_key",
+          "not_trusted"
+        ],
+        "type": "string"
+      },
+      "VerifyTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "description": "The token to check.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "VerifyWorkloadTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "policy": {
+            "description": "The policy handle (`lsw_...`). Not a secret.",
+            "pattern": "^lsw_[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "token": {
+            "description": "The external OIDC token. Used once, never stored or logged.",
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "policy",
+          "token"
+        ],
+        "type": "object"
+      },
+      "WorkloadTokenVerdict": {
+        "additionalProperties": false,
+        "description": "Verdict on an external workload token against a policy's issuer, audience and conditions.",
+        "properties": {
+          "agent_id": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "org_id": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy_id": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/VerifyReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid"
+        ],
+        "type": "object"
+      },
+      "WrapDekRequest": {
+        "additionalProperties": false,
+        "description": "The core generates the DEK inside itself; the request carries no key bytes.",
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/DekBinding"
+          }
+        },
+        "required": [
+          "binding"
+        ],
+        "type": "object"
+      },
+      "WrapDekResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dek_handle": {
+            "description": "Opaque short-lived handle to the DEK held inside the core. Not key bytes.",
+            "pattern": "^[A-Za-z0-9_-]{22,64}$",
+            "type": "string"
+          },
+          "key_id": {
+            "description": "KMS key id, `name:vN`.",
+            "type": "string"
+          },
+          "wrapped_dek": {
+            "description": "Wrapped DEK blob (ciphertext), standard base64.",
+            "format": "byte",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dek_handle",
+          "key_id",
+          "wrapped_dek"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "service_token": {
+        "description": "Caller service token from configuration (mechanism recorded in design.md decision 5, chosen in task 2.1).",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Internal only: reachable on the internal network by the NestJS API. Owner decision OC-9 G1. Bodies carry ids, ciphertext, tokens and verdicts; never plaintext secrets or key bytes.",
+    "license": {
+      "name": "see repository"
+    },
+    "title": "Locksmith core service API (internal)",
+    "version": "0.0.1-alpha.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/agent-tokens/mint": {
+      "post": {
+        "description": "Mints the 15-minute EdDSA agent token (`agent_token.rs`). The core does not decide whether the agent may have one.",
+        "operationId": "mintAgentToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintAgentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MintedToken"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Mint an agent token",
+        "tags": [
+          "tokens"
+        ]
+      }
+    },
+    "/v1/agent-tokens/verify": {
+      "post": {
+        "description": "Checks signature, audience and expiry. An invalid token is a 200 with `valid: false` and a coarse reason, not an error.",
+        "operationId": "verifyAgentToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTokenVerdict"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Verify an agent token",
+        "tags": [
+          "tokens"
+        ]
+      }
+    },
+    "/v1/audit/checkpoints": {
+      "post": {
+        "description": "Signs `{org, seq, head hash, time}` with the transit Ed25519 key `audit-checkpoint`. The message and signature are public.",
+        "operationId": "signAuditCheckpoint",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignCheckpointRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignCheckpointResponse"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Sign an audit checkpoint",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/v1/audit/events": {
+      "post": {
+        "description": "Chains the event onto the org's ledger (`ls_audit`). Returns the row id, seq and hash only.",
+        "operationId": "appendAuditEvent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendAuditEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendAuditEventResponse"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Append an audit event",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/v1/deks/unwrap": {
+      "post": {
+        "description": "Unwraps through KMS under the given binding and returns an opaque handle, never key bytes. A wrong binding is a 400.",
+        "operationId": "unwrapDek",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnwrapDekRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnwrapDekResponse"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Unwrap a DEK",
+        "tags": [
+          "keys"
+        ]
+      }
+    },
+    "/v1/deks/wrap": {
+      "post": {
+        "description": "The core generates a data key, wraps it through KMS (OpenBao transit locally) and returns the wrapped blob and an opaque handle. No key bytes cross this API.",
+        "operationId": "wrapDek",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WrapDekRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WrapDekResponse"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Generate and wrap a DEK",
+        "tags": [
+          "keys"
+        ]
+      }
+    },
+    "/v1/workload-tokens/mint": {
+      "post": {
+        "description": "Same token format and claims as `mintAgentToken`, for the agent bound to a workload identity policy.",
+        "operationId": "mintWorkloadToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintWorkloadTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MintedToken"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Mint an agent token for a verified workload",
+        "tags": [
+          "tokens"
+        ]
+      }
+    },
+    "/v1/workload-tokens/verify": {
+      "post": {
+        "description": "Verifies the external OIDC token against the policy's issuer, audience and claim conditions (`workload.rs`). All credential failures are `valid: false`.",
+        "operationId": "verifyWorkloadToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyWorkloadTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadTokenVerdict"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Verify an external workload token",
+        "tags": [
+          "tokens"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "service_token": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "audit"
+    },
+    {
+      "name": "keys"
+    },
+    {
+      "name": "tokens"
+    }
+  ]
+}

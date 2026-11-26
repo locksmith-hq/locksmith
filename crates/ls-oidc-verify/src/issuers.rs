@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
-use super::jwks::{DEFAULT_MAX_AGE, DEFAULT_MIN_REFRESH, JwksCache, VerificationKey};
+use crate::jwks::{DEFAULT_MAX_AGE, DEFAULT_MIN_REFRESH, JwksCache, VerificationKey};
 
 /// Largest discovery document accepted.
 const MAX_DISCOVERY_BYTES: usize = 64 * 1024;

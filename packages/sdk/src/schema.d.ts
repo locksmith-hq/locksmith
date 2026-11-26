@@ -81,6 +81,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/audit/human-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append a human sign-in, sign-out or personal-org event (NestJS API only)
+         * @description Appends `auth.sign_in`, `auth.sign_out` or `org.personal_created` for a user to the org's audit ledger, built by the same constructors the control plane uses itself. The issuer is a bare host; a port, path, query, userinfo or placeholder is a `400`, as are unknown fields and kinds.
+         */
+        post: operations["append_human_audit_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/gateway/bindings": {
         parameters: {
             query?: never;
@@ -1578,6 +1598,11 @@ export interface components {
             /** @description Resource ARNs the actions apply to. */
             resources?: string[];
         };
+        /**
+         * @description The kind of a human audit event NestJS appends for a sign-in flow.
+         * @enum {string}
+         */
+        HumanEventKind: "auth.sign_in" | "auth.sign_out" | "org.personal_created";
         /** @description One public key in the JWKS (RFC 7517, RFC 8037 `OKP`/`Ed25519`). */
         Jwk: {
             /** @description Always `EdDSA`. */
@@ -1709,6 +1734,23 @@ export interface components {
         NewEnvironment: {
             description?: string;
             name: string;
+        };
+        /**
+         * @description One human audit event. A kind, the user and the issuer host only: no subject, email, token
+         *     or claim text can reach the ledger.
+         */
+        NewHumanEvent: {
+            /**
+             * @description The identity provider's host name or IP literal; no scheme, port, path, query or
+             *     userinfo.
+             */
+            issuer: string;
+            kind: components["schemas"]["HumanEventKind"];
+            /**
+             * Format: uuid
+             * @description The human the event is about (the event's actor).
+             */
+            user_id: string;
         };
         /**
          * @description One agent MCP call, as the gateway records it: who, which tool, and how it ended. There is no
@@ -2384,6 +2426,87 @@ export interface operations {
             };
             /** @description `relay.outcome` already recorded for this `attempt_id` with different fields */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    append_human_audit_event: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the event belongs to */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewHumanEvent"];
+            };
+        };
+        responses: {
+            /** @description Appended */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendedEvent"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

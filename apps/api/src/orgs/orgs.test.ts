@@ -142,8 +142,8 @@ describe("orgs without dev auth", () => {
     const app = await appWith(flag);
     const http = request(app.getHttpServer());
     await http.post("/v1/orgs").send({ name: "Refused" }).expect(401);
-    // The check comes before the body is read.
-    await http.post("/v1/orgs").send({}).expect(401);
+    // As in Rust, a malformed body is refused (400) before the dev-auth check.
+    await http.post("/v1/orgs").send({}).expect(400);
     await http.get("/v1/orgs/current").set(DEV_ORG, uuidv7()).expect(401);
     const admin = new pg.Client({ connectionString: adminUrl });
     await admin.connect();
@@ -165,5 +165,15 @@ describe("helpers", () => {
   it("counts characters, not UTF-16 units, for the name limit", () => {
     expect(() => validateName("😀".repeat(200))).not.toThrow();
     expect(() => validateName("😀".repeat(201))).toThrow();
+  });
+});
+
+describe("create errors", () => {
+  it("names a missing field as the Rust API does, and never echoes a value", async () => {
+    const app = await appWith("1");
+    const http = request(app.getHttpServer());
+    expect((await http.post("/v1/orgs").send({}).expect(400)).body.detail).toBe("missing field `name`");
+    expect((await http.post("/v1/orgs").send({ name: 5 }).expect(400)).body.detail).toBe("invalid field: name");
+    await app.close();
   });
 });

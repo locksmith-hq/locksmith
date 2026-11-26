@@ -64,8 +64,13 @@ const BY_STATUS: Record<number, ProblemKind> = {
 
 /** Name of the first offending field, never its value (Rust names the field only). */
 function zodDetail(e: ZodError): string {
-  const path = e.issues[0]?.path.join(".");
-  return path ? `invalid field: ${path}` : "invalid request";
+  const issue = e.issues[0];
+  const path = issue?.path.join(".");
+  if (!path) return "invalid request";
+  // serde's wording for an absent field, which the frozen contract records.
+  return issue?.code === "invalid_type" && issue.message.endsWith("received undefined")
+    ? `missing field \`${path}\``
+    : `invalid field: ${path}`;
 }
 
 /**

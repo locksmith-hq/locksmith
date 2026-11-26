@@ -18,12 +18,12 @@ export class OrgsController {
     @Inject(DEV_AUTH) private readonly devAuth: boolean,
   ) {}
 
-  /** Without dev auth there is no way to name an org yet: 401 before any body check or query. */
+  /** As in Rust, the body is parsed first (400), then without dev auth there is no way to name an org yet: 401 before any query. */
   @Post()
   @HttpCode(201)
   async create(@Body() body: unknown, @Res({ passthrough: true }) res: Response): Promise<Org> {
-    if (!this.devAuth) throw new ProblemException("unauthenticated");
     const input = NewOrg.parse(body);
+    if (!this.devAuth) throw new ProblemException("unauthenticated");
     const org = await this.orgs.create(input.name);
     res.setHeader("Location", `/v1/orgs/${org.id}`);
     return org;

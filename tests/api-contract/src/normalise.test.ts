@@ -19,6 +19,12 @@ describe("normalise", () => {
     expect(n.headers(h)).toEqual({ "content-type": "application/json", location: "/v1/orgs/<id-1>" });
   });
 
+  it("drops an implied utf-8 charset from content-type", () => {
+    const n = new Normaliser();
+    const h = new Headers({ "content-type": "application/problem+json; charset=utf-8" });
+    expect(n.headers(h)).toEqual({ "content-type": "application/problem+json" });
+  });
+
   it("replaces timestamps with and without fractions or offsets", () => {
     const n = new Normaliser();
     const out = n.json({ a: "2026-11-24T10:00:00Z", b: "2026-11-24T10:00:00.123456+02:00", c: "2026-11-24T10:00:00Z" });

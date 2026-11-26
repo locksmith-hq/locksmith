@@ -3,9 +3,11 @@ import { AuditSink, AuditSinkError, type AuditEventInput } from "./audit-sink.js
 const TIMEOUT_MS = 5_000;
 
 /**
- * Appends through the Rust core's `POST /v1/audit/events` (services/core/src/audit_event.rs).
- * Replaced by `@locksmith/core-client` when B1 5.4 lands. The token is sent only in the
- * Authorization header; neither it nor any body is ever logged or put in an error.
+ * Appends through the Rust core's `POST /internal/v1/audit/human-events`
+ * (services/control-plane/src/api/internal.rs, B8-1): service token plus `X-Locksmith-Org`, and a
+ * body of kind, user id and issuer host only. Replaced by `@locksmith/core-client` when B1 5.4
+ * lands. The token is sent only in the Authorization header; neither it nor any body is ever
+ * logged or put in an error.
  */
 export class CoreAuditSink extends AuditSink {
   private readonly url: string;
@@ -15,24 +17,20 @@ export class CoreAuditSink extends AuditSink {
     private readonly token: string,
   ) {
     super();
-    this.url = `${baseUrl.replace(/\/+$/, "")}/v1/audit/events`;
+    this.url = `${baseUrl.replace(/\/+$/, "")}/internal/v1/audit/human-events`;
   }
 
   async append(e: AuditEventInput): Promise<void> {
-    const body = {
-      org_id: e.orgId,
-      kind: e.kind,
-      outcome: "ok",
-      actor: { type: "user", id: e.actorUserId },
-      target: { type: "org", id: e.orgId },
-      attrs: e.issuerHost ? { issuer: e.issuerHost } : {},
-      ...(e.idempotencyKey ? { idempotency_key: e.idempotencyKey } : {}),
-    };
+    const body = { kind: e.kind, user_id: e.actorUserId, ...(e.issuerHost ? { issuer: e.issuerHost } : {}) };
     let res: Response;
     try {
       res = await fetch(this.url, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${this.token}` },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.token}`,
+          "x-locksmith-org": e.orgId,
+        },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });

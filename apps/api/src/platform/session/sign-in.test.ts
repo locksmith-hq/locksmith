@@ -298,13 +298,13 @@ describe("issuerHost", () => {
 
 describe("CoreAuditSink", () => {
   it("POSTs the contract body with the bearer header and maps failures", async () => {
-    const seen: { url: string | undefined; method: string | undefined; auth: string | undefined; ctype: string | undefined; body: string }[] = [];
+    const seen: { url: string | undefined; method: string | undefined; auth: string | undefined; org: string | undefined; ctype: string | undefined; body: string }[] = [];
     let status = 200;
     const server = http.createServer((req, res) => {
       let body = "";
       req.on("data", (c) => (body += c));
       req.on("end", () => {
-        seen.push({ url: req.url, method: req.method, auth: req.headers.authorization, ctype: req.headers["content-type"], body });
+        seen.push({ url: req.url, method: req.method, auth: req.headers.authorization, org: req.headers["x-locksmith-org"] as string | undefined, ctype: req.headers["content-type"], body });
         res.writeHead(status).end("{}");
       });
     });
@@ -316,16 +316,9 @@ describe("CoreAuditSink", () => {
       const userId = "0192f3a0-0000-7000-8000-00000000000b";
       await sink.append({ orgId, kind: "auth.sign_in", actorUserId: userId, issuerHost: "issuer.example.com" });
       await sink.append({ orgId, kind: "auth.sign_out", actorUserId: userId });
-      expect(seen[0]).toMatchObject({ url: "/v1/audit/events", method: "POST", auth: "Bearer test-core-token", ctype: "application/json" });
-      expect(JSON.parse(seen[0]!.body!)).toEqual({
-        org_id: orgId,
-        kind: "auth.sign_in",
-        outcome: "ok",
-        actor: { type: "user", id: userId },
-        target: { type: "org", id: orgId },
-        attrs: { issuer: "issuer.example.com" },
-      });
-      expect(JSON.parse(seen[1]!.body!).attrs).toEqual({});
+      expect(seen[0]).toMatchObject({ url: "/internal/v1/audit/human-events", method: "POST", auth: "Bearer test-core-token", org: orgId, ctype: "application/json" });
+      expect(JSON.parse(seen[0]!.body!)).toEqual({ kind: "auth.sign_in", user_id: userId, issuer: "issuer.example.com" });
+      expect(JSON.parse(seen[1]!.body!)).toEqual({ kind: "auth.sign_out", user_id: userId });
       status = 500;
       await expect(sink.append({ orgId, kind: "auth.sign_in", actorUserId: userId })).rejects.toMatchObject({ reason: "rejected" });
     } finally {

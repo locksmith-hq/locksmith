@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::*;
-use crate::audit::{AuditSink, HttpAudit, MemoryAudit};
+use crate::audit::{AuditSink, EventKind, HttpAudit, MemoryAudit};
 use crate::decrypt::ControlPlane;
 use crate::mcp_upstream::policy::tests::{RESULT_CANARY, Rig, VALUE};
 use crate::mcp_upstream::tests::{AGENT, ORG};
@@ -89,6 +89,38 @@ async fn an_allowed_call_appends_a_pending_event_then_an_ok_outcome() {
     for canary in [ARG_CANARY, RESULT_CANARY, VALUE] {
         assert!(!text.contains(canary), "{canary} in {text}");
     }
+}
+
+/// T9 task 2.3, MCP upstream: a `tools/call` over the grant's burst limit is `budget_exceeded`
+/// before the pending event and any upstream request, and writes one `budget.exceeded` event.
+#[tokio::test]
+async fn an_over_budget_call_is_refused_before_anything_is_forwarded() {
+    let audit = Arc::new(MemoryAudit::default());
+    let sink: Arc<dyn AuditSink> = audit.clone();
+    let budget = crate::grants::Budget {
+        per_minute: Some(1),
+        per_day: None,
+    };
+    let rig = Rig::build_budgeted(MAX_CACHE_TTL, sink, fast_retries(), Some(budget)).await;
+    let first = rig.call_with("list_issues", json!({})).await;
+    assert!(
+        first.text.contains("called"),
+        "inside the limit: {}",
+        first.text
+    );
+    let (calls, mcp, events) = (
+        rig.probe.calls().len(),
+        audit.mcp_upstream().len(),
+        audit.events().len(),
+    );
+
+    let msg = rig.call("list_issues").await;
+    assert_eq!(msg["error"]["message"], "budget_exceeded", "{msg}");
+    assert_eq!(rig.probe.calls().len(), calls, "nothing forwarded");
+    assert_eq!(audit.mcp_upstream().len(), mcp, "no pending event");
+    let ev = audit.events();
+    assert_eq!(ev.len(), events + 1, "one event");
+    assert_eq!(ev[events].kind, EventKind::BudgetExceeded("per_minute"));
 }
 
 #[tokio::test]

@@ -262,6 +262,54 @@ impl UpstreamMcp {
             .map_err(Self::hop_error)
     }
 
+    /// The agent's and the grant's budgets (T9) for one call to this upstream. A refusal is one
+    /// `budget.exceeded` event and the fixed `budget_exceeded` error with the retry delay; grants
+    /// that cannot be read fail closed.
+    async fn check_budget(&self, agent: AgentIdentity) -> Result<(), McpError> {
+        let grants = self
+            .relay
+            .grants()
+            .grants(agent.agent_id)
+            .await
+            .map_err(|e| {
+                tracing::warn!(reason = e.as_str(), "agent grants could not be read");
+                McpError::internal_error("grants_unavailable", None)
+            })?;
+        let secret_id = self.upstream.secret_id;
+        let Err(refusal) = self
+            .relay
+            .check_budget(
+                agent.agent_id,
+                &grants,
+                secret_id,
+                crate::grants::MODE_RELAY,
+            )
+            .await
+        else {
+            return Ok(());
+        };
+        drop(grants);
+        let ev = crate::audit::RelayEvent {
+            kind: crate::audit::EventKind::BudgetExceeded(refusal.kind()),
+            agent_id: agent.agent_id,
+            secret_id,
+            version: self.upstream.version,
+            method: None,
+            host: None,
+            port: None,
+            status: None,
+            attempt_id: None,
+            issued: None,
+        };
+        if self.relay.audit().append(ev).await.is_err() {
+            tracing::error!("mcp upstream budget event not appended");
+        }
+        Err(McpError::invalid_request(
+            crate::budget::BudgetRefusal::SLUG,
+            Some(serde_json::json!({ "retry_after_secs": refusal.retry_after_secs() })),
+        ))
+    }
+
     /// The policy's decision for every catalogue tool; a tool it does not name is hidden. An
     /// evaluator error is `None` (the caller hides everything and refuses the call).
     async fn decisions(
@@ -394,6 +442,9 @@ impl ServerHandler for UpstreamMcp {
                 return Err(unknown_tool());
             }
         }
+        // Budget (T9): after the decision, before the pending event, any unwrap or upstream
+        // request. A refused call decrypts nothing and forwards nothing.
+        self.check_budget(agent).await?;
         // The pending event first: without it nothing is forwarded.
         let attempt = audit.begin(&tool).await?;
         let result = hop::call_tool(&self.deps(), &self.upstream, agent, request).await;

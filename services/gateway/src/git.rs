@@ -24,7 +24,7 @@ use crate::audit::{EventKind, Method as AuditMethod, Outcome, RelayEvent};
 use crate::config::Binding;
 use crate::decrypt::{DecryptError, MaterialError};
 use crate::egress::{self, EgressError};
-use crate::grants::allows_relay;
+use crate::grants::{MODE_RELAY, allows_relay};
 use crate::relay::{Relay, error};
 
 /// What a Git operation does to the repository; a grant for one does not allow the other.
@@ -571,7 +571,6 @@ async fn handle(
         query.as_deref(),
         post,
     );
-    drop(grants);
     let (binding, target) = match selected {
         Ok(x) => x,
         Err((why, secret)) => {
@@ -587,6 +586,33 @@ async fn handle(
             return fail(StatusCode::FORBIDDEN, slug, &request_id);
         }
     };
+    // Budget (T9): after the grant, before egress, fetch or unwrap. A refused call decrypts
+    // nothing and reaches no upstream.
+    if let Err(refusal) = relay
+        .check_budget(agent.agent_id, &grants, binding.secret_id, MODE_RELAY)
+        .await
+    {
+        let ev = git_event(
+            EventKind::BudgetExceeded(refusal.kind()),
+            agent.agent_id,
+            binding,
+            post,
+            None,
+        );
+        if relay.audit().append(ev).await.is_err() {
+            tracing::error!("git budget event not appended");
+        }
+        let mut r = fail(
+            StatusCode::TOO_MANY_REQUESTS,
+            crate::budget::BudgetRefusal::SLUG,
+            &request_id,
+        );
+        if let Ok(v) = HeaderValue::from_str(&refusal.retry_after_secs().to_string()) {
+            r.headers_mut().insert(header::RETRY_AFTER, v);
+        }
+        return r;
+    }
+    drop(grants);
     let call = Call {
         relay: &relay,
         agent_id: agent.agent_id,

@@ -56,8 +56,7 @@
         "src/db/types.ts"
       ],
       "ignoreDependencies": [
-        "kysely-codegen",
-        "@types/express"
+        "kysely-codegen"
       ]
     }
   }

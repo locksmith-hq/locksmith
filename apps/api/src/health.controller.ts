@@ -1,6 +1,8 @@
 import { Controller, Get, Inject } from "@nestjs/common";
+import { Public } from "./platform/auth/public.decorator.js";
 import { HealthCheck, HealthCheckService } from "@nestjs/terminus";
 
+@Public()
 @Controller()
 export class HealthController {
   // Explicit @Inject: vitest (oxc) does not emit design:paramtypes metadata.

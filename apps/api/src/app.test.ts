@@ -69,3 +69,10 @@ describe("health", () => {
     await app.close();
   });
 });
+
+describe("env oidc", () => {
+  it("treats empty OIDC settings as unset and requires all three together", () => {
+    expect(validateEnv({ DATABASE_URL: "postgres://x", LOCKSMITH_OIDC_ISSUER: "" }).LOCKSMITH_OIDC_ISSUER).toBeUndefined();
+    expect(() => validateEnv({ DATABASE_URL: "postgres://x", LOCKSMITH_OIDC_ISSUER: "https://i" })).toThrow(/together/);
+  });
+});

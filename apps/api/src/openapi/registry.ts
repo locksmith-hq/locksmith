@@ -1,3 +1,6 @@
+import { Agent, AgentGrant, AgentParams } from "../agents/agents.schemas.js";
+import { AuditEvent, AuditStatus } from "../audit/audit.schemas.js";
+import { Secret, SecretParams, SecretsParams, SecretVersionList } from "../secrets/secrets.schemas.js";
 import { NewOrg, Org, OrgParams } from "../orgs/orgs.schemas.js";
 import {
   Environment,
@@ -106,3 +109,65 @@ const projectRoutes: RouteDef[] = [
   }),
 ];
 routes.push(...projectRoutes);
+
+const agentRoutes: RouteDef[] = [
+  defineRoute({
+    method: "GET",
+    path: "/v1/agents",
+    query: PageQuerySchema,
+    responses: { 200: Paged(Agent), ...E(400, 401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/v1/agents/{agent_id}",
+    params: AgentParams,
+    responses: { 200: Agent, ...E(401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/v1/agents/{agent_id}/grants",
+    params: AgentParams,
+    query: PageQuerySchema,
+    responses: { 200: Paged(AgentGrant), ...E(400, 401, 403, 404, 503) },
+  }),
+];
+routes.push(...agentRoutes);
+
+const auditRoutes: RouteDef[] = [
+  defineRoute({
+    method: "GET",
+    path: "/v1/audit/events",
+    query: PageQuerySchema,
+    responses: { 200: Paged(AuditEvent), ...E(400, 401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/v1/audit/status",
+    responses: { 200: AuditStatus, ...E(401, 403, 404, 503) },
+  }),
+];
+routes.push(...auditRoutes);
+
+const secretsPath = `${envPath}/{environment_id}/secrets`;
+const secretRoutes: RouteDef[] = [
+  defineRoute({
+    method: "GET",
+    path: secretsPath,
+    params: SecretsParams,
+    query: PageQuerySchema,
+    responses: { 200: Paged(Secret), ...E(400, 401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: `${secretsPath}/{secret_id}`,
+    params: SecretParams,
+    responses: { 200: Secret, ...E(401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: `${secretsPath}/{secret_id}/versions`,
+    params: SecretParams,
+    responses: { 200: SecretVersionList, ...E(401, 403, 404, 503) },
+  }),
+];
+routes.push(...secretRoutes);

@@ -17,6 +17,7 @@ set -eu
 CP_TOKEN="${OPENBAO_CONTROL_PLANE_TOKEN:-dev-only-control-plane}"
 GW_TOKEN="${OPENBAO_GATEWAY_TOKEN:-dev-only-gateway}"
 CK_TOKEN="${OPENBAO_AUDIT_CHECKPOINT_TOKEN:-dev-only-audit-checkpoint}"
+CORE_TOKEN="${OPENBAO_CORE_TOKEN:-dev-only-core}"
 
 if bao secrets list -format=json | grep -q '"transit/"'; then
   echo "transit: already enabled"
@@ -46,7 +47,10 @@ printf 'path "transit/decrypt/gateway" {\n  capabilities = ["update"]\n}\n' \
   | bao policy write gateway - >/dev/null
 printf 'path "transit/sign/audit-checkpoint" {\n  capabilities = ["update"]\n}\n' \
   | bao policy write audit-checkpoint - >/dev/null
-echo "policies: control-plane, gateway, audit-checkpoint written"
+# B2 core service: wraps and unwraps data keys itself, so it holds both capabilities on the gateway key.
+printf 'path "transit/encrypt/gateway" {\n  capabilities = ["update"]\n}\npath "transit/decrypt/gateway" {\n  capabilities = ["update"]\n}\n' \
+  | bao policy write core - >/dev/null
+echo "policies: control-plane, gateway, audit-checkpoint, core written"
 
 # Tokens: created with fixed ids only if missing. Orphans without the default policy so each
 # holds exactly one transit capability. The values are never printed.
@@ -68,4 +72,5 @@ ensure_token() {
 ensure_token control-plane "$CP_TOKEN"
 ensure_token gateway "$GW_TOKEN"
 ensure_token audit-checkpoint "$CK_TOKEN"
+ensure_token core "$CORE_TOKEN"
 echo "openbao-init: done"

@@ -244,6 +244,10 @@ audit-smoke:
     just audit-verify
     just leak-scan --explain --require-coverage --dir "$dir"
 
+# B2 smoke check of the core service in `just up` (health, audit append, token mint and verify, DEK wrap and unwrap).
+core-check:
+    bash scripts/core-check.sh
+
 # Run locksmith-api against `just up`: dev auth on, loopback bind, OTLP to the LGTM container.
 api:
     #!/usr/bin/env bash

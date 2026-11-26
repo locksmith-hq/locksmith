@@ -1,0 +1,61 @@
+[package]
+name = "ls-core-service"
+description = "Locksmith core service: audit, token and DEK operations for the NestJS API (internal only)."
+edition.workspace = true
+version.workspace = true
+license = "AGPL-3.0-only"
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "ls_core_service"
+path = "src/lib.rs"
+
+[[bin]]
+name = "locksmith-core"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8.9"
+tower = { version = "0.5", features = ["util"] }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tracing-log = "0.2.0"
+secrecy = "0.10"
+http = "1"
+# Constant-time comparison of the caller's service token.
+subtle = "2.6.1"
+opentelemetry = "0.33.1"
+opentelemetry_sdk = "0.33.1"
+tracing-opentelemetry = "0.34.0"
+opentelemetry-appender-tracing = "0.33.1"
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace", "logs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.29", features = ["serde"] }
+# The ledger's allow-listed event types (the core turns request strings into these).
+ls-envelope = { path = "../../crates/ls-envelope" }
+base64 = "0.22"
+ls-crypto = { path = "../../crates/ls-crypto" }
+# Same version ls-envelope uses; only for random handles and DEK ids.
+getrandom = "0.2"
+time = { version = "0.3.55", features = ["parsing", "formatting"] }
+ls-agent-token = { path = "../../crates/ls-agent-token" }
+ls-oidc-verify = { path = "../../crates/ls-oidc-verify" }
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["rust_crypto"] }
+ls-audit = { path = "../../crates/ls-audit", features = ["postgres"] }
+sqlx-core = { version = "0.9.0", default-features = false, features = ["_rt-tokio", "uuid"] }
+sqlx-postgres = { version = "0.9.0", default-features = false, features = ["uuid"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+
+[dev-dependencies]
+ls-pg-test = { path = "../../crates/ls-pg-test" }
+opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }
+http-body-util = "0.1"
+wiremock = { workspace = true }
+# Sign test tokens with deterministic P-256 keys (already in the tree through jsonwebtoken).
+p256 = "0.14"
+jsonschema = { version = "0.63.1", default-features = false }

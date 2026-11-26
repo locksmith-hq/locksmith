@@ -984,7 +984,7 @@ export interface paths {
                                 /** @enum {string} */
                                 channel: "inbox" | "email" | "slack";
                                 /** @enum {string} */
-                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                             }[];
                         };
                     };
@@ -1034,7 +1034,7 @@ export interface paths {
                             /** @enum {string} */
                             channel: "inbox" | "email" | "slack";
                             /** @enum {string} */
-                            kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                            kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                         }[];
                     };
                 };
@@ -1053,7 +1053,7 @@ export interface paths {
                                 /** @enum {string} */
                                 channel: "inbox" | "email" | "slack";
                                 /** @enum {string} */
-                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                             }[];
                         };
                     };
@@ -1135,14 +1135,33 @@ export interface paths {
                                 /** Format: uuid */
                                 id: string;
                                 /** @enum {string} */
-                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                                 payload: {
                                     actor: {
                                         id: string;
                                         name: string;
                                     } | null;
+                                    honey?: {
+                                        agent: {
+                                            /** Format: uuid */
+                                            id: string;
+                                            name: string;
+                                        } | null;
+                                        binding: string | null;
+                                        console_link: string;
+                                        occurred_at: string;
+                                        path: string | null;
+                                        peer_address: string | null;
+                                        /** @enum {string} */
+                                        template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                                        token: {
+                                            /** Format: uuid */
+                                            id: string;
+                                            name: string;
+                                        };
+                                    };
                                     /** @enum {string} */
-                                    kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                    kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                                     link: string;
                                     object_name: string | null;
                                     occurred_at: string;
@@ -1248,6 +1267,344 @@ export interface paths {
                     content?: never;
                 };
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                created_at: string;
+                                disabled_at: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                last_triggered_at: string | null;
+                                name: string;
+                                /** @enum {string} */
+                                template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                            }[];
+                        };
+                    };
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @enum {string} */
+                        template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                    };
+                };
+            };
+            responses: {
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            created_at: string;
+                            disabled_at: string | null;
+                            /** Format: uuid */
+                            id: string;
+                            last_triggered_at: string | null;
+                            name: string;
+                            /** @enum {string} */
+                            template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                        };
+                    };
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            created_at: string;
+                            disabled_at: string | null;
+                            /** Format: uuid */
+                            id: string;
+                            last_triggered_at: string | null;
+                            name: string;
+                            /** @enum {string} */
+                            template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                        };
+                    };
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };

@@ -135,6 +135,14 @@ pub mod kind {
     /// person's consent for it (m1-remote-mcp task 4.2). Outcome `ok`, or `error` when the issuer
     /// call failed (the database revoke still stands). Records the layer and a static reason only.
     pub const MCP_ISSUER_REVOKE: Code = Code::new("mcp.issuer_revoke");
+    /// An agent used a honey (decoy) secret: it resolved a honey-backed binding, or the relay saw a
+    /// honey value in a request. Allow-listed fields: `secret_id` (the token), the template name, the
+    /// agent (actor), the binding id, the request path and the peer address. Never the decoy value or
+    /// any request content (change t5-honey-tokens).
+    pub const HONEY_TRIGGERED: Code = Code::new("honey.triggered");
+    /// The owner revealed a honey value (owner-only gateway endpoint). Records the token id and the
+    /// owner as actor, never the value.
+    pub const HONEY_REVEALED: Code = Code::new("honey.revealed");
 }
 
 /// Common outcomes.
@@ -192,6 +200,10 @@ pub mod attr {
     /// The `name=value` pairs of the verified external-token claims a workload identity policy
     /// names (a [`Text`](super::Text)); nothing else from the token.
     pub const CLAIMS: Code = Code::new("claims");
+    /// The honey token template (`aws_access_key`, `github_pat`, `slack_token` or `generic_api_key`).
+    pub const HONEY_TEMPLATE: Code = Code::new("honey_template");
+    /// The id of the binding a honey secret was reached through.
+    pub const BINDING_ID: Code = Code::new("binding_id");
 }
 
 /// Who acted.

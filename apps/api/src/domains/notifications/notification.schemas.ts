@@ -2,13 +2,30 @@ import { z } from "zod";
 import { defineRoute, type RouteDef } from "../../openapi/build.js";
 
 /** Closed set of notifiable events, mapped from audit kinds by the fan-out job (n1 design, decision 2). */
-export const NotifyKind = z.enum(["relay.denied", "git.denied", "grant.revoked", "agent.deleted"]);
+export const NotifyKind = z.enum(["relay.denied", "git.denied", "grant.revoked", "agent.deleted", "honey.triggered"]);
 export type NotifyKind = z.infer<typeof NotifyKind>;
 
 const NotifyChannel = z.enum(["inbox", "email", "slack"]);
 
 /** Who receives a kind on a channel; `owner` is the only resolvable value until the T6 roles exist. */
 const NotifyAudience = z.enum(["owner", "admins", "user"]);
+
+/**
+ * Extra allow-listed fields of a `honey.triggered` notification (t5 honey tokens): ids, names and
+ * static labels from the ledger event, never the decoy value or any request content.
+ */
+const HoneyTriggeredDetail = z
+  .object({
+    token: z.object({ id: z.uuid(), name: z.string() }),
+    template: z.enum(["aws_access_key", "github_pat", "slack_token", "generic_api_key"]),
+    agent: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+    binding: z.string().nullable(),
+    path: z.string().nullable(),
+    peer_address: z.string().nullable(),
+    occurred_at: z.string(),
+    console_link: z.string(),
+  })
+  .strict();
 
 /**
  * Allow-listed payload (decision 6): typed ledger fields only, never a copy of the event body, so no
@@ -21,6 +38,8 @@ const NotificationPayload = z
     object_name: z.string().nullable(),
     occurred_at: z.string(),
     link: z.string(),
+    /** Present only on `honey.triggered`. */
+    honey: HoneyTriggeredDetail.optional(),
   })
   .strict();
 

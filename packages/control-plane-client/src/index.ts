@@ -42,6 +42,10 @@ export type NotificationRules = Ok<"/v1/notification-rules", "get">;
 export type NotificationRule = NotificationRules["rules"][number];
 export type NotificationChannels = Ok<"/v1/notification-channels", "get">;
 export type NotificationKind = NotificationItem["kind"];
+/** Honey token metadata (t5): never a value, only the owner-only reveal and `smith honey plant` return one. */
+export type HoneyTokenList = Ok<"/v1/projects/{project_id}/environments/{environment_id}/honey-tokens", "get">;
+export type HoneyToken = HoneyTokenList["items"][number];
+export type HoneyTemplate = HoneyToken["template"];
 export type NotificationChannel = NotificationRule["channel"];
 export type NotificationAudience = NotificationRule["audience"];
 
@@ -50,6 +54,7 @@ export const NOTIFICATION_KINDS: readonly NotificationKind[] = [
   "git.denied",
   "grant.revoked",
   "agent.deleted",
+  "honey.triggered",
 ];
 export const NOTIFICATION_CHANNELS: readonly NotificationChannel[] = ["inbox", "email", "slack"];
 const KIND_LABEL: Record<NotificationKind, string> = {
@@ -57,6 +62,7 @@ const KIND_LABEL: Record<NotificationKind, string> = {
   "git.denied": "Git access denied",
   "grant.revoked": "Grant revoked",
   "agent.deleted": "Agent deleted",
+  "honey.triggered": "Honey token triggered",
 };
 export const notificationKindLabel = (k: NotificationKind): string => KIND_LABEL[k];
 

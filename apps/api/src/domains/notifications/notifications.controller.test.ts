@@ -18,6 +18,12 @@ describe("notifications contract stubs", () => {
   });
 
   it("keeps the kind enum closed", () => {
-    expect(NotifyKind.options).toEqual(["relay.denied", "git.denied", "grant.revoked", "agent.deleted"]);
+    expect(NotifyKind.options).toEqual([
+      "relay.denied",
+      "git.denied",
+      "grant.revoked",
+      "agent.deleted",
+      "honey.triggered",
+    ]);
   });
 });

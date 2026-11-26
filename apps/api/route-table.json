@@ -258,6 +258,26 @@
     },
     {
       "method": "GET",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens",
+      "owner": "nest"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens",
+      "owner": "nest"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}",
+      "owner": "nest"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}/disable",
+      "owner": "nest"
+    },
+    {
+      "method": "GET",
       "path": "/v1/projects/{project_id}/environments/{environment_id}/secrets",
       "owner": "rust"
     },

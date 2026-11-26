@@ -152,6 +152,8 @@ pub mod kind {
         GIT_DENIED,
         AWS_CREDENTIALS_ISSUED,
         AWS_CREDENTIALS_DENIED,
+        BUDGET_SET,
+        BUDGET_EXCEEDED,
         DB_SESSION_DENIED,
         DB_SESSION_OPENED,
         DB_SESSION_CLOSED,

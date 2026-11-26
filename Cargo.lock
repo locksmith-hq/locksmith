@@ -2914,7 +2914,9 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "crc32fast",
  "ed25519-dalek",
+ "getrandom 0.2.17",
  "hex",
  "http",
  "http-body-util",

@@ -131,8 +131,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mint and seal a honey value (NestJS API only; contract, not yet implemented)
-         * @description Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. Contract only: the handler answers `501` until change t5-honey-tokens task 2.2 lands.
+         * Mint and seal a honey value (NestJS API only)
+         * @description Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. The secret must be of kind `honey`, with the same template, and must have no version yet (`409` otherwise).
          */
         post: operations["mint_honey_value"];
         delete?: never;
@@ -3089,15 +3089,6 @@ export interface operations {
             };
             /** @description Unsupported media type */
             415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Not implemented yet */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

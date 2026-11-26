@@ -17,5 +17,6 @@ export const EXCLUDED: Record<string, string> = {
     "t5-honey-tokens group 1 stub answers 501; scenarios arrive with group 2",
   "POST /v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}/disable":
     "t5-honey-tokens group 1 stub answers 501; scenarios arrive with group 2",
-  "POST /internal/v1/honey/mint": "t5-honey-tokens group 1 contract only (answers 501); scenarios arrive with task 2.2",
+  "POST /internal/v1/honey/mint":
+    "service-token-only internal route; covered by services/control-plane/tests/honey_mint.rs",
 };

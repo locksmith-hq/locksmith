@@ -1346,11 +1346,31 @@ pub enum HoneyTemplate {
     GenericApiKey,
 }
 
+impl HoneyTemplate {
+    fn column(self) -> &'static str {
+        match self {
+            HoneyTemplate::AwsAccessKey => "aws_access_key",
+            HoneyTemplate::GithubPat => "github_pat",
+            HoneyTemplate::SlackToken => "slack_token",
+            HoneyTemplate::GenericApiKey => "generic_api_key",
+        }
+    }
+
+    fn generator(self) -> crate::honey::Template {
+        use crate::honey::Template;
+        match self {
+            HoneyTemplate::AwsAccessKey => Template::AwsAccessKey,
+            HoneyTemplate::GithubPat => Template::GithubPat,
+            HoneyTemplate::SlackToken => Template::SlackToken,
+            HoneyTemplate::GenericApiKey => Template::GenericApiKey,
+        }
+    }
+}
+
 /// Mint one honey (decoy) value for an existing secret row of kind `honey`. The value is generated
 /// and sealed inside the core; the request and the response never carry it.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)] // contract only until task 2.2 implements the handler
 pub struct MintHoney {
     pub template: HoneyTemplate,
     /// The secret row the sealed value becomes version 1 of.
@@ -1370,8 +1390,8 @@ pub struct MintedHoney {
     path = "/internal/v1/honey/mint",
     operation_id = "mint_honey_value",
     tag = "internal",
-    summary = "Mint and seal a honey value (NestJS API only; contract, not yet implemented)",
-    description = "Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. Contract only: the handler answers `501` until change t5-honey-tokens task 2.2 lands.",
+    summary = "Mint and seal a honey value (NestJS API only)",
+    description = "Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. The secret must be of kind `honey`, with the same template, and must have no version yet (`409` otherwise).",
     params(
         ("X-Locksmith-Org" = Uuid, Header, description = "The org the secret belongs to"),
     ),
@@ -1379,16 +1399,88 @@ pub struct MintedHoney {
     responses(
         (status = 201, description = "Minted and sealed", body = MintedHoney),
         InternalWriteErrors,
-        (status = 501, description = "Not implemented yet", body = Problem, content_type = "application/problem+json"),
     ),
     security(("service_token" = []))
 )]
 pub async fn mint_honey(
-    _org: ServiceOrgBinding,
-    ApiJson(_input): ApiJson<MintHoney>,
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+    ApiJson(input): ApiJson<MintHoney>,
 ) -> Result<(StatusCode, Json<MintedHoney>), ApiError> {
-    Err(ApiError::new(
-        Kind::NotImplemented,
-        "honey minting is not implemented yet",
+    let Some(kms) = state.kms().cloned() else {
+        return Err(ApiError::new(
+            Kind::Unavailable,
+            "secret version storage is not configured (no key service)",
+        ));
+    };
+    let org_id = org.org_id;
+    let MintHoney {
+        template,
+        secret_id,
+    } = input;
+    state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let row =
+                    sql::query("SELECT kind, honey_template FROM secrets WHERE id = $1 FOR UPDATE")
+                        .bind(secret_id)
+                        .fetch_optional(&mut *c)
+                        .await?
+                        .ok_or_else(|| ApiError::new(Kind::NotFound, "secret not found"))?;
+                let kind: String = row.try_get("kind")?;
+                let stored: Option<String> = row.try_get("honey_template")?;
+                if kind != "honey" || stored.as_deref() != Some(template.column()) {
+                    return Err(ApiError::new(
+                        Kind::Conflict,
+                        "the secret is not a honey token of this template",
+                    ));
+                }
+                let existing: i64 = sql::query_scalar(
+                    "SELECT count(*) FROM secret_versions WHERE org_id = $1 AND secret_id = $2",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .fetch_one(&mut *c)
+                .await?;
+                if existing > 0 {
+                    return Err(ApiError::new(
+                        Kind::Conflict,
+                        "the honey token already has a value",
+                    ));
+                }
+                let value = crate::honey::generate(template.generator()).map_err(|_| {
+                    tracing::error!("honey value generation failed: no randomness");
+                    ApiError::bare(Kind::Internal)
+                })?;
+                let sealed =
+                    super::versions::seal_and_wrap(kms.as_ref(), org_id, secret_id, 1, &value)
+                        .await;
+                drop(value);
+                let (ciphertext, wrapped_dek, key_id) = sealed?;
+                sql::query(
+                    "INSERT INTO secret_versions \
+                     (org_id, secret_id, version, ciphertext, wrapped_dek, key_id) \
+                     VALUES ($1, $2, 1, $3, $4, $5)",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .bind(ciphertext)
+                .bind(wrapped_dek)
+                .bind(key_id)
+                .execute(&mut *c)
+                .await?;
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await?;
+    tracing::info!(secret.id = %secret_id, "honey value minted");
+    Ok((
+        StatusCode::CREATED,
+        Json(MintedHoney {
+            secret_id,
+            version: 1,
+            template,
+        }),
     ))
 }

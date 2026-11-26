@@ -76,6 +76,9 @@ ls-proxy = { path = "../../crates/ls-proxy" }
 moka = { version = "0.12.16", default-features = false, features = ["sync"] }
 # Hashes in the audit API are shown as lowercase hex.
 hex = "0.4"
+# T5: honey value generators (random bytes and the GitHub PAT CRC32 suffix).
+getrandom = "0.2"
+crc32fast = "1.5"
 
 [dev-dependencies]
 opentelemetry_sdk = { version = "0.33.1", features = ["testing"] }

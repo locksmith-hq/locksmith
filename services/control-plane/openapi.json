@@ -3050,7 +3050,7 @@
     },
     "/internal/v1/honey/mint": {
       "post": {
-        "description": "Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. Contract only: the handler answers `501` until change t5-honey-tokens task 2.2 lands.",
+        "description": "Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. The secret must be of kind `honey`, with the same template, and must have no version yet (`409` otherwise).",
         "operationId": "mint_honey_value",
         "parameters": [
           {
@@ -3135,16 +3135,6 @@
             },
             "description": "Unsupported media type"
           },
-          "501": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Not implemented yet"
-          },
           "503": {
             "content": {
               "application/problem+json": {
@@ -3161,7 +3151,7 @@
             "service_token": []
           }
         ],
-        "summary": "Mint and seal a honey value (NestJS API only; contract, not yet implemented)",
+        "summary": "Mint and seal a honey value (NestJS API only)",
         "tags": [
           "internal"
         ]

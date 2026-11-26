@@ -9,6 +9,7 @@ pub mod checkpoint;
 pub mod config;
 pub mod db;
 pub mod enrollment;
+pub mod honey;
 pub mod issuer_admin;
 pub mod kms;
 pub mod mcp_endpoint;

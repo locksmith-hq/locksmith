@@ -175,8 +175,8 @@ export const scenarios: Scenario[] = [
 
       await both(
         ctx,
-        "upstream call (contract only, not implemented yet)",
-        501,
+        "upstream call",
+        201,
         { method: "POST", path: "/internal/v1/mcp/upstream-calls" },
         {
           phase: "call",

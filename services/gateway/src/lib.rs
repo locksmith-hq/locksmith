@@ -26,4 +26,6 @@ pub mod mcp_upstream;
 pub mod pg;
 pub mod relay;
 pub mod short_lived;
+#[cfg(test)]
+mod test_capture;
 pub mod ttl;

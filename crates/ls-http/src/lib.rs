@@ -104,7 +104,7 @@ mod tests {
     /// Runs in a child process that has `HTTP_PROXY` set (the workspace forbids `unsafe`, which
     /// `set_var` needs). Ignored so it only runs through the parent test.
     #[tokio::test]
-    #[ignore]
+    #[ignore = "child process of ignores_proxy_environment; needs HTTP_PROXY set"]
     async fn proxy_child() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))

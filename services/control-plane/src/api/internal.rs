@@ -676,6 +676,80 @@ pub async fn append_event(
     ))
 }
 
+/// The kind of a human audit event NestJS appends for a sign-in flow.
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+pub enum HumanEventKind {
+    #[serde(rename = "auth.sign_in")]
+    SignIn,
+    #[serde(rename = "auth.sign_out")]
+    SignOut,
+    #[serde(rename = "org.personal_created")]
+    PersonalCreated,
+}
+
+/// One human audit event. A kind, the user and the issuer host only: no subject, email, token
+/// or claim text can reach the ledger.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NewHumanEvent {
+    pub kind: HumanEventKind,
+    /// The human the event is about (the event's actor).
+    pub user_id: Uuid,
+    /// The identity provider's host name or IP literal; no scheme, port, path, query or
+    /// userinfo.
+    pub issuer: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/audit/human-events",
+    operation_id = "append_human_audit_event",
+    tag = "internal",
+    summary = "Append a human sign-in, sign-out or personal-org event (NestJS API only)",
+    description = "Appends `auth.sign_in`, `auth.sign_out` or `org.personal_created` for a user to the org's audit ledger, built by the same constructors the control plane uses itself. The issuer is a bare host; a port, path, query, userinfo or placeholder is a `400`, as are unknown fields and kinds.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to"),
+    ),
+    request_body = NewHumanEvent,
+    responses(
+        (status = 201, description = "Appended", body = AppendedEvent),
+        InternalWriteErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn append_human_event(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+    ApiJson(input): ApiJson<NewHumanEvent>,
+) -> Result<(StatusCode, Json<AppendedEvent>), ApiError> {
+    // The error never echoes the value.
+    let host = Host::parse(&input.issuer)
+        .map_err(|_| ApiError::validation("`issuer` must be a bare host name or IP"))?;
+    let org_id = org.org_id;
+    let issuer = host.as_str();
+    let event = match input.kind {
+        HumanEventKind::SignIn => crate::audit::auth_sign_in(input.user_id, org_id, issuer),
+        HumanEventKind::SignOut => crate::audit::auth_sign_out(input.user_id, org_id, issuer),
+        HumanEventKind::PersonalCreated => {
+            crate::audit::org_personal_created(input.user_id, org_id, issuer)
+        }
+    };
+    let a = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move { crate::audit::append(c, org_id, &event).await })
+        })
+        .await
+        .map_err(ApiError::from)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(AppendedEvent {
+            id: a.id,
+            seq: a.seq,
+        }),
+    ))
+}
+
 /// One per-org override of an agent-layer MCP tool's default (an `mcp_tool_settings` row).
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AgentToolSetting {

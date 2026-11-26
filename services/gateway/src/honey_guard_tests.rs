@@ -7,6 +7,7 @@
 //! `honey_tests.rs`.
 
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -681,6 +682,53 @@ async fn honey_values_are_caught_raw_base64_and_url_encoded_anywhere_in_the_requ
     }
 }
 
+/// Task 3.3: a disabled token's value is ignored (the request is forwarded as usual and nothing
+/// is recorded), and a clean request is forwarded.
+#[tokio::test]
+async fn a_disabled_tokens_value_is_ignored_and_clean_requests_pass() {
+    let h = Harness::start().await;
+    let disabled = String::from_utf8(decoy(DISABLED)).unwrap();
+    let (s, _) = h
+        .relay_to(
+            STANDARD_SECRET,
+            "/",
+            &[("x-old", &disabled)],
+            Some(&disabled),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(h.upstream_hits().await, 1);
+    let (s, _) = h.relay_to(STANDARD_SECRET, "/", &[], Some("hello")).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(h.upstream_hits().await, 2);
+    assert!(h.audit.honey().is_empty());
+}
+
+/// Task 3.3: a value split across two headers is not in either one, but the same value in the
+/// body is still caught.
+#[tokio::test]
+async fn a_value_split_across_headers_is_still_caught_in_the_body() {
+    let h = Harness::start().await;
+    let text = String::from_utf8(decoy(HTTP_HONEY)).unwrap();
+    let (a, b) = text.split_at(text.len() / 2);
+    let (s, body) = h
+        .relay_to(
+            STANDARD_SECRET,
+            "/",
+            &[("x-part-1", a), ("x-part-2", b)],
+            Some(&format!("token={text}")),
+        )
+        .await;
+    assert_eq!((s, slug(&body).as_str()), (StatusCode::FORBIDDEN, "denied"));
+    assert_eq!(h.upstream_hits().await, 0);
+    let events = h.audit.honey();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        (events[0].secret_id, events[0].path),
+        (HTTP_HONEY, HoneyPath::ValueMatch)
+    );
+}
+
 /// Task 3.2: the automaton is rebuilt only when the active set changes: a newly disabled token is
 /// ignored after the next refresh, a re-read of the same set opens nothing again, and a list
 /// that cannot be read keeps the previous scan.
@@ -767,4 +815,57 @@ fn scanner_matches_each_form_of_each_value() {
     }
     assert_eq!(s.find(b"AKIA nothing to see"), None);
     assert_eq!(HoneyScanner::new(&[]).find(b"anything"), None);
+}
+
+/// A `Write` that keeps everything written (the log capture).
+#[derive(Clone, Default)]
+struct Capture(Arc<Mutex<Vec<u8>>>);
+
+impl Write for Capture {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Task 3.3: across every path and the value scan, at trace level, no honey value (raw or
+/// base64) reaches a log line, a span field, an event or an answer.
+#[tokio::test]
+async fn no_honey_value_in_logs_events_or_answers() {
+    let capture = Capture::default();
+    let sink = capture.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_ansi(false)
+        .with_writer(move || sink.clone())
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+    for path in HoneyPath::ALL {
+        let h = Harness::start().await;
+        assert!(h.use_by_reference(path).await, "{path:?}");
+        assert_clean(
+            "events",
+            format!("{:?} {:?}", h.audit.honey(), h.audit.events()).as_bytes(),
+        );
+    }
+    let h = Harness::start().await;
+    let (s, body) = h
+        .relay_to(
+            STANDARD_SECRET,
+            "/",
+            &[],
+            Some(&String::from_utf8(decoy(PG_HONEY)).unwrap()),
+        )
+        .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_clean("answer", &body);
+    let logs = capture.0.lock().unwrap().clone();
+    assert!(
+        String::from_utf8_lossy(&logs).contains("honey token used"),
+        "the capture saw the gateway's logs"
+    );
+    assert_clean("logs", &logs);
 }

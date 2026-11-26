@@ -19,9 +19,41 @@ export interface Payload {
   object_name: string | null;
   occurred_at: string;
   link: string;
+  /** Present only on `honey.triggered` (t5 honey tokens); mirrors `HoneyTriggeredDetail`. */
+  honey?: HoneyDetail;
+}
+
+export interface HoneyDetail {
+  token: { id: string; name: string };
+  template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+  agent: { id: string; name: string } | null;
+  binding: string | null;
+  path: string | null;
+  peer_address: string | null;
+  occurred_at: string;
+  console_link: string;
+}
+
+const HONEY_TEMPLATES = new Set(["aws_access_key", "github_pat", "slack_token", "generic_api_key"]);
+const PATH_CODE = /^[a-z][a-z0-9_.-]{0,31}$/;
+const PEER = /^[a-z0-9.:[\]-]{1,255}$/i;
+
+/**
+ * One typed attr of a ledger event (`{"<key>": {"<tag>": "<value>"}}`), only when it has one of the
+ * expected tags and matches `ok`; anything else reads as absent.
+ */
+function attr(attrs: unknown, key: string, tags: string[], ok: (v: string) => boolean): string | null {
+  const entry = attrs && typeof attrs === "object" ? (attrs as Record<string, unknown>)[key] : null;
+  if (!entry || typeof entry !== "object") return null;
+  for (const tag of tags) {
+    const v = (entry as Record<string, unknown>)[tag];
+    if (typeof v === "string" && ok(v)) return v;
+  }
+  return null;
 }
 
 const REF = /^([a-z]+):([a-z0-9_.-]{1,64})$/;
+const REF_ID = /^[a-z0-9_.-]{1,64}$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function parseRef(ref: string | null): { type: string; id: string } | null {
@@ -83,7 +115,7 @@ export class FanoutJob implements OnModuleInit {
     if (!cursor) return 0;
     const events = await tx
       .selectFrom("audit_events")
-      .select(["seq", "kind", "actor", "target", "at"])
+      .select(["seq", "kind", "actor", "target", "attrs", "at"])
       .where("org_id", "=", orgId)
       .where("seq", ">", cursor.last_seq)
       .orderBy("seq")
@@ -145,7 +177,7 @@ export class FanoutJob implements OnModuleInit {
     tx: Tx,
     orgId: string,
     kind: Kind,
-    ev: { actor: string; target: string | null; at: Date | string },
+    ev: { actor: string; target: string | null; attrs: unknown; at: Date | string },
   ): Promise<Payload> {
     const actor = parseRef(ev.actor);
     const target = parseRef(ev.target);
@@ -161,12 +193,58 @@ export class FanoutJob implements OnModuleInit {
     };
     const actorName = (await agentName(actor)) ?? actor?.id ?? null;
     const objectName = (await agentName(target)) ?? target?.id ?? null;
-    return {
+    const payload: Payload = {
       kind,
       actor: actor && actorName ? { id: actor.id, name: actorName } : null,
       object_name: objectName,
       occurred_at: new Date(ev.at).toISOString(),
       link: target?.type === "agent" && UUID.test(target.id) ? `/agents/${target.id}` : "/audit",
+    };
+    if (kind === "honey.triggered") {
+      const honey = await this.honeyDetail(tx, orgId, ev, actor, target, agentName);
+      if (honey) {
+        payload.honey = honey;
+        payload.object_name = honey.token.name;
+        payload.link = honey.console_link;
+      }
+    }
+    return payload;
+  }
+
+  /**
+   * The allow-listed `honey` detail, from typed ledger fields: the target secret (id, looked up for its
+   * name), the agent actor, and the template, binding, path and peer attrs, each validated against a
+   * fixed shape. Never copies `attrs` and never touches a secret value. Null when the target is not a
+   * secret of this org.
+   */
+  private async honeyDetail(
+    tx: Tx,
+    orgId: string,
+    ev: { attrs: unknown; at: Date | string },
+    actor: { type: string; id: string } | null,
+    target: { type: string; id: string } | null,
+    agentName: (ref: { type: string; id: string } | null) => Promise<string | null>,
+  ): Promise<HoneyDetail | null> {
+    if (target?.type !== "secret" || !UUID.test(target.id)) return null;
+    const secret = await tx
+      .selectFrom("secrets as s")
+      .innerJoin("environments as e", "e.id", "s.environment_id")
+      .select(["s.name", "s.honey_template", "s.project_id", "s.environment_id"])
+      .where("s.org_id", "=", orgId)
+      .where("s.id", "=", target.id)
+      .executeTakeFirst();
+    const template = attr(ev.attrs, "honey_template", ["code"], (v) => HONEY_TEMPLATES.has(v)) ?? secret?.honey_template ?? null;
+    if (!template || !HONEY_TEMPLATES.has(template)) return null;
+    const name = await agentName(actor);
+    return {
+      token: { id: target.id, name: secret?.name ?? target.id },
+      template: template as HoneyDetail["template"],
+      agent: actor?.type === "agent" && UUID.test(actor.id) && name ? { id: actor.id, name } : null,
+      binding: attr(ev.attrs, "binding_id", ["id", "code"], (v) => REF_ID.test(v)),
+      path: attr(ev.attrs, "path", ["code"], (v) => PATH_CODE.test(v)),
+      peer_address: attr(ev.attrs, "peer_address", ["host", "code"], (v) => PEER.test(v)),
+      occurred_at: new Date(ev.at).toISOString(),
+      console_link: secret ? `/projects/${secret.project_id}/environments/${secret.environment_id}/honey-tokens` : "/audit",
     };
   }
 }

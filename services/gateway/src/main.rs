@@ -156,6 +156,11 @@ async fn main() -> ExitCode {
     };
     // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
     // only logs and never blocks the relay.
+    let honey: Arc<dyn ls_gateway::honey::HoneyOwnerSource> = control_plane.clone();
+    // Honey value scan (t5 task 3.2): the org's honey tokens from the control plane's scan list.
+    let honey_scan = Arc::new(ls_gateway::honey_guard::HoneyScan::new(
+        control_plane.clone(),
+    ));
     bindings_publish::spawn_publish(control_plane, bindings_publish::summaries(&config.bindings));
     let relay = Relay::new(
         auth,
@@ -168,9 +173,16 @@ async fn main() -> ExitCode {
     )
     // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
     .with_revoked_agents(clients)
-    .with_aws(aws);
+    .with_aws(aws)
+    // Owner-only honey reveal (t5 task 2.4) through the control plane's internal honey routes.
+    .with_honey(honey)
+    .with_honey_scan(honey_scan);
 
     let relay = Arc::new(relay);
+    // Load the scan now (a failure is retried on the first relayed request) and rebuild it when
+    // the org's active honey tokens change.
+    let honey_refresher =
+        ls_gateway::honey_guard::spawn_refresher(&relay, ls_gateway::honey_guard::REFRESH_EVERY);
 
     // Postgres listener (D3), off unless LOCKSMITH_GATEWAY_PG_LISTEN is set. TLS is required
     // before startup, so it does not start without a certificate and key.
@@ -248,13 +260,20 @@ async fn main() -> ExitCode {
     };
     tracing::info!(addr = %config.bind, bindings = binding_count, "locksmith-gateway listening");
 
-    let served = axum::serve(listener, router)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await;
+    // The peer address reaches only `honey.triggered` events (t5 task 3.1).
+    let served = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await;
     probe.abort();
     sweeper.abort();
+    if let Some(t) = honey_refresher {
+        t.abort();
+    }
     if let Some(t) = pg_task {
         t.abort();
     }

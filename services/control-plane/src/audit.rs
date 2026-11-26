@@ -61,6 +61,21 @@ fn admin(kind: Code, actor: Actor, target: Target, attrs: Attrs) -> Event {
     }
 }
 
+/// `honey.revealed`: the org's owner asked the gateway for a honey token's decoy value
+/// (t5-honey-tokens task 2.4). The owner is the actor, the token the target; the version and the
+/// template are the only attributes. Never the value.
+pub fn honey_revealed(user: Uuid, secret_id: Uuid, version: u32, template: Code) -> Event {
+    Event {
+        kind: kind::HONEY_REVEALED,
+        actor: Actor::User(user),
+        target: Some(Target::Secret(secret_id)),
+        outcome: outcome::OK,
+        attrs: Attrs::new()
+            .int(attr::VERSION, i64::from(version))
+            .code(attr::HONEY_TEMPLATE, template),
+    }
+}
+
 /// `agent.created`.
 pub fn agent_created(actor: Actor, agent_id: Uuid) -> Event {
     admin(

@@ -71,8 +71,9 @@ async fn new_org_gets_default_rules_and_a_cursor() {
     let db = pg.app_db(Default::default());
     let org = create_org(&db).await;
 
-    // Four notifiable kinds on three channels; only the inbox starts enabled, all to the owner.
-    assert_eq!(count(&db, org, "notification_rules").await, 12);
+    // Five notifiable kinds on three channels, all to the owner. The inbox starts enabled for every
+    // kind, and email also for `honey.triggered` (t5-honey-tokens 4.1); Slack starts off.
+    assert_eq!(count(&db, org, "notification_rules").await, 15);
     let enabled: Vec<(String, String, bool)> = db
         .with_org(org, |c| {
             Box::pin(async move {
@@ -85,12 +86,10 @@ async fn new_org_gets_default_rules_and_a_cursor() {
         })
         .await
         .unwrap();
-    assert_eq!(enabled.len(), 4);
-    assert!(
-        enabled
-            .iter()
-            .all(|(ch, aud, _)| ch == "inbox" && aud == "owner")
-    );
+    assert_eq!(enabled.len(), 6);
+    assert!(enabled.iter().all(|(_, aud, _)| aud == "owner"));
+    assert_eq!(enabled.iter().filter(|(ch, _, _)| ch == "inbox").count(), 5);
+    assert_eq!(enabled.iter().filter(|(ch, _, _)| ch == "email").count(), 1);
     assert_eq!(count(&db, org, "notification_cursors").await, 1);
 }
 
@@ -130,7 +129,7 @@ async fn two_orgs_never_see_each_others_notification_rows() {
         assert_eq!(count(&db, a, table).await, 1, "{table} own org");
         assert_eq!(count(&db, b, table).await, 0, "{table} other org");
     }
-    assert_eq!(count(&db, b, "notification_rules").await, 12);
+    assert_eq!(count(&db, b, "notification_rules").await, 15);
 
     // Marking read from the other org changes nothing; from its own org it works.
     let touched = |org: Uuid| {

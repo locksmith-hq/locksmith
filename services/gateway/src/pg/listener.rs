@@ -461,6 +461,20 @@ impl PgListener {
             .await
     }
 
+    /// [`Self::check`] alone, without TLS or the wire protocol (tests): `Ok` or the refusal's
+    /// slug.
+    #[cfg(test)]
+    pub(crate) async fn check_for_test(
+        &self,
+        agent: AgentIdentity,
+        database: &str,
+    ) -> Result<(), &'static str> {
+        self.check(agent, i64::MAX, database, BTreeMap::new())
+            .await
+            .map(drop)
+            .map_err(Refusal::slug)
+    }
+
     /// Binding → relay grant → address guard → decrypt (design decision 4).
     async fn check(
         &self,
@@ -484,10 +498,12 @@ impl PgListener {
             }
         };
         let now = time::OffsetDateTime::now_utc();
-        if !allows_relay(&grants, binding.secret_id, now) {
+        let Some(grant_id) =
+            crate::grants::relay_grant(&grants, binding.secret_id, now).map(|g| g.grant_id)
+        else {
             self.deny(agent, binding, Outcome::NoGrant).await;
             return Err(NOT_PERMITTED);
-        }
+        };
         drop(grants);
         let addrs = match egress::check_host(
             &binding.host,
@@ -514,8 +530,25 @@ impl PgListener {
             .await
         {
             Ok(v) => v,
+            // A honey secret (t5 task 3.1): refused before the unwrap; one `honey.triggered`
+            // event, and the client sees the same refusal as a missing grant.
+            Err(DecryptError::Honey(h)) => {
+                crate::honey_guard::record(
+                    relay,
+                    crate::audit::HoneyEvent {
+                        agent_id: agent.agent_id,
+                        secret_id: h.secret_id,
+                        path: crate::audit::HoneyPath::Db,
+                        binding_id: Some(grant_id),
+                        peer: None,
+                    },
+                )
+                .await;
+                return Err(NOT_PERMITTED);
+            }
             Err(e) => {
                 let why = match e {
+                    DecryptError::Honey(_) | DecryptError::NotHoney => Outcome::Denied,
                     DecryptError::Material(_) => Outcome::MaterialError,
                     DecryptError::Unwrap(_) | DecryptError::Open => Outcome::DecryptFailed,
                 };

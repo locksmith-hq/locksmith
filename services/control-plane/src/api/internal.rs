@@ -1,7 +1,8 @@
 //! Service-to-service routes under `/internal/v1` (S3 design decision 2; S4 decision 4).
 //!
 //! The gateway fetches the stored envelope of one secret version here: the A0-7 ciphertext, the
-//! KMS-wrapped DEK and the key id. None of it is plaintext, and the control plane cannot unwrap
+//! KMS-wrapped DEK, the key id and the secret's kind (`standard` or `honey`, so the gateway can
+//! refuse a honey token before it unwraps anything). None of it is plaintext, and the control plane cannot unwrap
 //! the DEK (its KMS token may only encrypt, S2 decision 4), so this route returns no secret
 //! value. It is reachable only with the gateway service token ([`ServiceOrgBinding`]), and the
 //! read runs in a tenant transaction for the org the gateway names, so another org's secret is a
@@ -14,7 +15,8 @@
 //! `POST /internal/v1/audit/events` appends a relay event (`relay.attempt`, `relay.outcome`,
 //! `relay.denied`, for Git `git.fetch`, `git.push`, `git.denied`, `credential.issued` for a
 //! short-lived credential the agent MCP issued, and for AWS credential vending
-//! `aws.credentials.issued`, `aws.credentials.denied`) to the org's audit ledger (S5 design decision 5). The body is typed end to
+//! `aws.credentials.issued`, `aws.credentials.denied`, and `honey.triggered` when an agent used a
+//! honey token, t5-honey-tokens) to the org's audit ledger (S5 design decision 5). The body is typed end to
 //! end: kinds, outcomes and methods are closed enums mapped to static codes, ids are UUIDs, the
 //! host is validated as a bare host name or IP, and unknown fields are refused. There is no field
 //! for a URL, path, query, header or body, so none of them can reach the ledger.
@@ -27,15 +29,15 @@ use base64::engine::general_purpose::STANDARD;
 use ls_audit::{Actor, Attrs, Code, Event, Host, Target, Text, attr, kind, outcome};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::agents::{GrantMode, GrantScope, grant_cols, optional_utc, scope_from_row};
-use super::extract::{ApiJson, ApiPath};
+use super::extract::{ApiJson, ApiPath, ApiQuery};
 use super::responses::{InternalReadErrors, InternalWriteErrors};
 use super::{all, exists_or_404, one};
 use crate::app::AppState;
-use crate::auth::ServiceOrgBinding;
+use crate::auth::{ForwardedOwner, ServiceOrgBinding};
 use crate::db::sql::{self, Row};
 use crate::mcp_store;
 use crate::problem::{ApiError, Kind, Problem};
@@ -54,6 +56,27 @@ pub struct SecretVersionMaterial {
     /// A0-7 `dek-wrap` blob (the KMS-wrapped data key), standard base64 with padding.
     #[schema(content_encoding = "base64")]
     pub wrapped_dek: String,
+    /// The secret's kind. The gateway refuses to open a `honey` (decoy) version for any agent
+    /// path and records `honey.triggered` instead (t5-honey-tokens design decision 3).
+    pub kind: SecretKind,
+}
+
+/// The kind of a secret (`secrets.kind`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SecretKind {
+    Standard,
+    Honey,
+}
+
+impl SecretKind {
+    fn from_column(s: &str) -> Option<Self> {
+        match s {
+            "standard" => Some(Self::Standard),
+            "honey" => Some(Self::Honey),
+            _ => None,
+        }
+    }
 }
 
 #[utoipa::path(
@@ -90,8 +113,9 @@ pub async fn material(
             Box::pin(async move {
                 // RLS limits the read to the bound org; the explicit org_id is belt and braces.
                 let row = sql::query(
-                    "SELECT ciphertext, wrapped_dek, key_id FROM secret_versions \
-                     WHERE org_id = $1 AND secret_id = $2 AND version = $3",
+                    "SELECT v.ciphertext, v.wrapped_dek, v.key_id, s.kind FROM secret_versions v \
+                     JOIN secrets s ON s.id = v.secret_id AND s.org_id = v.org_id \
+                     WHERE v.org_id = $1 AND v.secret_id = $2 AND v.version = $3",
                 )
                 .bind(org_id)
                 .bind(secret_id)
@@ -101,7 +125,12 @@ pub async fn material(
                 one(row, |r| {
                     let ciphertext: Vec<u8> = r.try_get("ciphertext")?;
                     let wrapped_dek: Vec<u8> = r.try_get("wrapped_dek")?;
+                    let kind: String = r.try_get("kind")?;
+                    let kind = SecretKind::from_column(&kind).ok_or_else(|| {
+                        sql::Error::Decode(format!("unknown secret kind {kind:?}").into())
+                    })?;
                     Ok(SecretVersionMaterial {
+                        kind,
                         secret_id,
                         version,
                         key_id: r.try_get("key_id")?,
@@ -248,6 +277,13 @@ pub enum RelayEventKind {
     /// credential is usable, so a failed append means nothing was issued.
     #[serde(rename = "credential.issued")]
     CredentialIssued,
+    /// An agent used a honey (decoy) secret (t5-honey-tokens): by reference on one of the
+    /// gateway's paths, or by value inside a relayed request. Outcome `denied`, with `honey_path`
+    /// and optionally `binding_id` and `peer` (stored as the ledger attrs `path`, `binding_id` and
+    /// `peer_address`); the control plane adds the token's template and
+    /// refuses (`409`) a secret that is not of kind `honey`.
+    #[serde(rename = "honey.triggered")]
+    HoneyTriggered,
 }
 
 impl RelayEventKind {
@@ -265,6 +301,7 @@ impl RelayEventKind {
             Self::DbSessionOpened => kind::DB_SESSION_OPENED,
             Self::DbSessionClosed => kind::DB_SESSION_CLOSED,
             Self::CredentialIssued => kind::CREDENTIAL_ISSUED,
+            Self::HoneyTriggered => kind::HONEY_TRIGGERED,
         }
     }
 
@@ -316,6 +353,36 @@ impl RelayOutcome {
             self,
             Self::Denied | Self::NoGrant | Self::GrantsUnavailable | Self::DeniedAddress
         )
+    }
+}
+
+/// Where the gateway caught a honey token (`honey.triggered`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum HoneyPath {
+    Relay,
+    Inject,
+    Delegate,
+    Git,
+    Aws,
+    Db,
+    ShortLived,
+    /// An active honey value inside a relayed request (raw, base64 or URL-encoded).
+    ValueMatch,
+}
+
+impl HoneyPath {
+    fn code(self) -> Code {
+        Code::new(match self {
+            Self::Relay => "relay",
+            Self::Inject => "inject",
+            Self::Delegate => "delegate",
+            Self::Git => "git",
+            Self::Aws => "aws",
+            Self::Db => "db",
+            Self::ShortLived => "short_lived",
+            Self::ValueMatch => "value_match",
+        })
     }
 }
 
@@ -417,6 +484,12 @@ pub struct NewRelayEvent {
     /// Lifetime of the vended credentials (`aws.credentials.*` only; required for `issued`).
     #[schema(minimum = 900, maximum = 3600)]
     pub duration_secs: Option<u32>,
+    /// Where a honey token was caught (`honey.triggered` only, required there).
+    pub honey_path: Option<HoneyPath>,
+    /// The grant the agent reached the honey token through (`honey.triggered` only).
+    pub binding_id: Option<Uuid>,
+    /// The caller's IP address, no port (`honey.triggered` only).
+    pub peer: Option<String>,
 }
 
 /// An AWS region code: lowercase letters, digits and inner hyphens.
@@ -431,8 +504,70 @@ fn valid_region(r: &str) -> bool {
 }
 
 impl NewRelayEvent {
+    /// The `honey.triggered` event: the agent, the token, where it was caught and, when known, the
+    /// grant and the caller's address. No other field is accepted. The template is added by
+    /// [`append_event`] from the secret row.
+    fn into_honey_event(self) -> Result<Event, ApiError> {
+        if self.outcome != RelayOutcome::Denied {
+            return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        if self.version.is_some()
+            || self.method.is_some()
+            || self.host.is_some()
+            || self.port.is_some()
+            || self.status.is_some()
+            || self.attempt_id.is_some()
+            || self.reason.is_some()
+            || self.duration_ms.is_some()
+            || self.bytes_in.is_some()
+            || self.bytes_out.is_some()
+            || self.credential_id.is_some()
+            || self.expires_at.is_some()
+            || self.region.is_some()
+            || self.duration_secs.is_some()
+        {
+            return Err(ApiError::validation(
+                "`honey.triggered` takes only `honey_path`, `binding_id` and `peer`",
+            ));
+        }
+        let path = self
+            .honey_path
+            .ok_or_else(|| ApiError::validation("`honey.triggered` needs `honey_path`"))?;
+        let mut attrs = Attrs::new().code(attr::PATH, path.code());
+        if let Some(b) = self.binding_id {
+            attrs = attrs.id(attr::BINDING_ID, b);
+        }
+        if let Some(p) = self.peer {
+            // An IP literal only (never a name the caller chose); the error never echoes it.
+            let ip: std::net::IpAddr = p
+                .parse()
+                .map_err(|_| ApiError::validation("`peer` must be an IP address"))?;
+            let host = Host::parse(&match ip {
+                std::net::IpAddr::V4(v4) => v4.to_string(),
+                std::net::IpAddr::V6(v6) => format!("[{v6}]"),
+            })
+            .map_err(|_| ApiError::validation("`peer` must be an IP address"))?;
+            attrs = attrs.host(attr::PEER_ADDRESS, host);
+        }
+        Ok(Event {
+            kind: self.kind.code(),
+            actor: Actor::Agent(self.agent_id),
+            target: Some(Target::Secret(self.secret_id)),
+            outcome: self.outcome.code(),
+            attrs,
+        })
+    }
+
     /// The ledger event, or a `400` naming the field that is not allowed.
     fn into_event(self) -> Result<Event, ApiError> {
+        if self.kind == RelayEventKind::HoneyTriggered {
+            return self.into_honey_event();
+        }
+        if self.honey_path.is_some() || self.binding_id.is_some() || self.peer.is_some() {
+            return Err(ApiError::validation(
+                "`honey_path`, `binding_id` and `peer` are for `honey.triggered` only",
+            ));
+        }
         let ok = match self.kind {
             RelayEventKind::Attempt => self.outcome == RelayOutcome::Pending,
             RelayEventKind::Outcome => self.outcome != RelayOutcome::Pending,
@@ -457,6 +592,7 @@ impl NewRelayEvent {
                 self.outcome == RelayOutcome::Ok
             }
             RelayEventKind::CredentialIssued => self.outcome == RelayOutcome::Ok,
+            RelayEventKind::HoneyTriggered => false,
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
@@ -619,7 +755,7 @@ pub struct AppendedEvent {
     operation_id = "append_audit_event",
     tag = "internal",
     summary = "Append a relay event to the org's audit ledger (gateway only)",
-    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
+    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable, and `honey.triggered` (outcome `denied`, with `honey_path` and optionally `binding_id` and `peer`, nothing else) when an agent used a honey token; the control plane adds the token's template and answers `409` for a secret that is not of kind `honey`. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
     params(
         ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to (the agent token's `org`)"),
     ),
@@ -627,7 +763,7 @@ pub struct AppendedEvent {
     responses(
         (status = 201, description = "Appended", body = AppendedEvent),
         (status = 200, description = "`relay.outcome` already recorded for this `attempt_id` with the same fields; nothing appended", body = AppendedEvent),
-        (status = 409, description = "`relay.outcome` already recorded for this `attempt_id` with different fields", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "`relay.outcome` already recorded for this `attempt_id` with different fields, or `honey.triggered` for a secret that is not a honey token", body = Problem, content_type = "application/problem+json"),
         InternalWriteErrors,
     ),
     security(("service_token" = []))
@@ -641,22 +777,51 @@ pub async fn append_event(
         RelayEventKind::Outcome => input.attempt_id,
         _ => None,
     };
-    let event = input.into_event()?;
+    let honey = input.kind == RelayEventKind::HoneyTriggered;
+    let mut event = input.into_event()?;
     let org_id = org.org_id;
     let appended = state
         .db()
         .with_org(org_id, move |c| {
             Box::pin(async move {
+                if honey {
+                    // The token must be a honey secret of this org; its template comes from the
+                    // row, not from the gateway.
+                    let Some(Target::Secret(secret_id)) = event.target else {
+                        return Err(ApiError::bare(Kind::Internal));
+                    };
+                    let row = sql::query(
+                        "SELECT kind, honey_template FROM secrets WHERE org_id = $1 AND id = $2",
+                    )
+                    .bind(org_id)
+                    .bind(secret_id)
+                    .fetch_optional(&mut *c)
+                    .await?
+                    .ok_or_else(ApiError::not_found)?;
+                    let kind: String = row.try_get("kind")?;
+                    let template: Option<String> = row.try_get("honey_template")?;
+                    let template = template.as_deref().and_then(HoneyTemplate::from_column);
+                    let (true, Some(template)) = (kind == "honey", template) else {
+                        return Err(ApiError::new(
+                            Kind::Conflict,
+                            "the secret is not a honey token",
+                        ));
+                    };
+                    event.attrs = std::mem::take(&mut event.attrs)
+                        .code(attr::HONEY_TEMPLATE, Code::new(template.column()));
+                }
                 match attempt_id {
-                    Some(a) => crate::audit::append_outcome_once(c, org_id, a, &event).await,
+                    Some(a) => crate::audit::append_outcome_once(c, org_id, a, &event)
+                        .await
+                        .map_err(ApiError::from),
                     None => crate::audit::append(c, org_id, &event)
                         .await
-                        .map(crate::audit::Once::Appended),
+                        .map(crate::audit::Once::Appended)
+                        .map_err(ApiError::from),
                 }
             })
         })
-        .await
-        .map_err(ApiError::from)?;
+        .await?;
     let (status, a) = match appended {
         crate::audit::Once::Appended(a) => (StatusCode::CREATED, a),
         crate::audit::Once::Existing(a) => (StatusCode::OK, a),
@@ -1334,4 +1499,401 @@ pub async fn revoked_agent_clients(
         })
         .await?;
     Ok(Json(RevokedAgentClientSet { items }))
+}
+
+/// The decoy formats the core can mint (change t5-honey-tokens).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum HoneyTemplate {
+    AwsAccessKey,
+    GithubPat,
+    SlackToken,
+    GenericApiKey,
+}
+
+impl HoneyTemplate {
+    fn column(self) -> &'static str {
+        match self {
+            HoneyTemplate::AwsAccessKey => "aws_access_key",
+            HoneyTemplate::GithubPat => "github_pat",
+            HoneyTemplate::SlackToken => "slack_token",
+            HoneyTemplate::GenericApiKey => "generic_api_key",
+        }
+    }
+
+    fn generator(self) -> crate::honey::Template {
+        use crate::honey::Template;
+        match self {
+            HoneyTemplate::AwsAccessKey => Template::AwsAccessKey,
+            HoneyTemplate::GithubPat => Template::GithubPat,
+            HoneyTemplate::SlackToken => Template::SlackToken,
+            HoneyTemplate::GenericApiKey => Template::GenericApiKey,
+        }
+    }
+}
+
+/// Mint one honey (decoy) value for an existing secret row of kind `honey`. The value is generated
+/// and sealed inside the core; the request and the response never carry it.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MintHoney {
+    pub template: HoneyTemplate,
+    /// The secret row the sealed value becomes version 1 of.
+    pub secret_id: Uuid,
+}
+
+/// The minted version's metadata. Never the value.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MintedHoney {
+    pub secret_id: Uuid,
+    pub version: u32,
+    pub template: HoneyTemplate,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/honey/mint",
+    operation_id = "mint_honey_value",
+    tag = "internal",
+    summary = "Mint and seal a honey value (NestJS API only)",
+    description = "Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. The secret must be of kind `honey`, with the same template, and must have no version yet (`409` otherwise).",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the secret belongs to"),
+    ),
+    request_body = MintHoney,
+    responses(
+        (status = 201, description = "Minted and sealed", body = MintedHoney),
+        (status = 404, description = "Unknown secret, or one of another org", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Not a honey token of this template, or already minted", body = Problem, content_type = "application/problem+json"),
+        InternalWriteErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn mint_honey(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+    ApiJson(input): ApiJson<MintHoney>,
+) -> Result<(StatusCode, Json<MintedHoney>), ApiError> {
+    let Some(kms) = state.kms().cloned() else {
+        return Err(ApiError::new(
+            Kind::Unavailable,
+            "secret version storage is not configured (no key service)",
+        ));
+    };
+    let org_id = org.org_id;
+    let MintHoney {
+        template,
+        secret_id,
+    } = input;
+    state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let row =
+                    sql::query("SELECT kind, honey_template FROM secrets WHERE id = $1 FOR UPDATE")
+                        .bind(secret_id)
+                        .fetch_optional(&mut *c)
+                        .await?
+                        .ok_or_else(|| ApiError::new(Kind::NotFound, "secret not found"))?;
+                let kind: String = row.try_get("kind")?;
+                let stored: Option<String> = row.try_get("honey_template")?;
+                if kind != "honey" || stored.as_deref() != Some(template.column()) {
+                    return Err(ApiError::new(
+                        Kind::Conflict,
+                        "the secret is not a honey token of this template",
+                    ));
+                }
+                let existing: i64 = sql::query_scalar(
+                    "SELECT count(*) FROM secret_versions WHERE org_id = $1 AND secret_id = $2",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .fetch_one(&mut *c)
+                .await?;
+                if existing > 0 {
+                    return Err(ApiError::new(
+                        Kind::Conflict,
+                        "the honey token already has a value",
+                    ));
+                }
+                let value = crate::honey::generate(template.generator()).map_err(|_| {
+                    tracing::error!("honey value generation failed: no randomness");
+                    ApiError::bare(Kind::Internal)
+                })?;
+                let sealed =
+                    super::versions::seal_and_wrap(kms.as_ref(), org_id, secret_id, 1, &value)
+                        .await;
+                drop(value);
+                let (ciphertext, wrapped_dek, key_id) = sealed?;
+                sql::query(
+                    "INSERT INTO secret_versions \
+                     (org_id, secret_id, version, ciphertext, wrapped_dek, key_id) \
+                     VALUES ($1, $2, 1, $3, $4, $5)",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .bind(ciphertext)
+                .bind(wrapped_dek)
+                .bind(key_id)
+                .execute(&mut *c)
+                .await?;
+                Ok::<_, ApiError>(())
+            })
+        })
+        .await?;
+    tracing::info!(secret.id = %secret_id, "honey value minted");
+    Ok((
+        StatusCode::CREATED,
+        Json(MintedHoney {
+            secret_id,
+            version: 1,
+            template,
+        }),
+    ))
+}
+
+impl HoneyTemplate {
+    /// The template stored in `secrets.honey_template`, if it is one the core knows.
+    fn from_column(s: &str) -> Option<Self> {
+        Some(match s {
+            "aws_access_key" => HoneyTemplate::AwsAccessKey,
+            "github_pat" => HoneyTemplate::GithubPat,
+            "slack_token" => HoneyTemplate::SlackToken,
+            "generic_api_key" => HoneyTemplate::GenericApiKey,
+            _ => return None,
+        })
+    }
+}
+
+/// Query of [`find_honey_tokens`].
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(deny_unknown_fields)]
+#[into_params(parameter_in = Query)]
+pub struct HoneyTokenQuery {
+    /// The honey token's name, matched exactly across every project and environment of the org.
+    /// Required with a forwarded person's token; absent for the gateway's own scan list.
+    pub name: Option<String>,
+}
+
+/// One honey token, as its owner names it. Never the value.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HoneyTokenRef {
+    pub secret_id: Uuid,
+    pub name: String,
+    pub template: HoneyTemplate,
+    /// Disabled tokens still match but cannot be revealed.
+    pub disabled: bool,
+    /// The version holding the value (the latest); `null` before it is minted. Only on the
+    /// gateway's scan list (no forwarded person).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
+}
+
+/// The org's honey tokens with a given name (usually one; one per environment at most).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HoneyTokenRefs {
+    pub items: Vec<HoneyTokenRef>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/internal/v1/honey/tokens",
+    operation_id = "find_honey_tokens",
+    tag = "internal",
+    summary = "Find the org's honey tokens by name for the owner, or list them all for the gateway's scan (gateway only)",
+    description = "With `X-Locksmith-User-Authorization`, the gateway calls this for `smith honey plant <name>`, forwarding the person's own access token: that person must be the org's owner (`403` otherwise) and `name` is required. Without it and without `name`, the gateway's service token alone lists every honey token of the org with the version holding its value, so the gateway can scan relayed requests for active honey values (t5-honey-tokens task 3.2); `name` without a person is a `401`. Returns ids, names, templates, the disabled flag and (scan list only) versions of secrets of kind `honey` only, never a value.",
+    params(
+        HoneyTokenQuery,
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the gateway acts for"),
+        ("X-Locksmith-User-Authorization" = Option<String>, Header, description = "`Bearer <access token>` of the person the gateway acts for; absent for the gateway's scan list"),
+    ),
+    responses(
+        (status = 200, description = "Matching honey tokens (possibly none)", body = HoneyTokenRefs),
+        (status = 400, description = "Invalid query", body = Problem, content_type = "application/problem+json"),
+        (status = 401, description = "Missing or invalid service token, org header or user token", body = Problem, content_type = "application/problem+json"),
+        (status = 403, description = "The user is not the org's owner, or has no verified email", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("service_token" = []))
+)]
+pub async fn find_honey_tokens(
+    State(state): State<AppState>,
+    service: ServiceOrgBinding,
+    headers: axum::http::HeaderMap,
+    ApiQuery(query): ApiQuery<HoneyTokenQuery>,
+) -> Result<Json<HoneyTokenRefs>, ApiError> {
+    let person = headers.get(crate::auth::USER_AUTHORIZATION_HEADER);
+    let name = match (person, query.name) {
+        (None, None) => return scan_list(&state, service.org_id).await,
+        (None, Some(_)) => return Err(ApiError::unauthenticated()),
+        (Some(_), None) => return Err(ApiError::validation("`name` is required")),
+        (Some(_), Some(name)) => name,
+    };
+    let owner = ForwardedOwner::verify(&state, &service, person.expect("matched above")).await?;
+    if name.trim().is_empty() || name.chars().count() > super::MAX_NAME_CHARS {
+        return Err(ApiError::validation("`name` must be 1 to 200 characters"));
+    }
+    let org_id = owner.org_id;
+    let rows = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let rows = sql::query(
+                    "SELECT id, name, honey_template, disabled_at IS NOT NULL AS disabled \
+                     FROM secrets WHERE org_id = $1 AND kind = 'honey' AND name = $2 ORDER BY id",
+                )
+                .bind(org_id)
+                .bind(name)
+                .fetch_all(c)
+                .await?;
+                Ok::<_, ApiError>(rows)
+            })
+        })
+        .await?;
+    let mut items = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let template: String = r.try_get("honey_template")?;
+        items.push(HoneyTokenRef {
+            secret_id: r.try_get("id")?,
+            name: r.try_get("name")?,
+            template: HoneyTemplate::from_column(&template)
+                .ok_or_else(|| ApiError::bare(Kind::Internal))?,
+            disabled: r.try_get("disabled")?,
+            version: None,
+        });
+    }
+    Ok(Json(HoneyTokenRefs { items }))
+}
+
+/// Every honey token of the org with its latest version, for the gateway's value scan. Metadata
+/// only: the gateway decrypts the values itself.
+async fn scan_list(state: &AppState, org_id: Uuid) -> Result<Json<HoneyTokenRefs>, ApiError> {
+    let rows = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let rows = sql::query(
+                    "SELECT s.id, s.name, s.honey_template, s.disabled_at IS NOT NULL AS disabled, \
+                     (SELECT max(v.version) FROM secret_versions v \
+                      WHERE v.org_id = s.org_id AND v.secret_id = s.id) AS version \
+                     FROM secrets s WHERE s.org_id = $1 AND s.kind = 'honey' ORDER BY s.id",
+                )
+                .bind(org_id)
+                .fetch_all(c)
+                .await?;
+                Ok::<_, ApiError>(rows)
+            })
+        })
+        .await?;
+    let mut items = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let template: String = r.try_get("honey_template")?;
+        let version: Option<i32> = r.try_get("version")?;
+        items.push(HoneyTokenRef {
+            secret_id: r.try_get("id")?,
+            name: r.try_get("name")?,
+            template: HoneyTemplate::from_column(&template)
+                .ok_or_else(|| ApiError::bare(Kind::Internal))?,
+            disabled: r.try_get("disabled")?,
+            version: version.and_then(|v| u32::try_from(v).ok()),
+        });
+    }
+    tracing::info!(tokens = items.len(), "honey scan list served");
+    Ok(Json(HoneyTokenRefs { items }))
+}
+
+/// What the gateway needs to open a honey value for its owner: the version to decrypt. Never the
+/// value (the control plane cannot decrypt).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HoneyReveal {
+    pub secret_id: Uuid,
+    pub version: u32,
+    pub template: HoneyTemplate,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/honey/tokens/{secret_id}/reveal",
+    operation_id = "reveal_honey_token",
+    tag = "internal",
+    summary = "Authorize the owner's reveal of a honey value and record it (gateway only)",
+    description = "The gateway calls this before it decrypts a honey value for `GET /v1/honey-tokens/{id}/value`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. The person must be the org's owner (`403`), the secret must exist in the org (`404`), be of kind `honey`, not be disabled and have a value (`409`). On success `honey.revealed` (the owner, the token, its version and template) is appended to the org's ledger in the same transaction, and the version to decrypt is returned. No request or response field carries the value.",
+    params(
+        ("secret_id" = Uuid, Path, description = "The honey token's secret id"),
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the gateway acts for"),
+        ("X-Locksmith-User-Authorization" = String, Header, description = "`Bearer <access token>` of the person the gateway acts for"),
+    ),
+    responses(
+        (status = 200, description = "Authorized and recorded", body = HoneyReveal),
+        (status = 401, description = "Missing or invalid service token, org header or user token", body = Problem, content_type = "application/problem+json"),
+        (status = 403, description = "The user is not the org's owner, or has no verified email", body = Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Unknown secret, or one of another org", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Not a honey token, disabled, or without a value", body = Problem, content_type = "application/problem+json"),
+        (status = 503, description = "Service unavailable", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("service_token" = []))
+)]
+pub async fn reveal_honey(
+    State(state): State<AppState>,
+    owner: ForwardedOwner,
+    ApiPath(secret_id): ApiPath<Uuid>,
+) -> Result<Json<HoneyReveal>, ApiError> {
+    let org_id = owner.org_id;
+    let user_id = owner.user_id;
+    let reveal = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                let row = sql::query(
+                    "SELECT kind, honey_template, disabled_at IS NOT NULL AS disabled \
+                     FROM secrets WHERE org_id = $1 AND id = $2",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .fetch_optional(&mut *c)
+                .await?
+                .ok_or_else(ApiError::not_found)?;
+                let kind: String = row.try_get("kind")?;
+                if kind != "honey" {
+                    return Err(ApiError::new(
+                        Kind::Conflict,
+                        "the secret is not a honey token",
+                    ));
+                }
+                if row.try_get::<bool, _>("disabled")? {
+                    return Err(ApiError::new(Kind::Conflict, "the honey token is disabled"));
+                }
+                let template: Option<String> = row.try_get("honey_template")?;
+                let template = template
+                    .as_deref()
+                    .and_then(HoneyTemplate::from_column)
+                    .ok_or_else(|| ApiError::bare(Kind::Internal))?;
+                let version: Option<i32> = sql::query_scalar(
+                    "SELECT max(version) FROM secret_versions WHERE org_id = $1 AND secret_id = $2",
+                )
+                .bind(org_id)
+                .bind(secret_id)
+                .fetch_one(&mut *c)
+                .await?;
+                let version = version.and_then(|v| u32::try_from(v).ok()).ok_or_else(|| {
+                    ApiError::new(Kind::Conflict, "the honey token has no value yet")
+                })?;
+                let event = crate::audit::honey_revealed(
+                    user_id,
+                    secret_id,
+                    version,
+                    Code::new(template.column()),
+                );
+                crate::audit::append(c, org_id, &event).await?;
+                Ok::<_, ApiError>(HoneyReveal {
+                    secret_id,
+                    version,
+                    template,
+                })
+            })
+        })
+        .await?;
+    // Ids only: never the value (the control plane cannot decrypt it anyway).
+    tracing::info!(secret.id = %secret_id, secret.version = reveal.version, "honey reveal authorized");
+    Ok(Json(reveal))
 }

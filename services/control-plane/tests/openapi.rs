@@ -155,6 +155,7 @@ fn internal_material_schema_has_no_plaintext_field() {
         [
             "ciphertext",
             "key_id",
+            "kind",
             "secret_id",
             "version",
             "wrapped_dek"

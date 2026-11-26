@@ -21,10 +21,11 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::audit::{EventKind, Method as AuditMethod, Outcome, RelayEvent};
+use crate::audit::{HoneyEvent, HoneyPath};
 use crate::config::Binding;
 use crate::decrypt::{DecryptError, MaterialError};
 use crate::egress::{self, EgressError};
-use crate::grants::allows_relay;
+use crate::grants::{allows_relay, relay_grant};
 use crate::relay::{Relay, error};
 
 /// What a Git operation does to the repository; a grant for one does not allow the other.
@@ -571,6 +572,11 @@ async fn handle(
         query.as_deref(),
         post,
     );
+    let grant_id = selected
+        .as_ref()
+        .ok()
+        .and_then(|(b, _)| relay_grant(&grants, b.secret_id, now))
+        .map(|g| g.grant_id);
     drop(grants);
     let (binding, target) = match selected {
         Ok(x) => x,
@@ -641,6 +647,21 @@ async fn handle(
         .await
     {
         Ok(v) => v,
+        // A honey secret (t5 task 3.1): refused before the unwrap; one `honey.triggered` event.
+        Err(DecryptError::Honey(h)) => {
+            crate::honey_guard::record(
+                &relay,
+                HoneyEvent {
+                    agent_id: agent.agent_id,
+                    secret_id: h.secret_id,
+                    path: HoneyPath::Git,
+                    binding_id: grant_id,
+                    peer: None,
+                },
+            )
+            .await;
+            return fail(StatusCode::FORBIDDEN, "denied", &request_id);
+        }
         Err(DecryptError::Material(MaterialError::NotFound)) => {
             return call
                 .failed(

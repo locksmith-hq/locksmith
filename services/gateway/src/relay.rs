@@ -5,7 +5,10 @@
 //! Order of checks, each before the next step runs:
 //! 1. agent token ([`crate::auth`]: JWKS signature, audience, expiry, org) -> `401`, nothing
 //!    else happens and nothing is audited;
-//! 2. request shape -> `400`;
+//! 2. request shape -> `400`; then, when a honey scan is configured, the target URL, headers and
+//!    body are scanned for the org's active honey values ([`crate::honey_guard`], t5 task 3.2): a
+//!    match appends `honey.triggered` (path `value_match`) and is a `403 denied`, never forwarded;
+//!    a scan that cannot be loaded is a `503` (fail closed);
 //! 3. grant (S4 task 2.2): the agent's grants (cached at most 10 s, [`crate::grants::GrantCache`])
 //!    must hold an unexpired `relay` grant for the secret -> `403 no_grant`; grants that cannot
 //!    be read -> `502 grants_unavailable` (fail closed);
@@ -16,7 +19,9 @@
 //! 6. append `relay.attempt` to the ledger; if that fails -> `503 audit_unavailable`, with no
 //!    material fetch, no unwrap and no upstream call (fail closed);
 //! 7. fetch material, unwrap DEK (cached), open the version. Nothing before this step touches
-//!    the material or the KMS;
+//!    the material or the KMS. A honey secret is refused here before the unwrap (t5 task 3.1):
+//!    `honey.triggered` (path `relay`, or `short_lived` for a short-lived credential), the attempt
+//!    closed as `denied`, and a `403 denied`;
 //! 8. render the binding's header template, send through a client pinned to the checked
 //!    addresses that follows no redirects;
 //! 9. read the response (identity encoding only, size-bounded), redact headers and body with
@@ -53,12 +58,12 @@ use url::Url;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::audit::{AuditSink, EventKind, Method, Outcome, RelayEvent};
+use crate::audit::{AuditSink, EventKind, HoneyEvent, HoneyPath, Method, Outcome, RelayEvent};
 use crate::auth::AgentAuth;
 use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
 use crate::egress::{self, EgressError, Resolver};
-use crate::grants::{GrantSource, allows_relay};
+use crate::grants::{GrantSource, relay_grant};
 
 /// Label in redaction markers: `[REDACTED:SECRET]`.
 pub const REDACTION_LABEL: &str = "SECRET";
@@ -137,6 +142,11 @@ pub struct Relay {
     /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
     /// honoured so a revoke takes effect here without waiting for `/mcp` traffic.
     revoked_agents: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
+    /// The control plane's owner-only honey routes (t5-honey-tokens task 2.4); without it the
+    /// `/v1/honey-tokens` routes answer `503`.
+    honey: Option<Arc<dyn crate::honey::HoneyOwnerSource>>,
+    /// The honey value scan (t5-honey-tokens task 3.2); without it requests are not scanned.
+    honey_scan: Option<Arc<crate::honey_guard::HoneyScan>>,
 }
 
 impl Relay {
@@ -162,7 +172,30 @@ impl Relay {
             aws: crate::aws::AwsOptions::default(),
             short_lived: crate::short_lived::ShortLivedStore::default(),
             revoked_agents: None,
+            honey: None,
+            honey_scan: None,
         }
+    }
+
+    /// Scan every relayed request for the org's active honey values (t5 task 3.2).
+    pub fn with_honey_scan(mut self, scan: Arc<crate::honey_guard::HoneyScan>) -> Self {
+        self.honey_scan = Some(scan);
+        self
+    }
+
+    pub fn honey_scan(&self) -> Option<&crate::honey_guard::HoneyScan> {
+        self.honey_scan.as_deref()
+    }
+
+    /// Serve the owner-only `/v1/honey-tokens` routes through `source` (in production the
+    /// control plane client).
+    pub fn with_honey(mut self, source: Arc<dyn crate::honey::HoneyOwnerSource>) -> Self {
+        self.honey = Some(source);
+        self
+    }
+
+    pub(crate) fn honey(&self) -> Option<&dyn crate::honey::HoneyOwnerSource> {
+        self.honey.as_deref()
     }
 
     /// Check short-lived credentials against the agent MCP client registry (task 4.2): a
@@ -396,6 +429,10 @@ fn span_host(url: &Url) -> String {
 /// What every event of one call shares. The host is recorded only when the outcome says the
 /// origin matched the binding ([`Outcome::origin_checked`]).
 struct CallAudit {
+    /// Where a honey secret resolved by this call is recorded (`relay` or `short_lived`).
+    honey_path: HoneyPath,
+    /// The caller's address, for a `honey.triggered` event.
+    peer: Option<std::net::IpAddr>,
     agent_id: Uuid,
     secret_id: Uuid,
     version: u32,
@@ -463,6 +500,16 @@ pub(crate) async fn append_outcome(relay: &Relay, ev: RelayEvent) -> bool {
 /// is refused (`403 denied`, audited) for any secret but the one it is scoped to. An unknown or
 /// expired one is a `401` like a bad agent token.
 pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Response {
+    handle_from(relay, headers, body, None).await
+}
+
+/// [`handle`] for a caller at `peer` (recorded only on a `honey.triggered` event).
+pub async fn handle_from(
+    relay: Arc<Relay>,
+    headers: HeaderMap,
+    body: Bytes,
+    peer: Option<std::net::IpAddr>,
+) -> Response {
     let request_id = Uuid::new_v4().to_string();
     let short_lived = headers
         .get(axum::http::header::AUTHORIZATION)
@@ -492,7 +539,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
                     secret_id: s.secret_id,
                     credential_id: s.credential_id,
                 };
-                handle_scoped(relay, agent, Some(only), request_id, body).await
+                handle_scoped(relay, agent, Some(only), request_id, body, peer).await
             }
             None => {
                 tracing::info!(
@@ -510,7 +557,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
             return error(StatusCode::UNAUTHORIZED, "unauthenticated", &request_id);
         }
     };
-    handle_as(relay, agent, request_id, body).await
+    handle_scoped(relay, agent, None, request_id, body, peer).await
 }
 
 /// The relay for an already authenticated agent: every check, the audit events and the
@@ -522,7 +569,7 @@ pub(crate) async fn handle_as(
     request_id: String,
     body: Bytes,
 ) -> Response {
-    handle_scoped(relay, agent, None, request_id, body).await
+    handle_scoped(relay, agent, None, request_id, body, None).await
 }
 
 /// A short-lived credential's restriction: the one secret it may relay.
@@ -538,10 +585,38 @@ async fn handle_scoped(
     only: Option<Only>,
     request_id: String,
     body: Bytes,
+    peer: Option<std::net::IpAddr>,
 ) -> Response {
     let Some(req) = parse(&body, relay.options.max_request_body) else {
         return error(StatusCode::BAD_REQUEST, "bad_request", &request_id);
     };
+    // Honey value scan (t5 task 3.2): before the grant check, so a decoy pasted into any request
+    // is caught whatever secret the call names. Nothing is forwarded on a match.
+    if let Some(scan) = &relay.honey_scan {
+        let scanner = match scan.scanner(&relay.decryptor).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = ?e, "honey scan unavailable; relay refused");
+                return error(StatusCode::SERVICE_UNAVAILABLE, "unavailable", &request_id);
+            }
+        };
+        let hit = crate::honey_guard::scan_request(&scanner, &req.url, &req.headers, &req.body);
+        drop(scanner);
+        if let Some(token) = hit {
+            crate::honey_guard::record(
+                &relay,
+                HoneyEvent {
+                    agent_id: agent.agent_id,
+                    secret_id: token,
+                    path: HoneyPath::ValueMatch,
+                    binding_id: None,
+                    peer,
+                },
+            )
+            .await;
+            return error(StatusCode::FORBIDDEN, "denied", &request_id);
+        }
+    }
 
     let host = span_host(&req.url);
     let span = tracing::info_span!(
@@ -560,6 +635,12 @@ async fn handle_scoped(
         span.record("credential.id", tracing::field::display(o.credential_id));
     }
     let call = CallAudit {
+        honey_path: if only.is_some() {
+            HoneyPath::ShortLived
+        } else {
+            HoneyPath::Relay
+        },
+        peer,
         agent_id: agent.agent_id,
         secret_id: req.secret_id,
         version: req.version,
@@ -673,13 +754,15 @@ async fn run(
             "grants_unavailable",
         )
     })?;
-    if !allows_relay(&grants, req.secret_id, time::OffsetDateTime::now_utc()) {
+    let Some(grant_id) =
+        relay_grant(&grants, req.secret_id, time::OffsetDateTime::now_utc()).map(|g| g.grant_id)
+    else {
         return Err(Failure::new(
             Outcome::NoGrant,
             StatusCode::FORBIDDEN,
             "no_grant",
         ));
-    }
+    };
     drop(grants);
 
     // 4. Binding and origin: refused before any fetch or unwrap.
@@ -727,26 +810,37 @@ async fn run(
         })?;
     *attempt = Some(id);
 
-    // 7. Decrypt.
-    let value = relay
-        .decryptor
-        .decrypt(req.secret_id, req.version)
-        .await
-        .map_err(|e| match e {
-            DecryptError::Material(MaterialError::NotFound) => {
-                Failure::new(Outcome::MaterialError, StatusCode::NOT_FOUND, "not_found")
-            }
-            DecryptError::Material(_) => Failure::new(
-                Outcome::MaterialError,
-                StatusCode::BAD_GATEWAY,
-                "secret_unavailable",
-            ),
-            DecryptError::Unwrap(_) | DecryptError::Open => Failure::new(
-                Outcome::DecryptFailed,
-                StatusCode::BAD_GATEWAY,
-                "secret_unavailable",
-            ),
-        })?;
+    // 7. Decrypt. A honey secret is refused here, before the unwrap (t5 task 3.1).
+    let decrypted = relay.decryptor.decrypt(req.secret_id, req.version).await;
+    if let Err(DecryptError::Honey(h)) = &decrypted {
+        crate::honey_guard::record(
+            relay,
+            HoneyEvent {
+                agent_id,
+                secret_id: h.secret_id,
+                path: call.honey_path,
+                binding_id: Some(grant_id),
+                peer: call.peer,
+            },
+        )
+        .await;
+    }
+    let value = decrypted.map_err(|e| match e {
+        DecryptError::Honey(_) | DecryptError::NotHoney => denied(),
+        DecryptError::Material(MaterialError::NotFound) => {
+            Failure::new(Outcome::MaterialError, StatusCode::NOT_FOUND, "not_found")
+        }
+        DecryptError::Material(_) => Failure::new(
+            Outcome::MaterialError,
+            StatusCode::BAD_GATEWAY,
+            "secret_unavailable",
+        ),
+        DecryptError::Unwrap(_) | DecryptError::Open => Failure::new(
+            Outcome::DecryptFailed,
+            StatusCode::BAD_GATEWAY,
+            "secret_unavailable",
+        ),
+    })?;
 
     // Encoded forms of values shorter than this are not matched by ls-redact, so an echo could
     // not be caught: refuse rather than relay unscannable (fail closed).
@@ -919,11 +1013,12 @@ fn upstream_failure(e: &reqwest::Error) -> Failure {
 /// Axum entry point: `503` until the relay is configured.
 pub async fn route(
     State(state): State<crate::app::AppState>,
+    peer: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
     match state.relay() {
-        Some(relay) => handle(relay, headers, body).await,
+        Some(relay) => handle_from(relay, headers, body, peer.map(|c| c.0.0.ip())).await,
         None => error(
             StatusCode::SERVICE_UNAVAILABLE,
             "unavailable",

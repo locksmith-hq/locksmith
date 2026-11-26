@@ -82,6 +82,28 @@ impl TokenStore for KeyringTokenStore {
     }
 }
 
+/// Environment variable that supplies a person's access token instead of the OS keystore (headless
+/// machines and tests). Read once; never printed.
+pub const USER_TOKEN_ENV: &str = "LOCKSMITH_USER_ACCESS_TOKEN";
+
+/// The person's access token saved by `smith login --user` (or [`USER_TOKEN_ENV`]).
+pub fn access_token() -> Result<SecretString, Fail> {
+    if let Ok(v) = std::env::var(USER_TOKEN_ENV) {
+        let v = zeroize::Zeroizing::new(v);
+        let t = v.trim();
+        if !t.is_empty() {
+            return Ok(SecretString::from(t.to_owned()));
+        }
+    }
+    match entry(ACCESS_KEY)?.get_password() {
+        Ok(t) if !t.trim().is_empty() => Ok(SecretString::from(t)),
+        Ok(_) | Err(keyring::Error::NoEntry) => Err(fail(
+            "not signed in as a person: run `smith login --user` first",
+        )),
+        Err(e) => Err(ks_err(e)),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub issuer: String,

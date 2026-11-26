@@ -33,6 +33,21 @@
     },
     {
       "method": "POST",
+      "path": "/internal/v1/honey/mint",
+      "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/v1/honey/tokens",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v1/honey/tokens/{secret_id}/reveal",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
       "path": "/internal/v1/mcp/agent-calls",
       "owner": "rust"
     },
@@ -124,12 +139,12 @@
     {
       "method": "POST",
       "path": "/v1/auth/sign-in",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",
       "path": "/v1/auth/sign-out",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "GET",
@@ -260,6 +275,26 @@
       "method": "PATCH",
       "path": "/v1/projects/{project_id}/environments/{environment_id}",
       "owner": "rust"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens",
+      "owner": "nest"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens",
+      "owner": "nest"
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}",
+      "owner": "nest"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}/disable",
+      "owner": "nest"
     },
     {
       "method": "GET",

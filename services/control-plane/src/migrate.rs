@@ -85,6 +85,16 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "notifications",
         include_str!("../migrations/0019_notifications.sql"),
     ),
+    (
+        20,
+        "honey tokens",
+        include_str!("../migrations/0020_honey_tokens.sql"),
+    ),
+    (
+        21,
+        "honey notification defaults",
+        include_str!("../migrations/0021_honey_notification_defaults.sql"),
+    ),
 ];
 
 /// The migrator over the embedded migrations.

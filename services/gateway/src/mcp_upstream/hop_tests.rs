@@ -277,6 +277,7 @@ impl Kit {
 
     fn deps(&self) -> HopDeps<'_> {
         HopDeps {
+            relay: None,
             decryptor: &self.decryptor,
             resolver: &self.resolver,
             connect_timeout: Duration::from_secs(5),
@@ -720,6 +721,7 @@ async fn hop_refuses_a_credential_too_short_to_scan_for() {
     );
     let resolver = StubResolver::default();
     let deps = HopDeps {
+        relay: None,
         decryptor: &d,
         resolver: &resolver,
         connect_timeout: Duration::from_secs(5),

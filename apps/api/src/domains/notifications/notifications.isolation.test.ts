@@ -61,9 +61,18 @@ afterAll(async () => {
 describe("notification tables (app role, row-level security)", () => {
   it("a new org has the default rules matrix and a cursor", async () => {
     const rules = await tenant.run(ORG_A, (tx) => tx.selectFrom("notification_rules").selectAll().execute());
-    expect(rules).toHaveLength(12);
-    expect(rules.filter((r) => r.enabled).map((r) => [r.channel, r.audience])).toEqual(
-      Array(4).fill(["inbox", "owner"]),
+    expect(rules).toHaveLength(15);
+    // The inbox for every kind, plus email for honey.triggered (t5-honey-tokens 4.1).
+    expect(
+      rules
+        .filter((r) => r.enabled)
+        .map((r) => `${r.kind}:${r.channel}:${r.audience}`)
+        .sort(),
+    ).toEqual(
+      [
+        ...["relay.denied", "git.denied", "grant.revoked", "agent.deleted", "honey.triggered"].map((k) => `${k}:inbox:owner`),
+        "honey.triggered:email:owner",
+      ].sort(),
     );
     const cursors = await tenant.run(ORG_A, (tx) =>
       tx.selectFrom("notification_cursors").selectAll().where("org_id", "=", ORG_A).execute(),

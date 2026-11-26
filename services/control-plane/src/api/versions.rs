@@ -121,7 +121,7 @@ async fn require_secret(
 
 /// Seal `value` for (org, secret, version) and wrap its DEK. The DEK is dropped (zeroized)
 /// before this returns; the caller drops the value.
-async fn seal_and_wrap(
+pub(super) async fn seal_and_wrap(
     kms: &dyn DekWrapper,
     org_id: Uuid,
     secret_id: Uuid,

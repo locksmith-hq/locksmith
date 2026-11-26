@@ -205,6 +205,32 @@ async fn issue_short_lived_credential(
     if relay.bindings().for_secret(a.secret_id).is_none() {
         return Ok(tool_error("denied", 403));
     }
+    // A credential delegated for a honey token is a use of it (t5 task 3.1, path `delegate`):
+    // nothing is decrypted here, so the honey scan's list of the org's tokens answers.
+    if let Some(scan) = relay.honey_scan() {
+        match scan.is_honey(relay.decryptor(), a.secret_id).await {
+            Ok(false) => {}
+            Ok(true) => {
+                let grant_id = grants::relay_grant(&grants, a.secret_id, now).map(|g| g.grant_id);
+                crate::honey_guard::record(
+                    relay,
+                    crate::audit::HoneyEvent {
+                        agent_id: agent.agent_id,
+                        secret_id: a.secret_id,
+                        path: crate::audit::HoneyPath::Delegate,
+                        binding_id: grant_id,
+                        peer: None,
+                    },
+                )
+                .await;
+                return Ok(tool_error("denied", 403));
+            }
+            Err(e) => {
+                tracing::warn!(error = ?e, "honey scan unavailable; credential not issued");
+                return Ok(tool_error("unavailable", 503));
+            }
+        }
+    }
     let expires_at = short_lived::expiry(now, a.ttl_secs, grant_expires);
     let minted =
         match relay

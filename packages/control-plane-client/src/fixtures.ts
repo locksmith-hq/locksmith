@@ -1,7 +1,7 @@
 // Fixture data for the MCP tool switches and clients, shaped like the control-plane responses.
 // Test and story data only: ids and names, never a token or a secret value.
 import type { paths } from "@locksmith/sdk";
-import type { BindingSummary, McpClient, McpToolSetting } from "./index";
+import type { BindingSummary, HoneyToken, McpClient, McpToolSetting } from "./index";
 
 type Ok<P extends keyof paths, M extends keyof paths[P]> = paths[P][M] extends {
   responses: { 200: { content: { "application/json": infer B } } };
@@ -162,4 +162,46 @@ export const notificationForbidden = {
   title: "Forbidden",
   status: 403,
   detail: "only an org owner can change notification rules",
+};
+
+const honeyBase = {
+  created_at: "2026-11-25T10:00:00Z",
+  disabled_at: null,
+};
+
+/** Two honey tokens in one environment: one never used, one triggered. No value field exists. */
+export const honeyTokens: Ok<"/v1/projects/{project_id}/environments/{environment_id}/honey-tokens", "get"> = {
+  items: [
+    {
+      ...honeyBase,
+      id: "0190b000-0000-7000-8000-0000000000b2",
+      name: "prod-aws-decoy",
+      template: "aws_access_key",
+      last_triggered_at: "2026-11-26T02:15:00Z",
+    },
+    {
+      ...honeyBase,
+      id: "0190b000-0000-7000-8000-0000000000b1",
+      name: "ci-github-decoy",
+      template: "github_pat",
+      last_triggered_at: null,
+    },
+  ],
+};
+
+/** The response to creating a honey token: metadata only. */
+export const honeyTokenCreated: HoneyToken = {
+  ...honeyBase,
+  id: "0190b000-0000-7000-8000-0000000000b3",
+  name: "stripe-decoy",
+  template: "generic_api_key",
+  last_triggered_at: null,
+};
+
+/** A 403 problem body, as a non-owner gets on every honey-token route. */
+export const honeyTokenForbidden = {
+  type: "about:blank",
+  title: "Forbidden",
+  status: 403,
+  detail: "only an org owner can manage honey tokens",
 };

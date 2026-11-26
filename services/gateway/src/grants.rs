@@ -63,6 +63,14 @@ pub fn delegate_grant(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) ->
         .find(|g| g.secret_id == secret_id && g.mode == MODE_DELEGATE && g.active_at(now))
 }
 
+/// The unexpired `relay` grant for `secret_id` at `now`, if any (the first, in the control
+/// plane's order).
+pub fn relay_grant(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) -> Option<&Grant> {
+    grants
+        .iter()
+        .find(|g| g.secret_id == secret_id && g.mode == MODE_RELAY && g.active_at(now))
+}
+
 /// Whether `grants` hold an unexpired relay grant for `secret_id` at `now`.
 pub fn allows_relay(grants: &[Grant], secret_id: Uuid, now: OffsetDateTime) -> bool {
     grants

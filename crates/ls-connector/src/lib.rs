@@ -27,7 +27,9 @@ use zeroize::{Zeroize, Zeroizing};
 
 mod workload;
 pub use workload::*;
+mod honey;
 pub mod mcp;
+pub use honey::{HoneyToken, honey_find, honey_value};
 
 /// Environment variable holding the enrollment secret (alternative to stdin).
 pub const ENROLLMENT_ENV: &str = "LOCKSMITH_ENROLLMENT_SECRET";

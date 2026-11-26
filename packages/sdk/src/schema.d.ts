@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Append a relay event to the org's audit ledger (gateway only)
-         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
+         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable, and `honey.triggered` (outcome `denied`, with `honey_path` and optionally `binding_id` and `peer`, nothing else) when an agent used a honey token; the control plane adds the token's template and answers `409` for a secret that is not of kind `honey`. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
          */
         post: operations["append_audit_event"];
         delete?: never;
@@ -115,6 +115,66 @@ export interface paths {
          */
         put: operations["put_gateway_bindings"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/honey/mint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint and seal a honey value (NestJS API only)
+         * @description Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. The secret must be of kind `honey`, with the same template, and must have no version yet (`409` otherwise).
+         */
+        post: operations["mint_honey_value"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/honey/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the org's honey tokens by name for the owner, or list them all for the gateway's scan (gateway only)
+         * @description With `X-Locksmith-User-Authorization`, the gateway calls this for `smith honey plant <name>`, forwarding the person's own access token: that person must be the org's owner (`403` otherwise) and `name` is required. Without it and without `name`, the gateway's service token alone lists every honey token of the org with the version holding its value, so the gateway can scan relayed requests for active honey values (t5-honey-tokens task 3.2); `name` without a person is a `401`. Returns ids, names, templates, the disabled flag and (scan list only) versions of secrets of kind `honey` only, never a value.
+         */
+        get: operations["find_honey_tokens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/honey/tokens/{secret_id}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorize the owner's reveal of a honey value and record it (gateway only)
+         * @description The gateway calls this before it decrypts a honey value for `GET /v1/honey-tokens/{id}/value`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. The person must be the org's owner (`403`), the secret must exist in the org (`404`), be of kind `honey`, not be disabled and have a value (`409`). On success `honey.revealed` (the owner, the token, its version and template) is appended to the org's ledger in the same transaction, and the version to decrypt is returned. No request or response field carries the value.
+         */
+        post: operations["reveal_honey_token"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1006,7 +1066,7 @@ export interface paths {
                                 /** @enum {string} */
                                 channel: "inbox" | "email" | "slack";
                                 /** @enum {string} */
-                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                             }[];
                         };
                     };
@@ -1056,7 +1116,7 @@ export interface paths {
                             /** @enum {string} */
                             channel: "inbox" | "email" | "slack";
                             /** @enum {string} */
-                            kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                            kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                         }[];
                     };
                 };
@@ -1075,7 +1135,7 @@ export interface paths {
                                 /** @enum {string} */
                                 channel: "inbox" | "email" | "slack";
                                 /** @enum {string} */
-                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                             }[];
                         };
                     };
@@ -1157,14 +1217,33 @@ export interface paths {
                                 /** Format: uuid */
                                 id: string;
                                 /** @enum {string} */
-                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                                 payload: {
                                     actor: {
                                         id: string;
                                         name: string;
                                     } | null;
+                                    honey?: {
+                                        agent: {
+                                            /** Format: uuid */
+                                            id: string;
+                                            name: string;
+                                        } | null;
+                                        binding: string | null;
+                                        console_link: string;
+                                        occurred_at: string;
+                                        path: string | null;
+                                        peer_address: string | null;
+                                        /** @enum {string} */
+                                        template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                                        token: {
+                                            /** Format: uuid */
+                                            id: string;
+                                            name: string;
+                                        };
+                                    };
                                     /** @enum {string} */
-                                    kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted";
+                                    kind: "relay.denied" | "git.denied" | "grant.revoked" | "agent.deleted" | "honey.triggered";
                                     link: string;
                                     object_name: string | null;
                                     occurred_at: string;
@@ -1270,6 +1349,370 @@ export interface paths {
                     content?: never;
                 };
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                created_at: string;
+                                disabled_at: string | null;
+                                /** Format: uuid */
+                                id: string;
+                                last_triggered_at: string | null;
+                                name: string;
+                                /** @enum {string} */
+                                template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                            }[];
+                        };
+                    };
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @enum {string} */
+                        template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                    };
+                };
+            };
+            responses: {
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            created_at: string;
+                            disabled_at: string | null;
+                            /** Format: uuid */
+                            id: string;
+                            last_triggered_at: string | null;
+                            name: string;
+                            /** @enum {string} */
+                            template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                        };
+                    };
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    project_id: string;
+                    environment_id: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            created_at: string;
+                            disabled_at: string | null;
+                            /** Format: uuid */
+                            id: string;
+                            last_triggered_at: string | null;
+                            name: string;
+                            /** @enum {string} */
+                            template: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+                        };
+                    };
+                };
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            detail: string;
+                            status: number;
+                            title: string;
+                            type: string;
+                        };
+                    };
+                };
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1601,6 +2044,46 @@ export interface components {
             resources?: string[];
         };
         /**
+         * @description Where the gateway caught a honey token (`honey.triggered`).
+         * @enum {string}
+         */
+        HoneyPath: "relay" | "inject" | "delegate" | "git" | "aws" | "db" | "short_lived" | "value_match";
+        /**
+         * @description What the gateway needs to open a honey value for its owner: the version to decrypt. Never the
+         *     value (the control plane cannot decrypt).
+         */
+        HoneyReveal: {
+            /** Format: uuid */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+            /** Format: int32 */
+            version: number;
+        };
+        /**
+         * @description The decoy formats the core can mint (change t5-honey-tokens).
+         * @enum {string}
+         */
+        HoneyTemplate: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+        /** @description One honey token, as its owner names it. Never the value. */
+        HoneyTokenRef: {
+            /** @description Disabled tokens still match but cannot be revealed. */
+            disabled: boolean;
+            name: string;
+            /** Format: uuid */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+            /**
+             * Format: int32
+             * @description The version holding the value (the latest); `null` before it is minted. Only on the
+             *     gateway's scan list (no forwarded person).
+             */
+            version?: number | null;
+        };
+        /** @description The org's honey tokens with a given name (usually one; one per environment at most). */
+        HoneyTokenRefs: {
+            items: components["schemas"]["HoneyTokenRef"][];
+        };
+        /**
          * @description The kind of a human audit event NestJS appends for a sign-in flow.
          * @enum {string}
          */
@@ -1703,6 +2186,26 @@ export interface components {
          * @enum {string}
          */
         McpUpstreamReason: "hide" | "deny" | "hold" | "unknown_tool" | "policy_unavailable" | "catalogue_unavailable" | "denied" | "denied_address" | "upstream_unreachable" | "secret_unavailable" | "secret_unusable" | "upstream_error" | "upstream_unsupported" | "upstream_timeout" | "redaction_failed" | "internal";
+        /**
+         * @description Mint one honey (decoy) value for an existing secret row of kind `honey`. The value is generated
+         *     and sealed inside the core; the request and the response never carry it.
+         */
+        MintHoney: {
+            /**
+             * Format: uuid
+             * @description The secret row the sealed value becomes version 1 of.
+             */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+        };
+        /** @description The minted version's metadata. Never the value. */
+        MintedHoney: {
+            /** Format: uuid */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+            /** Format: int32 */
+            version: number;
+        };
         NewAgent: {
             description?: string;
             name: string;
@@ -1826,6 +2329,11 @@ export interface components {
              */
             attempt_id?: string | null;
             /**
+             * Format: uuid
+             * @description The grant the agent reached the honey token through (`honey.triggered` only).
+             */
+            binding_id?: string | null;
+            /**
              * Format: int64
              * @description Bytes relayed client to upstream (`db.session.closed` only).
              */
@@ -1855,6 +2363,7 @@ export interface components {
              * @description When the short-lived credential expires, Unix seconds (`credential.issued` only).
              */
             expires_at?: number | null;
+            honey_path?: components["schemas"]["HoneyPath"] | null;
             /**
              * @description Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or
              *     query.
@@ -1863,6 +2372,8 @@ export interface components {
             kind: components["schemas"]["RelayEventKind"];
             method?: components["schemas"]["RelayMethod"] | null;
             outcome: components["schemas"]["RelayOutcome"];
+            /** @description The caller's IP address, no port (`honey.triggered` only). */
+            peer?: string | null;
             /**
              * Format: int32
              * @description Upstream port, when the URL names one explicitly.
@@ -2134,7 +2645,7 @@ export interface components {
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued" | "honey.triggered";
         /**
          * @description The upstream request method.
          * @enum {string}
@@ -2173,6 +2684,11 @@ export interface components {
              */
             version_count: number;
         };
+        /**
+         * @description The kind of a secret (`secrets.kind`).
+         * @enum {string}
+         */
+        SecretKind: "standard" | "honey";
         /** @description Metadata of one stored version. Never carries the value or any key material. */
         SecretVersion: {
             /** Format: date-time */
@@ -2200,6 +2716,11 @@ export interface components {
             ciphertext: string;
             /** @description The KMS key the data key is wrapped under, e.g. `gateway:v1`. */
             key_id: string;
+            /**
+             * @description The secret's kind. The gateway refuses to open a `honey` (decoy) version for any agent
+             *     path and records `honey.triggered` instead (t5-honey-tokens design decision 3).
+             */
+            kind: components["schemas"]["SecretKind"];
             /** Format: uuid */
             secret_id: string;
             /** Format: int32 */
@@ -2426,7 +2947,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `relay.outcome` already recorded for this `attempt_id` with different fields */
+            /** @description `relay.outcome` already recorded for this `attempt_id` with different fields, or `honey.triggered` for a secret that is not a honey token */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2606,6 +3127,245 @@ export interface operations {
             };
             /** @description Unsupported media type */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    mint_honey_value: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the secret belongs to */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MintHoney"];
+            };
+        };
+        responses: {
+            /** @description Minted and sealed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MintedHoney"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown secret, or one of another org */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a honey token of this template, or already minted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    find_honey_tokens: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The honey token's name, matched exactly across every project and environment of the org.
+                 *     Required with a forwarded person's token; absent for the gateway's own scan list.
+                 */
+                name?: string;
+            };
+            header: {
+                /** @description The org the gateway acts for */
+                "X-Locksmith-Org": string;
+                /** @description `Bearer <access token>` of the person the gateway acts for; absent for the gateway's scan list */
+                "X-Locksmith-User-Authorization"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching honey tokens (possibly none) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoneyTokenRefs"];
+                };
+            };
+            /** @description Invalid query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token, org header or user token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The user is not the org's owner, or has no verified email */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reveal_honey_token: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the gateway acts for */
+                "X-Locksmith-Org": string;
+                /** @description `Bearer <access token>` of the person the gateway acts for */
+                "X-Locksmith-User-Authorization": string;
+            };
+            path: {
+                /** @description The honey token's secret id */
+                secret_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized and recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoneyReveal"];
+                };
+            };
+            /** @description Missing or invalid service token, org header or user token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The user is not the org's owner, or has no verified email */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown secret, or one of another org */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a honey token, disabled, or without a value */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

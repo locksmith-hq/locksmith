@@ -27,6 +27,20 @@ function classify(err: unknown): EmailErrorCode {
 
 /** A fixed text built from the allow-listed payload fields only (design decision 6). */
 export function renderEmail(p: Payload): { subject: string; text: string } {
+  if (p.honey) {
+    const h = p.honey;
+    const lines = [
+      `A honey token was used.`,
+      `Token: ${h.token.name} (${h.template})`,
+      `Agent: ${h.agent ? h.agent.name : "unknown"}`,
+      `Path: ${h.path ?? "unknown"}`,
+      ...(h.binding ? [`Binding: ${h.binding}`] : []),
+      ...(h.peer_address ? [`Peer: ${h.peer_address}`] : []),
+      `At: ${h.occurred_at}`,
+      `Open: ${h.console_link}`,
+    ];
+    return { subject: `Locksmith: honey token ${h.token.name} was used`, text: lines.join("\n") + "\n" };
+  }
   const what = p.object_name ? ` on ${p.object_name}` : "";
   const who = p.actor ? ` by ${p.actor.name}` : "";
   return {

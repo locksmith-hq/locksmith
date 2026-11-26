@@ -254,6 +254,7 @@ async fn material_returns_ciphertext_and_wrapped_dek_only() {
         [
             "ciphertext",
             "key_id",
+            "kind",
             "secret_id",
             "version",
             "wrapped_dek"
@@ -262,6 +263,7 @@ async fn material_returns_ciphertext_and_wrapped_dek_only() {
     assert_eq!(r.body["secret_id"], f.secret_id.to_string());
     assert_eq!(r.body["version"], 1);
     assert_eq!(r.body["key_id"], "gateway:v1");
+    assert_eq!(r.body["kind"], "standard");
     let decode = |field: &str| STANDARD.decode(r.body[field].as_str().unwrap()).unwrap();
     assert_eq!(decode("ciphertext"), f.ciphertext);
     assert_eq!(decode("wrapped_dek"), f.wrapped_dek);

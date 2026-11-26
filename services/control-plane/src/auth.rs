@@ -178,6 +178,68 @@ impl FromRequestParts<AppState> for ServiceOrgBinding {
     }
 }
 
+/// Header in which the gateway forwards the human's own `Bearer` access token on an internal call
+/// made for that human (t5-honey-tokens task 2.4). The service token stays in `Authorization`.
+pub const USER_AUTHORIZATION_HEADER: &str = "x-locksmith-user-authorization";
+
+/// The org's owner, for an internal call the gateway makes on a human's behalf: the gateway's
+/// service token is verified as for [`ServiceOrgBinding`], and the human's access token, forwarded
+/// in [`USER_AUTHORIZATION_HEADER`], is verified against the OIDC issuer like any human bearer
+/// token (same verifier, same user resolution). The human must be bound to the org the gateway
+/// acts for. Personal orgs have exactly one human, so that human is the owner (T1 design
+/// decision 6). `401` for a bad service token or human token, `403` for a valid human of another
+/// org. Agent tokens and MCP hub tokens carry another audience, so the verifier refuses them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForwardedOwner {
+    pub user_id: Uuid,
+    pub org_id: Uuid,
+    /// The issuer that vouched for the identity.
+    pub issuer: String,
+}
+
+impl FromRequestParts<AppState> for ForwardedOwner {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let service = ServiceOrgBinding::from_request_parts(parts, state)
+            .await
+            .map_err(|Unauthenticated| ApiError::unauthenticated())?;
+        let value = parts
+            .headers
+            .get(USER_AUTHORIZATION_HEADER)
+            .ok_or_else(ApiError::unauthenticated)?
+            .clone();
+        Self::verify(state, &service, &value).await
+    }
+}
+
+impl ForwardedOwner {
+    /// Verify the human token forwarded in [`USER_AUTHORIZATION_HEADER`] (`value`) for a call
+    /// whose service token already verified as `service`: the extractor's checks, for a route
+    /// that also serves the gateway alone.
+    pub async fn verify(
+        state: &AppState,
+        service: &ServiceOrgBinding,
+        value: &axum::http::HeaderValue,
+    ) -> Result<Self, ApiError> {
+        let (identity, user) = human_login(state, value.as_bytes()).await?;
+        if user.org_id != service.org_id {
+            return Err(ApiError::new(
+                crate::problem::Kind::Forbidden,
+                "only the org's owner may do this",
+            ));
+        }
+        Ok(Self {
+            user_id: user.user_id,
+            org_id: service.org_id,
+            issuer: identity.issuer,
+        })
+    }
+}
+
 /// The credential of an `Authorization: Bearer <token>` value (scheme case-insensitive,
 /// surrounding whitespace trimmed, empty refused). The one bearer parser: the gateway uses it for
 /// agent tokens too.

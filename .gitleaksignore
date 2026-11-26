@@ -63,3 +63,5 @@ e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index
 crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
 # n1 fan-out test canary: fake literal, rewritten so it no longer matches (worker-b, 2026-11-25).
 50e12c92cee970411a47f0333d0a543d022d9388:apps/api/src/domains/notifications/fanout.test.ts:stripe-access-token:17
+# b2 dev-only compose agent signing seed (public placeholder, not a secret) (worker captain-america, 2026-11-24).
+9b326952d700a3331c31da7abe3de60420ffa1be:infra/compose/.env.example:generic-api-key:31

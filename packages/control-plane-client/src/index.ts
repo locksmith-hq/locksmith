@@ -28,6 +28,8 @@ export type McpClient = components["schemas"]["McpClient"];
 /** One gateway binding, non-secret fields only (never a password, template, secret id or key). */
 export type BindingSummary = components["schemas"]["BindingSummary"];
 export type BindingKind = components["schemas"]["BindingKind"];
+/** An org's plan and paid feature keys (`GET /internal/v1/orgs/{org_id}/entitlements`, service token only). */
+export type OrgEntitlements = components["schemas"]["OrgEntitlements"];
 export type Problem = components["schemas"]["Problem"];
 
 /** Non-secret fields of a binding as label/value pairs for display, in a fixed order per kind; unset fields are skipped. */

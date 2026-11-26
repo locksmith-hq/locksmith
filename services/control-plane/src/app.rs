@@ -19,6 +19,8 @@ use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use ls_entitlements::{EntitlementSource, FreeTier};
+
 use crate::agent_token::AgentTokenSigner;
 use crate::auth::ServiceToken;
 use crate::auth::abuse::{AbuseGuard, AbuseLimits};
@@ -52,6 +54,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
         (name = "orgs"), (name = "projects"), (name = "environments"), (name = "secrets"),
         (name = "agents", description = "Agent identities, their relay grants, agent tokens and the token-signing JWKS"),
         (name = "workload-identities", description = "Workload identity trust policies and the exchange of an external OIDC token for an agent token"),
+        (name = "entitlements", description = "What an org's plan includes; service token only"),
         (name = "internal", description = "Service-to-service routes for the gateway; service token only, never exposed to users or agents"),
     )
 )]
@@ -98,6 +101,7 @@ pub struct AppState {
     workload_abuse: Arc<AbuseGuard>,
     mcp: Option<Arc<McpEndpoint>>,
     issuer_admin: Option<Arc<IssuerAdmin>>,
+    entitlements: Arc<dyn EntitlementSource>,
 }
 
 impl AppState {
@@ -115,7 +119,20 @@ impl AppState {
             workload_abuse: Arc::new(AbuseGuard::default()),
             mcp: None,
             issuer_admin: None,
+            entitlements: Arc::new(FreeTier),
         }
+    }
+
+    /// Answer entitlement questions from `source` (T10 OC-6). The default is [`FreeTier`]; the
+    /// enterprise build injects the licence-backed source from `ee/`.
+    pub fn with_entitlements(mut self, source: Arc<dyn EntitlementSource>) -> Self {
+        self.entitlements = source;
+        self
+    }
+
+    /// The entitlement source.
+    pub fn entitlements(&self) -> &dyn EntitlementSource {
+        &*self.entitlements
     }
 
     /// Revoke the person's consent at the issuer after a hub MCP client revoke (M1 task 4.2).

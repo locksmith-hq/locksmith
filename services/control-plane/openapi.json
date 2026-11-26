@@ -1522,6 +1522,31 @@
         ],
         "type": "object"
       },
+      "OrgEntitlements": {
+        "description": "The plan and paid features of one org.",
+        "properties": {
+          "features": {
+            "description": "Stable feature keys the plan includes, for example `audit_streaming`; sorted.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "org_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanKey"
+          }
+        },
+        "required": [
+          "org_id",
+          "plan",
+          "features"
+        ],
+        "type": "object"
+      },
       "Paged_Agent": {
         "description": "One page of a list. `next` is absent on the last page.",
         "properties": {
@@ -1972,6 +1997,14 @@
           }
         },
         "type": "object"
+      },
+      "PlanKey": {
+        "description": "An org's plan.",
+        "enum": [
+          "free",
+          "enterprise"
+        ],
+        "type": "string"
       },
       "Problem": {
         "description": "The JSON body of an error response.",
@@ -3508,6 +3541,95 @@
         "summary": "Append an `mcp.upstream_call` or `mcp.upstream_outcome` event (gateway only)",
         "tags": [
           "internal"
+        ]
+      }
+    },
+    "/internal/v1/orgs/{org_id}/entitlements": {
+      "get": {
+        "description": "The org in the path must be the org named in `X-Locksmith-Org`; another org is a `404`. A Free org has no features.",
+        "operationId": "get_org_entitlements",
+        "parameters": [
+          {
+            "description": "Org id",
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The org the caller acts for",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgEntitlements"
+                }
+              }
+            },
+            "description": "The org's entitlements"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not found (including another org's secret)"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "The org's plan and paid feature keys (service token only)",
+        "tags": [
+          "entitlements"
         ]
       }
     },
@@ -7676,6 +7798,10 @@
     {
       "description": "Workload identity trust policies and the exchange of an external OIDC token for an agent token",
       "name": "workload-identities"
+    },
+    {
+      "description": "What an org's plan includes; service token only",
+      "name": "entitlements"
     },
     {
       "description": "Service-to-service routes for the gateway; service token only, never exposed to users or agents",

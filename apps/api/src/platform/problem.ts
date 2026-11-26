@@ -101,6 +101,12 @@ export class ProblemFilter implements ExceptionFilter {
     // body-parser (malformed JSON, oversized body) throws http-errors, not Nest exceptions.
     const status = (error as { status?: unknown } | null)?.status;
     if (typeof status === "number" && BY_STATUS[status] && status < 500) return { kind: BY_STATUS[status]! };
+    // Postgres: a unique violation is a duplicate name in the parent, a foreign-key violation a delete of a parent that
+    // still has children (inserts check their parent first). Only the error code is read, never its message.
+    const pgCode = (error as { code?: unknown } | null)?.code;
+    if (pgCode === "23505")
+      return { kind: "conflict", detail: "a resource with that name already exists in this parent" };
+    if (pgCode === "23503") return { kind: "conflict", detail: "the resource still has child resources" };
     this.log.error(`unhandled error: ${error instanceof Error ? error.constructor.name : typeof error}`);
     return { kind: "internal" };
   }

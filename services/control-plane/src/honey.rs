@@ -39,7 +39,8 @@ fn generate_with(
     template: Template,
     fill: &mut dyn FnMut(&mut [u8]) -> Result<(), RngError>,
 ) -> Result<SecretBytes, RngError> {
-    let mut out: Vec<u8> = Vec::new();
+    // Sized up front so the buffer never reallocates and leaves stray plaintext copies.
+    let mut out: Vec<u8> = Vec::with_capacity(64);
     match template {
         Template::AwsAccessKey => {
             // `AKIA` is the long-term access key prefix; 16 base32 characters follow (20 total).

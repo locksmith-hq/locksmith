@@ -1398,6 +1398,8 @@ pub struct MintedHoney {
     request_body = MintHoney,
     responses(
         (status = 201, description = "Minted and sealed", body = MintedHoney),
+        (status = 404, description = "Unknown secret, or one of another org", body = Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Not a honey token of this template, or already minted", body = Problem, content_type = "application/problem+json"),
         InternalWriteErrors,
     ),
     security(("service_token" = []))

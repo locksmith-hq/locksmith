@@ -3115,6 +3115,26 @@
             },
             "description": "Email verification required"
           },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unknown secret, or one of another org"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not a honey token of this template, or already minted"
+          },
           "413": {
             "content": {
               "application/problem+json": {

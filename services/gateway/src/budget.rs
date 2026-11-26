@@ -153,6 +153,12 @@ pub struct BudgetGuard<C: Clock = DefaultClock> {
 }
 
 impl BudgetGuard<DefaultClock> {
+    /// The guard the shipped gateway runs: burst limits plus daily budgets leased from the control
+    /// plane's core. `main` builds it here so a test can exercise the exact wiring.
+    pub fn for_control_plane(core: Arc<ControlPlane>) -> Self {
+        Self::new().with_leases(core)
+    }
+
     pub fn new() -> Self {
         Self::with_clock(DefaultClock::default())
     }
@@ -440,6 +446,30 @@ mod tests {
 
     fn day_guard(core: Arc<StubCore>, now: OffsetDateTime) -> BudgetGuard {
         BudgetGuard::new().with_leases(core).with_now(move || now)
+    }
+
+    /// A guard built like `main.rs` counts `per_day` through the control plane's lease endpoint
+    /// and refuses at the limit (it once enforced only per-minute limits).
+    #[tokio::test]
+    async fn the_shipped_guard_refuses_at_the_daily_limit() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let cp = MockServer::start().await;
+        let today = OffsetDateTime::now_utc().date().to_string();
+        Mock::given(method("POST"))
+            .and(path("/internal/v1/budgets/lease"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "granted": 0, "used": 3, "day": today
+            })))
+            .mount(&cp)
+            .await;
+        let core = Arc::new(
+            ControlPlane::new(cp.uri().parse().unwrap(), Uuid::new_v4(), "t".into()).unwrap(),
+        );
+        let g = BudgetGuard::for_control_plane(core);
+        let refused = g.check(Uuid::new_v4(), &grant(daily(3), None)).await;
+        assert!(matches!(refused, Err(BudgetRefusal::Daily { .. })));
+        assert_eq!(cp.received_requests().await.unwrap().len(), 1);
     }
 
     #[tokio::test]

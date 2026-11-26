@@ -816,6 +816,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             email: {
+                                delivery_failed: boolean;
                                 enabled: boolean;
                             };
                             slack: {
@@ -876,6 +877,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             email: {
+                                delivery_failed: boolean;
                                 enabled: boolean;
                             };
                             slack: {

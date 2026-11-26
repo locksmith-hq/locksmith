@@ -19,12 +19,16 @@
                     "email": {
                       "additionalProperties": false,
                       "properties": {
+                        "delivery_failed": {
+                          "type": "boolean"
+                        },
                         "enabled": {
                           "type": "boolean"
                         }
                       },
                       "required": [
-                        "enabled"
+                        "enabled",
+                        "delivery_failed"
                       ],
                       "type": "object"
                     },
@@ -157,12 +161,16 @@
                     "email": {
                       "additionalProperties": false,
                       "properties": {
+                        "delivery_failed": {
+                          "type": "boolean"
+                        },
                         "enabled": {
                           "type": "boolean"
                         }
                       },
                       "required": [
-                        "enabled"
+                        "enabled",
+                        "delivery_failed"
                       ],
                       "type": "object"
                     },

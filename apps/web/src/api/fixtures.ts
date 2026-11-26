@@ -9,6 +9,8 @@ export interface FixtureOptions {
   /** Force a status for any request whose "METHOD path" matches (e.g. `{ "POST /v1/projects": 409 }`). */
   fail?: Record<string, number>;
   empty?: boolean;
+  /** The email channel reports a failed delivery (shows the settings banner). */
+  deliveryFailed?: boolean;
 }
 
 function createFixtures(opts: FixtureOptions = {}) {
@@ -85,7 +87,10 @@ function createFixtures(opts: FixtureOptions = {}) {
           last_triggered_at: null,
         },
       ];
-  const chan = { email: { enabled: false }, slack: { configured: false } };
+  const chan = {
+    email: { enabled: false, delivery_failed: opts.deliveryFailed ?? false },
+    slack: { configured: false },
+  };
   const requests: string[] = [];
   let seq = 100;
 

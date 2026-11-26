@@ -543,3 +543,176 @@ async fn agents_strangers_and_non_honey_secrets_are_refused_without_a_reveal() {
             .is_success()
     );
 }
+
+/// t5-honey-tokens tasks 3.1-3.3 through the real control plane: the material names the kind, the
+/// scan list feeds the value scan, and `honey.triggered` lands in the org's ledger with the
+/// template the control plane looked up, the path, the grant and the peer, and never the value.
+#[tokio::test]
+async fn honey_triggered_lands_in_the_ledger_by_reference_and_by_value() {
+    use crate::audit::HttpAudit;
+    use crate::config::Binding;
+    use crate::grants::Grant;
+    use crate::honey_guard::HoneyScan;
+
+    let f = Fixture::start().await;
+    let upstream = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&upstream)
+        .await;
+    let control_plane = Arc::new(
+        ControlPlane::new(f.cp_url.clone(), f.org, SERVICE_TOKEN.to_owned().into()).unwrap(),
+    );
+    let decryptor = Decryptor::new(
+        f.org,
+        control_plane.clone(),
+        f.kms.clone(),
+        Arc::new(DekCache::new(CacheSettings::default())),
+    );
+    let signer = AgentTokenSigner::from_seed(Zeroizing::new([9u8; 32])).unwrap();
+    let auth = Arc::new(AgentAuth::new(
+        f.org,
+        Arc::new(StubJwks::with(vec![signer.jwk().clone()])),
+        JwksSettings::default(),
+    ));
+    let grant = |secret_id| Grant {
+        grant_id: Uuid::now_v7(),
+        secret_id,
+        secret_name: "K".to_owned(),
+        mode: "relay".to_owned(),
+        scope: None,
+        expires_at: None,
+    };
+    let (honey_grant, standard_grant) = (grant(f.honey), grant(f.standard));
+    let honey_grant_id = honey_grant.grant_id;
+    let grants = Arc::new(StubGrants::default());
+    grants.set(AGENT, vec![honey_grant, standard_grant]);
+    let origin = format!("http://127.0.0.1:{}", upstream.address().port());
+    let bind = |secret_id| Binding {
+        secret_id,
+        origin: origin.clone(),
+        header: "Authorization".to_owned(),
+        template: "Bearer {secret}".to_owned(),
+        allow_private_hosts: true,
+    };
+    let relay = Arc::new(
+        Relay::new(
+            auth,
+            grants,
+            Bindings {
+                org_id: f.org,
+                bindings: vec![bind(f.honey), bind(f.standard)],
+                aws_bindings: Vec::new(),
+                pg: Vec::new(),
+                git_bindings: Vec::new(),
+                mcp_upstreams: Vec::new(),
+            },
+            decryptor,
+            Arc::new(StubResolver::default()),
+            Arc::new(HttpAudit::new(control_plane.clone())),
+            RelayOptions::default(),
+        )
+        .with_honey_scan(Arc::new(HoneyScan::new(control_plane))),
+    );
+    let relay_req = |secret: Uuid, headers: Value| {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert(
+            "authorization",
+            format!("Bearer {}", f.agent_token).parse().unwrap(),
+        );
+        let body = json!({
+            "secret_id": secret, "version": 1, "method": "GET",
+            "url": format!("{origin}/v1/items"), "headers": headers,
+        });
+        (h, axum::body::Bytes::from(body.to_string()))
+    };
+
+    // By reference, from a known peer.
+    let (h, b) = relay_req(f.honey, json!([]));
+    let peer: std::net::IpAddr = "192.0.2.7".parse().unwrap();
+    let resp = crate::relay::handle_from(relay.clone(), h, b, Some(peer)).await;
+    assert_eq!(resp.status().as_u16(), 403);
+    // By value: the base64 decoy in a request that names the standard secret.
+    let (h, b) = relay_req(
+        f.standard,
+        json!([[
+            "authorization",
+            format!(
+                "Basic {}",
+                base64::engine::general_purpose::STANDARD.encode(value())
+            )
+        ]]),
+    );
+    let resp = crate::relay::handle_from(relay.clone(), h, b, None).await;
+    assert_eq!(resp.status().as_u16(), 403);
+    let raw = resp.into_body().collect().await.unwrap().to_bytes();
+    assert_no_value("value-match answer", &raw);
+    assert!(
+        upstream.received_requests().await.unwrap().is_empty(),
+        "nothing forwarded"
+    );
+    // Only the scan opened the honey value (once); the reference use unwrapped nothing, and the
+    // disabled token (same decoy) is not in the scan.
+    assert_eq!(f.kms_calls(), 1);
+
+    let rows: Vec<_> = f
+        .records()
+        .await
+        .into_iter()
+        .filter(|r| r.kind == "honey.triggered")
+        .collect();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    for r in &rows {
+        assert_eq!(r.actor, format!("agent:{AGENT}"));
+        assert_eq!(r.target.as_deref(), Some(&*format!("secret:{}", f.honey)));
+        assert_eq!(r.outcome, "denied");
+        assert_eq!(attr(r, "honey_template"), Some("aws_access_key"));
+    }
+    assert_eq!(attr(&rows[0], "honey_path"), Some("relay"));
+    let honey_grant_text = honey_grant_id.to_string();
+    assert_eq!(
+        attr(&rows[0], "binding_id"),
+        Some(honey_grant_text.as_str())
+    );
+    assert_eq!(attr(&rows[0], "peer"), Some("192.0.2.7"));
+    assert_eq!(attr(&rows[1], "honey_path"), Some("value_match"));
+    assert_eq!(attr(&rows[1], "binding_id"), None);
+    assert_eq!(attr(&rows[1], "peer"), None);
+    let allowed = ["binding_id", "honey_path", "honey_template", "peer"];
+    for r in &rows {
+        for (k, _, _) in r.attrs.as_ref().unwrap().entries() {
+            assert!(allowed.contains(&k.as_str()), "unexpected field {k}");
+        }
+    }
+    let walk = ls_audit::verify(f.records().await.iter().map(ls_audit::Record::link), &[]);
+    assert!(walk.ok(), "{walk:?}");
+    assert_no_value("ledger", f.ledger_text().await.as_bytes());
+
+    // The control plane refuses `honey.triggered` for a secret that is not a honey token.
+    let http = client();
+    let r = http
+        .post(f.cp_url.join("internal/v1/audit/events").unwrap())
+        .bearer_auth(SERVICE_TOKEN)
+        .header("x-locksmith-org", f.org.to_string())
+        .json(&json!({
+            "kind": "honey.triggered", "outcome": "denied", "agent_id": AGENT,
+            "secret_id": f.standard, "honey_path": "relay",
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 409);
+    // Nor does it take a request field on one.
+    let r = http
+        .post(f.cp_url.join("internal/v1/audit/events").unwrap())
+        .bearer_auth(SERVICE_TOKEN)
+        .header("x-locksmith-org", f.org.to_string())
+        .json(&json!({
+            "kind": "honey.triggered", "outcome": "denied", "agent_id": AGENT,
+            "secret_id": f.honey, "honey_path": "relay", "host": "example.com",
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 400);
+}

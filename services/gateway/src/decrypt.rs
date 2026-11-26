@@ -7,7 +7,11 @@
 //! - [`DekCache`] keeps unwrapped DEKs for a bounded TTL (default 60 s, at most 1000 entries).
 //!   Entries hold the key in `ls-envelope`'s [`DataKey`], whose `SecretKey32` is zeroized on
 //!   drop, so eviction zeroizes (once any in-flight request using the key finishes).
-//! - [`Decryptor::decrypt`] returns the value in [`SecretBytes`] (zeroized on drop).
+//! - [`Decryptor::decrypt`] returns the value in [`SecretBytes`] (zeroized on drop). It is the
+//!   one place every agent path resolves a secret, so it refuses a honey (decoy) secret with the
+//!   typed [`DecryptError::Honey`] once the material names its kind, before any unwrap
+//!   (t5-honey-tokens design decision 3); only [`Decryptor::decrypt_honey`] opens one, for the
+//!   owner's reveal and the gateway's own value scan.
 //!
 //! No type here that holds a key or a value implements `Debug`, `Display` or `Clone`, and no
 //! error carries key material, the value or a KMS / control-plane response body.
@@ -47,6 +51,8 @@ const MAX_MATERIAL_RESPONSE: usize = 1024 * 1024;
 pub struct Material {
     pub ciphertext: Vec<u8>,
     pub wrapped_dek: WrappedDek,
+    /// The secret is a honey (decoy) token (`kind = 'honey'`).
+    pub honey: bool,
 }
 
 /// Why the material could not be fetched. No variant carries a response body.
@@ -279,6 +285,15 @@ struct MaterialJson {
     key_id: String,
     ciphertext: String,
     wrapped_dek: String,
+    /// Required: an answer without it is refused rather than read as `standard` (fail closed).
+    kind: KindJson,
+}
+
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum KindJson {
+    Standard,
+    Honey,
 }
 
 /// Parse the endpoint's JSON and check it answers the question asked.
@@ -304,6 +319,7 @@ pub fn parse_material(
     Ok(Material {
         ciphertext,
         wrapped_dek,
+        honey: m.kind == KindJson::Honey,
     })
 }
 
@@ -439,9 +455,20 @@ impl DekCache {
     }
 }
 
+/// A honey (decoy) secret was resolved on an agent path: refused before any unwrap. The caller
+/// records `honey.triggered` for its path and denies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HoneySecret {
+    pub secret_id: Uuid,
+}
+
 /// Why a value could not be decrypted. No variant carries key material or the value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DecryptError {
+    /// The secret is a honey token; nothing was unwrapped or opened.
+    Honey(HoneySecret),
+    /// [`Decryptor::decrypt_honey`] was asked for a secret that is not a honey token.
+    NotHoney,
     Material(MaterialError),
     /// The KMS refused or failed to unwrap the data key.
     Unwrap(WrapError),
@@ -452,6 +479,8 @@ pub enum DecryptError {
 impl std::fmt::Display for DecryptError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Honey(_) => f.write_str("honey secret refused"),
+            Self::NotHoney => f.write_str("not a honey secret"),
             Self::Material(e) => write!(f, "secret material unavailable ({e:?})"),
             Self::Unwrap(e) => write!(f, "data key unwrap failed: {e}"),
             Self::Open => f.write_str("secret version did not decrypt"),
@@ -498,6 +527,8 @@ impl Decryptor {
         }
     }
 
+    /// Open a secret version for an agent path. A honey secret is refused with
+    /// [`DecryptError::Honey`] before the data key is unwrapped.
     pub async fn decrypt(
         &self,
         secret_id: Uuid,
@@ -508,6 +539,36 @@ impl Decryptor {
             .fetch(secret_id, version)
             .await
             .map_err(DecryptError::Material)?;
+        if material.honey {
+            return Err(DecryptError::Honey(HoneySecret { secret_id }));
+        }
+        self.open(secret_id, version, material).await
+    }
+
+    /// Open a honey secret's version: the owner-only reveal and the gateway's value scan. Any
+    /// other secret is refused with [`DecryptError::NotHoney`] before the unwrap.
+    pub async fn decrypt_honey(
+        &self,
+        secret_id: Uuid,
+        version: u32,
+    ) -> Result<SecretBytes, DecryptError> {
+        let material = self
+            .material
+            .fetch(secret_id, version)
+            .await
+            .map_err(DecryptError::Material)?;
+        if !material.honey {
+            return Err(DecryptError::NotHoney);
+        }
+        self.open(secret_id, version, material).await
+    }
+
+    async fn open(
+        &self,
+        secret_id: Uuid,
+        version: u32,
+        material: Material,
+    ) -> Result<SecretBytes, DecryptError> {
         let dek = match self.cache.get(secret_id, version) {
             Some(dek) => dek,
             None => {
@@ -582,7 +643,15 @@ pub(crate) mod testkit {
                 "key_id": key().to_string(),
                 "ciphertext": B64.encode(&self.ciphertext),
                 "wrapped_dek": B64.encode(&self.wrapped),
+                "kind": "standard",
             })
+        }
+
+        /// [`Self::json`] for a honey (decoy) secret.
+        pub fn json_honey(&self, secret: Uuid, version: u32) -> serde_json::Value {
+            let mut v = self.json(secret, version);
+            v["kind"] = "honey".into();
+            v
         }
 
         /// The transit ciphertext the gateway sends to OpenBao to unwrap this DEK (base64 part).
@@ -594,6 +663,7 @@ pub(crate) mod testkit {
             Material {
                 ciphertext: self.ciphertext.clone(),
                 wrapped_dek: WrappedDek::from_bytes(self.wrapped.clone()).unwrap(),
+                honey: false,
             }
         }
     }
@@ -604,6 +674,75 @@ pub(crate) mod testkit {
         pub secret: Uuid,
         pub version: u32,
         pub fetches: AtomicUsize,
+    }
+
+    /// Serves sealed versions by (secret, version), each standard or honey; counts fetches.
+    #[derive(Default)]
+    pub struct FakeVault {
+        pub versions: std::sync::Mutex<Vec<(Uuid, u32, bool, Sealed)>>,
+        pub fetches: AtomicUsize,
+    }
+
+    impl FakeVault {
+        pub fn put(&self, secret: Uuid, version: u32, honey: bool, sealed: Sealed) {
+            self.versions
+                .lock()
+                .unwrap()
+                .push((secret, version, honey, sealed));
+        }
+    }
+
+    impl MaterialSource for FakeVault {
+        fn fetch(
+            &self,
+            secret_id: Uuid,
+            version: u32,
+        ) -> BoxFuture<'_, Result<Material, MaterialError>> {
+            self.fetches.fetch_add(1, Ordering::SeqCst);
+            let found = self
+                .versions
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(s, v, _, _)| *s == secret_id && *v == version)
+                .map(|(_, _, honey, sealed)| Material {
+                    honey: *honey,
+                    ..sealed.material()
+                });
+            Box::pin(async move { found.ok_or(MaterialError::NotFound) })
+        }
+    }
+
+    /// Unwraps every DEK sealed by [`seal`] for the listed (secret, version) pairs; counts calls.
+    #[derive(Default)]
+    pub struct FakeKmsMany {
+        pub deks: std::sync::Mutex<Vec<(Uuid, u32, [u8; 32])>>,
+        pub calls: AtomicUsize,
+    }
+
+    impl Unwrapper for FakeKmsMany {
+        fn unwrap_dek<'a>(
+            &'a self,
+            _wrapped: &'a WrappedDek,
+            binding: &'a Binding,
+        ) -> BoxFuture<'a, Result<SecretKey32, WrapError>> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            let secret = Uuid::from_bytes(binding.secret_id);
+            let found = self
+                .deks
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|(s, v, _)| *s == secret && *v == binding.version)
+                .map(|(_, _, k)| *k);
+            let purpose_ok = binding.purpose == Purpose::DekWrap;
+            Box::pin(async move {
+                match found {
+                    Some(k) if purpose_ok => Ok(SecretKey32::from_bytes(k)),
+                    _ => Err(WrapError::Rejected { status: 500 }),
+                }
+            })
+        }
     }
 
     impl MaterialSource for FakeMaterial {
@@ -726,6 +865,83 @@ mod tests {
         assert_eq!(e, DecryptError::Open);
         let text = format!("{e} {e:?}");
         assert!(!text.contains("canary"), "{text}");
+    }
+
+    /// t5-honey-tokens task 3.1: the resolution refuses a honey secret with a typed refusal once
+    /// the material names its kind, before any unwrap; only `decrypt_honey` opens one, and it
+    /// refuses a standard secret the same way.
+    #[tokio::test]
+    async fn honey_secret_is_refused_before_unwrap() {
+        const HONEY: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000b1);
+        let vault = Arc::new(FakeVault::default());
+        let kms = Arc::new(FakeKmsMany::default());
+        for (id, honey) in [(SECRET, false), (HONEY, true)] {
+            let sealed = seal(ORG, id, 1, VALUE);
+            kms.deks.lock().unwrap().push((id, 1, sealed.dek));
+            vault.put(id, 1, honey, sealed);
+        }
+        let d = Decryptor::new(
+            ORG,
+            vault.clone(),
+            kms.clone(),
+            Arc::new(DekCache::new(CacheSettings::default())),
+        );
+        let e = d.decrypt(HONEY, 1).await.err();
+        assert_eq!(
+            e,
+            Some(DecryptError::Honey(HoneySecret { secret_id: HONEY }))
+        );
+        assert_eq!(
+            kms.calls.load(Ordering::SeqCst),
+            0,
+            "no unwrap for a honey secret"
+        );
+        assert!(d.cache().is_empty());
+        let text = format!("{} {:?}", e.clone().unwrap(), e.unwrap());
+        assert!(!text.contains("canary"), "{text}");
+
+        assert_eq!(
+            d.decrypt_honey(SECRET, 1).await.err(),
+            Some(DecryptError::NotHoney)
+        );
+        assert_eq!(
+            kms.calls.load(Ordering::SeqCst),
+            0,
+            "no unwrap for a standard secret"
+        );
+        assert_eq!(d.decrypt_honey(HONEY, 1).await.unwrap().expose(), VALUE);
+        assert_eq!(d.decrypt(SECRET, 1).await.unwrap().expose(), VALUE);
+    }
+
+    /// The material must name the secret's kind: an answer without it (or with an unknown one) is
+    /// refused rather than read as a standard secret.
+    #[test]
+    fn material_without_a_kind_is_refused() {
+        let sealed = seal(ORG, SECRET, 1, VALUE);
+        let ok = sealed.json(SECRET, 1);
+        assert!(
+            !parse_material(ok.to_string().as_bytes(), SECRET, 1)
+                .unwrap()
+                .honey
+        );
+        let honey = sealed.json_honey(SECRET, 1);
+        assert!(
+            parse_material(honey.to_string().as_bytes(), SECRET, 1)
+                .unwrap()
+                .honey
+        );
+        for kind in [serde_json::Value::Null, "secret".into()] {
+            let mut v = sealed.json(SECRET, 1);
+            if kind.is_null() {
+                v.as_object_mut().unwrap().remove("kind");
+            } else {
+                v["kind"] = kind;
+            }
+            assert!(matches!(
+                parse_material(v.to_string().as_bytes(), SECRET, 1),
+                Err(MaterialError::BadResponse)
+            ));
+        }
     }
 
     #[tokio::test]

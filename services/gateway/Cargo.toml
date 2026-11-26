@@ -58,6 +58,9 @@ rmcp = { version = "=3.11.0", default-features = false, features = ["server", "c
 # Same versions the workspace already uses (ls-crypto, ls-envelope, ls-audit).
 getrandom = "0.2"
 sha2 = "0.10"
+# t5-honey-tokens task 3.2: the multi-pattern matcher behind the honey value scan (the same crate
+# ls-redact builds its automaton with; MIT OR Unlicense).
+aho-corasick = "1.1.5"
 
 [dev-dependencies]
 proptest = { workspace = true }

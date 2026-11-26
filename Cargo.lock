@@ -3096,6 +3096,7 @@ dependencies = [
 name = "ls-gateway"
 version = "0.0.1-alpha.4"
 dependencies = [
+ "aho-corasick",
  "axum",
  "base64 0.22.1",
  "bytes",

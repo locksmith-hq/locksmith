@@ -339,7 +339,7 @@ pub async fn value_route(
     };
     let value = match relay
         .decryptor()
-        .decrypt(reveal.secret_id, reveal.version)
+        .decrypt_honey(reveal.secret_id, reveal.version)
         .await
     {
         Ok(v) => v,

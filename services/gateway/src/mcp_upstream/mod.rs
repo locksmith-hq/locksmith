@@ -229,6 +229,7 @@ struct UpstreamMcp {
 impl UpstreamMcp {
     fn deps(&self) -> hop::HopDeps<'_> {
         hop::HopDeps {
+            relay: Some(&self.relay),
             decryptor: self.relay.decryptor(),
             resolver: self.relay.resolver(),
             connect_timeout: self.relay.options().connect_timeout,

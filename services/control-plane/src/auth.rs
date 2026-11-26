@@ -210,7 +210,21 @@ impl FromRequestParts<AppState> for ForwardedOwner {
         let value = parts
             .headers
             .get(USER_AUTHORIZATION_HEADER)
-            .ok_or_else(ApiError::unauthenticated)?;
+            .ok_or_else(ApiError::unauthenticated)?
+            .clone();
+        Self::verify(state, &service, &value).await
+    }
+}
+
+impl ForwardedOwner {
+    /// Verify the human token forwarded in [`USER_AUTHORIZATION_HEADER`] (`value`) for a call
+    /// whose service token already verified as `service`: the extractor's checks, for a route
+    /// that also serves the gateway alone.
+    pub async fn verify(
+        state: &AppState,
+        service: &ServiceOrgBinding,
+        value: &axum::http::HeaderValue,
+    ) -> Result<Self, ApiError> {
         let (identity, user) = human_login(state, value.as_bytes()).await?;
         if user.org_id != service.org_id {
             return Err(ApiError::new(

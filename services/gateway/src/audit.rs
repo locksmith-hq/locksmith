@@ -25,7 +25,13 @@
 //! `credential.issued` event before the credential becomes usable: the agent, the secret, the
 //! credential's id and its expiry. Never the credential. Nothing here holds the value, a header, a
 //! body, a path or the query string. `gateway_audit` is read-only legacy (migration 0009).
+//!
+//! An agent's use of a honey (decoy) token appends one `honey.triggered` event ([`HoneyEvent`],
+//! t5-honey-tokens task 3.1): the agent, the token, where it was caught ([`HoneyPath`]), the grant
+//! it was reached through and the caller's IP address when known. The control plane adds the
+//! token's template. Never the value or anything from the request.
 
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
@@ -279,8 +285,86 @@ impl std::fmt::Display for AuditError {
 
 impl std::error::Error for AuditError {}
 
+/// Where the gateway caught a honey token (`honey_path` in the ledger).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HoneyPath {
+    /// `POST /v1/relay` with an agent token, and the agent MCP `relay_http_request` tool.
+    Relay,
+    /// The MCP upstream proxy, which injects the stored credential into the upstream exchange.
+    Inject,
+    /// The agent MCP `issue_short_lived_credential` tool: a credential delegated for the secret.
+    Delegate,
+    /// `/git/...` (D1).
+    Git,
+    /// `POST /v1/aws/credentials` (D2).
+    Aws,
+    /// The Postgres listener (D3).
+    Db,
+    /// `POST /v1/relay` with a short-lived credential.
+    ShortLived,
+    /// An active honey value inside a relayed request (raw, base64 or URL-encoded).
+    ValueMatch,
+}
+
+impl HoneyPath {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Relay => "relay",
+            Self::Inject => "inject",
+            Self::Delegate => "delegate",
+            Self::Git => "git",
+            Self::Aws => "aws",
+            Self::Db => "db",
+            Self::ShortLived => "short_lived",
+            Self::ValueMatch => "value_match",
+        }
+    }
+
+    /// Every path, in the ledger's order.
+    pub const ALL: [HoneyPath; 8] = [
+        Self::Relay,
+        Self::Inject,
+        Self::Delegate,
+        Self::Git,
+        Self::Aws,
+        Self::Db,
+        Self::ShortLived,
+        Self::ValueMatch,
+    ];
+}
+
+/// One `honey.triggered` event: ids, a closed path code and an IP address. Never a value, a
+/// header, a body or a URL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HoneyEvent {
+    pub agent_id: Uuid,
+    /// The honey token (its secret id).
+    pub secret_id: Uuid,
+    pub path: HoneyPath,
+    /// The grant the agent reached the token through, when the path checked one.
+    pub binding_id: Option<Uuid>,
+    /// The caller's address, when the path knows it.
+    pub peer: Option<IpAddr>,
+}
+
+#[derive(Serialize)]
+struct WireHoneyEvent {
+    kind: &'static str,
+    outcome: &'static str,
+    agent_id: Uuid,
+    secret_id: Uuid,
+    honey_path: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    binding_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peer: Option<String>,
+}
+
 /// Appends relay events. Returns the stored event's id (an attempt's id keys its outcome).
 pub trait AuditSink: Send + Sync {
+    /// Append one `honey.triggered` event (t5-honey-tokens task 3.1).
+    fn append_honey(&self, ev: HoneyEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+
     fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
 
     /// Append an AWS credential-vending event (D2).
@@ -627,6 +711,20 @@ impl HttpAudit {
         }
     }
 
+    async fn post_honey(&self, ev: HoneyEvent) -> Result<Uuid, AuditError> {
+        let body = serde_json::to_vec(&WireHoneyEvent {
+            kind: "honey.triggered",
+            outcome: "denied",
+            agent_id: ev.agent_id,
+            secret_id: ev.secret_id,
+            honey_path: ev.path.as_str(),
+            binding_id: ev.binding_id,
+            peer: ev.peer.map(|p| p.to_canonical().to_string()),
+        })
+        .map_err(|_| AuditError::Rejected)?;
+        self.append_to(EVENTS_PATH, body, &[201]).await
+    }
+
     async fn post_mcp_call(&self, ev: McpCallEvent) -> Result<Uuid, AuditError> {
         let body = serde_json::to_vec(&WireMcpCall {
             agent_id: ev.agent_id,
@@ -657,6 +755,10 @@ impl HttpAudit {
 }
 
 impl AuditSink for HttpAudit {
+    fn append_honey(&self, ev: HoneyEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        Box::pin(self.post_honey(ev))
+    }
+
     fn append(&self, ev: RelayEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         Box::pin(self.post(ev))
     }
@@ -698,9 +800,16 @@ pub struct MemoryAudit {
     pub fail_upstream_outcomes_first: Mutex<usize>,
     /// Every upstream-call append tried, failed ones included.
     pub upstream_tries: Mutex<usize>,
+    /// The `honey.triggered` events appended. `fail` fails these too.
+    pub honey: Mutex<Vec<HoneyEvent>>,
 }
 
 impl MemoryAudit {
+    /// The `honey.triggered` events in order.
+    pub fn honey(&self) -> Vec<HoneyEvent> {
+        self.honey.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
     /// The upstream-call events with the ids the sink gave them, in order.
     pub fn mcp_upstream(&self) -> Vec<(Uuid, McpUpstreamEvent)> {
         self.mcp_upstream
@@ -752,6 +861,19 @@ impl MemoryAudit {
 }
 
 impl AuditSink for MemoryAudit {
+    fn append_honey(&self, ev: HoneyEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        let result = if self.fail {
+            Err(AuditError::Unavailable)
+        } else {
+            self.honey
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(ev);
+            Ok(Uuid::now_v7())
+        };
+        Box::pin(async move { result })
+    }
+
     fn append_mcp_upstream(&self, ev: McpUpstreamEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         *self
             .upstream_tries

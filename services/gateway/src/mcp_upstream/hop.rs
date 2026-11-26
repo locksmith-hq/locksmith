@@ -71,6 +71,9 @@ pub const MAX_MESSAGE: usize = 1024 * 1024;
 /// What the hop needs from the gateway: the decrypt path, the resolver and the connect timeout
 /// (the relay's).
 pub struct HopDeps<'a> {
+    /// Where a honey secret is recorded (`honey.triggered`, path `inject`); `None` in tests that
+    /// drive the hop alone.
+    pub relay: Option<&'a crate::relay::Relay>,
     pub decryptor: &'a Decryptor,
     pub resolver: &'a dyn Resolver,
     pub connect_timeout: Duration,
@@ -118,6 +121,9 @@ pub enum HopError {
     RedactionFailed,
     /// The client could not be built.
     Internal,
+    /// The upstream's credential is a honey token (t5 task 3.1): refused before the unwrap and
+    /// recorded; the agent sees `denied`, like any refusal.
+    Honey,
 }
 
 impl HopError {
@@ -134,6 +140,7 @@ impl HopError {
             Self::Timeout => "upstream_timeout",
             Self::RedactionFailed => "redaction_failed",
             Self::Internal => "internal",
+            Self::Honey => "denied",
         }
     }
 }
@@ -177,7 +184,21 @@ pub async fn forward(
         upstream = %upstream.name,
         agent_id = %agent.agent_id,
     );
-    run(deps, upstream, request).instrument(span).await
+    let result = run(deps, upstream, request).instrument(span).await;
+    if let (Err(HopError::Honey), Some(relay)) = (&result, deps.relay) {
+        crate::honey_guard::record(
+            relay,
+            crate::audit::HoneyEvent {
+                agent_id: agent.agent_id,
+                secret_id: upstream.secret_id,
+                path: crate::audit::HoneyPath::Inject,
+                binding_id: None,
+                peer: None,
+            },
+        )
+        .await;
+    }
+    result
 }
 
 async fn run(
@@ -212,7 +233,10 @@ async fn run(
         .decryptor
         .decrypt(upstream.secret_id, upstream.version)
         .await
-        .map_err(|_| HopError::SecretUnavailable)?;
+        .map_err(|e| match e {
+            crate::decrypt::DecryptError::Honey(_) => HopError::Honey,
+            _ => HopError::SecretUnavailable,
+        })?;
     let header_value =
         crate::relay::render(&upstream.template, value.expose()).ok_or(HopError::SecretUnusable)?;
     // Encoded forms of values shorter than this are not matched by ls-redact, so an echo could

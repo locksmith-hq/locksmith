@@ -378,6 +378,7 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
             .await;
     };
     let scope = grant.scope.clone().unwrap_or_default();
+    let grant_id = grant.grant_id;
     drop(grants);
     let duration = clamp_duration(binding, &scope, req.duration_secs);
     call.duration = Some(duration);
@@ -393,6 +394,21 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
         .await
     {
         Ok(v) => v,
+        // A honey secret (t5 task 3.1): refused before the unwrap; one `honey.triggered` event.
+        Err(DecryptError::Honey(h)) => {
+            crate::honey_guard::record(
+                &relay,
+                crate::audit::HoneyEvent {
+                    agent_id: agent.agent_id,
+                    secret_id: h.secret_id,
+                    path: crate::audit::HoneyPath::Aws,
+                    binding_id: Some(grant_id),
+                    peer: None,
+                },
+            )
+            .await;
+            return error(StatusCode::FORBIDDEN, "denied", &request_id);
+        }
         Err(DecryptError::Material(MaterialError::NotFound)) => {
             return call
                 .refuse(failure(

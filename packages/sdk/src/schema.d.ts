@@ -72,7 +72,7 @@ export interface paths {
         put?: never;
         /**
          * Append a relay event to the org's audit ledger (gateway only)
-         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
+         * @description The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable, and `honey.triggered` (outcome `denied`, with `honey_path` and optionally `binding_id` and `peer`, nothing else) when an agent used a honey token; the control plane adds the token's template and answers `409` for a secret that is not of kind `honey`. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.
          */
         post: operations["append_audit_event"];
         delete?: never;
@@ -149,8 +149,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Find the org's honey tokens by name, for the org's owner (gateway only)
-         * @description The gateway calls this for `smith honey plant <name>`, forwarding the person's own access token in `X-Locksmith-User-Authorization`. That person must be the org's owner (`403` otherwise). Returns ids, names and templates of secrets of kind `honey` only, never a value.
+         * Find the org's honey tokens by name for the owner, or list them all for the gateway's scan (gateway only)
+         * @description With `X-Locksmith-User-Authorization`, the gateway calls this for `smith honey plant <name>`, forwarding the person's own access token: that person must be the org's owner (`403` otherwise) and `name` is required. Without it and without `name`, the gateway's service token alone lists every honey token of the org with the version holding its value, so the gateway can scan relayed requests for active honey values (t5-honey-tokens task 3.2); `name` without a person is a `401`. Returns ids, names, templates, the disabled flag and (scan list only) versions of secrets of kind `honey` only, never a value.
          */
         get: operations["find_honey_tokens"];
         put?: never;
@@ -2044,6 +2044,11 @@ export interface components {
             resources?: string[];
         };
         /**
+         * @description Where the gateway caught a honey token (`honey.triggered`).
+         * @enum {string}
+         */
+        HoneyPath: "relay" | "inject" | "delegate" | "git" | "aws" | "db" | "short_lived" | "value_match";
+        /**
          * @description What the gateway needs to open a honey value for its owner: the version to decrypt. Never the
          *     value (the control plane cannot decrypt).
          */
@@ -2067,6 +2072,12 @@ export interface components {
             /** Format: uuid */
             secret_id: string;
             template: components["schemas"]["HoneyTemplate"];
+            /**
+             * Format: int32
+             * @description The version holding the value (the latest); `null` before it is minted. Only on the
+             *     gateway's scan list (no forwarded person).
+             */
+            version?: number | null;
         };
         /** @description The org's honey tokens with a given name (usually one; one per environment at most). */
         HoneyTokenRefs: {
@@ -2318,6 +2329,11 @@ export interface components {
              */
             attempt_id?: string | null;
             /**
+             * Format: uuid
+             * @description The grant the agent reached the honey token through (`honey.triggered` only).
+             */
+            binding_id?: string | null;
+            /**
              * Format: int64
              * @description Bytes relayed client to upstream (`db.session.closed` only).
              */
@@ -2347,6 +2363,7 @@ export interface components {
              * @description When the short-lived credential expires, Unix seconds (`credential.issued` only).
              */
             expires_at?: number | null;
+            honey_path?: components["schemas"]["HoneyPath"] | null;
             /**
              * @description Upstream host name or IP literal only (an IPv6 address in brackets); no port, path or
              *     query.
@@ -2355,6 +2372,8 @@ export interface components {
             kind: components["schemas"]["RelayEventKind"];
             method?: components["schemas"]["RelayMethod"] | null;
             outcome: components["schemas"]["RelayOutcome"];
+            /** @description The caller's IP address, no port (`honey.triggered` only). */
+            peer?: string | null;
             /**
              * Format: int32
              * @description Upstream port, when the URL names one explicitly.
@@ -2626,7 +2645,7 @@ export interface components {
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued" | "honey.triggered";
         /**
          * @description The upstream request method.
          * @enum {string}
@@ -2665,6 +2684,11 @@ export interface components {
              */
             version_count: number;
         };
+        /**
+         * @description The kind of a secret (`secrets.kind`).
+         * @enum {string}
+         */
+        SecretKind: "standard" | "honey";
         /** @description Metadata of one stored version. Never carries the value or any key material. */
         SecretVersion: {
             /** Format: date-time */
@@ -2692,6 +2716,11 @@ export interface components {
             ciphertext: string;
             /** @description The KMS key the data key is wrapped under, e.g. `gateway:v1`. */
             key_id: string;
+            /**
+             * @description The secret's kind. The gateway refuses to open a `honey` (decoy) version for any agent
+             *     path and records `honey.triggered` instead (t5-honey-tokens design decision 3).
+             */
+            kind: components["schemas"]["SecretKind"];
             /** Format: uuid */
             secret_id: string;
             /** Format: int32 */
@@ -2918,7 +2947,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `relay.outcome` already recorded for this `attempt_id` with different fields */
+            /** @description `relay.outcome` already recorded for this `attempt_id` with different fields, or `honey.triggered` for a secret that is not a honey token */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3217,15 +3246,18 @@ export interface operations {
     };
     find_honey_tokens: {
         parameters: {
-            query: {
-                /** @description The honey token's name, matched exactly across every project and environment of the org. */
-                name: string;
+            query?: {
+                /**
+                 * @description The honey token's name, matched exactly across every project and environment of the org.
+                 *     Required with a forwarded person's token; absent for the gateway's own scan list.
+                 */
+                name?: string;
             };
             header: {
                 /** @description The org the gateway acts for */
                 "X-Locksmith-Org": string;
-                /** @description `Bearer <access token>` of the person the gateway acts for */
-                "X-Locksmith-User-Authorization": string;
+                /** @description `Bearer <access token>` of the person the gateway acts for; absent for the gateway's scan list */
+                "X-Locksmith-User-Authorization"?: string | null;
             };
             path?: never;
             cookie?: never;

@@ -136,9 +136,12 @@ pub mod kind {
     /// call failed (the database revoke still stands). Records the layer and a static reason only.
     pub const MCP_ISSUER_REVOKE: Code = Code::new("mcp.issuer_revoke");
     /// An agent used a honey (decoy) secret: it resolved a honey-backed binding, or the relay saw a
-    /// honey value in a request. Allow-listed fields: `secret_id` (the token), the template name, the
-    /// agent (actor), the binding id, the request path and the peer address. Never the decoy value or
-    /// any request content (change t5-honey-tokens).
+    /// honey value in a request. Outcome `denied`. Allow-listed fields: the token (target
+    /// `secret:<id>`), the agent (actor), `honey_template`, `honey_path` (where it was caught:
+    /// `relay`, `inject`, `delegate`, `git`, `aws`, `db`, `short_lived` or `value_match`),
+    /// `binding_id` (the grant the agent reached it through, when one was checked) and `peer` (the
+    /// caller's IP address, when known). Never the decoy value or any request content (change
+    /// t5-honey-tokens).
     pub const HONEY_TRIGGERED: Code = Code::new("honey.triggered");
     /// The owner revealed a honey value (owner-only gateway endpoint). Records the token id and the
     /// owner as actor, never the value.
@@ -252,6 +255,11 @@ pub mod attr {
     pub const HONEY_TEMPLATE: Code = Code::new("honey_template");
     /// The id of the binding a honey secret was reached through.
     pub const BINDING_ID: Code = Code::new("binding_id");
+    /// Where the gateway caught a honey token (a closed code such as `relay` or `value_match`;
+    /// never a URL path).
+    pub const HONEY_PATH: Code = Code::new("honey_path");
+    /// The caller's IP address (a [`Host`](super::Host) holding an IP literal, no port).
+    pub const PEER: Code = Code::new("peer");
 
     /// Every code in this module: the allow-list a request string is checked against.
     pub const ALL: &[Code] = &[
@@ -281,6 +289,8 @@ pub mod attr {
         CLAIMS,
         HONEY_TEMPLATE,
         BINDING_ID,
+        HONEY_PATH,
+        PEER,
     ];
 
     /// The code spelled `s`, if it is on the allow-list.

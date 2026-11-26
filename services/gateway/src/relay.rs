@@ -2146,7 +2146,8 @@ mod tests {
         h.assert_audit_clean();
     }
 
-    /// T9 task 2.3, `/v1/relay`: a call over the grant's burst limit is `429 budget_exceeded` with
+    /// T9 task 2.3, `/v1/relay`. The spec's "inject" is this header injection (there is no other
+    /// inject route) and its "delegate" is `/v1/aws/credentials` (`aws_over_budget_*`): a call over the grant's burst limit is `429 budget_exceeded` with
     /// `Retry-After`, no material fetch, no KMS decrypt, no DNS, no upstream request, and one
     /// `budget.exceeded` event (no attempt). Calls inside the limit still relay.
     #[tokio::test]

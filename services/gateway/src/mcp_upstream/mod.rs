@@ -383,6 +383,9 @@ impl ServerHandler for UpstreamMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let agent = Self::agent(&context)?;
+        // Budget (T9): first, before the catalogue fetch (which unwraps the key and calls the
+        // upstream) and before any unwrap or forward. A refused call costs no KMS call.
+        self.check_budget(agent).await?;
         let audit = CallAudit::new(&self.relay, agent, &self.upstream.name);
         let catalogue = match self.catalogue(agent).await {
             Ok(c) => c,
@@ -442,9 +445,6 @@ impl ServerHandler for UpstreamMcp {
                 return Err(unknown_tool());
             }
         }
-        // Budget (T9): after the decision, before the pending event, any unwrap or upstream
-        // request. A refused call decrypts nothing and forwards nothing.
-        self.check_budget(agent).await?;
         // The pending event first: without it nothing is forwarded.
         let attempt = audit.begin(&tool).await?;
         let result = hop::call_tool(&self.deps(), &self.upstream, agent, request).await;

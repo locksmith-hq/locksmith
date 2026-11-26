@@ -197,6 +197,49 @@ async fn mcp_short_lived_credential_relays_its_secret_redacted() {
     h.assert_audit_clean();
 }
 
+/// T9 task 2.3, short-lived: a credential's relay over the grant's burst limit is
+/// `429 budget_exceeded`, with no KMS call, no material fetch and no upstream request.
+#[tokio::test]
+async fn mcp_short_lived_over_budget_is_429_before_unwrap() {
+    let h = harness(Setup {
+        budget: Some(crate::budget::BudgetGuard::new()),
+        ..on()
+    })
+    .await;
+    echo_mock().mount(&h.upstream).await;
+    let mut g = grant(SECRET, "LIMITED", None);
+    g.budget = Some(crate::grants::Budget {
+        per_minute: Some(1),
+        per_day: None,
+    });
+    h.grants.set(AGENT, vec![g]);
+    let sid = session(&h).await;
+    let token = credential(&issue(&h, &sid, SECRET, 120).await);
+    let body = || {
+        json!({"secret_id": SECRET, "version": 1, "method": "GET",
+               "url": format!("{}/echo", h.origin())})
+    };
+    let (status, _) = h.call(Some(&token), body()).await;
+    assert_eq!(status, StatusCode::OK, "inside the limit");
+    let (kms, cp, up) = (
+        h.kms_calls().await,
+        Harness::hits(&h.cp).await,
+        Harness::hits(&h.upstream).await,
+    );
+    let before = h.audit.events().len();
+
+    let (status, raw) = h.call(Some(&token), body()).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(String::from_utf8_lossy(&raw).contains("budget_exceeded"));
+    assert_clean("short-lived budget refusal", &raw);
+    assert_eq!(h.kms_calls().await, kms, "no KMS call");
+    assert_eq!(Harness::hits(&h.cp).await, cp, "no material fetch");
+    assert_eq!(Harness::hits(&h.upstream).await, up, "no upstream request");
+    let ev = h.audit.events();
+    assert_eq!(ev.len(), before + 1, "one event");
+    assert_eq!(ev[before].kind, EventKind::BudgetExceeded("per_minute"));
+}
+
 /// Scoped to one secret and one route: any other secret is refused before any unwrap, and the
 /// credential is no agent token anywhere else (`/mcp`, `/v1/grants`).
 #[tokio::test]

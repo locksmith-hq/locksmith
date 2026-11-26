@@ -123,6 +123,28 @@ async fn an_over_budget_call_is_refused_before_anything_is_forwarded() {
     assert_eq!(ev[events].kind, EventKind::BudgetExceeded("per_minute"));
 }
 
+/// The budget is checked before the catalogue fetch: a refused call on a cold catalogue
+/// costs no KMS call and no `tools/list`.
+#[tokio::test]
+async fn an_over_budget_call_on_a_cold_catalogue_unwraps_and_forwards_nothing() {
+    let audit = Arc::new(MemoryAudit::default());
+    let sink: Arc<dyn AuditSink> = audit.clone();
+    let budget = crate::grants::Budget {
+        per_minute: Some(1),
+        per_day: None,
+    };
+    // A zero cache TTL keeps the catalogue cold on every call.
+    let rig = Rig::build_budgeted(Duration::ZERO, sink, fast_retries(), Some(budget)).await;
+    let first = rig.call_with("list_issues", json!({})).await;
+    assert!(first.text.contains("called"), "{}", first.text);
+    let calls = rig.probe.calls().len();
+    let before = audit.events().len();
+    let msg = rig.call("list_issues").await;
+    assert_eq!(msg["error"]["message"], "budget_exceeded", "{msg}");
+    assert_eq!(rig.probe.calls().len(), calls, "nothing forwarded");
+    assert_eq!(audit.events().len(), before + 1, "one event");
+}
+
 #[tokio::test]
 async fn the_pending_append_failing_refuses_the_call_before_anything_is_forwarded() {
     let audit = Arc::new(MemoryAudit {

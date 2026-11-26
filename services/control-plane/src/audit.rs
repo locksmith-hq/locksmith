@@ -41,7 +41,7 @@ pub async fn append(
 
 pub use ls_audit::pg::Once;
 
-/// Idempotent `relay.outcome` append (shared with the core service: `ls_audit::pg`).
+/// Idempotent outcome append (`relay.outcome`, or `mcp.upstream_outcome`; shared with the core service: `ls_audit::pg`).
 pub async fn append_outcome_once(
     c: &mut PgConnection,
     org_id: Uuid,

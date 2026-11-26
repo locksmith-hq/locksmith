@@ -3172,7 +3172,9 @@ name = "ls-mcp-server"
 version = "0.0.1-alpha.4"
 dependencies = [
  "rmcp",
+ "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -4570,6 +4572,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "rand 0.10.3",
+ "reqwest",
  "schemars 1.2.3",
  "serde",
  "serde_json",
@@ -5298,6 +5301,7 @@ dependencies = [
  "signal-hook",
  "tokio",
  "toml",
+ "toml_edit",
  "url",
  "webpki-roots 1.0.12",
  "wiremock",
@@ -5862,6 +5866,7 @@ dependencies = [
  "indexmap 2.14.2",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 

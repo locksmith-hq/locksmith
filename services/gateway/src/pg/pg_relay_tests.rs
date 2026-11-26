@@ -196,6 +196,7 @@ impl Harness {
             aws_bindings: Vec::new(),
             pg: vec![upstream],
             git_bindings: Vec::new(),
+            mcp_upstreams: Vec::new(),
         };
         let audit = Arc::new(MemoryAudit::default());
         let relay = Arc::new(Relay::new(

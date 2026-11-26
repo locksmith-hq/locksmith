@@ -172,7 +172,7 @@ pub async fn append_outcome_once(
              WHERE org_id = $1 AND kind = $2 AND (attrs -> 'attempt_id' ->> 'id') = $3",
     )
     .bind(org_id)
-    .bind(crate::kind::RELAY_OUTCOME.as_str())
+    .bind(event.kind.as_str())
     .bind(attempt_id.hyphenated().to_string())
     .fetch_optional(&mut *c)
     .await?;
@@ -182,8 +182,7 @@ pub async fn append_outcome_once(
     let stored_attrs = serde_json::from_str(&attrs)
         .ok()
         .and_then(|v| StoredAttrs::from_json(&v));
-    let same = event.kind == crate::kind::RELAY_OUTCOME
-        && actor == event.actor.to_text()
+    let same = actor == event.actor.to_text()
         && target == event.target.map(|t| t.to_text())
         && outcome == event.outcome.as_str()
         && stored_attrs.as_ref() == Some(&event.attrs.stored());

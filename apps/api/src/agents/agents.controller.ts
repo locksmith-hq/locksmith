@@ -53,7 +53,11 @@ export class AgentsController {
 
   @Post(":agentId/grants")
   @HttpCode(201)
-  async createGrant(@Param("agentId") agentId: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+  async createGrant(
+    @Param("agentId") agentId: string,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const id = pathId(agentId);
     const grant = await this.svc.createGrant(id, NewAgentGrant.parse(body));
     res.setHeader("Location", `/v1/agents/${id}/grants/${grant.id}`);

@@ -34,13 +34,15 @@ const Scope = z.strictObject({
   resources: z.array(z.string()).default([]),
   max_duration_secs: z.number().int().min(0).max(4_294_967_295).nullish(),
 });
-export type ScopeInput = z.infer<typeof Scope>;
 
 const UUID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
 
 /** Rust `NewAgentGrant`. */
 export const NewAgentGrant = z.strictObject({
-  secret_id: z.string().regex(UUID).transform((v) => v.toLowerCase()),
+  secret_id: z
+    .string()
+    .regex(UUID)
+    .transform((v) => v.toLowerCase()),
   mode: z.enum(["relay", "delegate"]).default("relay"),
   scope: Scope.nullish(),
   expires_at: z.iso.datetime({ offset: true }).nullish(),

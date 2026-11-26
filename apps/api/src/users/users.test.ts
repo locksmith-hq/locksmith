@@ -26,6 +26,7 @@ class Recorder implements AuditSink {
   async append(e: AuthAuditEvent) {
     this.events.push(e);
   }
+  async appendAdmin() {}
 }
 
 const ident = (subject: string, o: Partial<HumanIdentity> = {}): HumanIdentity => ({

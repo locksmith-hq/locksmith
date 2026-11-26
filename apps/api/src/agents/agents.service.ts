@@ -43,7 +43,11 @@ const toGrant = (r: GrantRow): AgentGrant => ({
 });
 
 /** Rust `GrantScope::validate`. */
-function validateScope(scope: { actions: string[]; resources: string[]; max_duration_secs?: number | null }): void {
+function validateScope(scope: {
+  actions: string[];
+  resources: string[];
+  max_duration_secs?: number | null | undefined;
+}): void {
   const MAX_ITEMS = 64;
   const MAX_LEN = 512;
   const bad = (m: string) => new ProblemException("validation", m);
@@ -197,7 +201,11 @@ export class AgentsService {
       };
     }
     await this.requireAgent(agentId);
-    const secret = await this.tx.selectFrom("secrets").select("id").where("id", "=", input.secret_id).executeTakeFirst();
+    const secret = await this.tx
+      .selectFrom("secrets")
+      .select("id")
+      .where("id", "=", input.secret_id)
+      .executeTakeFirst();
     if (!secret) throw new ProblemException("not-found");
     let inserted: { id: string };
     try {

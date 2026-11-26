@@ -18,7 +18,14 @@ import { AgentsModule } from "./agents.module.js";
 
 // Task 6.4: the agents and grants paths against a real Postgres as the app role (row-level security applies).
 // Audit events go to a recording sink; the core client is a stub that makes enrollment secrets.
-const MIGRATIONS = ["0001_roles.sql", "0002_tenancy_schema.sql", "0003_secret_versions.sql", "0006_agents.sql", "0011_users.sql", "0015_grant_delegate.sql"];
+const MIGRATIONS = [
+  "0001_roles.sql",
+  "0002_tenancy_schema.sql",
+  "0003_secret_versions.sql",
+  "0006_agents.sql",
+  "0011_users.sql",
+  "0015_grant_delegate.sql",
+];
 const DEV_ORG = "x-locksmith-dev-org";
 
 let container: StartedTestContainer;
@@ -100,9 +107,13 @@ async function secretIn(org: string): Promise<string> {
   const admin = new pg.Client({ connectionString: adminUrl });
   await admin.connect();
   try {
-    const p = (await admin.query("insert into projects (org_id, name) values ($1, 'p') returning id", [org])).rows[0].id;
+    const p = (await admin.query("insert into projects (org_id, name) values ($1, 'p') returning id", [org])).rows[0]
+      .id;
     const e = (
-      await admin.query("insert into environments (org_id, project_id, name) values ($1, $2, 'e') returning id", [org, p])
+      await admin.query("insert into environments (org_id, project_id, name) values ($1, $2, 'e') returning id", [
+        org,
+        p,
+      ])
     ).rows[0].id;
     return (
       await admin.query(
@@ -208,9 +219,17 @@ describe("agent grants", () => {
     const d = await http
       .post(url)
       .set(DEV_ORG, a)
-      .send({ secret_id: secret, mode: "delegate", scope: { actions: ["s3:GetObject"], resources: ["arn:aws:s3:::b/*"], max_duration_secs: 900 } })
+      .send({
+        secret_id: secret,
+        mode: "delegate",
+        scope: { actions: ["s3:GetObject"], resources: ["arn:aws:s3:::b/*"], max_duration_secs: 900 },
+      })
       .expect(201);
-    expect(d.body.scope).toEqual({ actions: ["s3:GetObject"], resources: ["arn:aws:s3:::b/*"], max_duration_secs: 900 });
+    expect(d.body.scope).toEqual({
+      actions: ["s3:GetObject"],
+      resources: ["arn:aws:s3:::b/*"],
+      max_duration_secs: 900,
+    });
     const l = await http.get(url).set(DEV_ORG, a).expect(200);
     expect(l.body.items).toHaveLength(2);
     await http.get(`/v1/agents/${agent}/grants`).set(DEV_ORG, b).expect(404);
@@ -222,7 +241,10 @@ describe("agent grants", () => {
         target: { type: "grant", id: g.body.id },
         attrs: { agent_id: agent, secret_id: secret, mode: "relay", expires_at: Math.floor(Date.parse(future) / 1000) },
       }),
-      expect.objectContaining({ kind: "grant.created", attrs: { agent_id: agent, secret_id: secret, mode: "delegate" } }),
+      expect.objectContaining({
+        kind: "grant.created",
+        attrs: { agent_id: agent, secret_id: secret, mode: "delegate" },
+      }),
       expect.objectContaining({ kind: "grant.revoked", attrs: { agent_id: agent } }),
     ]);
     // Deleting the agent counts its remaining grants.
@@ -248,7 +270,12 @@ describe("agent grants", () => {
       { secret_id: secret, mode: "other" },
       { secret_id: secret, extra: true },
     ];
-    for (const body of bad) await http.post(url).set(DEV_ORG, a).send(body as object).expect(400);
+    for (const body of bad)
+      await http
+        .post(url)
+        .set(DEV_ORG, a)
+        .send(body as object)
+        .expect(400);
     await http.post(url).set(DEV_ORG, a).send({ secret_id: MISSING }).expect(404);
     await http.post(`/v1/agents/${MISSING}/grants`).set(DEV_ORG, a).send({ secret_id: secret }).expect(404);
     // A secret of another org is not visible, so it is 404 and not a leak.

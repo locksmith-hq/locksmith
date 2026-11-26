@@ -12,6 +12,7 @@ pub mod auth;
 pub mod aws;
 pub mod aws_policy;
 pub mod bindings_publish;
+pub mod budget;
 pub mod config;
 pub mod decrypt;
 pub mod egress;

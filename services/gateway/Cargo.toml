@@ -58,6 +58,7 @@ rmcp = { version = "=3.11.0", default-features = false, features = ["server", "c
 # Same versions the workspace already uses (ls-crypto, ls-envelope, ls-audit).
 getrandom = "0.2"
 sha2 = "0.10"
+governor = { version = "0.10", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 proptest = { workspace = true }

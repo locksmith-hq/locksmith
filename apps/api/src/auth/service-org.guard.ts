@@ -6,8 +6,8 @@ import { TenantService } from "../tenant/tenant.service.js";
 
 /** Injection token: the gateway service token, or null when none is configured (every internal call is then refused). */
 export const GATEWAY_SERVICE_TOKEN = Symbol("GATEWAY_SERVICE_TOKEN");
-export const SERVICE_ORG_HEADER = "x-locksmith-org";
-export const MIN_SERVICE_TOKEN_BYTES = 32;
+const SERVICE_ORG_HEADER = "x-locksmith-org";
+const MIN_SERVICE_TOKEN_BYTES = 32;
 
 /** Rust `config.rs`: unset or empty means off; a token that is padded or shorter than 32 bytes is refused at startup. */
 export function gatewayServiceToken(env: Record<string, string | undefined>): string | null {

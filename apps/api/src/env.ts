@@ -13,7 +13,10 @@ const envSchema = z
     // Gateway service token for /internal/v1 (Rust `LOCKSMITH_GATEWAY_SERVICE_TOKEN`): unset means every internal call is refused.
     LOCKSMITH_GATEWAY_SERVICE_TOKEN: z
       .string()
-      .refine((v) => v === "" || (v.trim() === v && Buffer.byteLength(v) >= 32), "at least 32 bytes, no surrounding whitespace")
+      .refine(
+        (v) => v === "" || (v.trim() === v && Buffer.byteLength(v) >= 32),
+        "at least 32 bytes, no surrounding whitespace",
+      )
       .optional(),
     JOBS_DATABASE_URL: z.string().min(1).optional(),
     // Dev header auth (Rust `LOCKSMITH_DEV_AUTH`): "1" on, unset, "" or "0" off, anything else invalid.

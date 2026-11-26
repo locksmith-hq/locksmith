@@ -1,21 +1,44 @@
-import { Controller, Get, NotImplementedException, Post, Put } from "@nestjs/common";
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  NotImplementedException,
+  Param,
+  Post,
+  Put,
+  Query,
+} from "@nestjs/common";
+import { z } from "zod";
+import { NotificationsService } from "./notifications.service.js";
 
-/** Contract stubs (n1 group 1): every route answers 501 until the inbox and rules API lands (group 4). */
+const UnreadQuery = z.enum(["true", "false"]).optional();
+const IdParam = z.uuid();
+
+/** Inbox routes are live (n1 4.1); rules and channels stay 501 contract stubs until their tasks land. */
 @Controller("v1")
 export class NotificationsController {
+  constructor(@Inject(NotificationsService) private readonly notifications: NotificationsService) {}
+
   @Get("notifications")
-  list(): never {
-    throw new NotImplementedException();
+  list(@Query("unread") unread?: string) {
+    const parsed = UnreadQuery.safeParse(unread);
+    if (!parsed.success) throw new BadRequestException("unread must be true or false");
+    return this.notifications.list(parsed.data === "true");
   }
 
   @Post("notifications/read-all")
-  readAll(): never {
-    throw new NotImplementedException();
+  @HttpCode(204)
+  async readAll(): Promise<void> {
+    await this.notifications.markAllRead();
   }
 
   @Post("notifications/:id/read")
-  read(): never {
-    throw new NotImplementedException();
+  @HttpCode(204)
+  async read(@Param("id") id: string): Promise<void> {
+    if (!IdParam.safeParse(id).success) throw new BadRequestException("id must be a uuid");
+    await this.notifications.markRead(id);
   }
 
   @Get("notification-rules")

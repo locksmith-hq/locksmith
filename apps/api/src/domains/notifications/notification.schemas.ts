@@ -14,7 +14,7 @@ const NotifyAudience = z.enum(["owner", "admins", "user"]);
  * Allow-listed payload (decision 6): typed ledger fields only, never a copy of the event body, so no
  * secret value can reach a notification. Adding a field here is a deliberate, reviewed act.
  */
-const NotificationPayload = z
+export const NotificationPayload = z
   .object({
     kind: NotifyKind,
     actor: z.object({ id: z.string(), name: z.string() }).nullable(),
@@ -32,7 +32,7 @@ const Notification = z.object({
   read_at: z.string().nullable(),
 });
 
-const NotificationPage = z.object({
+export const NotificationPage = z.object({
   items: z.array(Notification),
   unread_count: z.number().int().min(0),
 });

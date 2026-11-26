@@ -1335,3 +1335,60 @@ pub async fn revoked_agent_clients(
         .await?;
     Ok(Json(RevokedAgentClientSet { items }))
 }
+
+/// The decoy formats the core can mint (change t5-honey-tokens).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum HoneyTemplate {
+    AwsAccessKey,
+    GithubPat,
+    SlackToken,
+    GenericApiKey,
+}
+
+/// Mint one honey (decoy) value for an existing secret row of kind `honey`. The value is generated
+/// and sealed inside the core; the request and the response never carry it.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)] // contract only until task 2.2 implements the handler
+pub struct MintHoney {
+    pub template: HoneyTemplate,
+    /// The secret row the sealed value becomes version 1 of.
+    pub secret_id: Uuid,
+}
+
+/// The minted version's metadata. Never the value.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MintedHoney {
+    pub secret_id: Uuid,
+    pub version: u32,
+    pub template: HoneyTemplate,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/honey/mint",
+    operation_id = "mint_honey_value",
+    tag = "internal",
+    summary = "Mint and seal a honey value (NestJS API only; contract, not yet implemented)",
+    description = "Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. Contract only: the handler answers `501` until change t5-honey-tokens task 2.2 lands.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The org the secret belongs to"),
+    ),
+    request_body = MintHoney,
+    responses(
+        (status = 201, description = "Minted and sealed", body = MintedHoney),
+        InternalWriteErrors,
+        (status = 501, description = "Not implemented yet", body = Problem, content_type = "application/problem+json"),
+    ),
+    security(("service_token" = []))
+)]
+pub async fn mint_honey(
+    _org: ServiceOrgBinding,
+    ApiJson(_input): ApiJson<MintHoney>,
+) -> Result<(StatusCode, Json<MintedHoney>), ApiError> {
+    Err(ApiError::new(
+        Kind::NotImplemented,
+        "honey minting is not implemented yet",
+    ))
+}

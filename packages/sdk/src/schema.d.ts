@@ -121,6 +121,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/honey/mint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint and seal a honey value (NestJS API only; contract, not yet implemented)
+         * @description Generates a decoy value for `template` in the core, seals it as version 1 of `secret_id` and returns the version only, never the value. Contract only: the handler answers `501` until change t5-honey-tokens task 2.2 lands.
+         */
+        post: operations["mint_honey_value"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/mcp/agent-calls": {
         parameters: {
             query?: never;
@@ -1956,6 +1976,11 @@ export interface components {
             resources?: string[];
         };
         /**
+         * @description The decoy formats the core can mint (change t5-honey-tokens).
+         * @enum {string}
+         */
+        HoneyTemplate: "aws_access_key" | "github_pat" | "slack_token" | "generic_api_key";
+        /**
          * @description The kind of a human audit event NestJS appends for a sign-in flow.
          * @enum {string}
          */
@@ -2058,6 +2083,26 @@ export interface components {
          * @enum {string}
          */
         McpUpstreamReason: "hide" | "deny" | "hold" | "unknown_tool" | "policy_unavailable" | "catalogue_unavailable" | "denied" | "denied_address" | "upstream_unreachable" | "secret_unavailable" | "secret_unusable" | "upstream_error" | "upstream_unsupported" | "upstream_timeout" | "redaction_failed" | "internal";
+        /**
+         * @description Mint one honey (decoy) value for an existing secret row of kind `honey`. The value is generated
+         *     and sealed inside the core; the request and the response never carry it.
+         */
+        MintHoney: {
+            /**
+             * Format: uuid
+             * @description The secret row the sealed value becomes version 1 of.
+             */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+        };
+        /** @description The minted version's metadata. Never the value. */
+        MintedHoney: {
+            /** Format: uuid */
+            secret_id: string;
+            template: components["schemas"]["HoneyTemplate"];
+            /** Format: int32 */
+            version: number;
+        };
         NewAgent: {
             description?: string;
             name: string;
@@ -2961,6 +3006,96 @@ export interface operations {
             };
             /** @description Unsupported media type */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    mint_honey_value: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the secret belongs to */
+                "X-Locksmith-Org": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MintHoney"];
+            };
+        };
+        responses: {
+            /** @description Minted and sealed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MintedHoney"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request body too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unsupported media type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not implemented yet */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };

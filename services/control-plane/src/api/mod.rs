@@ -100,6 +100,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(internal::revoked_agent_clients))
         .routes(routes!(internal::append_event))
         .routes(routes!(internal::append_human_event))
+        .routes(routes!(internal::mint_honey))
 }
 
 /// Append `event` to `org_id`'s ledger in its own tenant transaction.

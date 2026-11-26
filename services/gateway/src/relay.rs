@@ -995,6 +995,8 @@ mod tests {
             mode: "relay".to_owned(),
             scope: None,
             expires_at,
+            budget: None,
+            agent_budget: None,
         }
     }
 

@@ -67,6 +67,8 @@ fn grant(secret_id: Uuid) -> Grant {
         mode: "relay".to_owned(),
         expires_at: None,
         scope: None,
+        budget: None,
+        agent_budget: None,
     }
 }
 

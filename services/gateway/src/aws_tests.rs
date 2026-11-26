@@ -89,6 +89,8 @@ fn grant(secret_id: Uuid, mode: &str, scope: Option<AwsGrantScope>) -> Grant {
         mode: mode.to_owned(),
         scope,
         expires_at: None,
+        budget: None,
+        agent_budget: None,
     }
 }
 

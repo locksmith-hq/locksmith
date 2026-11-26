@@ -184,6 +184,8 @@ impl Harness {
                 mode: "relay".to_owned(),
                 expires_at: None,
                 scope: None,
+                budget: None,
+                agent_budget: None,
             }],
         );
         let resolver = Arc::new(StubResolver::with(&[(

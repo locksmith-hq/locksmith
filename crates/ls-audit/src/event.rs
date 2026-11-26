@@ -104,6 +104,12 @@ pub mod kind {
     pub const AGENT_DELETED: Code = Code::new("agent.deleted");
     pub const GRANT_CREATED: Code = Code::new("grant.created");
     pub const GRANT_REVOKED: Code = Code::new("grant.revoked");
+    /// An agent or grant call budget was set or cleared (T9). Allow-listed fields: agent, grant
+    /// (if grant-level), limit kind (`per_minute` or `per_day`), limit, window.
+    pub const BUDGET_SET: Code = Code::new("budget.set");
+    /// A call was refused because a budget was used up (T9). Allow-listed fields: agent, grant,
+    /// limit kind, limit, window; never the call's arguments or any credential.
+    pub const BUDGET_EXCEEDED: Code = Code::new("budget.exceeded");
     /// A workload identity trust policy was created or deleted (D4 task 1.3).
     pub const WORKLOAD_IDENTITY_CREATED: Code = Code::new("workload_identity.created");
     pub const WORKLOAD_IDENTITY_DELETED: Code = Code::new("workload_identity.deleted");

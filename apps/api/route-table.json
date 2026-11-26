@@ -159,17 +159,17 @@
     {
       "method": "POST",
       "path": "/v1/orgs",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "GET",
       "path": "/v1/orgs/current",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "GET",
       "path": "/v1/orgs/{org_id}",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "GET",

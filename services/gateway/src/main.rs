@@ -156,7 +156,10 @@ async fn main() -> ExitCode {
     };
     // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
     // only logs and never blocks the relay.
-    bindings_publish::spawn_publish(control_plane.clone(), bindings_publish::summaries(&config.bindings));
+    bindings_publish::spawn_publish(
+        control_plane.clone(),
+        bindings_publish::summaries(&config.bindings),
+    );
     let relay = Relay::new(
         auth,
         grants,
@@ -170,7 +173,9 @@ async fn main() -> ExitCode {
     .with_revoked_agents(clients)
     .with_aws(aws)
     // T9: per-minute limits plus `per_day` budgets leased from the core.
-    .with_budget(ls_gateway::budget::BudgetGuard::for_control_plane(control_plane));
+    .with_budget(ls_gateway::budget::BudgetGuard::for_control_plane(
+        control_plane,
+    ));
 
     let relay = Arc::new(relay);
 

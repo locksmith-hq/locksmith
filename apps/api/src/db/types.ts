@@ -203,8 +203,11 @@ export interface Projects {
 export interface Secrets {
   created_at: Generated<Timestamp>;
   description: Generated<string>;
+  disabled_at: Timestamp | null;
   environment_id: string;
+  honey_template: string | null;
   id: Generated<string>;
+  kind: Generated<string>;
   name: string;
   org_id: string;
   project_id: string;

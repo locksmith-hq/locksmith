@@ -2448,30 +2448,11 @@ mod tests {
         assert_eq!(h.outcomes(), ["redaction_failed"]);
     }
 
-    #[derive(Clone, Default)]
-    struct Capture(Arc<Mutex<Vec<u8>>>);
-
-    impl std::io::Write for Capture {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().write(buf)
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
     /// Trace-level logs of the success and failure paths (including reqwest/hyper) hold no
     /// encoding of the value.
     #[tokio::test]
     async fn logs_hold_no_secret() {
-        let cap = Capture::default();
-        let writer = cap.clone();
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .with_writer(move || writer.clone())
-            .with_ansi(false)
-            .finish();
-        let _guard = tracing::subscriber::set_default(subscriber);
+        let cap = crate::test_capture::start();
 
         let h = harness(Setup::default()).await;
         Mock::given(method("GET"))
@@ -2501,12 +2482,12 @@ mod tests {
             .relay_get(SECRET, &format!("{}/x", failing.origin()))
             .await;
 
-        let logs = cap.0.lock().unwrap().clone();
         assert!(
-            String::from_utf8_lossy(&logs).contains("relay"),
+            cap.scoped(crate::test_capture::Which::Plain)
+                .contains("relay"),
             "capture saw the relay span"
         );
-        assert_clean("trace logs", &logs);
+        assert_clean("trace logs", &cap.all(crate::test_capture::Which::Plain));
     }
 
     // S5 task 3.2: the relay against the real control plane and its Postgres ledger.

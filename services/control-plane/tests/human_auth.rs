@@ -462,14 +462,7 @@ async fn auth_bearer_token_is_refused_when_no_issuer_is_configured() {
 
 #[tokio::test]
 async fn auth_verify_span_has_no_token_content() {
-    let capture = common::Capture::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(capture.clone())
-        .with_max_level(tracing::Level::TRACE)
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-        .with_ansi(false)
-        .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let capture = common::capture_logs();
 
     let key = TestKey::new("k1", 1);
     let issuer = Issuer::start_db(&[&key]).await;
@@ -487,6 +480,7 @@ async fn auth_verify_span_has_no_token_content() {
     );
 
     let logs = capture.contents();
+    let all_logs = capture.all_contents();
     assert!(logs.contains("verify_jwt"), "span missing: {logs}");
     assert!(
         logs.contains("outcome=\"ok\"") || logs.contains("outcome=ok"),
@@ -501,7 +495,7 @@ async fn auth_verify_span_has_no_token_content() {
         "secret-subject-xyz",
         "secret-subject-xyz@example.com",
     ] {
-        assert!(!logs.contains(secret), "trace leaked token content");
+        assert!(!all_logs.contains(secret), "trace leaked token content");
     }
 }
 

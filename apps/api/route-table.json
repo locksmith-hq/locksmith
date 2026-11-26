@@ -33,6 +33,11 @@
     },
     {
       "method": "POST",
+      "path": "/internal/v1/honey/mint",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
       "path": "/internal/v1/mcp/agent-calls",
       "owner": "rust"
     },

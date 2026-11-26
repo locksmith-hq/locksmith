@@ -140,6 +140,61 @@ pub async fn append_in_tx(
     })
 }
 
+/// What an idempotent append did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Once {
+    /// The event was appended.
+    Appended(Appended),
+    /// An identical event was already stored under the key; nothing was appended.
+    Existing(Appended),
+    /// A different event is already stored under the key; nothing was appended.
+    Conflict,
+}
+
+/// `(id, seq, hash, actor, target, outcome, attrs)` of a stored `relay.outcome`.
+type StoredOutcome = (Uuid, i64, Vec<u8>, String, Option<String>, String, String);
+
+/// Append a `relay.outcome` `event` unless one is already stored for `attempt_id` (S5 design
+/// decision 5: the gateway retries outcomes, so a retry after a lost response must not append a
+/// second one). Takes the org's head lock first, so the check and the append see no concurrent
+/// append; the partial unique index from migration 0009 is the backstop. An existing outcome
+/// with the same actor, target, outcome and attributes is returned as [`Once::Existing`], one
+/// that differs is [`Once::Conflict`].
+pub async fn append_outcome_once(
+    c: &mut PgConnection,
+    org_id: Uuid,
+    attempt_id: Uuid,
+    event: &Event,
+) -> Result<Once, Error> {
+    lock_head(c, org_id).await?;
+    let existing: Option<StoredOutcome> = query_as(
+        "SELECT id, seq, hash, actor, target, outcome, attrs::text FROM audit_events \
+             WHERE org_id = $1 AND kind = $2 AND (attrs -> 'attempt_id' ->> 'id') = $3",
+    )
+    .bind(org_id)
+    .bind(event.kind.as_str())
+    .bind(attempt_id.hyphenated().to_string())
+    .fetch_optional(&mut *c)
+    .await?;
+    let Some((id, seq, hash, actor, target, outcome, attrs)) = existing else {
+        return append_in_tx(c, org_id, event).await.map(Once::Appended);
+    };
+    let stored_attrs = serde_json::from_str(&attrs)
+        .ok()
+        .and_then(|v| StoredAttrs::from_json(&v));
+    let same = actor == event.actor.to_text()
+        && target == event.target.map(|t| t.to_text())
+        && outcome == event.outcome.as_str()
+        && stored_attrs.as_ref() == Some(&event.attrs.stored());
+    if !same {
+        return Ok(Once::Conflict);
+    }
+    let (Ok(seq), Ok(hash)) = (u64::try_from(seq), Hash::try_from(&hash[..])) else {
+        return Err(Error::Decode("stored audit row out of range".into()));
+    };
+    Ok(Once::Existing(Appended { seq, id, hash }))
+}
+
 /// Lock `org_id`'s head row (creating it on the first use) until the caller's transaction
 /// ends, and return the head's `(seq, hash)`. Every append takes this lock, so a caller that
 /// must check the chain before appending (e.g. an idempotent append) takes it first and then

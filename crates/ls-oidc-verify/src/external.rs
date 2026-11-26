@@ -23,11 +23,11 @@ use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 use tracing::Instrument as _;
 
-use super::human::Refused;
-use super::issuers::IssuerRegistry;
-use super::jwt;
+use crate::Refused;
+use crate::issuers::IssuerRegistry;
+use crate::jwt;
 
-pub use super::jwt::{LEEWAY_SECS, MAX_TOKEN_BYTES};
+pub use crate::jwt::{LEEWAY_SECS, MAX_TOKEN_BYTES};
 /// Default maximum `exp - iat` (D4 decision 6): GitHub issues about 10 minutes, projected
 /// Kubernetes tokens at least 10 minutes.
 pub const DEFAULT_MAX_LIFETIME: Duration = Duration::from_secs(3600);

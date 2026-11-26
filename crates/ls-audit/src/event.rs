@@ -198,6 +198,8 @@ pub mod attr {
     /// The `name=value` pairs of the verified external-token claims a workload identity policy
     /// names (a [`Text`](super::Text)); nothing else from the token.
     pub const CLAIMS: Code = Code::new("claims");
+    /// Which budget limit refused a call (T9): `per_minute`, `per_day` or `per_day_unavailable`.
+    pub const LIMIT_KIND: Code = Code::new("limit_kind");
 }
 
 /// Who acted.

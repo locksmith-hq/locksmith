@@ -248,6 +248,34 @@ pub enum RelayEventKind {
     /// credential is usable, so a failed append means nothing was issued.
     #[serde(rename = "credential.issued")]
     CredentialIssued,
+    /// A call was refused because an agent or grant budget was used up (T9 task 2.3); outcome
+    /// `denied`, with `limit_kind`. No attempt: nothing was unwrapped.
+    #[serde(rename = "budget.exceeded")]
+    BudgetExceeded,
+}
+
+/// Which budget limit refused a call (`budget.exceeded`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+pub enum BudgetLimitKind {
+    /// The per-minute burst limit.
+    #[serde(rename = "per_minute")]
+    Minute,
+    /// The daily limit.
+    #[serde(rename = "per_day")]
+    Day,
+    /// A daily limit applies but the counter could not be reached (fail closed).
+    #[serde(rename = "per_day_unavailable")]
+    DayUnavailable,
+}
+
+impl BudgetLimitKind {
+    fn code(self) -> Code {
+        match self {
+            Self::Minute => Code::new("per_minute"),
+            Self::Day => Code::new("per_day"),
+            Self::DayUnavailable => Code::new("per_day_unavailable"),
+        }
+    }
 }
 
 impl RelayEventKind {
@@ -265,6 +293,7 @@ impl RelayEventKind {
             Self::DbSessionOpened => kind::DB_SESSION_OPENED,
             Self::DbSessionClosed => kind::DB_SESSION_CLOSED,
             Self::CredentialIssued => kind::CREDENTIAL_ISSUED,
+            Self::BudgetExceeded => kind::BUDGET_EXCEEDED,
         }
     }
 
@@ -417,6 +446,8 @@ pub struct NewRelayEvent {
     /// Lifetime of the vended credentials (`aws.credentials.*` only; required for `issued`).
     #[schema(minimum = 900, maximum = 3600)]
     pub duration_secs: Option<u32>,
+    /// Which limit refused the call (`budget.exceeded` only, required there).
+    pub limit_kind: Option<BudgetLimitKind>,
 }
 
 /// An AWS region code: lowercase letters, digits and inner hyphens.
@@ -457,9 +488,15 @@ impl NewRelayEvent {
                 self.outcome == RelayOutcome::Ok
             }
             RelayEventKind::CredentialIssued => self.outcome == RelayOutcome::Ok,
+            RelayEventKind::BudgetExceeded => self.outcome == RelayOutcome::Denied,
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        if (self.kind == RelayEventKind::BudgetExceeded) != self.limit_kind.is_some() {
+            return Err(ApiError::validation(
+                "`limit_kind` is required for `budget.exceeded` and refused elsewhere",
+            ));
         }
         let closed = self.kind == RelayEventKind::DbSessionClosed;
         if closed != self.reason.is_some() {
@@ -578,6 +615,9 @@ impl NewRelayEvent {
         }
         if let Some(r) = self.reason {
             attrs = attrs.code(attr::REASON, r.code());
+        }
+        if let Some(k) = self.limit_kind {
+            attrs = attrs.code(attr::LIMIT_KIND, k.code());
         }
         for (key, v) in [
             (attr::DURATION_MS, self.duration_ms),

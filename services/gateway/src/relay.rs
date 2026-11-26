@@ -58,7 +58,7 @@ use crate::auth::AgentAuth;
 use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
 use crate::egress::{self, EgressError, Resolver};
-use crate::grants::{GrantSource, allows_relay};
+use crate::grants::{Grant, GrantSource, MODE_RELAY, allows_relay};
 
 /// Label in redaction markers: `[REDACTED:SECRET]`.
 pub const REDACTION_LABEL: &str = "SECRET";
@@ -137,6 +137,9 @@ pub struct Relay {
     /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
     /// honoured so a revoke takes effect here without waiting for `/mcp` traffic.
     revoked_agents: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
+    /// Per-agent and per-grant call budgets (T9), checked before any key is unwrapped. Burst-only
+    /// until [`Relay::with_budget`] gives it a daily lease source.
+    budget: crate::budget::BudgetGuard,
 }
 
 impl Relay {
@@ -162,7 +165,34 @@ impl Relay {
             aws: crate::aws::AwsOptions::default(),
             short_lived: crate::short_lived::ShortLivedStore::default(),
             revoked_agents: None,
+            budget: crate::budget::BudgetGuard::new(),
         }
+    }
+
+    /// Replace the budget guard (T9), for example one with a daily lease source.
+    pub fn with_budget(mut self, budget: crate::budget::BudgetGuard) -> Self {
+        self.budget = budget;
+        self
+    }
+
+    /// Counts one call of `agent_id` on the unexpired `mode` grant for `secret_id` against its
+    /// budgets (T9). Every path that unwraps a key calls this first and refuses on `Err`: no
+    /// unwrap, no upstream request. A grant that is not there is not this check's refusal.
+    pub(crate) async fn check_budget(
+        &self,
+        agent_id: Uuid,
+        grants: &[Grant],
+        secret_id: Uuid,
+        mode: &str,
+    ) -> Result<(), crate::budget::BudgetRefusal> {
+        let now = time::OffsetDateTime::now_utc();
+        let Some(grant) = grants
+            .iter()
+            .find(|g| g.secret_id == secret_id && g.mode == mode && g.active_at(now))
+        else {
+            return Ok(());
+        };
+        self.budget.check(agent_id, grant).await
     }
 
     /// Check short-lived credentials against the agent MCP client registry (task 4.2): a
@@ -356,6 +386,8 @@ struct Failure {
     status: StatusCode,
     slug: &'static str,
     upstream_status: Option<u16>,
+    /// A budget refusal (T9): the limit kind for the `budget.exceeded` event, and `Retry-After`.
+    budget: Option<(&'static str, u64)>,
 }
 
 impl Failure {
@@ -365,6 +397,18 @@ impl Failure {
             status,
             slug,
             upstream_status: None,
+            budget: None,
+        }
+    }
+
+    fn budget(r: crate::budget::BudgetRefusal) -> Self {
+        Self {
+            budget: Some((r.kind(), r.retry_after_secs())),
+            ..Self::new(
+                Outcome::BudgetExceeded,
+                StatusCode::TOO_MANY_REQUESTS,
+                crate::budget::BudgetRefusal::SLUG,
+            )
         }
     }
 
@@ -409,6 +453,8 @@ impl CallAudit {
         let host_ok = match kind {
             EventKind::Attempt => true,
             EventKind::Outcome(o) | EventKind::Denied(o) => o.origin_checked(),
+            // Refused before the binding lookup, so the host is still caller input.
+            EventKind::BudgetExceeded(_) => false,
             EventKind::GitFetch(_)
             | EventKind::GitPush(_)
             | EventKind::GitDenied(_)
@@ -594,9 +640,16 @@ async fn handle_scoped(
             }
             None if outcome.is_denial() => {
                 // One try: the call is refused whether or not the event lands.
+                let kind = match &result {
+                    Err(Failure {
+                        budget: Some((k, _)),
+                        ..
+                    }) => EventKind::BudgetExceeded(k),
+                    _ => EventKind::Denied(outcome),
+                };
                 if relay
                     .audit
-                    .append(call.event(EventKind::Denied(outcome), None, None))
+                    .append(call.event(kind, None, None))
                     .await
                     .is_err()
                 {
@@ -643,7 +696,13 @@ async fn handle_scoped(
             }
             Err(f) => {
                 tracing::warn!("relay refused or failed");
-                error(f.status, f.slug, &request_id)
+                let mut r = error(f.status, f.slug, &request_id);
+                if let Some((_, secs)) = f.budget
+                    && let Ok(v) = HeaderValue::from_str(&secs.to_string())
+                {
+                    r.headers_mut().insert(axum::http::header::RETRY_AFTER, v);
+                }
+                r
             }
         }
     }
@@ -680,6 +739,12 @@ async fn run(
             "no_grant",
         ));
     }
+    // 3b. Budget (T9): after the grant, before any binding lookup, fetch or unwrap. A refused
+    // call decrypts nothing and sends nothing upstream.
+    relay
+        .check_budget(agent_id, &grants, req.secret_id, MODE_RELAY)
+        .await
+        .map_err(Failure::budget)?;
     drop(grants);
 
     // 4. Binding and origin: refused before any fetch or unwrap.
@@ -1106,6 +1171,8 @@ mod tests {
         settings_source: Option<Arc<dyn crate::mcp_settings::ToolSettingsSource>>,
         /// The agent-layer client registry (task 4.2); none means nobody is revoked.
         clients: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
+        /// Replaces the default burst-only budget guard (T9).
+        budget: Option<crate::budget::BudgetGuard>,
     }
 
     impl Default for Setup {
@@ -1121,6 +1188,7 @@ mod tests {
                 mcp_tools: Vec::new(),
                 settings_source: None,
                 clients: None,
+                budget: None,
                 options: RelayOptions {
                     connect_timeout: Duration::from_secs(2),
                     timeout: Duration::from_millis(1500),
@@ -1272,6 +1340,9 @@ mod tests {
         if let Some(clients) = setup.clients {
             relay = relay.with_revoked_agents(clients);
         }
+        if let Some(budget) = setup.budget {
+            relay = relay.with_budget(budget);
+        }
         let relay = Arc::new(relay);
         let app = app::build(
             AppState::new(Arc::new(ReadyFlag::new(true)))
@@ -1366,6 +1437,7 @@ mod tests {
                     | EventKind::DbDenied(_)
                     | EventKind::DbOpened
                     | EventKind::DbClosed(_)
+                    | EventKind::BudgetExceeded(_)
                     | EventKind::CredentialIssued => None,
                 })
                 .collect()
@@ -1393,6 +1465,7 @@ mod tests {
                     | EventKind::DbDenied(_)
                     | EventKind::DbOpened
                     | EventKind::DbClosed(_)
+                    | EventKind::BudgetExceeded(_)
                     | EventKind::CredentialIssued => {}
                 }
             }
@@ -2069,6 +2142,56 @@ mod tests {
                 None,
                 None
             )
+        );
+        h.assert_audit_clean();
+    }
+
+    /// T9 task 2.3, `/v1/relay`: a call over the grant's burst limit is `429 budget_exceeded` with
+    /// `Retry-After`, no material fetch, no KMS decrypt, no DNS, no upstream request, and one
+    /// `budget.exceeded` event (no attempt). Calls inside the limit still relay.
+    #[tokio::test]
+    async fn relay_over_budget_is_429_before_unwrap() {
+        let h = harness(Setup {
+            budget: Some(crate::budget::BudgetGuard::new()),
+            ..Setup::default()
+        })
+        .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("fine"))
+            .mount(&h.upstream)
+            .await;
+        let mut g = grant(SECRET, "LIMITED", None);
+        g.budget = Some(crate::grants::Budget {
+            per_minute: Some(1),
+            per_day: None,
+        });
+        h.grants.set(AGENT, vec![g]);
+        let url = format!("{}/x", h.origin());
+
+        let (status, _) = h.relay_get(SECRET, &url).await;
+        assert_eq!(status, StatusCode::OK, "the first call is inside the limit");
+        let (kms, cp, up) = (
+            h.kms_calls().await,
+            Harness::hits(&h.cp).await,
+            Harness::hits(&h.upstream).await,
+        );
+        let audit_before = h.audit.events().len();
+
+        let (status, raw) = h.relay_get(SECRET, &url).await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        let text = String::from_utf8_lossy(&raw).to_lowercase();
+        assert!(text.contains("\"budget_exceeded\""), "{text}");
+        assert!(text.contains("retry-after: "), "{text}");
+        assert_clean("budget refusal", &raw);
+        assert_eq!(h.kms_calls().await, kms, "no KMS decrypt call");
+        assert_eq!(Harness::hits(&h.cp).await, cp, "no material fetch");
+        assert_eq!(Harness::hits(&h.upstream).await, up, "no upstream request");
+        let ev = h.audit.events();
+        assert_eq!(ev.len(), audit_before + 1, "one event, no attempt");
+        let e = &ev[audit_before];
+        assert_eq!(
+            (e.kind, e.agent_id, e.secret_id, e.host.as_deref()),
+            (EventKind::BudgetExceeded("per_minute"), AGENT, SECRET, None)
         );
         h.assert_audit_clean();
     }

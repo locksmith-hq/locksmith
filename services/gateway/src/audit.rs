@@ -72,6 +72,8 @@ pub enum Outcome {
     /// The `relay.attempt` event could not be appended; refused before any unwrap. Never sent
     /// to the ledger (the ledger was not reachable); logs and spans only.
     AuditUnavailable,
+    /// An agent or grant budget was used up (T9); refused before any unwrap.
+    BudgetExceeded,
 }
 
 impl Outcome {
@@ -90,6 +92,7 @@ impl Outcome {
             Self::UpstreamError => "upstream_error",
             Self::RedactionFailed => "redaction_failed",
             Self::AuditUnavailable => "audit_unavailable",
+            Self::BudgetExceeded => "budget_exceeded",
         }
     }
 
@@ -97,14 +100,21 @@ impl Outcome {
     pub fn is_denial(self) -> bool {
         matches!(
             self,
-            Self::NoGrant | Self::GrantsUnavailable | Self::Denied | Self::DeniedAddress
+            Self::NoGrant
+                | Self::GrantsUnavailable
+                | Self::Denied
+                | Self::DeniedAddress
+                | Self::BudgetExceeded
         )
     }
 
     /// Whether the URL's origin matched the secret's binding before this outcome, so the host
     /// is configuration rather than caller input and may be recorded.
     pub fn origin_checked(self) -> bool {
-        !matches!(self, Self::NoGrant | Self::GrantsUnavailable | Self::Denied)
+        !matches!(
+            self,
+            Self::NoGrant | Self::GrantsUnavailable | Self::Denied | Self::BudgetExceeded
+        )
     }
 }
 
@@ -133,6 +143,9 @@ pub enum EventKind {
     DbClosed(SessionClose),
     /// A short-lived credential was issued (outcome `ok`); the event carries [`Issued`].
     CredentialIssued,
+    /// A call was refused because a budget was used up (T9 task 2.3), before any unwrap. The
+    /// payload is the limit kind (`BudgetRefusal::kind`). Written once, no attempt.
+    BudgetExceeded(&'static str),
 }
 
 /// Why a relayed Postgres session ended.
@@ -181,6 +194,7 @@ impl EventKind {
             Self::DbOpened => ("db.session.opened", "ok"),
             Self::DbClosed(_) => ("db.session.closed", "ok"),
             Self::CredentialIssued => ("credential.issued", "ok"),
+            Self::BudgetExceeded(_) => ("budget.exceeded", "denied"),
         }
     }
 }
@@ -527,6 +541,8 @@ struct WireEvent {
     credential_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     expires_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    limit_kind: Option<&'static str>,
 }
 
 #[derive(Deserialize)]
@@ -598,6 +614,10 @@ impl HttpAudit {
             bytes_out: closed.map(|c| c.bytes_out),
             credential_id: ev.issued.map(|i| i.credential_id),
             expires_at: ev.issued.map(|i| i.expires_at),
+            limit_kind: match ev.kind {
+                EventKind::BudgetExceeded(k) => Some(k),
+                _ => None,
+            },
         })
         .map_err(|_| AuditError::Rejected)?;
         // 201 appended; 200 an outcome already stored for this attempt (a retry).

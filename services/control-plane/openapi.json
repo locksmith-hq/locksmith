@@ -752,6 +752,15 @@
         ],
         "type": "object"
       },
+      "BudgetLimitKind": {
+        "description": "Which budget limit refused a call (`budget.exceeded`).",
+        "enum": [
+          "per_minute",
+          "per_day",
+          "per_day_unavailable"
+        ],
+        "type": "string"
+      },
       "ConditionView": {
         "description": "One claim test as shown to callers: `pattern` ends in `*` for a prefix match.",
         "properties": {
@@ -1409,6 +1418,17 @@
           },
           "kind": {
             "$ref": "#/components/schemas/RelayEventKind"
+          },
+          "limit_kind": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BudgetLimitKind",
+                "description": "Which limit refused the call (`budget.exceeded` only, required there)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "method": {
             "oneOf": [
@@ -2249,7 +2269,8 @@
           "db.session.denied",
           "db.session.opened",
           "db.session.closed",
-          "credential.issued"
+          "credential.issued",
+          "budget.exceeded"
         ],
         "type": "string"
       },

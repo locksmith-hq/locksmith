@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "openapi:emit": "OPENAPI_EMIT=1 vitest run src/openapi/nest-document.test.ts",
-    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
+    "build:dist": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.6.0",

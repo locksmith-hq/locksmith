@@ -9,6 +9,7 @@ export type Tx = Transaction<DB>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLS_ORG = "tenant.orgId";
 const CLS_TX = "tenant.tx";
+const CLS_USER = "tenant.userId";
 
 /**
  * Request-scoped tenant transactions (decision A0-5). Every query for an org runs inside a
@@ -26,6 +27,15 @@ export class TenantService {
   /** Called by the auth guard (task 4.1) once the principal's org is known. */
   setOrgId(orgId: string): void {
     this.cls.set(CLS_ORG, orgId);
+  }
+
+  /** Called by the auth guard (task 4.1) with the authenticated user's id. */
+  setUserId(userId: string): void {
+    this.cls.set(CLS_USER, userId);
+  }
+
+  userId(): string | undefined {
+    return this.cls.get<string | undefined>(CLS_USER);
   }
 
   orgId(): string | undefined {

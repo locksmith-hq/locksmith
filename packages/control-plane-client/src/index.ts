@@ -1,7 +1,7 @@
 // Control-plane client for agents and grants. Types and transport come from @locksmith/sdk.
 // Nothing here logs or persists a response body: the enrollment secret only ever lives in
 // the object returned to the caller.
-import { createLocksmith, LocksmithError, paginate, unwrap, type components } from "@locksmith/sdk";
+import { createLocksmith, LocksmithError, paginate, unwrap, type components, type paths } from "@locksmith/sdk";
 
 export type Agent = components["schemas"]["Agent"];
 export type AgentEnrollment = components["schemas"]["AgentEnrollment"];
@@ -29,6 +29,56 @@ export type McpClient = components["schemas"]["McpClient"];
 export type BindingSummary = components["schemas"]["BindingSummary"];
 export type BindingKind = components["schemas"]["BindingKind"];
 export type Problem = components["schemas"]["Problem"];
+
+type Ok<P extends keyof paths, M extends keyof paths[P]> = paths[P][M] extends {
+  responses: { 200: { content: { "application/json": infer B } } };
+}
+  ? B
+  : never;
+/** The caller's inbox: items newest first with the unread count. Payloads hold allow-listed fields only. */
+export type NotificationInbox = Ok<"/v1/notifications", "get">;
+export type NotificationItem = NotificationInbox["items"][number];
+export type NotificationRules = Ok<"/v1/notification-rules", "get">;
+export type NotificationRule = NotificationRules["rules"][number];
+export type NotificationChannels = Ok<"/v1/notification-channels", "get">;
+export type NotificationKind = NotificationItem["kind"];
+export type NotificationChannel = NotificationRule["channel"];
+export type NotificationAudience = NotificationRule["audience"];
+
+export const NOTIFICATION_KINDS: readonly NotificationKind[] = [
+  "relay.denied",
+  "git.denied",
+  "grant.revoked",
+  "agent.deleted",
+];
+export const NOTIFICATION_CHANNELS: readonly NotificationChannel[] = ["inbox", "email", "slack"];
+const KIND_LABEL: Record<NotificationKind, string> = {
+  "relay.denied": "Relay denied",
+  "git.denied": "Git access denied",
+  "grant.revoked": "Grant revoked",
+  "agent.deleted": "Agent deleted",
+};
+export const notificationKindLabel = (k: NotificationKind): string => KIND_LABEL[k];
+
+/** One display line for an inbox item, built from the allow-listed payload fields only. */
+export function notificationSummary(n: NotificationItem): string {
+  const who = n.payload.actor?.name;
+  const what = n.payload.object_name;
+  return [notificationKindLabel(n.kind), what && `on ${what}`, who && `by ${who}`].filter(Boolean).join(" ");
+}
+
+/** Flips one kind and channel in a rules list. A new rule goes to `audience`; others are kept as they are. */
+export function toggleRule(
+  rules: readonly NotificationRule[],
+  kind: NotificationKind,
+  channel: NotificationChannel,
+  audience: NotificationAudience = "owner",
+): NotificationRule[] {
+  const has = rules.some((r) => r.kind === kind && r.channel === channel);
+  return has
+    ? rules.filter((r) => !(r.kind === kind && r.channel === channel))
+    : [...rules, { kind, channel, audience, audience_user_id: null }];
+}
 
 /** Non-secret fields of a binding as label/value pairs for display, in a fixed order per kind; unset fields are skipped. */
 export function bindingDetails(b: BindingSummary): Array<[label: string, value: string]> {
@@ -172,6 +222,15 @@ export interface Client {
   listMcpClients(): Promise<McpClient[]>;
   /** The gateway's bindings for the org, non-secret fields only. */
   listBindings(): Promise<BindingSummary[]>;
+  /** The caller's inbox (own items only). */
+  listNotifications(opts?: { unread?: boolean }): Promise<NotificationInbox>;
+  markNotificationRead(id: string): Promise<void>;
+  markAllNotificationsRead(): Promise<void>;
+  /** Owner only: a non-owner gets a 403 ApiError. */
+  getNotificationRules(): Promise<NotificationRules>;
+  setNotificationRules(rules: NotificationRule[]): Promise<NotificationRules>;
+  getNotificationChannels(): Promise<NotificationChannels>;
+  setEmailChannel(enabled: boolean): Promise<NotificationChannels>;
   /** Revoke a client by its row `id` (not the OAuth `client_id`). Idempotent. */
   revokeMcpClient(id: string): Promise<McpClient>;
 }
@@ -297,6 +356,17 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
       run(c.PUT("/v1/mcp/tools/{layer}/{tool}", { params: { path: { layer, tool } }, body: { enabled } })),
     listBindings: async () => (await run(c.GET("/v1/bindings"))).items,
     listMcpClients: () => all((cursor) => run(c.GET("/v1/mcp/clients", { params: { query: q(cursor) } }))),
+    listNotifications: ({ unread } = {}) =>
+      run(c.GET("/v1/notifications", { params: { query: unread ? { unread } : {} } })),
+    markNotificationRead: (id) => run(c.POST("/v1/notifications/{id}/read", { params: { path: { id } } })),
+    markAllNotificationsRead: () => run(c.POST("/v1/notifications/read-all")),
+    getNotificationRules: () => run(c.GET("/v1/notification-rules")),
+    setNotificationRules: (rules) => run(c.PUT("/v1/notification-rules", { body: { rules } })),
+    getNotificationChannels: () => run(c.GET("/v1/notification-channels")),
+    setEmailChannel: async (enabled) => {
+      const r = await run(c.PUT("/v1/notification-channels", { body: { email: { enabled } } }));
+      return r as NotificationChannels;
+    },
     revokeMcpClient: (client_row_id) =>
       run(c.POST("/v1/mcp/clients/{client_row_id}/revoke", { params: { path: { client_row_id } } })),
   };

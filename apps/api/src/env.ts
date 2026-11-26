@@ -7,6 +7,11 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   DATABASE_URL: z.string().min(1),
   JOBS_DATABASE_URL: z.string().min(1).optional(),
+  // Email delivery (N1): the job runs only when all three are set. The relay is plain SMTP with no
+  // credentials in this slice; a credentialed relay comes with the secret-write path.
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  SMTP_FROM: z.string().min(3).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

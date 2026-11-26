@@ -10,8 +10,9 @@ describe("route-table.json", () => {
   const spec = read("../../../services/control-plane/openapi.json") as {
     paths: Record<string, Record<string, unknown>>;
   };
+  const nestSpec = read("../openapi.nest.json") as typeof spec;
   const methods = ["get", "post", "put", "patch", "delete", "head", "options"];
-  const expected = Object.entries(spec.paths)
+  const expected = [...Object.entries(spec.paths), ...Object.entries(nestSpec.paths)]
     .flatMap(([path, ops]) =>
       Object.keys(ops)
         .filter((m) => methods.includes(m))
@@ -19,7 +20,7 @@ describe("route-table.json", () => {
     )
     .sort();
 
-  it("lists exactly the operations of the frozen openapi.json", () => {
+  it("lists exactly the operations of openapi.json and openapi.nest.json", () => {
     expect(table.routes.map((r) => `${r.method} ${r.path}`).sort()).toEqual(expected);
   });
 

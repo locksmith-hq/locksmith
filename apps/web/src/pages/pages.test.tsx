@@ -197,3 +197,42 @@ test("bindings: a credential-shaped field injected into an AWS row never renders
   expect(row).toHaveTextContent("Allowed actions: s3:ListBucket");
   expect(container.textContent).not.toMatch(/SECRET-ID-VALUE|EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
 });
+
+test("notifications: bell shows unread, inbox marks read, empty state", async () => {
+  open("/notifications");
+  expect(await screen.findByTestId("unread-count")).toHaveTextContent("1");
+  expect(await screen.findByText("Relay denied on stripe by ci-agent")).toBeInTheDocument();
+  await userEvent.click(screen.getByText(/Mark read: Relay denied/));
+  await waitFor(() => expect(screen.queryByTestId("unread-count")).toBeNull());
+});
+
+test("notifications: empty inbox and failed load with retry", async () => {
+  open("/notifications", { empty: true });
+  expect(await screen.findByText("No notifications.")).toBeInTheDocument();
+});
+
+test("notification settings: owner toggles a rule and email; a 403 hides the controls", async () => {
+  const fx = open("/settings/notifications");
+  await userEvent.click(await screen.findByLabelText("Git access denied to inbox"));
+  await waitFor(() => expect(fx.requests).toContain("PUT /v1/notification-rules"));
+  await userEvent.click(await screen.findByLabelText("Email delivery"));
+  await waitFor(() => expect(fx.requests).toContain("PUT /v1/notification-channels"));
+  expect(screen.getByText("Slack: not configured")).toBeInTheDocument();
+});
+
+test("notification settings: a failed email delivery shows a banner, otherwise none", async () => {
+  open("/settings/notifications", { deliveryFailed: true });
+  expect(await screen.findByText(/Email delivery failed/)).toBeInTheDocument();
+});
+
+test("notification settings: no banner when delivery is healthy", async () => {
+  open("/settings/notifications");
+  await screen.findByLabelText("Email delivery");
+  expect(screen.queryByText(/Email delivery failed/)).toBeNull();
+});
+
+test("notification settings: non-owner sees a notice and no controls", async () => {
+  open("/settings/notifications", { fail: { "GET /v1/notification-rules": 403 } });
+  expect(await screen.findByText(/Only an organization owner/)).toBeInTheDocument();
+  expect(screen.queryByLabelText("Email delivery")).toBeNull();
+});

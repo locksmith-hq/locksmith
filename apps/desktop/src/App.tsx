@@ -9,6 +9,7 @@ import {
   Keys,
   McpClients,
   McpTools,
+  Notifications,
   OrgAudit,
   Overview,
   Projects,
@@ -39,6 +40,7 @@ const TABS = {
   "Org audit": OrgAudit,
   "MCP tools": McpTools,
   "MCP clients": McpClients,
+  Notifications,
 } as const;
 export type Tab = keyof typeof TABS;
 const TAB_ICON: Record<Tab, IconName> = {
@@ -56,6 +58,7 @@ const TAB_ICON: Record<Tab, IconName> = {
   "Org audit": "doc",
   "MCP tools": "key",
   "MCP clients": "sessions",
+  Notifications: "alert",
 };
 const POLL_MS = 5000;
 

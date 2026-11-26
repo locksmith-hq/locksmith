@@ -8,6 +8,7 @@ import { UsersModule } from "./users/users.module.js";
 import { OrgsModule } from "./orgs/orgs.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
+import { CoreModule } from "./core/core.module.js";
 import { DbModule } from "./db/db.module.js";
 import { TenantModule } from "./tenant/tenant.module.js";
 import { ProblemFilter } from "./platform/problem.js";
@@ -27,6 +28,7 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
       },
     }),
     TerminusModule,
+    CoreModule,
     DbModule,
     TenantModule,
     AuthModule,

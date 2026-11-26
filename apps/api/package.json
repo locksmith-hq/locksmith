@@ -27,6 +27,7 @@
     "vitest": "^4.1.12"
   },
   "dependencies": {
+    "@locksmith/core-client": "*",
     "@nestjs/common": "^12.6.0",
     "@nestjs/config": "^12.1.1",
     "@nestjs/core": "^12.6.0",

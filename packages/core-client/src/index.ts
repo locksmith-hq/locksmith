@@ -54,7 +54,7 @@ function unwrap<T>(r: { data?: T; error?: unknown; response: Response }): T {
 }
 
 export function createCoreClient(opts: CoreClientOptions) {
-  const raw: CoreRawClient = createClient<paths>({ baseUrl: opts.baseUrl, fetch: opts.fetch });
+  const raw: CoreRawClient = createClient<paths>({ baseUrl: opts.baseUrl, ...(opts.fetch ? { fetch: opts.fetch } : {}) });
   raw.use({
     onRequest({ request }) {
       const token = typeof opts.token === "function" ? opts.token() : opts.token;

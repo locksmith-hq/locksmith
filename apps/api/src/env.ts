@@ -7,6 +7,9 @@ const envSchema = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
     DATABASE_URL: z.string().min(1),
+    // Internal Rust core (audit, tokens, DEKs). The token is a secret: no default, never logged.
+    LOCKSMITH_CORE_URL: z.url(),
+    LOCKSMITH_CORE_SERVICE_TOKEN: z.string().min(1),
     JOBS_DATABASE_URL: z.string().min(1).optional(),
     // Dev header auth (Rust `LOCKSMITH_DEV_AUTH`): "1" on, unset, "" or "0" off, anything else invalid.
     LOCKSMITH_DEV_AUTH: z.enum(["", "0", "1"]).optional(),

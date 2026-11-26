@@ -16,8 +16,20 @@ describe("env", () => {
       expect(String(e)).not.toContain("abc-not-a-port");
     }
   });
+  it("fails fast without the core url and service token", () => {
+    expect(() => validateEnv({ DATABASE_URL: "postgres://x" })).toThrow(/LOCKSMITH_CORE_URL/);
+    expect(() => validateEnv({ DATABASE_URL: "postgres://x", LOCKSMITH_CORE_URL: "http://core:8081" })).toThrow(
+      /LOCKSMITH_CORE_SERVICE_TOKEN/,
+    );
+  });
   it("accepts a valid env", () => {
-    expect(validateEnv({ DATABASE_URL: "postgres://x" }).PORT).toBe(3000);
+    expect(
+      validateEnv({
+        DATABASE_URL: "postgres://x",
+        LOCKSMITH_CORE_URL: "http://core:8081",
+        LOCKSMITH_CORE_SERVICE_TOKEN: "t",
+      }).PORT,
+    ).toBe(3000);
   });
 });
 
@@ -45,6 +57,8 @@ describe("logging redaction", () => {
 describe("health", () => {
   it("serves /healthz and /readyz", async () => {
     process.env["DATABASE_URL"] = "postgres://unused";
+    process.env["LOCKSMITH_CORE_URL"] = "http://127.0.0.1:1";
+    process.env["LOCKSMITH_CORE_SERVICE_TOKEN"] = "test-service-token";
     process.env["LOG_LEVEL"] = "silent";
     const { AppModule } = await import("./app.module.js"); // reads env at import
     const { PG_BOSS } = await import("./jobs/jobs.service.js");

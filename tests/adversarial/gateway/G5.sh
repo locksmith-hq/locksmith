@@ -27,7 +27,9 @@
 # 2. Request fields that reach audit event attributes: relays whose URL host, method or path
 #    carry `{secret}` (refused, or sent literally), bound relays with several methods, and
 #    `POST /internal/v1/audit/events` with the service token and hosts with a placeholder, path,
-#    port, userinfo, space or an unknown `url` field (400), plus one valid event.
+#    port, userinfo, space or an unknown `url` field (400), plus one valid event; and
+#    `POST /internal/v1/audit/human-events` with a valid human event (201) and issuers with a
+#    placeholder, path, port, userinfo, query or scheme, an unknown field and an unknown kind (400).
 # 3. `GET /v1/audit/events` for both orgs (every page): every actor, target, kind, outcome and
 #    attribute is an id, code, host or integer; neither org's ledger names the other's ids.
 # 4. The audit export: `locksmith-audit export` into a fresh directory; both orgs' event and
@@ -222,6 +224,9 @@ by_key = {(m, t): o for m, t, o in ops}
 
 
 HUMAN_ONLY = {"auth_sign_in", "auth_sign_out"}
+# The token exchange needs a token signed by an external issuer; a valid exchange against a stub issuer is
+# the `workload_abuse` and `workload_exchange` cargo tests (D4), so G5 only sends malformed requests.
+EXTERNAL_TOKEN = {"create_workload_token"}
 
 
 def is_internal(o):
@@ -291,8 +296,19 @@ for m, t in [("GET", "/healthz"), ("GET", "/readyz"), ("GET", "/.well-known/jwks
              ("GET", "/v1/orgs/{org_id}"), ("GET", "/v1/projects"), ("GET", P),
              ("GET", P + "/environments"), ("GET", E), ("GET", E + "/secrets"), ("GET", S),
              ("GET", S + "/versions"), ("GET", "/v1/agents"), ("GET", AG), ("GET", AG + "/grants"),
-             ("GET", "/v1/audit/status"), ("GET", "/v1/mcp/tools"), ("GET", "/v1/mcp/clients")]:
+             ("GET", "/v1/audit/status"), ("GET", "/v1/mcp/tools"), ("GET", "/v1/mcp/clients"),
+             ("GET", "/v1/orgs/current"), ("GET", "/v1/bindings"), ("GET", "/v1/workload-identities")]:
     valid(m, t)
+# A workload-identity policy for org A's agent: the `{id}` the sweep uses for reads, malformed and
+# cross-org probes; it is deleted after the sweep.
+st, d = valid("POST", "/v1/workload-identities", body={
+    "name": name("g5-wi"), "issuer_kind": "github", "audience": "https://g5.example",
+    "agent_id": A["agent"], "conditions": [{"claim": "repository", "pattern": "acme/g5"}]})
+real["id"] = (d or {}).get("id")
+if not real["id"]:
+    failures.append("the workload-identity policy was not created")
+    real["id"] = str(uuid.uuid4())
+valid("GET", "/v1/workload-identities/{id}")
 valid("PUT", "/v1/mcp/tools/{layer}/{tool}", body=valid_body("PUT", "/v1/mcp/tools/{layer}/{tool}"))
 # No client row exists in the fresh org, so revoke answers 404 (the real revoke is in G10 and the e2e).
 call(api, "valid", opid("POST", "/v1/mcp/clients/{client_row_id}/revoke"), "unknown", "POST",
@@ -414,6 +430,7 @@ for method, tmpl, o in ops:
                 text = json.dumps(d)
                 if any(v in text for v in A.values()):
                     failures.append("cross-org %s %s: the response names an org A id" % (oid, label))
+valid("DELETE", "/v1/workload-identities/{id}")
 # A grant naming the other org's secret, both ways.
 call(api, "cross-org", opid("POST", AG + "/grants"), "b-grants-a-secret", "POST",
      fill(AG + "/grants", {"agent_id": B["agent"]}), body={"secret_id": A["secret"]}, headers=dev(B["org"]),
@@ -462,6 +479,23 @@ call(api, "attrs", append, "method-ph", "POST", "/internal/v1/audit/events",
 call(api, "attrs", append, "valid", "POST", "/internal/v1/audit/events",
      body=dict(relay_event, port=8443), headers=svc, expect="201")
 
+# The human-event route (B8): a user id, a kind and an issuer host only.
+human_ev = {"kind": "auth.sign_in", "user_id": "00000000-0000-7000-8000-0000000000b8",
+            "issuer": "idp.example"}
+human = opid("POST", "/internal/v1/audit/human-events")
+for label, issuer in [("ph", "{secret}.example"), ("ph-enc", "%7Bsecret%7D.example"),
+                      ("path", "idp.example/{secret}"), ("port", "idp.example:8443"),
+                      ("userinfo", "{secret}@idp.example"), ("query", "idp.example?k={secret}"),
+                      ("scheme", "https://idp.example")]:
+    call(api, "attrs", human, "human-issuer-" + label, "POST", "/internal/v1/audit/human-events",
+         body=dict(human_ev, issuer=issuer), headers=svc, expect="400")
+call(api, "attrs", human, "human-field", "POST", "/internal/v1/audit/human-events",
+     body=dict(human_ev, email="{secret}"), headers=svc, expect="400")
+call(api, "attrs", human, "human-kind", "POST", "/internal/v1/audit/human-events",
+     body=dict(human_ev, kind="{secret}"), headers=svc, expect="400")
+call(api, "attrs", human, "valid", "POST", "/internal/v1/audit/human-events",
+     body=human_ev, headers=svc, expect="201")
+
 # --- the gateway's agent route ---
 st, d = call(gw, "gateway", "gateway_grants", "agent", "GET", "/v1/grants",
              headers={"Authorization": "Bearer " + agent_auth})
@@ -488,6 +522,8 @@ for method, tmpl, o in ops:
         need = {"internal"}
     elif oid in HUMAN_ONLY:
         need = {"human-refused"}  # a real human token is G7's; here the dev header must be refused
+    elif oid in EXTERNAL_TOKEN:
+        need = {"malformed"}
     else:
         need = {"valid"}
         if params_of(o, "path") or params_of(o, "query") or o.get("requestBody") or method == "GET":

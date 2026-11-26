@@ -45,9 +45,7 @@ pub struct HumanIdentity {
     pub auth_time: Option<i64>,
 }
 
-/// A refused token. Deliberately opaque: the only content is a static label for traces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Refused(pub &'static str);
+pub use ls_oidc_verify::Refused;
 
 #[derive(Deserialize)]
 struct Claims {

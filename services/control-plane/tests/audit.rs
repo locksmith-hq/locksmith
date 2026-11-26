@@ -1484,3 +1484,121 @@ async fn gateway_records_agent_mcp_clients_and_reads_the_revoked_ones() {
     .await;
     assert_eq!(no_token.status, StatusCode::UNAUTHORIZED);
 }
+
+const HUMAN_EVENTS: &str = "/internal/v1/audit/human-events";
+
+/// `POST /internal/v1/audit/human-events` with optional `Authorization` and `X-Locksmith-Org`.
+async fn post_human(app: &Router, auth: Option<&str>, org: Option<Uuid>, body: &Value) -> Reply {
+    let mut b = Request::builder()
+        .method("POST")
+        .uri(HUMAN_EVENTS)
+        .header("content-type", "application/json");
+    if let Some(a) = auth {
+        b = b.header("authorization", a);
+    }
+    if let Some(o) = org {
+        b = b.header("x-locksmith-org", o.to_string());
+    }
+    send(app, b.body(Body::from(body.to_string())).unwrap()).await
+}
+
+fn human(kind: &str, user: Uuid) -> Value {
+    json!({ "kind": kind, "user_id": user, "issuer": "idp.example.com" })
+}
+
+/// B8 1.2: no token, a wrong token and an agent token are `401` before any database access.
+#[tokio::test]
+async fn human_events_need_the_service_token() {
+    let app = app::build(state(common::unreachable_db(), Some(TOKEN)));
+    let org = Some(Uuid::now_v7());
+    let body = human("auth.sign_in", Uuid::now_v7());
+    // An agent token is a JWT, not the service token.
+    let agent = "Bearer eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJhZ2VudCJ9.c2ln";
+    for auth in [None, Some(bearer(WRONG)), Some(agent.to_owned())] {
+        let r = post_human(&app, auth.as_deref(), org, &body).await;
+        assert_problem(&r, StatusCode::UNAUTHORIZED, "unauthenticated");
+    }
+    let r = post_human(&app, Some(&bearer(TOKEN)), None, &body).await;
+    assert_problem(&r, StatusCode::UNAUTHORIZED, "unauthenticated");
+}
+
+/// B8 1.2: unknown fields and kinds, and an issuer that is not a bare host, are `400` before
+/// any database access, and the problem never echoes the value.
+#[tokio::test]
+async fn human_events_outside_the_allow_list_are_400() {
+    let app = app::build(state(common::unreachable_db(), Some(TOKEN)));
+    let auth = bearer(TOKEN);
+    let org = Some(Uuid::now_v7());
+    let user = Uuid::now_v7();
+    let with = |k: &str, v: Value| {
+        let mut b = human("auth.sign_in", user);
+        b[k] = v;
+        b
+    };
+    for bad in [
+        with("email", json!(CANARY)),
+        with("subject", json!(CANARY)),
+        with("kind", json!(CANARY)),
+        with("kind", json!("auth.verify_failed")),
+        with("kind", json!("relay.attempt")),
+        with("user_id", json!(CANARY)),
+        with("issuer", json!("idp.example.com:8443")),
+        with("issuer", json!("idp.example.com/realms/x")),
+        with("issuer", json!(format!("idp.example.com?t={CANARY}"))),
+        with("issuer", json!(format!("{CANARY}@idp.example.com"))),
+        with("issuer", json!("https://idp.example.com")),
+        with("issuer", json!("{{issuer}}")),
+        with("issuer", json!("<issuer>")),
+        with("issuer", json!("")),
+        with("issuer", json!(CANARY)),
+        json!({"kind": "auth.sign_in", "user_id": user}),
+        json!({"kind": "auth.sign_in", "issuer": "idp.example.com"}),
+    ] {
+        let r = post_human(&app, Some(&auth), org, &bad).await;
+        assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
+        assert!(!r.raw.contains(CANARY), "{}", r.raw);
+    }
+}
+
+/// B8 1.2: each kind appends in the named org's chain with the user as actor and the issuer
+/// host only; the chain verifies, and the other org sees nothing.
+#[tokio::test]
+async fn human_events_append_per_kind_in_the_named_org_only() {
+    let f = Fixture::start().await;
+    let (a, b) = (f.org("a").await, f.org("b").await);
+    let auth = bearer(TOKEN);
+    let user = Uuid::now_v7();
+    let mut last = 0;
+    for kind in ["auth.sign_in", "auth.sign_out", "org.personal_created"] {
+        let r = post_human(&f.app, Some(&auth), Some(a), &human(kind, user)).await;
+        assert_eq!(r.status, StatusCode::CREATED, "{}", r.raw);
+        let seq = r.body["seq"].as_u64().unwrap();
+        assert!(seq > last, "seq advances: {seq} after {last}");
+        last = seq;
+    }
+    let rows = f.records(a).await;
+    let human_rows: Vec<_> = rows
+        .iter()
+        .filter(|r| r.actor == format!("user:{user}"))
+        .collect();
+    assert_eq!(human_rows.len(), 3);
+    for (row, kind) in
+        human_rows
+            .iter()
+            .zip(["auth.sign_in", "auth.sign_out", "org.personal_created"])
+    {
+        assert_eq!(row.kind, kind);
+        assert_eq!(row.outcome, "ok");
+        assert_eq!(row.target.as_deref(), Some(format!("org:{a}").as_str()));
+        let attrs = row.attrs.as_ref().unwrap().to_json();
+        assert_eq!(attrs, json!({ "issuer": { "host": "idp.example.com" } }));
+    }
+    assert_intact(&rows);
+    assert!(
+        f.records(b)
+            .await
+            .iter()
+            .all(|r| r.actor != format!("user:{user}")),
+        "the event lands only in the org named by the header"
+    );
+}

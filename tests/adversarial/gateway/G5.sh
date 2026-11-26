@@ -27,7 +27,9 @@
 # 2. Request fields that reach audit event attributes: relays whose URL host, method or path
 #    carry `{secret}` (refused, or sent literally), bound relays with several methods, and
 #    `POST /internal/v1/audit/events` with the service token and hosts with a placeholder, path,
-#    port, userinfo, space or an unknown `url` field (400), plus one valid event.
+#    port, userinfo, space or an unknown `url` field (400), plus one valid event; and
+#    `POST /internal/v1/audit/human-events` with a valid human event (201) and issuers with a
+#    placeholder, path, port, userinfo, query or scheme, an unknown field and an unknown kind (400).
 # 3. `GET /v1/audit/events` for both orgs (every page): every actor, target, kind, outcome and
 #    attribute is an id, code, host or integer; neither org's ledger names the other's ids.
 # 4. The audit export: `locksmith-audit export` into a fresh directory; both orgs' event and
@@ -476,6 +478,23 @@ call(api, "attrs", append, "method-ph", "POST", "/internal/v1/audit/events",
      body=dict(relay_event, method="{secret}"), headers=svc, expect="400")
 call(api, "attrs", append, "valid", "POST", "/internal/v1/audit/events",
      body=dict(relay_event, port=8443), headers=svc, expect="201")
+
+# The human-event route (B8): a user id, a kind and an issuer host only.
+human_ev = {"kind": "auth.sign_in", "user_id": "00000000-0000-7000-8000-0000000000b8",
+            "issuer": "idp.example"}
+human = opid("POST", "/internal/v1/audit/human-events")
+for label, issuer in [("ph", "{secret}.example"), ("ph-enc", "%7Bsecret%7D.example"),
+                      ("path", "idp.example/{secret}"), ("port", "idp.example:8443"),
+                      ("userinfo", "{secret}@idp.example"), ("query", "idp.example?k={secret}"),
+                      ("scheme", "https://idp.example")]:
+    call(api, "attrs", human, "human-issuer-" + label, "POST", "/internal/v1/audit/human-events",
+         body=dict(human_ev, issuer=issuer), headers=svc, expect="400")
+call(api, "attrs", human, "human-field", "POST", "/internal/v1/audit/human-events",
+     body=dict(human_ev, email="{secret}"), headers=svc, expect="400")
+call(api, "attrs", human, "human-kind", "POST", "/internal/v1/audit/human-events",
+     body=dict(human_ev, kind="{secret}"), headers=svc, expect="400")
+call(api, "attrs", human, "valid", "POST", "/internal/v1/audit/human-events",
+     body=human_ev, headers=svc, expect="201")
 
 # --- the gateway's agent route ---
 st, d = call(gw, "gateway", "gateway_grants", "agent", "GET", "/v1/grants",

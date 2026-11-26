@@ -9,4 +9,12 @@ export const EXCLUDED: Record<string, string> = {
   "GET /v1/notification-channels": "n1-notifications group 1 stub answers 501; scenarios arrive with group 4",
   "PUT /v1/notification-channels": "n1-notifications group 1 stub answers 501; scenarios arrive with group 4",
   "POST /v1/notification-channels/test": "n1-notifications group 1 stub answers 501; scenarios arrive with group 4",
+  "GET /v1/projects/{project_id}/environments/{environment_id}/honey-tokens":
+    "t5-honey-tokens group 1 stub answers 501; scenarios arrive with group 2",
+  "POST /v1/projects/{project_id}/environments/{environment_id}/honey-tokens":
+    "t5-honey-tokens group 1 stub answers 501; scenarios arrive with group 2",
+  "DELETE /v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}":
+    "t5-honey-tokens group 1 stub answers 501; scenarios arrive with group 2",
+  "POST /v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}/disable":
+    "t5-honey-tokens group 1 stub answers 501; scenarios arrive with group 2",
 };

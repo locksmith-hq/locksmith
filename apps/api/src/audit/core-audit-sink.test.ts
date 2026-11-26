@@ -58,3 +58,32 @@ describe("CoreAuditSink", () => {
     expect((err as { getStatus(): number }).getStatus()).toBe(503);
   });
 });
+
+describe("CoreAuditSink admin events", () => {
+  const admin = {
+    kind: "grant.revoked",
+    orgId: ORG,
+    actor: { type: "service", code: "dev_auth" },
+    target: { type: "grant", id: USER },
+    attrs: { agent_id: ORG },
+  } as const;
+
+  it("appends the event as given, with outcome ok", async () => {
+    const { sink: s, calls } = sink(() => Response.json(appendAuditEvent));
+    await s.appendAdmin(admin);
+    expect(await calls[0]!.json()).toEqual({
+      org_id: ORG,
+      kind: "grant.revoked",
+      outcome: "ok",
+      actor: { type: "service", code: "dev_auth" },
+      target: { type: "grant", id: USER },
+      attrs: { agent_id: ORG },
+    });
+  });
+
+  it("fails closed with 503 when the core refuses", async () => {
+    const { sink: s } = sink(() => Response.json({ title: "x", status: 500 }, { status: 500 }));
+    const err = await s.appendAdmin(admin).catch((e: unknown) => e);
+    expect((err as { getStatus(): number }).getStatus()).toBe(503);
+  });
+});

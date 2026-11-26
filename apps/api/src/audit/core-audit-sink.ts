@@ -1,7 +1,7 @@
 import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import type { CoreClient } from "@locksmith/core-client";
 import { CORE_CLIENT } from "../core/core.tokens.js";
-import type { AuditSink, AuthAuditEvent } from "./audit-sink.js";
+import type { AdminAuditEvent, AuditSink, AuthAuditEvent } from "./audit-sink.js";
 
 /**
  * The real audit sink: appends through the Rust core, which hashes, chains and signs. Fails
@@ -24,6 +24,21 @@ export class CoreAuditSink implements AuditSink {
       });
     } catch {
       // Never forward the cause: it could echo core response text.
+      throw new ServiceUnavailableException();
+    }
+  }
+
+  async appendAdmin(event: AdminAuditEvent): Promise<void> {
+    try {
+      await this.core.appendAuditEvent({
+        org_id: event.orgId,
+        kind: event.kind,
+        outcome: "ok",
+        actor: event.actor,
+        target: event.target,
+        attrs: event.attrs,
+      });
+    } catch {
       throw new ServiceUnavailableException();
     }
   }

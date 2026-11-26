@@ -24,7 +24,25 @@ export interface AuthAuditEvent {
  */
 export interface AuditSink {
   append(event: AuthAuditEvent): Promise<void>;
+  /** An admin event (agents, grants): the same ledger and the same fail-closed rule. */
+  appendAdmin(event: AdminAuditEvent): Promise<void>;
 }
+
+/**
+ * An admin audit event as the core takes it: allow-listed kind, ids, integers and short codes
+ * only (Rust `audit::agent_created` and friends). Never a name, description or secret.
+ */
+export interface AdminAuditEvent {
+  kind: "agent.created" | "agent.rotated" | "agent.deleted" | "grant.created" | "grant.revoked";
+  orgId: string;
+  /** Until the console session lands the actor is the dev-auth service, as in Rust. */
+  actor: { type: "service"; code: string } | { type: "user"; id: string };
+  target: { type: "agent" | "grant"; id: string };
+  attrs: Record<string, string | number | boolean>;
+}
+
+/** The actor of admin requests while the org binding is the dev-only header (Rust `DEV_AUTH_ACTOR`). */
+export const DEV_AUTH_ACTOR = { type: "service", code: "dev_auth" } as const;
 
 /**
  * Default sink until the core client lands: fails closed. An audit append that cannot be made
@@ -32,6 +50,10 @@ export interface AuditSink {
  */
 export class FailClosedAuditSink implements AuditSink {
   async append(): Promise<void> {
+    throw new ServiceUnavailableException();
+  }
+
+  async appendAdmin(): Promise<void> {
     throw new ServiceUnavailableException();
   }
 }

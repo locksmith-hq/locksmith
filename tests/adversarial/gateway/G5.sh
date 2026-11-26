@@ -222,6 +222,9 @@ by_key = {(m, t): o for m, t, o in ops}
 
 
 HUMAN_ONLY = {"auth_sign_in", "auth_sign_out"}
+# The token exchange needs a token signed by an external issuer; a valid exchange against a stub issuer is
+# the `workload_abuse` and `workload_exchange` cargo tests (D4), so G5 only sends malformed requests.
+EXTERNAL_TOKEN = {"create_workload_token"}
 
 
 def is_internal(o):
@@ -291,8 +294,19 @@ for m, t in [("GET", "/healthz"), ("GET", "/readyz"), ("GET", "/.well-known/jwks
              ("GET", "/v1/orgs/{org_id}"), ("GET", "/v1/projects"), ("GET", P),
              ("GET", P + "/environments"), ("GET", E), ("GET", E + "/secrets"), ("GET", S),
              ("GET", S + "/versions"), ("GET", "/v1/agents"), ("GET", AG), ("GET", AG + "/grants"),
-             ("GET", "/v1/audit/status"), ("GET", "/v1/mcp/tools"), ("GET", "/v1/mcp/clients")]:
+             ("GET", "/v1/audit/status"), ("GET", "/v1/mcp/tools"), ("GET", "/v1/mcp/clients"),
+             ("GET", "/v1/orgs/current"), ("GET", "/v1/bindings"), ("GET", "/v1/workload-identities")]:
     valid(m, t)
+# A workload-identity policy for org A's agent: the `{id}` the sweep uses for reads, malformed and
+# cross-org probes; it is deleted after the sweep.
+st, d = valid("POST", "/v1/workload-identities", body={
+    "name": name("g5-wi"), "issuer_kind": "github", "audience": "https://g5.example",
+    "agent_id": A["agent"], "conditions": [{"claim": "repository", "pattern": "acme/g5"}]})
+real["id"] = (d or {}).get("id")
+if not real["id"]:
+    failures.append("the workload-identity policy was not created")
+    real["id"] = str(uuid.uuid4())
+valid("GET", "/v1/workload-identities/{id}")
 valid("PUT", "/v1/mcp/tools/{layer}/{tool}", body=valid_body("PUT", "/v1/mcp/tools/{layer}/{tool}"))
 # No client row exists in the fresh org, so revoke answers 404 (the real revoke is in G10 and the e2e).
 call(api, "valid", opid("POST", "/v1/mcp/clients/{client_row_id}/revoke"), "unknown", "POST",
@@ -414,6 +428,7 @@ for method, tmpl, o in ops:
                 text = json.dumps(d)
                 if any(v in text for v in A.values()):
                     failures.append("cross-org %s %s: the response names an org A id" % (oid, label))
+valid("DELETE", "/v1/workload-identities/{id}")
 # A grant naming the other org's secret, both ways.
 call(api, "cross-org", opid("POST", AG + "/grants"), "b-grants-a-secret", "POST",
      fill(AG + "/grants", {"agent_id": B["agent"]}), body={"secret_id": A["secret"]}, headers=dev(B["org"]),
@@ -488,6 +503,8 @@ for method, tmpl, o in ops:
         need = {"internal"}
     elif oid in HUMAN_ONLY:
         need = {"human-refused"}  # a real human token is G7's; here the dev header must be refused
+    elif oid in EXTERNAL_TOKEN:
+        need = {"malformed"}
     else:
         need = {"valid"}
         if params_of(o, "path") or params_of(o, "query") or o.get("requestBody") or method == "GET":

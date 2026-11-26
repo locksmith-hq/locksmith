@@ -313,7 +313,7 @@ describe("issuerHost", () => {
     expect(issuerHost("https://user@idp.example:8443/x?y#z")).toBe("idp.example");
     expect(issuerHost("not a url")).toBeUndefined();
     expect(issuerHost("")).toBeUndefined();
-    expect(issuerHost("http://[::1]:8080/x")).toBe("::1");
+    expect(issuerHost("http://[::1]:8080/x")).toBe("[::1]");
   });
 });
 

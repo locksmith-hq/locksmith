@@ -7,7 +7,7 @@ import { UsersService } from "./users.service.js";
 /** Lowercased host of an issuer URL (the only identity attribute the ledger records), if it has one. */
 export function issuerHost(issuer: string): string | undefined {
   try {
-    return new URL(issuer).hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1") || undefined;
+    return new URL(issuer).hostname.toLowerCase() || undefined;
   } catch {
     return undefined;
   }

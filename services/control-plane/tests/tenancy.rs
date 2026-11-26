@@ -147,7 +147,7 @@ async fn migrations_apply_once_and_restart_as_owner_applies_nothing() {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(policies, 18);
+    assert_eq!(policies, 19);
 
     let value_like: Vec<String> = sql::query_scalar(
         "SELECT table_name || '.' || column_name FROM information_schema.columns

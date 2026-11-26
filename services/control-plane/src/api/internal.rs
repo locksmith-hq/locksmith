@@ -1335,3 +1335,109 @@ pub async fn revoked_agent_clients(
         .await?;
     Ok(Json(RevokedAgentClientSet { items }))
 }
+
+/// Largest daily limit a lease may carry (a sanity bound, not a product limit).
+const BUDGET_LIMIT_MAX: i32 = 1_000_000_000;
+/// Largest block of calls one lease may ask for.
+const BUDGET_LEASE_MAX: i32 = 1_000;
+
+/// Body of `POST /internal/v1/budgets/lease`: the gateway asks for a block of calls from an
+/// agent's daily budget.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BudgetLeaseRequest {
+    /// The agent the budget belongs to.
+    pub agent_id: Uuid,
+    /// The grant for a per-grant budget; absent for the agent-wide budget.
+    pub grant_id: Option<Uuid>,
+    /// The daily limit in calls, as the gateway read it from the grant or agent budget.
+    #[schema(minimum = 1, maximum = 1_000_000_000)]
+    pub daily_limit: i32,
+    /// How many calls the gateway wants now (`min(10, remaining)`).
+    #[schema(minimum = 1, maximum = 1_000)]
+    pub count: i32,
+}
+
+/// What the core granted from today's budget.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BudgetLease {
+    /// Calls granted now: between 0 and `count`, never past the daily limit. `0` means the
+    /// day's budget is spent.
+    pub granted: i32,
+    /// Calls leased so far today, this lease included.
+    pub used: i32,
+    /// The UTC day the lease counts against (`YYYY-MM-DD`); the counter restarts at its end.
+    pub day: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/internal/v1/budgets/lease",
+    operation_id = "lease_budget_calls",
+    tag = "internal",
+    summary = "Lease a block of calls from an agent's daily budget (gateway only)",
+    description = "Atomically raises today's (UTC) call counter for the agent, or for one of its grants, by up to `count` and never past `daily_limit`, and answers how many were granted. Concurrent leases cannot together exceed the limit. `granted` is `0` once the day's budget is spent. The agent must exist in the org (else `404`), and a grant must belong to it. Counts and ids only.",
+    params(
+        ("X-Locksmith-Org" = Uuid, Header, description = "The agent's org (the token's `org`)"),
+    ),
+    request_body = BudgetLeaseRequest,
+    responses(
+        (status = 200, description = "Leased (possibly 0)", body = BudgetLease),
+        (status = 404, description = "The agent or grant does not exist in the org", body = Problem, content_type = "application/problem+json"),
+        InternalWriteErrors,
+    ),
+    security(("service_token" = []))
+)]
+pub async fn lease_budget_calls(
+    State(state): State<AppState>,
+    org: ServiceOrgBinding,
+    ApiJson(input): ApiJson<BudgetLeaseRequest>,
+) -> Result<Json<BudgetLease>, ApiError> {
+    if !(1..=BUDGET_LIMIT_MAX).contains(&input.daily_limit) {
+        return Err(ApiError::new(
+            Kind::Validation,
+            "daily_limit must be between 1 and 1000000000",
+        ));
+    }
+    if !(1..=BUDGET_LEASE_MAX).contains(&input.count) {
+        return Err(ApiError::new(
+            Kind::Validation,
+            "count must be between 1 and 1000",
+        ));
+    }
+    let org_id = org.org_id;
+    let lease = state
+        .db()
+        .with_org(org_id, move |c| {
+            Box::pin(async move {
+                exists_or_404(
+                    c,
+                    sql::query_scalar("SELECT 1 FROM agents WHERE id = $1").bind(input.agent_id),
+                )
+                .await?;
+                if let Some(g) = input.grant_id {
+                    exists_or_404(
+                        c,
+                        sql::query_scalar(
+                            "SELECT 1 FROM agent_grants WHERE id = $1 AND agent_id = $2",
+                        )
+                        .bind(g)
+                        .bind(input.agent_id),
+                    )
+                    .await?;
+                }
+                crate::budget_store::lease(
+                    c,
+                    org_id,
+                    input.agent_id,
+                    input.grant_id,
+                    input.daily_limit,
+                    input.count,
+                )
+                .await
+                .map_err(ApiError::from)
+            })
+        })
+        .await?;
+    Ok(Json(lease))
+}

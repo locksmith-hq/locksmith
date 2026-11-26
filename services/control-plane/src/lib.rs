@@ -5,6 +5,7 @@ pub mod api;
 pub mod app;
 pub mod audit;
 pub mod auth;
+pub mod budget_store;
 pub mod checkpoint;
 pub mod config;
 pub mod db;

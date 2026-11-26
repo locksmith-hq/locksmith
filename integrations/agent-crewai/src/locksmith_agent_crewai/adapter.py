@@ -35,6 +35,17 @@ class _SharedAuth(httpx.Auth):
         return self._inner.async_auth_flow(request)
 
 
+def _drop_none_args(tool: Any) -> None:
+    """CrewAI fills every optional schema field with `None`; the gateway rejects unknown or null
+    arguments, so the call keeps only the fields that carry a value."""
+    run = tool._run
+
+    def _run(**kwargs: Any) -> Any:
+        return run(**{k: v for k, v in kwargs.items() if v is not None})
+
+    object.__setattr__(tool, "_run", _run)
+
+
 def locksmith_tools(client: AgentClient) -> MCPServerAdapter:
     """Use it as `with locksmith_tools(client) as tools: Agent(..., tools=tools)`; raises
     `AgentError("unsafe_tool")` if a kept tool has a value-shaped schema."""
@@ -43,6 +54,8 @@ def locksmith_tools(client: AgentClient) -> MCPServerAdapter:
         *ALLOWED_TOOLS,
     )
     try:
+        for tool in adapter.tools:
+            _drop_none_args(tool)
         assert_no_value_tools(
             {"name": t.name, "inputSchema": t.args_schema.model_json_schema()} for t in adapter.tools
         )

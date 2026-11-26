@@ -19,7 +19,8 @@ use uuid::Uuid;
 use crate::grants::Grant;
 
 type Key = (Uuid, Option<Uuid>);
-type Limiter<C> = RateLimiter<Key, HashMapStateStore<Key>, C, NoOpMiddleware<<C as Clock>::Instant>>;
+type Limiter<C> =
+    RateLimiter<Key, HashMapStateStore<Key>, C, NoOpMiddleware<<C as Clock>::Instant>>;
 
 /// Why a call was refused. The slug is the `budget_exceeded` error code; no field carries a secret.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +60,10 @@ impl Default for BudgetGuard<DefaultClock> {
 
 impl<C: Clock + Clone> BudgetGuard<C> {
     pub fn with_clock(clock: C) -> Self {
-        Self { clock, limiters: Mutex::new(HashMap::new()) }
+        Self {
+            clock,
+            limiters: Mutex::new(HashMap::new()),
+        }
     }
 
     fn limiter(&self, per_minute: NonZeroU32) -> Arc<Limiter<C>> {
@@ -77,10 +81,15 @@ impl<C: Clock + Clone> BudgetGuard<C> {
     pub fn check(&self, agent: Uuid, grant: &Grant) -> Result<(), BudgetRefusal> {
         let scopes = [
             (grant.agent_budget.and_then(|b| b.per_minute), (agent, None)),
-            (grant.budget.and_then(|b| b.per_minute), (agent, Some(grant.grant_id))),
+            (
+                grant.budget.and_then(|b| b.per_minute),
+                (agent, Some(grant.grant_id)),
+            ),
         ];
         for (per_minute, key) in scopes {
-            let Some(n) = per_minute.and_then(NonZeroU32::new) else { continue };
+            let Some(n) = per_minute.and_then(NonZeroU32::new) else {
+                continue;
+            };
             if let Err(not_until) = self.limiter(n).check_key(&key) {
                 return Err(BudgetRefusal::Burst {
                     retry_after: not_until.wait_time_from(self.clock.now()),
@@ -111,7 +120,10 @@ mod tests {
     }
 
     fn per_minute(n: u32) -> Option<Budget> {
-        Some(Budget { per_minute: Some(n), per_day: None })
+        Some(Budget {
+            per_minute: Some(n),
+            per_day: None,
+        })
     }
 
     #[test]

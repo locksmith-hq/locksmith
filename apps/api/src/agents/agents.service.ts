@@ -254,6 +254,30 @@ export class AgentsService {
     return paged(rows.map(toGrant), page);
   }
 
+  /** Rust `internal::agent_grants`: the agent's unexpired grants for the gateway; an unknown agent is a 404. */
+  async activeGrants(agentId: string) {
+    await this.requireAgent(agentId);
+    const rows = await this.grantQuery()
+      .where("g.agent_id", "=", agentId)
+      .where((eb) => eb.or([eb("g.expires_at", "is", null), eb("g.expires_at", ">", sql<Date>`now()`)]))
+      .orderBy("g.id")
+      .execute();
+    return {
+      agent_id: agentId,
+      items: rows.map((r) => {
+        const g = toGrant(r);
+        return {
+          grant_id: g.id,
+          secret_id: g.secret_id,
+          secret_name: g.secret_name,
+          mode: g.mode,
+          scope: g.scope,
+          expires_at: g.expires_at,
+        };
+      }),
+    };
+  }
+
   async revokeGrant(agentId: string, grantId: string): Promise<void> {
     const res = await this.tx
       .deleteFrom("agent_grants")

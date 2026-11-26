@@ -283,3 +283,78 @@ describe("agent grants", () => {
     await app.close();
   });
 });
+
+describe("GET /internal/v1/agents/{id}/grants", () => {
+  const TOKEN = "gateway-service-token-0123456789abcdef";
+  const withToken = async () => {
+    process.env["LOCKSMITH_GATEWAY_SERVICE_TOKEN"] = TOKEN;
+    return twoOrgs();
+  };
+
+  it("serves only unexpired grants to the gateway, scoped to the named org", async () => {
+    const { app, http, a, b } = await withToken();
+    const secret = await secretIn(a);
+    const agent = (await http.post("/v1/agents").set(DEV_ORG, a).send({ name: "x" }).expect(201)).body.agent.id;
+    const url = `/v1/agents/${agent}/grants`;
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    const live = (await http.post(url).set(DEV_ORG, a).send({ secret_id: secret, expires_at: future }).expect(201))
+      .body;
+    const admin = new pg.Client({ connectionString: adminUrl });
+    await admin.connect();
+    const second = (
+      await admin.query(
+        "insert into secrets (org_id, project_id, environment_id, name) select org_id, project_id, environment_id, 's2' from secrets where id = $1 returning id",
+        [secret],
+      )
+    ).rows[0].id;
+    const expired = (await http.post(url).set(DEV_ORG, a).send({ secret_id: second }).expect(201)).body;
+    await admin.query("update agent_grants set expires_at = now() - interval '1 minute' where id = $1", [expired.id]);
+    await admin.end();
+
+    const internal = `/internal/v1/agents/${agent}/grants`;
+    const r = await http.get(internal).set("Authorization", `Bearer ${TOKEN}`).set("X-Locksmith-Org", a).expect(200);
+    expect(r.body).toEqual({
+      agent_id: agent,
+      items: [
+        {
+          grant_id: live.id,
+          secret_id: secret,
+          secret_name: "s",
+          mode: "relay",
+          scope: null,
+          expires_at: future,
+        },
+      ],
+    });
+    // Another org's id is the same 404 as an agent that does not exist.
+    await http.get(internal).set("Authorization", `Bearer ${TOKEN}`).set("X-Locksmith-Org", b).expect(404);
+    await http
+      .get(`/internal/v1/agents/${MISSING}/grants`)
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .set("X-Locksmith-Org", a)
+      .expect(404);
+    await app.close();
+  });
+
+  it("refuses a missing or wrong token, a bad org header, and the dev header, all as 401", async () => {
+    const { app, http, a } = await withToken();
+    const agent = (await http.post("/v1/agents").set(DEV_ORG, a).send({ name: "x" }).expect(201)).body.agent.id;
+    const internal = `/internal/v1/agents/${agent}/grants`;
+    await http.get(internal).set("X-Locksmith-Org", a).expect(401);
+    await http.get(internal).set("Authorization", "Bearer wrong").set("X-Locksmith-Org", a).expect(401);
+    await http.get(internal).set("Authorization", `Bearer ${TOKEN}x`).set("X-Locksmith-Org", a).expect(401);
+    await http.get(internal).set("Authorization", `Bearer ${TOKEN}`).expect(401);
+    await http.get(internal).set("Authorization", `Bearer ${TOKEN}`).set("X-Locksmith-Org", "nope").expect(401);
+    await http.get(internal).set(DEV_ORG, a).expect(401);
+    await app.close();
+    // No token configured: every internal call fails closed, even with the right-looking header.
+    delete process.env["LOCKSMITH_GATEWAY_SERVICE_TOKEN"];
+    const closed = await appWith("1");
+    await request(closed.getHttpServer())
+      .get(internal)
+      .set("Authorization", `Bearer ${TOKEN}`)
+      .set("X-Locksmith-Org", a)
+      .expect(401);
+    await closed.close();
+  });
+});

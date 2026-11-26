@@ -1,4 +1,5 @@
 import json
+import os
 import secrets
 from types import SimpleNamespace
 
@@ -7,7 +8,7 @@ from locksmith_agent import AgentClient, AgentError
 
 from locksmith_agent_google_adk import adapter, locksmith_toolset
 
-ENROL = secrets.token_urlsafe(32)
+ENROL = os.environ.get("ADVERSARIAL_CANARY") or secrets.token_urlsafe(32)
 RELAY = {
     "secret_id": "00000000-0000-4000-8000-000000000001",
     "version": 1,

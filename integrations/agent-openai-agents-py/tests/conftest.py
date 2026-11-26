@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,10 @@ def scan_transcript(tmp_path):
     def scan(entries: list, canary: str) -> None:
         transcript = tmp_path / "transcript.jsonl"
         transcript.write_text("".join(json.dumps(e, default=str) + "\n" for e in entries))
+        keep = os.environ.get("ADVERSARIAL_ARTIFACT_DIR")
+        if keep:  # tests/adversarial/cases/F2.sh scans these with the oracle too
+            with open(Path(keep) / f"{Path(__file__).resolve().parents[1].name}.jsonl", "a") as fh:
+                fh.write(transcript.read_text())
         canaries = tmp_path / "canaries"
         canaries.write_text(canary + "\n")
         res = subprocess.run(

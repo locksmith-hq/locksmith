@@ -1,0 +1,43 @@
+{
+  "action_id": 2,
+  "activity_id": 1,
+  "actor": {
+    "user": {
+      "uid": "agent:0197c1f0-0000-7000-8000-0000000000a1"
+    }
+  },
+  "category_uid": 2,
+  "class_uid": 2004,
+  "cloud": {
+    "provider": "Locksmith"
+  },
+  "finding_info": {
+    "title": "workload_identity.denied",
+    "uid": "0197c1f0-0000-7000-8000-0000000000c3"
+  },
+  "message": "workload_identity.denied",
+  "metadata": {
+    "product": {
+      "name": "Locksmith audit ledger",
+      "vendor_name": "Locksmith"
+    },
+    "tenant_uid": "0197c1f0-0000-7000-8000-00000000000a",
+    "uid": "42",
+    "version": "1.3.0"
+  },
+  "osint": [],
+  "resources": [
+    {
+      "uid": "secret:0197c1f0-0000-7000-8000-0000000000b2"
+    }
+  ],
+  "severity_id": 3,
+  "time": 1764000000123,
+  "type_uid": 200401,
+  "unmapped": {
+    "host": "api.example.com",
+    "reason": "no_grant",
+    "secret_id": "0197c1f0-0000-7000-8000-0000000000b2",
+    "status": 403
+  }
+}

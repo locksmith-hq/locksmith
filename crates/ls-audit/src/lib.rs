@@ -25,6 +25,7 @@ use sha2::{Digest, Sha256};
 pub mod checkpoint;
 pub mod event;
 pub mod export;
+pub mod ocsf;
 #[cfg(feature = "postgres")]
 pub mod pg;
 pub mod verifier;

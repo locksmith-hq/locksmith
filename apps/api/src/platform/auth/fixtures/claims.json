@@ -1,0 +1,28 @@
+{
+  "$comment": "Claim shapes recorded from a Cognito user pool and a Keycloak realm, with values replaced by fakes. Tokens are re-signed in the test with a throwaway key; no real token or key is stored.",
+  "cognito": {
+    "issuer": "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_TESTPOOL",
+    "audience": "test-client-id",
+    "claims": {
+      "sub": "11111111-2222-3333-4444-555555555555",
+      "token_use": "id",
+      "email": "ada@example.test",
+      "email_verified": true,
+      "cognito:username": "ada",
+      "auth_time": 1763900000
+    }
+  },
+  "keycloak": {
+    "issuer": "http://localhost:8180/realms/locksmith",
+    "audience": "locksmith-api",
+    "claims": {
+      "sub": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      "typ": "Bearer",
+      "azp": "locksmith-desktop",
+      "preferred_username": "grace",
+      "email": "grace@example.test",
+      "email_verified": false,
+      "auth_time": 1763900100
+    }
+  }
+}

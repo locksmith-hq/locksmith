@@ -48,11 +48,6 @@
     },
     {
       "method": "POST",
-      "path": "/internal/v1/audit/human-events",
-      "owner": "rust"
-    },
-    {
-      "method": "POST",
       "path": "/internal/v1/mcp/agent-clients",
       "owner": "rust"
     },

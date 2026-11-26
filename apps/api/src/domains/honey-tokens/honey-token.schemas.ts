@@ -19,7 +19,7 @@ const HoneyToken = z.object({
 
 const HoneyTokenList = z.object({ items: z.array(HoneyToken) });
 
-const NewHoneyToken = z.object({ name: z.string().min(1).max(100), template: HoneyTemplate });
+export const NewHoneyToken = z.object({ name: z.string().min(1).max(100), template: HoneyTemplate });
 
 /** RFC 9457 problem body shared by every error response (B1 task 4.4 owns the filter). */
 const Problem = z.object({ type: z.string(), title: z.string(), status: z.number().int(), detail: z.string() });

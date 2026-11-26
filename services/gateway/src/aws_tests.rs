@@ -490,6 +490,39 @@ async fn aws_response_carrying_the_base_credential_is_withheld() {
     );
 }
 
+/// T9 task 2.3, AWS: a call over the grant's burst limit is `429 budget_exceeded` with
+/// `Retry-After` before any decrypt or STS call, and writes one `budget.exceeded` event.
+#[tokio::test]
+async fn aws_over_budget_is_429_before_decrypt_and_sts() {
+    let sts = mock_sts(sts_ok(MOCK_SECRET)).await;
+    let mut g = grant(VEND, "delegate", Some(s3_scope()));
+    g.budget = Some(crate::grants::Budget {
+        per_minute: Some(1),
+        per_day: None,
+    });
+    let h = Harness::start(
+        vec![binding(VEND, "r", true)],
+        vec![g],
+        Some(format!("{}/", sts.uri())),
+        MemoryAudit::default(),
+    );
+    let (status, _) = h.post(json!({})).await;
+    assert_eq!(status, StatusCode::OK, "inside the limit");
+    let (fetches, calls, events) = (h.fetches(), sts_calls(&sts).await, h.audit.events().len());
+
+    let (status, body) = h.post(json!({})).await;
+    assert_eq!(
+        (status, slug(&body).as_str()),
+        (StatusCode::TOO_MANY_REQUESTS, "budget_exceeded")
+    );
+    assert_no_base(&body);
+    assert_eq!(h.fetches(), fetches, "no decrypt");
+    assert_eq!(sts_calls(&sts).await, calls, "no STS call");
+    let ev = h.audit.events();
+    assert_eq!(ev.len(), events + 1, "one event");
+    assert_eq!(ev[events].kind, EventKind::BudgetExceeded("per_minute"));
+}
+
 #[tokio::test]
 async fn aws_ledger_failure_withholds_credentials() {
     let sts = mock_sts(sts_ok(MOCK_SECRET)).await;

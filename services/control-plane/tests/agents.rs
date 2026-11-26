@@ -246,13 +246,7 @@ fn payload(token: &str) -> Value {
 /// the secret or a minted token.
 #[tokio::test]
 async fn enrollment_secret_is_shown_once_and_stored_only_as_a_hash() {
-    let capture = common::Capture::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(capture.clone())
-        .with_max_level(tracing::Level::TRACE)
-        .with_ansi(false)
-        .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let capture = common::capture_logs();
 
     let f = Fixture::start().await;
     let r = call(
@@ -358,6 +352,7 @@ async fn enrollment_secret_is_shown_once_and_stored_only_as_a_hash() {
     assert_problem(&r, StatusCode::BAD_REQUEST, "validation");
 
     let logs = capture.contents();
+    let all_logs = capture.all_contents();
     assert!(logs.contains("agent token minted"), "{logs}");
     for needle in [
         secret_body,
@@ -365,7 +360,7 @@ async fn enrollment_secret_is_shown_once_and_stored_only_as_a_hash() {
         token.as_str(),
         &hash,
     ] {
-        assert!(!logs.contains(needle), "logs leak a credential");
+        assert!(!all_logs.contains(needle), "logs leak a credential");
     }
 }
 

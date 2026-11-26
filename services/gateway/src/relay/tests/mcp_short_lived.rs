@@ -348,17 +348,7 @@ async fn mcp_short_lived_refusals_issue_nothing() {
 /// carry the credential.
 #[tokio::test]
 async fn mcp_short_lived_logs_hold_no_value_and_no_credential() {
-    let cap = Capture::default();
-    let writer = cap.clone();
-    let filter = crate::mcp_endpoint::cap_rmcp_logs(tracing_subscriber::EnvFilter::new(
-        "trace,rmcp::service=trace",
-    ));
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_writer(move || writer.clone())
-        .with_ansi(false)
-        .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let cap = crate::test_capture::start();
 
     let h = harness(on()).await;
     echo_mock().mount(&h.upstream).await;
@@ -383,10 +373,11 @@ async fn mcp_short_lived_logs_hold_no_value_and_no_credential() {
     h.grants.set(AGENT, Vec::new());
     issue(&h, &sid, SECRET, 60).await;
 
-    let logs = cap.0.lock().unwrap().clone();
+    let logs = cap.all(crate::test_capture::Which::Capped);
     let text = String::from_utf8_lossy(&logs);
     assert!(
-        text.contains("short-lived credential issued"),
+        cap.scoped(crate::test_capture::Which::Capped)
+            .contains("short-lived credential issued"),
         "capture saw the issue"
     );
     assert_clean("trace logs", &logs);

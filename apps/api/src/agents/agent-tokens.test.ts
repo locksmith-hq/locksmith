@@ -24,12 +24,19 @@ let container: StartedTestContainer;
 let db: Database;
 let adminUrl: string;
 let coreDown = false;
+let jwksMode: "keys" | "unconfigured" = "keys";
+const JWK = { kty: "OKP", crv: "Ed25519", x: "A".repeat(43), kid: "test-kid", alg: "EdDSA", use: "sig" };
 const verifyCalls: { enrollment_hash: string | null }[] = [];
 const core = {
   verifyEnrollmentSecret: async (r: { enrollment_secret: string; enrollment_hash: string | null }) => {
     if (coreDown) throw new Error("core LEAK-CANARY");
     verifyCalls.push({ enrollment_hash: r.enrollment_hash });
     return { valid: r.enrollment_hash === `$argon2id$stub:${r.enrollment_secret}` };
+  },
+  getAgentTokenJwks: async () => {
+    if (coreDown) throw new Error("core LEAK-CANARY");
+    if (jwksMode === "unconfigured") throw Object.assign(new Error("not configured"), { status: 503 });
+    return { keys: [JWK] };
   },
   mintAgentToken: async (r: { org_id: string; agent_id: string }) => ({
     token: `jwt.${r.org_id}.${r.agent_id}`,
@@ -170,6 +177,37 @@ describe("POST /v1/agent-tokens", () => {
     coreDown = true;
     try {
       const r = await http.post("/v1/agent-tokens").send({ enrollment_secret: secret }).expect(503);
+      expect(JSON.stringify(r.body)).not.toContain("LEAK-CANARY");
+    } finally {
+      coreDown = false;
+    }
+  });
+});
+
+describe("GET /.well-known/jwks.json", () => {
+  it("relays the core's public key set, cacheable for a minute, with no credential", async () => {
+    jwksMode = "keys";
+    const r = await request(app.getHttpServer()).get("/.well-known/jwks.json").expect(200);
+    expect(r.headers["cache-control"]).toBe("public, max-age=60");
+    expect(r.body).toEqual({ keys: [JWK] });
+    expect(JSON.stringify(r.body)).not.toContain('"d"');
+  });
+
+  it("is an empty set when the core has no signing key", async () => {
+    jwksMode = "unconfigured";
+    try {
+      const r = await request(app.getHttpServer()).get("/.well-known/jwks.json").expect(200);
+      expect(r.body).toEqual({ keys: [] });
+    } finally {
+      jwksMode = "keys";
+    }
+  });
+
+  it("fails closed with a problem 503 and leaks nothing when the core is down", async () => {
+    coreDown = true;
+    try {
+      const r = await request(app.getHttpServer()).get("/.well-known/jwks.json").expect(503);
+      expect(r.body.status).toBe(503);
       expect(JSON.stringify(r.body)).not.toContain("LEAK-CANARY");
     } finally {
       coreDown = false;

@@ -118,6 +118,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/agent-tokens/mint", post(agent_token_api::mint))
         .route("/v1/agent-tokens/verify", post(agent_token_api::verify))
+        .route("/v1/agent-tokens/jwks", get(agent_token_api::jwks))
         .route(
             "/v1/workload-tokens/mint",
             post(agent_token_api::mint_workload),

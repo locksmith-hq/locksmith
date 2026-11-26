@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/v1/agent-tokens/jwks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public keys that verify agent tokens
+         * @description The Ed25519 public key agent tokens are signed with. The NestJS API serves it at `/.well-known/jwks.json`. 503 when the signing key is not configured.
+         */
+        get: operations["getAgentTokenJwks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-tokens/mint": {
         parameters: {
             query?: never;
@@ -307,6 +327,25 @@ export interface components {
             enrollment_hash: string;
             enrollment_secret: string;
         };
+        /** @description One public key in the JWKS (RFC 7517, RFC 8037 `OKP`/`Ed25519`). */
+        Jwk: {
+            /** @constant */
+            alg: "EdDSA";
+            /** @constant */
+            crv: "Ed25519";
+            /** @description The RFC 7638 SHA-256 thumbprint of this key. */
+            kid: string;
+            /** @constant */
+            kty: "OKP";
+            /** @constant */
+            use: "sig";
+            /** @description The public key, base64url without padding. */
+            x: string;
+        };
+        /** @description The key set agent tokens verify against. Public keys only. */
+        JwkSet: {
+            keys: components["schemas"]["Jwk"][];
+        };
         /** @description Mint for an agent the caller (the NestJS API) has already authenticated; the core makes no authorization decision. */
         MintAgentTokenRequest: {
             /** Format: uuid */
@@ -442,6 +481,44 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAgentTokenJwks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JwkSet"];
+                };
+            };
+            /** @description Missing or invalid caller credentials; nothing was done. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A dependency (database or KMS) is unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     mintAgentToken: {
         parameters: {
             query?: never;

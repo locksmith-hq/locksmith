@@ -16,6 +16,7 @@ export type SignCheckpointResponse = S["SignCheckpointResponse"];
 export type MintAgentTokenRequest = S["MintAgentTokenRequest"];
 export type MintWorkloadTokenRequest = S["MintWorkloadTokenRequest"];
 export type MintedToken = S["MintedToken"];
+export type JwkSet = S["JwkSet"];
 export type VerifyTokenRequest = S["VerifyTokenRequest"];
 export type VerifyWorkloadTokenRequest = S["VerifyWorkloadTokenRequest"];
 export type AgentTokenVerdict = S["AgentTokenVerdict"];
@@ -75,6 +76,8 @@ export function createCoreClient(opts: CoreClientOptions) {
     verifyAgentToken: async (body: VerifyTokenRequest) => unwrap(await raw.POST("/v1/agent-tokens/verify", { body })),
     mintWorkloadToken: async (body: MintWorkloadTokenRequest) => unwrap(await raw.POST("/v1/workload-tokens/mint", { body })),
     verifyWorkloadToken: async (body: VerifyWorkloadTokenRequest) => unwrap(await raw.POST("/v1/workload-tokens/verify", { body })),
+    /** The public key set agent tokens verify against (public keys only). */
+    getAgentTokenJwks: async () => unwrap(await raw.GET("/v1/agent-tokens/jwks")),
     wrapDek: async (body: WrapDekRequest) => unwrap(await raw.POST("/v1/deks/wrap", { body })),
     unwrapDek: async (body: UnwrapDekRequest) => unwrap(await raw.POST("/v1/deks/unwrap", { body })),
     /** The returned `enrollment_secret` is shown to the human once; store only `enrollment_hash`. */

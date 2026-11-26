@@ -21,9 +21,9 @@ describe("contract drift", () => {
   });
 
   const ops = Object.values(spec.paths).flatMap((p) => Object.values(p).map((o) => o.operationId));
-  it("has exactly the eight OC-9 G1 operations plus the two B1-5 enrollment ones", () => {
+  it("has exactly the eight OC-9 G1 operations plus the two B1-5 enrollment ones and the JWKS read", () => {
     expect([...ops].sort()).toEqual([
-      "appendAuditEvent", "generateEnrollmentSecret", "mintAgentToken", "mintWorkloadToken",
+      "appendAuditEvent", "generateEnrollmentSecret", "getAgentTokenJwks", "mintAgentToken", "mintWorkloadToken",
       "signAuditCheckpoint", "unwrapDek", "verifyAgentToken", "verifyEnrollmentSecret",
       "verifyWorkloadToken", "wrapDek",
     ]);

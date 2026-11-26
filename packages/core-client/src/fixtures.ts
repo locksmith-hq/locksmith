@@ -3,7 +3,7 @@
 // token, key or secret value appears here.
 import type {
   AgentTokenVerdict, AppendAuditEventResponse, EnrollmentSecretVerdict, GeneratedEnrollmentSecret,
-  MintedToken, Problem, SignCheckpointResponse, UnwrapDekResponse, WorkloadTokenVerdict, WrapDekResponse,
+  JwkSet, MintedToken, Problem, SignCheckpointResponse, UnwrapDekResponse, WorkloadTokenVerdict, WrapDekResponse,
 } from "./index";
 
 export const fixtureIds = {
@@ -33,6 +33,10 @@ export const verifyWorkloadToken: WorkloadTokenVerdict = {
   valid: true, org_id: fixtureIds.org, policy_id: fixtureIds.policy, agent_id: fixtureIds.agent,
 };
 export const verifyWorkloadTokenInvalid: WorkloadTokenVerdict = { valid: false, reason: "not_trusted" };
+// Fake key: the right shape (32 base64url bytes) but all zero, so it verifies nothing.
+export const getAgentTokenJwks: JwkSet = {
+  keys: [{ kty: "OKP", crv: "Ed25519", x: "A".repeat(43), kid: "fixture-kid", alg: "EdDSA", use: "sig" }],
+};
 export const wrapDek: WrapDekResponse = { wrapped_dek: "Zml4dHVyZS13cmFwcGVkLWRlaw==", key_id: "gateway:v1", dek_handle: "fixture_dek_handle_0000000" };
 export const unwrapDek: UnwrapDekResponse = { dek_handle: wrapDek.dek_handle, key_id: "gateway:v1" };
 // Fake: the right shape (`lse_` + 86 base64url chars) but all zero bytes, so it names no agent.
@@ -52,5 +56,5 @@ export const badRequest: Problem = { type: "about:blank", title: "Bad Request", 
 export const fixtures = {
   appendAuditEvent, signAuditCheckpoint, mintAgentToken, verifyAgentToken,
   mintWorkloadToken, verifyWorkloadToken, wrapDek, unwrapDek,
-  generateEnrollmentSecret, verifyEnrollmentSecret,
+  generateEnrollmentSecret, verifyEnrollmentSecret, getAgentTokenJwks,
 } as const;

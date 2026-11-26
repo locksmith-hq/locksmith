@@ -8,10 +8,11 @@ import { AgentTokensService } from "./agent-tokens.service.js";
 import { AgentsController } from "./agents.controller.js";
 import { AgentsService } from "./agents.service.js";
 import { InternalAgentsController } from "./internal-agents.controller.js";
+import { JwksController } from "./jwks.controller.js";
 
 @Module({
   imports: [AuthModule, UsersModule],
   providers: [AgentsService, AgentTokensService, OrgBindingGuard, ServiceOrgGuard],
-  controllers: [AgentsController, AgentTokensController, InternalAgentsController],
+  controllers: [AgentsController, AgentTokensController, InternalAgentsController, JwksController],
 })
 export class AgentsModule {}

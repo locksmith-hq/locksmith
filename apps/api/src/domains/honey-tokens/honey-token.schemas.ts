@@ -40,7 +40,7 @@ export const honeyTokenRoutes: RouteDef[] = [
     path: base,
     params: envParams,
     body: NewHoneyToken,
-    responses: { 201: HoneyToken, 401: Problem, 403: Problem, 404: Problem, 422: Problem },
+    responses: { 201: HoneyToken, 401: Problem, 403: Problem, 404: Problem, 409: Problem, 422: Problem, 503: Problem },
   }),
   defineRoute({
     method: "POST",

@@ -165,6 +165,10 @@ describe("honey tokens service", () => {
     // B's own project and environment, A's token id: nothing there.
     expect(await problem(svc.disable(scopeB, a.id))).toBe("not-found");
     expect(await problem(svc.remove(scopeB, a.id))).toBe("not-found");
+    // B naming A's own project and environment: only row-level security stops this one.
+    const asB = { orgId: ORG_B, projectId: PROJ_A, environmentId: ENV_A };
+    expect(await problem(svc.disable(asB, a.id))).toBe("not-found");
+    expect(await problem(svc.remove(asB, a.id))).toBe("not-found");
     // B naming A's project is not even an environment B can see.
     expect(await problem(svc.list({ orgId: ORG_B, projectId: PROJ_A, environmentId: ENV_A }))).toBe("not-found");
     expect(await problem(svc.create({ orgId: ORG_B, projectId: PROJ_A, environmentId: ENV_A }, { name: "x", template: "slack_token" }))).toBe("not-found");

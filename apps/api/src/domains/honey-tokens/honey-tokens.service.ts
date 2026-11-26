@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { sql } from "kysely";
 import { ProblemException } from "../../platform/problem/problem.js";
 import { TenantService, type Tx } from "../../tenant/tenant.service.js";
@@ -58,6 +58,8 @@ const view = (r: Row): HoneyTokenView => ({
  */
 @Injectable()
 export class HoneyTokensService {
+  private readonly log = new Logger("honey-tokens");
+
   constructor(
     @Inject(TenantService) private readonly tenant: TenantService,
     @Inject(HONEY_MINTER) private readonly minter: HoneyMinter | null,
@@ -105,7 +107,7 @@ export class HoneyTokensService {
       // No sealed value: remove the row so the name can be reused. Best effort; the original error wins.
       await this.tenant
         .run(s.orgId, (tx) => tx.deleteFrom("secrets").where("id", "=", id).where("kind", "=", "honey").execute())
-        .catch(() => {});
+        .catch(() => this.log.error({ event: "honey.mint_cleanup_failed" }));
       throw e;
     }
     return this.get(s, id);

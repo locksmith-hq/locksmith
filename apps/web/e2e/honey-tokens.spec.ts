@@ -80,7 +80,7 @@ test("honey tokens: create, copy the plant command, see a triggered state, disab
 
   // The triggered state comes from the fixture.
   const triggered = `triggered-${stamp}`;
-  await expect(page.getByRole("cell", { name: triggered })).toBeVisible();
+  await expect(page.getByRole("cell", { name: triggered, exact: true })).toBeVisible();
   await expect(page.getByText("2026-11-26T02:15:00Z")).toBeVisible();
 
   // Create.
@@ -88,7 +88,7 @@ test("honey tokens: create, copy the plant command, see a triggered state, disab
   await page.getByLabel("Honey token name").fill(name);
   await page.getByLabel("Honey token template").selectOption("github_pat");
   await page.getByRole("button", { name: "Create honey token" }).click();
-  await expect(page.getByRole("cell", { name })).toBeVisible();
+  await expect(page.getByRole("cell", { name, exact: true })).toBeVisible();
 
   // Copy the plant command: a name and a placeholder path, never a value.
   await page.getByRole("button", { name: `Copy plant command: ${name}` }).click();
@@ -100,7 +100,7 @@ test("honey tokens: create, copy the plant command, see a triggered state, disab
   await expect(page.getByRole("button", { name: `Disable ${name}` })).toBeDisabled();
   await page.getByRole("button", { name: `Delete ${name}` }).click();
   await page.getByRole("button", { name: "Confirm delete" }).click();
-  await expect(page.getByRole("cell", { name })).toHaveCount(0);
+  await expect(page.getByRole("cell", { name, exact: true })).toHaveCount(0);
 
   // No decoy value anywhere in the DOM.
   const html = await page.content();

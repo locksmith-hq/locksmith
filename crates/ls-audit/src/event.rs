@@ -137,9 +137,9 @@ pub mod kind {
     pub const MCP_ISSUER_REVOKE: Code = Code::new("mcp.issuer_revoke");
     /// An agent used a honey (decoy) secret: it resolved a honey-backed binding, or the relay saw a
     /// honey value in a request. Outcome `denied`. Allow-listed fields: the token (target
-    /// `secret:<id>`), the agent (actor), `honey_template`, `honey_path` (where it was caught:
+    /// `secret:<id>`), the agent (actor), `honey_template`, `path` (where it was caught:
     /// `relay`, `inject`, `delegate`, `git`, `aws`, `db`, `short_lived` or `value_match`),
-    /// `binding_id` (the grant the agent reached it through, when one was checked) and `peer` (the
+    /// `binding_id` (the grant the agent reached it through, when one was checked) and `peer_address` (the
     /// caller's IP address, when known). Never the decoy value or any request content (change
     /// t5-honey-tokens).
     pub const HONEY_TRIGGERED: Code = Code::new("honey.triggered");
@@ -256,10 +256,10 @@ pub mod attr {
     /// The id of the binding a honey secret was reached through.
     pub const BINDING_ID: Code = Code::new("binding_id");
     /// Where the gateway caught a honey token (a closed code such as `relay` or `value_match`;
-    /// never a URL path).
-    pub const HONEY_PATH: Code = Code::new("honey_path");
+    /// never a URL or request path).
+    pub const PATH: Code = Code::new("path");
     /// The caller's IP address (a [`Host`](super::Host) holding an IP literal, no port).
-    pub const PEER: Code = Code::new("peer");
+    pub const PEER_ADDRESS: Code = Code::new("peer_address");
 
     /// Every code in this module: the allow-list a request string is checked against.
     pub const ALL: &[Code] = &[
@@ -289,8 +289,8 @@ pub mod attr {
         CLAIMS,
         HONEY_TEMPLATE,
         BINDING_ID,
-        HONEY_PATH,
-        PEER,
+        PATH,
+        PEER_ADDRESS,
     ];
 
     /// The code spelled `s`, if it is on the allow-list.

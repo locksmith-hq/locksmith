@@ -668,17 +668,17 @@ async fn honey_triggered_lands_in_the_ledger_by_reference_and_by_value() {
         assert_eq!(r.outcome, "denied");
         assert_eq!(attr(r, "honey_template"), Some("aws_access_key"));
     }
-    assert_eq!(attr(&rows[0], "honey_path"), Some("relay"));
+    assert_eq!(attr(&rows[0], "path"), Some("relay"));
     let honey_grant_text = honey_grant_id.to_string();
     assert_eq!(
         attr(&rows[0], "binding_id"),
         Some(honey_grant_text.as_str())
     );
-    assert_eq!(attr(&rows[0], "peer"), Some("192.0.2.7"));
-    assert_eq!(attr(&rows[1], "honey_path"), Some("value_match"));
+    assert_eq!(attr(&rows[0], "peer_address"), Some("192.0.2.7"));
+    assert_eq!(attr(&rows[1], "path"), Some("value_match"));
     assert_eq!(attr(&rows[1], "binding_id"), None);
-    assert_eq!(attr(&rows[1], "peer"), None);
-    let allowed = ["binding_id", "honey_path", "honey_template", "peer"];
+    assert_eq!(attr(&rows[1], "peer_address"), None);
+    let allowed = ["binding_id", "honey_template", "path", "peer_address"];
     for r in &rows {
         for (k, _, _) in r.attrs.as_ref().unwrap().entries() {
             assert!(allowed.contains(&k.as_str()), "unexpected field {k}");

@@ -285,7 +285,7 @@ impl std::fmt::Display for AuditError {
 
 impl std::error::Error for AuditError {}
 
-/// Where the gateway caught a honey token (`honey_path` in the ledger).
+/// Where the gateway caught a honey token (`path` in the ledger; `honey_path` on the wire).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HoneyPath {
     /// `POST /v1/relay` with an agent token, and the agent MCP `relay_http_request` tool.

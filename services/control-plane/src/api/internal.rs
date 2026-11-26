@@ -279,7 +279,8 @@ pub enum RelayEventKind {
     CredentialIssued,
     /// An agent used a honey (decoy) secret (t5-honey-tokens): by reference on one of the
     /// gateway's paths, or by value inside a relayed request. Outcome `denied`, with `honey_path`
-    /// and optionally `binding_id` and `peer`; the control plane adds the token's template and
+    /// and optionally `binding_id` and `peer` (stored as the ledger attrs `path`, `binding_id` and
+    /// `peer_address`); the control plane adds the token's template and
     /// refuses (`409`) a secret that is not of kind `honey`.
     #[serde(rename = "honey.triggered")]
     HoneyTriggered,
@@ -532,7 +533,7 @@ impl NewRelayEvent {
         let path = self
             .honey_path
             .ok_or_else(|| ApiError::validation("`honey.triggered` needs `honey_path`"))?;
-        let mut attrs = Attrs::new().code(attr::HONEY_PATH, path.code());
+        let mut attrs = Attrs::new().code(attr::PATH, path.code());
         if let Some(b) = self.binding_id {
             attrs = attrs.id(attr::BINDING_ID, b);
         }
@@ -546,7 +547,7 @@ impl NewRelayEvent {
                 std::net::IpAddr::V6(v6) => format!("[{v6}]"),
             })
             .map_err(|_| ApiError::validation("`peer` must be an IP address"))?;
-            attrs = attrs.host(attr::PEER, host);
+            attrs = attrs.host(attr::PEER_ADDRESS, host);
         }
         Ok(Event {
             kind: self.kind.code(),

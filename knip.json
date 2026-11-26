@@ -56,7 +56,9 @@
         "src/db/types.ts"
       ],
       "ignoreDependencies": [
-        "kysely-codegen"
+        "kysely-codegen",
+        "@nestjs/platform-express",
+        "pino-http"
       ]
     }
   }

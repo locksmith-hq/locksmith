@@ -969,3 +969,93 @@ test("notifications: inbox with mark read, owner rules matrix, and the 403 and n
   await nav("Notifications");
   expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
 });
+
+const honeyTok = (id: string, name: string, over = {}) => ({
+  id,
+  name,
+  template: "aws_access_key" as const,
+  created_at: "2026-11-25T10:00:00Z",
+  disabled_at: null,
+  last_triggered_at: null,
+  ...over,
+});
+
+function honeyClient(items: ReturnType<typeof honeyTok>[]) {
+  return {
+    listProjects: vi.fn().mockResolvedValue([{ id: "p1", name: "web" }]),
+    listEnvironments: vi.fn().mockResolvedValue([{ id: "e1", name: "prod" }]),
+    listHoneyTokens: vi.fn().mockImplementation(() => Promise.resolve({ items })),
+    createHoneyToken: vi.fn().mockResolvedValue(honeyTok("h9", "new-decoy")),
+    disableHoneyToken: vi.fn().mockResolvedValue(honeyTok("h1", "decoy-a")),
+    deleteHoneyToken: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+test("honey tokens: create, copy the plant command, disable and delete; metadata only", async () => {
+  const client = honeyClient([
+    honeyTok("h1", "decoy-a"),
+    honeyTok("h2", "decoy-b", { last_triggered_at: "2026-11-26T02:15:00Z" }),
+  ]);
+  m.agentsClient.mockReturnValue(client as never);
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  render(<App />);
+  await nav("Honey tokens");
+  expect(await screen.findByText("decoy-a")).toBeInTheDocument();
+  expect(screen.getByText("2026-11-26T02:15:00Z")).toBeInTheDocument();
+  expect(screen.getByText("never")).toBeInTheDocument();
+
+  await userEvent.type(screen.getByLabelText("Honey token name"), "new-decoy");
+  await userEvent.selectOptions(screen.getByLabelText("Honey token template"), "github_pat");
+  await userEvent.click(screen.getByRole("button", { name: "Create honey token" }));
+  expect(client.createHoneyToken).toHaveBeenCalledWith("p1", "e1", { name: "new-decoy", template: "github_pat" });
+
+  await userEvent.click(screen.getByRole("button", { name: "Copy plant command: decoy-a" }));
+  expect(writeText).toHaveBeenCalledWith("smith honey plant decoy-a --into .env");
+
+  await userEvent.click(screen.getByRole("button", { name: "Disable decoy-a" }));
+  expect(client.disableHoneyToken).toHaveBeenCalledWith("p1", "e1", "h1");
+
+  await userEvent.click(screen.getByRole("button", { name: "Delete decoy-b" }));
+  await userEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+  expect(client.deleteHoneyToken).toHaveBeenCalledWith("p1", "e1", "h2");
+  expect(document.body.textContent).not.toMatch(/AKIA/);
+});
+
+test("honey tokens: a 403 for a non-owner shows the error and no control plane means a hint", async () => {
+  const client = honeyClient([]);
+  client.listHoneyTokens.mockRejectedValue(new Error("only an org owner can manage honey tokens"));
+  m.agentsClient.mockReturnValue(client as never);
+  const r = render(<App />);
+  await nav("Honey tokens");
+  expect(await screen.findByRole("alert")).toHaveTextContent("only an org owner");
+  r.unmount();
+  m.agentsClient.mockReturnValue(null as never);
+  render(<App />);
+  await nav("Honey tokens");
+  expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
+});
+
+test("org audit: a honey.triggered event shows its allow-listed fields, other kinds do not", async () => {
+  const e = (seq: number, kind: string) => ({
+    id: `e${seq}`,
+    seq,
+    at: "2026-11-26T02:15:00Z",
+    kind,
+    actor: "agent:a1",
+    target: "secret:s1",
+    outcome: "denied",
+    attrs: { path: "relay", host: "api.example.com" },
+    digest: "d",
+    prev_digest: "p",
+  });
+  m.agentsClient.mockReturnValue({
+    auditStatus: vi.fn().mockResolvedValue({ head_seq: 2, latest_checkpoint: null, latest_verify: null }),
+    listAuditEvents: vi.fn().mockResolvedValue({ items: [e(2, "honey.triggered"), e(1, "relay.outcome")] }),
+  } as never);
+  render(<App />);
+  await nav("Org audit");
+  expect(await screen.findByText("honey.triggered")).toBeInTheDocument();
+  expect(screen.getByText("path=relay host=api.example.com")).toBeInTheDocument();
+  expect(screen.getAllByText(/host=api\.example\.com/)).toHaveLength(1);
+});

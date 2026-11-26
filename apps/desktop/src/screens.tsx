@@ -15,6 +15,11 @@ import {
   bindingDetails,
   buildWorkloadIdentity,
   hasPrefixCondition,
+  HONEY_TEMPLATES,
+  HONEY_TEMPLATE_LABEL,
+  honeyPlantCommand,
+  type HoneyTemplate,
+  type HoneyToken,
   isPrefixPattern,
   NOTIFICATION_CHANNELS,
   NOTIFICATION_KINDS,
@@ -1405,6 +1410,12 @@ export function WorkloadIdentities(_: ScreenProps) {
 
 /** The org's control-plane audit ledger (events plus chain status), read-only. */
 
+/** The allow-listed attributes of a ledger event as `key=value` pairs. Identifier-typed values only. */
+const eventFields = (attrs: object) =>
+  Object.entries(attrs)
+    .map(([k, v]) => `${k}=${String(v)}`)
+    .join(" ");
+
 export function OrgAudit(_: ScreenProps) {
   const client = api.agentsClient();
   const [status, setStatus] = useState<api.AuditStatus | null>(null);
@@ -1509,6 +1520,7 @@ export function OrgAudit(_: ScreenProps) {
                     <th>Actor</th>
                     <th>Target</th>
                     <th>Outcome</th>
+                    <th>Fields</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1522,6 +1534,7 @@ export function OrgAudit(_: ScreenProps) {
                         <td className="mono">{e.actor}</td>
                         <td className="mono wrap">{breakable(e.target ?? "")}</td>
                         <td>{e.outcome}</td>
+                        <td className="mono wrap">{e.kind === "honey.triggered" ? eventFields(e.attrs) : ""}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -2304,6 +2317,214 @@ export function Notifications(_: ScreenProps) {
             </tbody>
           </table>
         </div>
+      )}
+    </section>
+  );
+}
+
+function HoneyRow({
+  t,
+  onDisable,
+  onDelete,
+}: {
+  t: HoneyToken;
+  onDisable: () => Promise<unknown>;
+  onDelete: () => Promise<unknown>;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(honeyPlantCommand(t.name));
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <tr>
+      <td className="strong">{t.name}</td>
+      <td>{HONEY_TEMPLATE_LABEL[t.template]}</td>
+      <td className="mono nowrap">{t.last_triggered_at ?? "never"}</td>
+      <td>{t.disabled_at ? "Disabled" : "Active"}</td>
+      <td>
+        <button type="button" className="btn sm" onClick={() => void copy()}>
+          Copy plant command: {t.name}
+        </button>
+        {copied && <span role="status"> Copied</span>}
+        <button type="button" className="btn sm" disabled={t.disabled_at !== null} onClick={() => void onDisable()}>
+          Disable {t.name}
+        </button>
+        {confirming ? (
+          <span role="alertdialog" aria-label={`Delete ${t.name}?`}>
+            Delete {t.name}?{" "}
+            <button
+              type="button"
+              className="btn sm danger-text"
+              onClick={() =>
+                void onDelete().then(
+                  () => setConfirming(false),
+                  () => setConfirming(false),
+                )
+              }
+            >
+              Confirm delete
+            </button>
+            <button type="button" className="btn sm quiet" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button type="button" className="btn sm danger-text" onClick={() => setConfirming(true)}>
+            Delete {t.name}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/** Decoy credentials per environment. Owner only; metadata and the plant command, never a value. */
+export function HoneyTokens(_: ScreenProps) {
+  const client = api.agentsClient();
+  if (!client)
+    return (
+      <section className="screen" aria-labelledby="h-honey">
+        <Head id="h-honey" title="Honey tokens" />
+        <NoClient what="honey tokens" />
+      </section>
+    );
+  return <HoneyTokensView client={client} />;
+}
+
+function HoneyTokensView({ client }: { client: Client }) {
+  const [pid, setPid] = useState("");
+  const [eid, setEid] = useState("");
+  const [name, setName] = useState("");
+  const [template, setTemplate] = useState<HoneyTemplate>(HONEY_TEMPLATES[0]!);
+  const ps = useCpList(() => client.listProjects(), [client]);
+  const project = pid || ps.items?.[0]?.id || "";
+  const es = useCpList<Environment>(
+    () => (project ? client.listEnvironments(project) : Promise.resolve([])),
+    [client, project],
+  );
+  const env = eid || es.items?.[0]?.id || "";
+  const hs = useCpList<HoneyToken>(
+    async () => (project && env ? (await client.listHoneyTokens(project, env)).items : []),
+    [client, project, env],
+  );
+  return (
+    <section className="screen" aria-labelledby="h-honey">
+      <Head
+        id="h-honey"
+        title="Honey tokens"
+        sub="Decoy credentials that raise an alert when an agent uses one. Values are never shown here."
+      />
+      {(ps.err || es.err || hs.err) && <Alert>{ps.err || es.err || hs.err}</Alert>}
+      {!ps.items ? (
+        <ListWait what="projects" l={ps} />
+      ) : ps.items.length === 0 ? (
+        <Empty icon="key">
+          <b>No projects yet, so no honey tokens.</b>
+        </Empty>
+      ) : (
+        <>
+          <label>
+            Project{" "}
+            <select
+              aria-label="Project"
+              value={project}
+              onChange={(e) => {
+                setPid(e.target.value);
+                setEid("");
+              }}
+            >
+              {ps.items.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {es.items && es.items.length === 0 ? (
+            <Empty icon="key">No environments in this project.</Empty>
+          ) : (
+            es.items && (
+              <label>
+                Environment{" "}
+                <select aria-label="Environment" value={env} onChange={(e) => setEid(e.target.value)}>
+                  {es.items.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )
+          )}
+          {env && (
+            <form
+              className="card"
+              aria-label="Create honey token"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void hs
+                  .run(() => client.createHoneyToken(project, env, { name, template }))
+                  .then(
+                    () => setName(""),
+                    () => {},
+                  );
+              }}
+            >
+              <input aria-label="Honey token name" required value={name} onChange={(e) => setName(e.target.value)} />
+              <select
+                aria-label="Honey token template"
+                value={template}
+                onChange={(e) => setTemplate(e.target.value as HoneyTemplate)}
+              >
+                {HONEY_TEMPLATES.map((t) => (
+                  <option key={t} value={t}>
+                    {HONEY_TEMPLATE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="btn primary sm">
+                Create honey token
+              </button>
+            </form>
+          )}
+          {env &&
+            (!hs.items ? (
+              <ListWait what="honey tokens" l={hs} />
+            ) : hs.items.length === 0 ? (
+              <Empty icon="key">No honey tokens in this environment.</Empty>
+            ) : (
+              <div className="table-wrap">
+                <table className="grid">
+                  <caption className="sr-only">Honey tokens</caption>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Template</th>
+                      <th>Last triggered</th>
+                      <th>State</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hs.items.map((t) => (
+                      <HoneyRow
+                        key={t.id}
+                        t={t}
+                        onDisable={() => hs.run(() => client.disableHoneyToken(project, env, t.id))}
+                        onDelete={() => hs.run(() => client.deleteHoneyToken(project, env, t.id))}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+        </>
       )}
     </section>
   );

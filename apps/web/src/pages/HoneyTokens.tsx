@@ -5,6 +5,8 @@ import { Head } from "@locksmith/ui";
 import {
   ApiError,
   HONEY_TEMPLATES,
+  HONEY_TEMPLATE_LABEL as TEMPLATE_LABEL,
+  honeyPlantCommand as plantCommand,
   type Client,
   type HoneyTemplate,
   type HoneyToken,
@@ -12,16 +14,6 @@ import {
 import { QueryState } from "../QueryState";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
-
-const TEMPLATE_LABEL: Record<HoneyTemplate, string> = {
-  aws_access_key: "AWS access key",
-  github_pat: "GitHub token",
-  slack_token: "Slack token",
-  generic_api_key: "Generic API key",
-};
-
-/** The command to plant a decoy. A literal placeholder path: it carries a name, never a value. */
-const plantCommand = (name: string) => `smith honey plant ${name} --into .env`;
 
 function Row({ t, onDisable, onDelete }: { t: HoneyToken; onDisable: () => void; onDelete: () => void }) {
   const [confirming, setConfirming] = useState(false);

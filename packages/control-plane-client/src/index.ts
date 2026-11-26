@@ -53,6 +53,14 @@ export const HONEY_TEMPLATES: readonly HoneyTemplate[] = [
   "slack_token",
   "generic_api_key",
 ];
+export const HONEY_TEMPLATE_LABEL: Record<HoneyTemplate, string> = {
+  aws_access_key: "AWS access key",
+  github_pat: "GitHub token",
+  slack_token: "Slack token",
+  generic_api_key: "Generic API key",
+};
+/** The command to plant a decoy. A literal placeholder path: it carries a name, never a value. */
+export const honeyPlantCommand = (name: string): string => `smith honey plant ${name} --into .env`;
 export type NotificationChannel = NotificationRule["channel"];
 export type NotificationAudience = NotificationRule["audience"];
 

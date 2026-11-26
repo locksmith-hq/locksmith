@@ -1097,6 +1097,11 @@ export interface components {
              */
             grant_id?: string | null;
         };
+        /**
+         * @description Which budget limit refused a call (`budget.exceeded`).
+         * @enum {string}
+         */
+        BudgetLimitKind: "per_minute" | "per_day" | "per_day_unavailable";
         /** @description One claim test as shown to callers: `pattern` ends in `*` for a prefix match. */
         ConditionView: {
             claim: string;
@@ -1393,6 +1398,7 @@ export interface components {
              */
             host?: string | null;
             kind: components["schemas"]["RelayEventKind"];
+            limit_kind?: components["schemas"]["BudgetLimitKind"] | null;
             method?: components["schemas"]["RelayMethod"] | null;
             outcome: components["schemas"]["RelayOutcome"];
             /**
@@ -1666,7 +1672,7 @@ export interface components {
          * @description The kind of a relay event.
          * @enum {string}
          */
-        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued";
+        RelayEventKind: "relay.attempt" | "relay.outcome" | "relay.denied" | "git.fetch" | "git.push" | "git.denied" | "aws.credentials.issued" | "aws.credentials.denied" | "db.session.denied" | "db.session.opened" | "db.session.closed" | "credential.issued" | "budget.exceeded";
         /**
          * @description The upstream request method.
          * @enum {string}

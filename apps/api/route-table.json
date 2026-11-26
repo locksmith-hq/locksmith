@@ -74,7 +74,7 @@
     {
       "method": "GET",
       "path": "/v1/agents",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",
@@ -89,7 +89,7 @@
     {
       "method": "GET",
       "path": "/v1/agents/{agent_id}",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",
@@ -99,7 +99,7 @@
     {
       "method": "GET",
       "path": "/v1/agents/{agent_id}/grants",
-      "owner": "rust"
+      "owner": "nest"
     },
     {
       "method": "POST",

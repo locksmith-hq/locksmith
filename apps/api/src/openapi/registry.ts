@@ -1,3 +1,4 @@
+import { Agent, AgentGrant, AgentParams } from "../agents/agents.schemas.js";
 import { NewOrg, Org, OrgParams } from "../orgs/orgs.schemas.js";
 import {
   Environment,
@@ -106,3 +107,26 @@ const projectRoutes: RouteDef[] = [
   }),
 ];
 routes.push(...projectRoutes);
+
+const agentRoutes: RouteDef[] = [
+  defineRoute({
+    method: "GET",
+    path: "/v1/agents",
+    query: PageQuerySchema,
+    responses: { 200: Paged(Agent), ...E(400, 401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/v1/agents/{agent_id}",
+    params: AgentParams,
+    responses: { 200: Agent, ...E(401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/v1/agents/{agent_id}/grants",
+    params: AgentParams,
+    query: PageQuerySchema,
+    responses: { 200: Paged(AgentGrant), ...E(400, 401, 403, 404, 503) },
+  }),
+];
+routes.push(...agentRoutes);

@@ -5,6 +5,7 @@ import { TerminusModule } from "@nestjs/terminus";
 import { LoggerModule } from "nestjs-pino";
 import { AuthModule } from "./auth/auth.module.js";
 import { UsersModule } from "./users/users.module.js";
+import { AgentsModule } from "./agents/agents.module.js";
 import { OrgsModule } from "./orgs/orgs.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
@@ -35,6 +36,7 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
     UsersModule,
     OrgsModule,
     ProjectsModule,
+    AgentsModule,
     JobsModule,
   ],
   controllers: [HealthController],

@@ -7,7 +7,7 @@ import { UsersService } from "./users.service.js";
 /** Lowercased host of an issuer URL (the only identity attribute the ledger records), if it has one. */
 export function issuerHost(issuer: string): string | undefined {
   try {
-    return new URL(issuer).hostname.toLowerCase() || undefined;
+    return new URL(issuer).hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1") || undefined;
   } catch {
     return undefined;
   }
@@ -35,8 +35,10 @@ export class SessionService {
     // Never succeed unaudited: without a core there is nowhere to write the event.
     const sink = this.sink;
     if (!sink) throw new ProblemException("unavailable");
-    const user = await this.users.resolve(identity);
+    // The core requires a bare issuer host: refuse before any user or org is created.
     const host = issuerHost(identity.issuer);
+    if (!host) throw new ProblemException("unauthenticated");
+    const user = await this.users.resolve(identity);
     const event = (k: string) => ({ orgId: user.orgId, kind: k, actorUserId: user.userId, issuerHost: host });
     try {
       // Known gap: Rust appends org.personal_created in the user transaction. Here the user commits

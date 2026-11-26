@@ -56,7 +56,9 @@ export class UsersService {
     if (existing) return this.known(tx, existing, email);
 
     // Serialise first sign-ins of one identity: the loser waits, then finds the winner's row.
-    await sql`select pg_advisory_xact_lock(hashtextextended(${`user:${issuer.length}:${issuer}${subject}`}, 0))`.execute(tx);
+    await sql`select pg_advisory_xact_lock(hashtextextended(${`user:${issuer.length}:${issuer}${subject}`}, 0))`.execute(
+      tx,
+    );
     const again = await this.find(tx, issuer, subject);
     if (again) return this.known(tx, again, email);
 

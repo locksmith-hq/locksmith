@@ -45,7 +45,10 @@ let admin: pg.Client;
 let appUrl: string;
 
 const migration = (name: string) =>
-  readFileSync(fileURLToPath(new URL(`../../../../../services/control-plane/migrations/${name}`, import.meta.url)), "utf8");
+  readFileSync(
+    fileURLToPath(new URL(`../../../../../services/control-plane/migrations/${name}`, import.meta.url)),
+    "utf8",
+  );
 
 class FakeSink extends AuditSink {
   events: AuditEventInput[] = [];
@@ -91,7 +94,10 @@ class Noop {
 
 async function makeApp(sink: AuditSink | null): Promise<INestApplication> {
   const mod = await Test.createTestingModule({
-    imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => ({ DATABASE_URL: appUrl })] }), DbModule],
+    imports: [
+      ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => ({ DATABASE_URL: appUrl })] }),
+      DbModule,
+    ],
     controllers: [SessionController, Noop],
     providers: [
       UsersService,
@@ -101,8 +107,7 @@ async function makeApp(sink: AuditSink | null): Promise<INestApplication> {
       { provide: APP_GUARD, useClass: AuthGuard },
       { provide: APP_FILTER, useClass: ProblemFilter },
     ],
-  })
-    .compile();
+  }).compile();
   const app = mod.createNestApplication();
   await app.init();
   return app;
@@ -142,7 +147,8 @@ describe("POST /v1/auth/sign-in", () => {
     expect([await count("users"), await count("orgs")]).toEqual([users0 + 1, orgs0 + 1]);
     expect(sink.kinds()).toEqual(["org.personal_created", "auth.sign_in"]);
 
-    const row = (await admin.query("select id, personal_org_id from users where subject = $1", [identity.subject])).rows[0];
+    const row = (await admin.query("select id, personal_org_id from users where subject = $1", [identity.subject]))
+      .rows[0];
     const org = (await admin.query("select name from orgs where id = $1", [row.personal_org_id])).rows[0];
     expect(org.name).toBe("Personal");
     for (const e of sink.events) {
@@ -154,6 +160,18 @@ describe("POST /v1/auth/sign-in", () => {
     expect(second.status).toBe(204);
     expect([await count("users"), await count("orgs")]).toEqual([users0 + 1, orgs0 + 1]);
     expect(sink.kinds()).toEqual(["auth.sign_in"]);
+    await app.close();
+  });
+
+  it("an issuer with no usable host is a 401 before any user or org is created", async () => {
+    const sink = new FakeSink();
+    const app = await makeApp(sink);
+    const { token } = login({ issuer: "not a url" });
+    const [users0, orgs0] = [await count("users"), await count("orgs")];
+    const res = await request(app.getHttpServer()).post("/v1/auth/sign-in").set("authorization", `Bearer ${token}`);
+    expect(res.status).toBe(401);
+    expect([await count("users"), await count("orgs")]).toEqual([users0, orgs0]);
+    expect(sink.events).toEqual([]);
     await app.close();
   });
 
@@ -183,7 +201,9 @@ describe("POST /v1/auth/sign-in", () => {
     await request(app.getHttpServer()).post("/v1/auth/sign-in").set("authorization", `Bearer ${b.token}`).expect(204);
     expect([await count("users"), await count("orgs")]).toEqual([users0 + 1, orgs0]);
     const rows = (
-      await admin.query("select personal_org_id from users where subject = any($1)", [[a.identity.subject, b.identity.subject]])
+      await admin.query("select personal_org_id from users where subject = any($1)", [
+        [a.identity.subject, b.identity.subject],
+      ])
     ).rows;
     expect(new Set(rows.map((r) => r.personal_org_id)).size).toBe(1);
     expect(sink.kinds()).toEqual(["auth.sign_in"]);
@@ -293,18 +313,33 @@ describe("issuerHost", () => {
     expect(issuerHost("https://user@idp.example:8443/x?y#z")).toBe("idp.example");
     expect(issuerHost("not a url")).toBeUndefined();
     expect(issuerHost("")).toBeUndefined();
+    expect(issuerHost("http://[::1]:8080/x")).toBe("::1");
   });
 });
 
 describe("CoreAuditSink", () => {
   it("POSTs the contract body with the bearer header and maps failures", async () => {
-    const seen: { url: string | undefined; method: string | undefined; auth: string | undefined; org: string | undefined; ctype: string | undefined; body: string }[] = [];
+    const seen: {
+      url: string | undefined;
+      method: string | undefined;
+      auth: string | undefined;
+      org: string | undefined;
+      ctype: string | undefined;
+      body: string;
+    }[] = [];
     let status = 200;
     const server = http.createServer((req, res) => {
       let body = "";
       req.on("data", (c) => (body += c));
       req.on("end", () => {
-        seen.push({ url: req.url, method: req.method, auth: req.headers.authorization, org: req.headers["x-locksmith-org"] as string | undefined, ctype: req.headers["content-type"], body });
+        seen.push({
+          url: req.url,
+          method: req.method,
+          auth: req.headers.authorization,
+          org: req.headers["x-locksmith-org"] as string | undefined,
+          ctype: req.headers["content-type"],
+          body,
+        });
         res.writeHead(status).end("{}");
       });
     });
@@ -316,11 +351,23 @@ describe("CoreAuditSink", () => {
       const userId = "0192f3a0-0000-7000-8000-00000000000b";
       await sink.append({ orgId, kind: "auth.sign_in", actorUserId: userId, issuerHost: "issuer.example.com" });
       await sink.append({ orgId, kind: "auth.sign_out", actorUserId: userId });
-      expect(seen[0]).toMatchObject({ url: "/internal/v1/audit/human-events", method: "POST", auth: "Bearer test-core-token", org: orgId, ctype: "application/json" });
-      expect(JSON.parse(seen[0]!.body!)).toEqual({ kind: "auth.sign_in", user_id: userId, issuer: "issuer.example.com" });
+      expect(seen[0]).toMatchObject({
+        url: "/internal/v1/audit/human-events",
+        method: "POST",
+        auth: "Bearer test-core-token",
+        org: orgId,
+        ctype: "application/json",
+      });
+      expect(JSON.parse(seen[0]!.body!)).toEqual({
+        kind: "auth.sign_in",
+        user_id: userId,
+        issuer: "issuer.example.com",
+      });
       expect(JSON.parse(seen[1]!.body!)).toEqual({ kind: "auth.sign_out", user_id: userId });
       status = 500;
-      await expect(sink.append({ orgId, kind: "auth.sign_in", actorUserId: userId })).rejects.toMatchObject({ reason: "rejected" });
+      await expect(sink.append({ orgId, kind: "auth.sign_in", actorUserId: userId })).rejects.toMatchObject({
+        reason: "rejected",
+      });
     } finally {
       await new Promise((r) => server.close(r));
     }

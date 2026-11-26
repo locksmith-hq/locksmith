@@ -28,6 +28,7 @@ pub fn operations() -> Vec<(String, String)> {
 }
 
 /// Panics unless `body` is valid for `POST <path>` answering `status`.
+#[allow(dead_code)] // not used by every test binary
 pub fn assert_matches_contract(path: &str, status: u16, body: &Value) {
     assert_method_matches_contract("post", path, status, body);
 }

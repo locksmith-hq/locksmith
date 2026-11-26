@@ -43,6 +43,7 @@ services:
       OPENBAO_GATEWAY_TOKEN: ${OPENBAO_GATEWAY_TOKEN:-dev-only-gateway}
       OPENBAO_GATEWAY_OAUTH_TOKEN: ${OPENBAO_GATEWAY_OAUTH_TOKEN:-dev-only-gateway-oauth}
       OPENBAO_AUDIT_CHECKPOINT_TOKEN: ${OPENBAO_AUDIT_CHECKPOINT_TOKEN:-dev-only-audit-checkpoint}
+      OPENBAO_CORE_TOKEN: ${OPENBAO_CORE_TOKEN:-dev-only-core}
     volumes: ["./openbao-init.sh:/openbao-init.sh:ro"]
     ports: ["127.0.0.1:8200:8200"]
     healthcheck:
@@ -50,6 +51,30 @@ services:
       interval: 3s
       timeout: 10s
       retries: 20
+
+  # B2: the Rust core service (audit, tokens, DEK wrap) for the NestJS API. Internal only: the caller
+  # presents LOCKSMITH_CORE_SERVICE_TOKEN; the port is published on loopback for the host-run API and
+  # `just core-check`, never on another interface. Needs the schema from `just api` for audit and
+  # workload verify; wrap, tokens and checkpoints work without it.
+  core:
+    build: {context: ../.., dockerfile: services/core/Dockerfile}
+    environment:
+      LOCKSMITH_CORE_BIND: 0.0.0.0:8090
+      LOCKSMITH_CORE_SERVICE_TOKEN: ${LOCKSMITH_CORE_SERVICE_TOKEN:-dev-only-core-service-token-0123456789}
+      LOCKSMITH_CORE_DATABASE_URL: postgres://locksmith_app:${LOCKSMITH_APP_PASSWORD:-locksmith-app-dev-only}@postgres:5432/${POSTGRES_DB:-locksmith}
+      LOCKSMITH_CORE_OPENBAO_ADDR: http://openbao:8200
+      LOCKSMITH_CORE_OPENBAO_TOKEN: ${OPENBAO_AUDIT_CHECKPOINT_TOKEN:-dev-only-audit-checkpoint}
+      LOCKSMITH_CORE_OPENBAO_DEK_TOKEN: ${OPENBAO_CORE_TOKEN:-dev-only-core}
+      LOCKSMITH_CORE_AGENT_SIGNING_KEY: ${LOCKSMITH_CORE_AGENT_SIGNING_KEY:-AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
+    ports: ["127.0.0.1:${LOCKSMITH_CORE_PORT:-8091}:8090"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      openbao: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8090 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && read -r l <&3 && [[ $$l == *200* ]]"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
 
   upstream:
     image: wiremock/wiremock:3.13.2

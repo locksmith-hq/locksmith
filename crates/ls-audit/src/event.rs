@@ -147,6 +147,48 @@ pub mod kind {
     /// A person disconnected an OAuth connection; the outcome says whether the provider revoked
     /// the grant.
     pub const OAUTH_DISCONNECTED: Code = Code::new("oauth.disconnected");
+
+    /// Every code in this module: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[
+        RELAY_ATTEMPT,
+        RELAY_OUTCOME,
+        RELAY_DENIED,
+        GIT_FETCH,
+        GIT_PUSH,
+        GIT_DENIED,
+        AWS_CREDENTIALS_ISSUED,
+        AWS_CREDENTIALS_DENIED,
+        DB_SESSION_DENIED,
+        DB_SESSION_OPENED,
+        DB_SESSION_CLOSED,
+        AGENT_CREATED,
+        AGENT_ROTATED,
+        AGENT_DELETED,
+        GRANT_CREATED,
+        GRANT_REVOKED,
+        WORKLOAD_IDENTITY_CREATED,
+        WORKLOAD_IDENTITY_DELETED,
+        WORKLOAD_IDENTITY_EXCHANGED,
+        WORKLOAD_IDENTITY_DENIED,
+        AUTH_SIGN_IN,
+        AUTH_SIGN_OUT,
+        AUTH_VERIFY_FAILED,
+        ORG_PERSONAL_CREATED,
+        MCP_CALL,
+        MCP_UPSTREAM_CALL,
+        MCP_UPSTREAM_OUTCOME,
+        CREDENTIAL_ISSUED,
+        MCP_ISSUER_REVOKE,
+        OAUTH_CONNECTED,
+        OAUTH_CONNECT_FAILED,
+        OAUTH_REFRESH_FAILED,
+        OAUTH_DISCONNECTED,
+    ];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
 }
 
 /// Common outcomes.
@@ -156,6 +198,14 @@ pub mod outcome {
     pub const PENDING: Code = Code::new("pending");
     pub const DENIED: Code = Code::new("denied");
     pub const ERROR: Code = Code::new("error");
+
+    /// Every code in this module: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[OK, PENDING, DENIED, ERROR];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
 }
 
 /// Attribute keys in use. New keys are new constants.
@@ -212,6 +262,58 @@ pub mod attr {
     /// The provider id of an OAuth connection from the provider registry (a
     /// [`Text`](super::Text) the control plane checks against `[a-z0-9-]{1,32}`).
     pub const PROVIDER: Code = Code::new("provider");
+
+    /// Every code in this module: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[
+        AGENT_ID,
+        SECRET_ID,
+        VERSION,
+        MODE,
+        EXPIRES_AT,
+        GRANTS_REVOKED,
+        HOST,
+        PORT,
+        METHOD,
+        STATUS,
+        ATTEMPT_ID,
+        ISSUER,
+        REASON,
+        REGION,
+        DURATION_SECS,
+        DURATION_MS,
+        BYTES_IN,
+        BYTES_OUT,
+        LAYER,
+        TOOL,
+        CREDENTIAL_ID,
+        UPSTREAM,
+        DECISION,
+        CLAIMS,
+        PERSON,
+        CONNECTION_ID,
+        PROVIDER,
+    ];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
+}
+
+/// Service names that may appear as `Actor::Service`.
+pub mod service {
+    use super::Code;
+    pub const GATEWAY: Code = Code::new("gateway");
+    pub const CONTROL_PLANE: Code = Code::new("control_plane");
+    pub const DEV_AUTH: Code = Code::new("dev_auth");
+
+    /// Every service code: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[GATEWAY, CONTROL_PLANE, DEV_AUTH];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
 }
 
 /// Who acted.
@@ -684,6 +786,57 @@ mod tests {
             let v: serde_json::Value = serde_json::from_str(bad).unwrap();
             assert_eq!(StoredAttrs::from_json(&v), None, "{bad}");
         }
+    }
+
+    /// Every constant in a registry module's source is on its `ALL` list (a new constant that
+    /// is not listed would be refused by the core service).
+    #[test]
+    fn registries_list_every_constant() {
+        let src = include_str!("event.rs");
+        for (name, all) in [
+            ("kind", kind::ALL),
+            ("outcome", outcome::ALL),
+            ("attr", attr::ALL),
+            ("service", service::ALL),
+        ] {
+            let start = src.find(&format!("pub mod {name} {{")).unwrap();
+            let body = &src[start..];
+            let body = &body[..body.find("\n}\n").unwrap()];
+            let mut declared: Vec<&str> = body
+                .lines()
+                .filter(|l| l.trim_start().starts_with("pub const ") && !l.contains("const ALL:"))
+                .map(|l| {
+                    l.split("Code::new(\"")
+                        .nth(1)
+                        .unwrap()
+                        .split('"')
+                        .next()
+                        .unwrap()
+                })
+                .collect();
+            let mut listed: Vec<&str> = all.iter().map(|c| c.as_str()).collect();
+            declared.sort_unstable();
+            listed.sort_unstable();
+            assert_eq!(declared, listed, "{name}::ALL out of date");
+        }
+    }
+
+    #[test]
+    fn lookup_accepts_only_listed_codes() {
+        assert_eq!(kind::lookup("agent.created"), Some(kind::AGENT_CREATED));
+        assert_eq!(outcome::lookup("ok"), Some(outcome::OK));
+        assert_eq!(attr::lookup("agent_id"), Some(attr::AGENT_ID));
+        assert_eq!(service::lookup("gateway"), Some(service::GATEWAY));
+        for bad in [
+            "",
+            "unknown.kind",
+            "AGENT.CREATED",
+            "agent.created ",
+            "ok;drop",
+        ] {
+            assert_eq!(kind::lookup(bad), None, "{bad:?}");
+        }
+        assert_eq!(service::lookup("agent.created"), None);
     }
 
     #[test]

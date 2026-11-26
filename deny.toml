@@ -60,6 +60,10 @@ allow = ["AGPL-3.0-only"]
 name = "ls-gateway"
 allow = ["AGPL-3.0-only"]
 
+[[licenses.exceptions]]
+name = "ls-core-service"
+allow = ["AGPL-3.0-only"]
+
 # Source-available (ee/LICENSE), not open source. Only crates under ee/ may carry it.
 [[licenses.exceptions]]
 name = "ls-ee-license"

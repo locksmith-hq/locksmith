@@ -57,7 +57,7 @@ describe("CoreHoneyMinter", () => {
     });
   });
 
-  it("maps 404 and 409, and every other failure to unavailable, without echoing the token", async () => {
+  it("maps 404 and 409, and every other failure to unavailable,", async () => {
     const m = new CoreHoneyMinter(base, TOKEN);
     for (const [s, k] of [[404, "not-found"], [409, "conflict"], [401, "unavailable"], [500, "unavailable"], [503, "unavailable"]] as const) {
       status = s;

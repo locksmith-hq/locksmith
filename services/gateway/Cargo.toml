@@ -17,6 +17,11 @@ path = "src/lib.rs"
 name = "locksmith-gateway"
 path = "src/main.rs"
 
+# t5-honey-tokens task 3.4: p50 / p99 of the honey value scan (`cargo bench --bench honey_scan`).
+[[bench]]
+name = "honey_scan"
+harness = false
+
 [dependencies]
 # Reused as a library (S3 design decision 1): telemetry setup, the tenant-scoped database
 # handle and readiness. The gateway has no copy of them.

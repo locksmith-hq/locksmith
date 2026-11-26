@@ -67,3 +67,5 @@ crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
 9b326952d700a3331c31da7abe3de60420ffa1be:infra/compose/.env.example:generic-api-key:31
 # b6 auth test: fake token fixtures, not secrets (worker-c, 2026-11-24).
 c39fe6b474818ce04a3bd77b1ef2e806146edb40:apps/api/src/platform/auth/auth.test.ts:generic-api-key:72
+# Fake AWS-shaped honey decoy in a t5 branch commit (built at runtime in later commits).
+e21d6c2574415e1bed8122b6ccc329ae0c7bdfc8:services/gateway/src/honey_tests.rs:aws-access-token:52

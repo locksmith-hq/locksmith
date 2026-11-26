@@ -65,6 +65,26 @@ function createFixtures(opts: FixtureOptions = {}) {
   let rules: { kind: string; channel: string; audience: string; audience_user_id: null }[] = [
     { kind: "relay.denied", channel: "inbox", audience: "owner", audience_user_id: null },
   ];
+  const honey: Record<string, unknown>[] = opts.empty
+    ? []
+    : [
+        {
+          id: id(50),
+          name: "prod-aws-decoy",
+          template: "aws_access_key",
+          created_at: now,
+          disabled_at: null,
+          last_triggered_at: "2026-11-19T02:15:00Z",
+        },
+        {
+          id: id(51),
+          name: "ci-github-decoy",
+          template: "github_pat",
+          created_at: now,
+          disabled_at: null,
+          last_triggered_at: null,
+        },
+      ];
   const chan = { email: { enabled: false }, slack: { configured: false } };
   const requests: string[] = [];
   let seq = 100;
@@ -236,6 +256,25 @@ function createFixtures(opts: FixtureOptions = {}) {
     if (path === "/v1/notification-channels") {
       if (method === "PUT") chan.email.enabled = (body as unknown as { email: { enabled: boolean } }).email.enabled;
       return reply(chan);
+    }
+    if ((m = path.match(/^\/v1\/projects\/[^/]+\/environments\/[^/]+\/honey-tokens(?:\/([^/]+?)(\/disable)?)?$/))) {
+      if (!m[1]) {
+        if (method === "GET") return reply({ items: honey });
+        const t = {
+          id: id(seq++),
+          name: body.name!,
+          template: body.template!,
+          created_at: now,
+          disabled_at: null,
+          last_triggered_at: null,
+        };
+        honey.push(t);
+        return reply(t, 201);
+      }
+      const i = honey.findIndex((x) => x.id === m![1]);
+      if (i < 0) return problem(404);
+      if (method === "DELETE") return (honey.splice(i, 1), reply(null, 204));
+      return ((honey[i]!.disabled_at ??= now), reply(honey[i]));
     }
     if (path === "/v1/mcp/clients") return reply({ items: mcpClients });
     if ((m = path.match(/^\/v1\/mcp\/clients\/([^/]+)\/revoke$/))) {

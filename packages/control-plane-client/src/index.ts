@@ -46,6 +46,13 @@ export type NotificationKind = NotificationItem["kind"];
 export type HoneyTokenList = Ok<"/v1/projects/{project_id}/environments/{environment_id}/honey-tokens", "get">;
 export type HoneyToken = HoneyTokenList["items"][number];
 export type HoneyTemplate = HoneyToken["template"];
+export type NewHoneyToken = { name: string; template: HoneyTemplate };
+export const HONEY_TEMPLATES: readonly HoneyTemplate[] = [
+  "aws_access_key",
+  "github_pat",
+  "slack_token",
+  "generic_api_key",
+];
 export type NotificationChannel = NotificationRule["channel"];
 export type NotificationAudience = NotificationRule["audience"];
 
@@ -237,6 +244,11 @@ export interface Client {
   setNotificationRules(rules: NotificationRule[]): Promise<NotificationRules>;
   getNotificationChannels(): Promise<NotificationChannels>;
   setEmailChannel(enabled: boolean): Promise<NotificationChannels>;
+  /** Owner only (403 otherwise). Metadata only: no honey token value is ever returned. */
+  listHoneyTokens(projectId: string, envId: string): Promise<HoneyTokenList>;
+  createHoneyToken(projectId: string, envId: string, body: NewHoneyToken): Promise<HoneyToken>;
+  disableHoneyToken(projectId: string, envId: string, id: string): Promise<HoneyToken>;
+  deleteHoneyToken(projectId: string, envId: string, id: string): Promise<void>;
   /** Revoke a client by its row `id` (not the OAuth `client_id`). Idempotent. */
   revokeMcpClient(id: string): Promise<McpClient>;
 }
@@ -373,6 +385,31 @@ export function createClient(orgId: string, baseUrl = "", getToken?: () => strin
       const r = await run(c.PUT("/v1/notification-channels", { body: { email: { enabled } } }));
       return r as NotificationChannels;
     },
+    listHoneyTokens: (project_id, environment_id) =>
+      run(
+        c.GET("/v1/projects/{project_id}/environments/{environment_id}/honey-tokens", {
+          params: { path: { project_id, environment_id } },
+        }),
+      ),
+    createHoneyToken: (project_id, environment_id, body) =>
+      run(
+        c.POST("/v1/projects/{project_id}/environments/{environment_id}/honey-tokens", {
+          params: { path: { project_id, environment_id } },
+          body,
+        }),
+      ),
+    disableHoneyToken: (project_id, environment_id, id) =>
+      run(
+        c.POST("/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}/disable", {
+          params: { path: { project_id, environment_id, id } },
+        }),
+      ),
+    deleteHoneyToken: (project_id, environment_id, id) =>
+      run(
+        c.DELETE("/v1/projects/{project_id}/environments/{environment_id}/honey-tokens/{id}", {
+          params: { path: { project_id, environment_id, id } },
+        }),
+      ),
     revokeMcpClient: (client_row_id) =>
       run(c.POST("/v1/mcp/clients/{client_row_id}/revoke", { params: { path: { client_row_id } } })),
   };

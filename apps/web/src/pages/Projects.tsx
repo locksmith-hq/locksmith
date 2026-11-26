@@ -4,6 +4,7 @@ import { Link, Route, Routes, useParams } from "react-router";
 import { Head } from "@locksmith/ui";
 import type { Client, Environment, Project } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
+import { HoneyTokens } from "./HoneyTokens";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
@@ -165,7 +166,7 @@ function ProjectDetail({ client }: { client: Client }) {
           <ul className="list">
             {items.map((e) => (
               <li key={e.id} className="row">
-                {e.name}
+                {e.name} <Link to={`/projects/${id}/environments/${e.id}/honey-tokens`}>Honey tokens: {e.name}</Link>
                 <RowActions
                   name={e.name}
                   onRename={(name) => rename.mutateAsync({ env: e.id, name })}
@@ -185,6 +186,7 @@ export function Projects({ client }: { client: Client }) {
     <Routes>
       <Route index element={<ProjectList client={client} />} />
       <Route path=":id" element={<ProjectDetail client={client} />} />
+      <Route path=":id/environments/:envId/honey-tokens" element={<HoneyTokens client={client} />} />
     </Routes>
   );
 }

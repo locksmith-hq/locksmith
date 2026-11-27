@@ -11,18 +11,18 @@ const num = (v: string | number | bigint) => Number(v);
 const numOrNull = (v: string | number | bigint | null) => (v === null ? null : Number(v));
 
 /** The cursor is the last `seq` returned: big-endian i64 as canonical base64url, so paging is stable under appends. */
-const encodeCursor = (seq: number) => {
+const encodeCursor = (seq: string) => {
   const b = Buffer.alloc(8);
   b.writeBigInt64BE(BigInt(seq));
   return b.toString("base64url");
 };
 
-function decodeCursor(cursor: string): number | null {
+function decodeCursor(cursor: string): string | null {
   if (!/^[A-Za-z0-9_-]+$/.test(cursor)) return null;
   const bytes = Buffer.from(cursor, "base64url");
   if (bytes.length !== 8 || bytes.toString("base64url") !== cursor) return null;
   const seq = bytes.readBigInt64BE();
-  return seq >= 1n ? Number(seq) : null;
+  return seq >= 1n ? seq.toString() : null;
 }
 
 /**
@@ -35,7 +35,7 @@ export class AuditReadsService {
 
   async events(raw: unknown): Promise<{ items: AuditEvent[]; next?: string }> {
     const { limit, cursor } = parsePageQuery(raw);
-    let before: number | null = null;
+    let before: string | null = null;
     if (cursor !== undefined) {
       before = decodeCursor(cursor);
       if (before === null) throw new ProblemException("validation", "`cursor` is not valid");
@@ -44,7 +44,7 @@ export class AuditReadsService {
       .tx()
       .selectFrom("audit_events")
       .select(["seq", "id", "at", "kind", "actor", "target", "outcome", "attrs", "prev_hash", "hash"]);
-    if (before !== null) q = q.where("seq", "<", String(before));
+    if (before !== null) q = q.where("seq", "<", before);
     const rows = await q
       .orderBy("seq", "desc")
       .limit(limit + 1)
@@ -61,7 +61,7 @@ export class AuditReadsService {
       prev_digest: hex(r.prev_hash),
       digest: hex(r.hash),
     }));
-    return rows.length > limit ? { items, next: encodeCursor(items[items.length - 1]!.seq) } : { items };
+    return rows.length > limit ? { items, next: encodeCursor(String(rows[limit - 1]!.seq)) } : { items };
   }
 
   async status(): Promise<AuditStatus> {

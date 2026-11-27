@@ -167,6 +167,9 @@ describe("audit reads", () => {
     // seq 0 and negative cursors are not valid
     const zero = Buffer.alloc(8).toString("base64url");
     await http.get(`/v1/audit/events?cursor=${zero}`).set(DEV_ORG, a).expect(400);
+    // i64::MAX is a valid cursor: a normal empty-or-full page, not an overflow
+    const max = Buffer.from("7fffffffffffffff", "hex").toString("base64url");
+    await http.get(`/v1/audit/events?cursor=${max}`).set(DEV_ORG, a).expect(200);
     await http.get("/v1/audit/events").expect(401);
     await http.get("/v1/audit/status").expect(401);
   });

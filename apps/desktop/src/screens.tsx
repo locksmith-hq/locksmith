@@ -54,6 +54,7 @@ import { EmptyState } from "@locksmith-hq/empty-state";
 import { Loader } from "@locksmith-hq/loader";
 import { PageHeader } from "@locksmith-hq/page-header";
 import { Card } from "@locksmith-hq/card";
+import { ConfirmDialog } from "@locksmith-hq/confirm-dialog";
 import { Input } from "@locksmith-hq/input";
 import { Label } from "@locksmith-hq/label";
 import { LiveDot } from "@locksmith-hq/live-dot";
@@ -1799,29 +1800,6 @@ function RowActions({
       </form>
     );
   }
-  if (mode === "confirm") {
-    return (
-      <span role="alertdialog" aria-label={`Delete ${name}?`} className="flex items-center gap-2 text-[13px]">
-        Delete {name}?
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          onClick={() =>
-            void onDelete().then(
-              () => setMode(""),
-              () => setMode(""),
-            )
-          }
-        >
-          Confirm delete
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setMode("")}>
-          Cancel
-        </Button>
-      </span>
-    );
-  }
   return (
     <span className="flex items-center gap-2">
       <Button type="button" variant="outline" size="sm" onClick={() => setMode("edit")}>
@@ -1830,6 +1808,16 @@ function RowActions({
       <Button type="button" variant="destructive" size="sm" onClick={() => setMode("confirm")}>
         Delete {name}
       </Button>
+      <ConfirmDialog
+        open={mode === "confirm"}
+        onClose={() => setMode("")}
+        onConfirm={() => void onDelete().catch(() => {})}
+        title={`Delete ${name}?`}
+        confirmLabel="Confirm delete"
+        danger
+      >
+        This cannot be undone.
+      </ConfirmDialog>
     </span>
   );
 }

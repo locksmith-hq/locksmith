@@ -16,8 +16,7 @@ function sources(dir: string): string[] {
 }
 
 describe("desktop uses the design system", () => {
-  // Flip to a normal `it` once the last screen is moved (t11 group 3).
-  it.fails("names the old kit nowhere in the sources or the manifest", () => {
+  it("names the old kit nowhere in the sources or the manifest", () => {
     const manifest = readFileSync(join(here, "..", "package.json"), "utf8");
     expect(manifest).not.toContain(old);
     for (const f of sources(here)) expect(readFileSync(f, "utf8"), f).not.toContain(old);

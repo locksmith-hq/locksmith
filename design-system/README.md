@@ -7,6 +7,7 @@ The Locksmith kit as npm packages, one per component, published to GitHub Packag
 | `packages/<component>` | One component each. Built with `tsc` to `dist/`. |
 | `packages/styles` | `@locksmith-hq/styles`: the design tokens, the Tailwind theme that gives shadcn's parts the Locksmith look, and the styles of the Locksmith-only components. |
 | `docs` | The docs site: a page per package with a live demo and its API. |
+| `mcp` | An MCP server so coding agents can look up components, props, examples and tokens. |
 
 Changes here wait for the owner's review (`.github/CODEOWNERS`).
 
@@ -46,6 +47,14 @@ import { Button } from "@locksmith-hq/button";
 ```
 
 The tokens name the fonts but do not load them: load Chakra Petch (400 to 700) and Azeret Mono (400, 500) yourself. `<html data-theme="light|dark">` forces a theme; without it the system setting decides.
+
+## For coding agents
+
+`design-system/mcp` is an MCP server that answers what components exist, their props, a working example of each, and the colour tokens, read from this source. It is configured in the repo's `.mcp.json` as `design-system`; the `design-system-mcp` skill (`.claude/skills/design-system-mcp`) covers setup, use and troubleshooting.
+
+## Releases
+
+Packages are published to GitHub Packages, the organization's private npm registry, by the `design-system-release` workflow. The version bump comes from Conventional Commits: name the pull request `feat(button): ...` for a minor bump, `fix(...)` or `perf(...)` for a patch, and add `!` for a major. See `.changeset/README.md`.
 
 ## Work on it
 

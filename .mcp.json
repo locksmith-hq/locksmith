@@ -13,6 +13,10 @@
       "env": {
         "GRAFANA_URL": "http://127.0.0.1:3000"
       }
+    },
+    "design-system": {
+      "command": "node",
+      "args": ["design-system/mcp/server.mjs"]
     }
   }
 }

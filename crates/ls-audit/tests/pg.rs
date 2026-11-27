@@ -242,6 +242,9 @@ async fn rls_isolates_orgs_on_every_ledger_table() {
             "audit_checkpoints",
             "audit_events",
             "audit_heads",
+            // Migration 0017: the OTLP stream's destinations and per-destination cursor.
+            "audit_stream_cursor",
+            "audit_stream_destinations",
             "audit_verify_runs"
         ]
     );

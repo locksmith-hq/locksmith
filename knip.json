@@ -22,6 +22,11 @@
     "apps/desktop": {
       "project": [
         "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "@locksmith-hq/styles",
+        "tailwindcss",
+        "tw-animate-css"
       ]
     },
     "packages/ui": {

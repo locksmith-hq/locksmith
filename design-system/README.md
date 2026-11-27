@@ -50,7 +50,7 @@ The tokens name the fonts but do not load them: load Chakra Petch (400 to 700) a
 
 ## For coding agents
 
-`design-system/mcp` is an MCP server that answers what components exist, their props, a working example of each, and the colour tokens, read from this source. It is configured in the repo's `.mcp.json` as `design-system`; the `design-system-mcp` skill (`.claude/skills/design-system-mcp`) covers setup, use and troubleshooting.
+`design-system/mcp` is an internal MCP server, used only to build Locksmith and never published. It answers what components exist, their props, a working example of each, and the colour tokens, read from this source. It is configured in the repo's `.mcp.json` as `design-system`; the `design-system-mcp` skill (`.claude/skills/design-system-mcp`) covers setup, use and troubleshooting.
 
 ## Releases
 

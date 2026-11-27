@@ -7,7 +7,8 @@
     "integrations/*",
     "tests/api-contract",
     "design-system/packages/*",
-    "design-system/docs"
+    "design-system/docs",
+    "design-system/mcp"
   ],
   "scripts": {
     "build": "turbo run build",

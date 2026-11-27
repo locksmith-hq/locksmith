@@ -1,0 +1,22 @@
+{
+  "name": "@locksmith-hq/design-system-mcp",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP server that lets a coding agent look up the Locksmith design system: components, props, examples and tokens.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "locksmith-design-system-mcp": "./server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test *.test.mjs",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "typescript": "^5.7.0",
+    "zod": "^4.6.7"
+  }
+}

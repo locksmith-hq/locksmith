@@ -84,6 +84,15 @@
         "tw-animate-css",
         "@locksmith-hq/styles"
       ]
+    },
+    "design-system/mcp": {
+      "entry": [
+        "server.mjs",
+        "*.test.mjs"
+      ],
+      "project": [
+        "*.mjs"
+      ]
     }
   }
 }

@@ -23,6 +23,8 @@ fn golden() {
         "gemini-cli",
         "copilot",
         "cline",
+        "opencode",
+        "kiro",
     ] {
         let mut files: Vec<_> = std::fs::read_dir(root.join(agent))
             .unwrap()
@@ -43,6 +45,8 @@ fn golden() {
                 .unwrap_or_else(|| {
                     if agent == "copilot" {
                         "preToolUse"
+                    } else if agent == "opencode" {
+                        "tool.execute.before"
                     } else {
                         "PreToolUse"
                     }

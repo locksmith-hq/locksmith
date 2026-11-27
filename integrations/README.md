@@ -4,7 +4,7 @@ Thin agent, IDE and CI plugins. They call `smith hook` or `locksmith-mcp` and co
 
 Language rule: TypeScript/JavaScript only, managed with npm. Decisions about secrets, policy or licensing belong in Rust, not here.
 
-Hook config files here (`claude-code/hooks/hooks.json`, `cursor/hooks.json`, `codex/config.toml`, plus the MCP snippets `claude-code/.mcp.json`, `cursor/mcp.json`, `generic-mcp/mcp.json`, and the Gemini CLI, Copilot, Windsurf and Cline files listed below)
+Hook config files here (`claude-code/hooks/hooks.json`, `cursor/hooks.json`, `codex/config.toml`, plus the MCP snippets `claude-code/.mcp.json`, `cursor/mcp.json`, `generic-mcp/mcp.json`, and the Gemini CLI, Copilot, Windsurf, Cline, OpenCode and Kiro files listed below)
 are generated from `crates/smith-cli/src/agents.rs`; a unit test fails on drift. Regenerate with
 `UPDATE_INTEGRATIONS=1 cargo test -p smith-cli --bin smith agents`.
 
@@ -52,6 +52,8 @@ blocks the agent's own shell.
 | Gemini CLI | `gemini-cli` | `smith init`, then trust the folder in `gemini` | prevention (needs a trusted folder) |
 | Copilot (VS Code agent mode, CLI) | `copilot` | `smith init` (`.github/hooks/locksmith.json`, `.vscode/mcp.json`) | prevention, with a fail-open timeout |
 | Cline | `cline` | `smith init` (`.clinerules/hooks/PreToolUse`; add the MCP server by hand in Cline's MCP Servers panel) | prevention, unconfirmed against a live agent |
+| OpenCode | `opencode` | `smith init` (`.opencode/plugins/locksmith.js`, `opencode.json`) | unknown, not protected (V1 plugin API, docs-derived) |
+| Kiro | `kiro` | `smith init` (`.kiro/hooks/locksmith.json`, `.kiro/settings/mcp.json`) | unknown, not protected (docs-derived payload) |
 | Windsurf (Devin Desktop) | `windsurf` | generated only; no hook handler yet | unknown, not protected |
 | Any other MCP client | `generic-mcp` | merge `mcp.json` by hand | none |
 

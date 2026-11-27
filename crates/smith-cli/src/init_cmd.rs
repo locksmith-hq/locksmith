@@ -175,6 +175,12 @@ fn build(root: &Path, hub: Option<&str>, gateway: Option<&[String]>) -> Result<P
             ));
             continue;
         }
+        if let Some(h) = agents::user_level_hint(a) {
+            p.notes.push(format!(
+                "{}: user-level config in {h} is not edited by `smith init`; a hook or server there applies to every project",
+                a.id()
+            ));
+        }
         let f = agents::config_path(a, root);
         let before = read(&f);
         let mut after = agents::merge_hooks(a, before.as_deref())

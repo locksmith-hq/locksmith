@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "servers": {
+      "locksmith": {
+        "command": [
+          "locksmith-mcp"
+        ],
+        "type": "local"
+      }
+    }
+  }
+}

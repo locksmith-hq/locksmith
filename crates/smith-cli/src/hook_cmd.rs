@@ -27,7 +27,7 @@ pub fn run(agent: &str, event: &str) -> Result<ExitCode, Fail> {
         return Err(Fail(
             ExitCode::Usage,
             format!(
-                "unknown agent `{agent}` (claude-code, cursor, codex, gemini-cli, copilot, cline)"
+                "unknown agent `{agent}` (claude-code, cursor, codex, gemini-cli, copilot, cline, opencode, kiro)"
             ),
         ));
     };

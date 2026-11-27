@@ -323,6 +323,75 @@ fn init_wires_new_agents_idempotently_and_prints_manual_steps() {
     assert_eq!(before, tree(&r.0));
 }
 
+/// OpenCode and Kiro: hook and MCP are wired, the user-level note is printed, doctor says the
+/// protection is unknown and `hub.mcp` is unsupported, a second run changes nothing.
+#[test]
+fn init_and_doctor_wire_opencode_and_kiro() {
+    let h = Home::new();
+    let r = Repo::new();
+    r.write("opencode.json", "{\"theme\": \"dark\", \"mcp\": {\"servers\": {\"mine\": {\"type\": \"local\", \"command\": [\"x\"]}}}}\n");
+    r.write(".kiro/hooks/mine.json", "{\"version\": \"v1\", \"hooks\": [{\"name\": \"mine\", \"trigger\": \"PostToolUse\", \"action\": {\"type\": \"command\", \"command\": \"true\"}}]}\n");
+    let before_init = h.smith_in(&r.0, &["doctor"]);
+    let text = s(&before_init.stdout);
+    assert!(
+        text.contains("hooks.opencode ") && text.contains("Locksmith hooks are missing"),
+        "{text}"
+    );
+    let out = s(&init_yes(&h, &r).stdout);
+    let read = |p: &str| std::fs::read_to_string(r.0.join(p)).unwrap();
+    let oc = read("opencode.json");
+    assert!(oc.contains("\"theme\"") && oc.contains("\"mine\"") && oc.contains("locksmith-mcp"));
+    assert!(
+        read(".opencode/plugins/locksmith.js").contains("smith hook opencode tool.execute.before")
+    );
+    let kiro_hooks = read(".kiro/hooks/mine.json");
+    assert!(kiro_hooks.contains("PostToolUse"), "other hooks kept");
+    assert!(read(".kiro/hooks/locksmith.json").contains("smith hook kiro PreToolUse"));
+    assert!(read(".kiro/settings/mcp.json").contains("locksmith-mcp"));
+    assert!(out.contains("note: opencode: user-level config"), "{out}");
+    assert!(out.contains("note: kiro: user-level config"), "{out}");
+    let before = tree(&r.0);
+    assert!(s(&init_yes(&h, &r).stdout).contains("already set up"));
+    assert_eq!(before, tree(&r.0));
+    let text = s(&h.smith_in(&r.0, &["doctor"]).stdout);
+    let line = |id: &str| {
+        text.lines()
+            .find(|l| l.contains(id))
+            .unwrap_or_else(|| panic!("no {id} line in {text}"))
+            .to_string()
+    };
+    for id in ["hooks.opencode ", "hooks.kiro "] {
+        assert!(
+            line(id).contains("protection: unknown, not protected"),
+            "{}",
+            line(id)
+        );
+        assert!(!line(id).contains("prevention"), "{}", line(id));
+    }
+}
+
+/// An unparsable OpenCode or Kiro config stops init and is left as it was.
+#[test]
+fn init_leaves_invalid_opencode_and_kiro_configs_untouched() {
+    let h = Home::new();
+    for (file, body) in [
+        ("opencode.json", "{not json"),
+        (".kiro/settings/mcp.json", "[1, 2"),
+        (".kiro/hooks/locksmith.json", "{oops"),
+        (".opencode/plugins/locksmith.js", "export const X = 1;\n"),
+    ] {
+        let r = Repo::new();
+        r.write(file, body);
+        r.write(".kiro/keep", "");
+        r.write("opencode.json.keep", "");
+        let before = tree(&r.0);
+        let o = h.smith_in(&r.0, &["init", "--yes"]);
+        assert!(!o.status.success(), "{file}: {}", s(&o.stdout));
+        assert!(s(&o.stderr).contains(file), "{file}: {}", s(&o.stderr));
+        assert_eq!(before, tree(&r.0), "{file} untouched, nothing else written");
+    }
+}
+
 /// An unparsable config makes init stop with an error and leaves every file as it was.
 #[test]
 fn init_leaves_invalid_agent_configs_untouched() {

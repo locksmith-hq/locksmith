@@ -55,7 +55,14 @@ fn agent_outcome_with(a: Agent, protection: Protection, repo: &Path) -> Outcome 
         );
     }
     if agents::installed(a, repo) {
-        Outcome::ok(format!("Locksmith hooks installed; protection: {label}"))
+        let note = if protection == Protection::Unknown {
+            "; the hook can be switched off from the repo config or never loaded"
+        } else {
+            ""
+        };
+        Outcome::ok(format!(
+            "Locksmith hooks installed; protection: {label}{note}"
+        ))
     } else {
         Outcome::warn(
             "agent detected but Locksmith hooks are missing",
@@ -204,6 +211,14 @@ fn windsurf() -> Outcome {
     agent_outcome(Agent::Windsurf, &repo_dir())
 }
 
+fn opencode() -> Outcome {
+    agent_outcome(Agent::OpenCode, &repo_dir())
+}
+
+fn kiro() -> Outcome {
+    agent_outcome(Agent::Kiro, &repo_dir())
+}
+
 fn hub_mcp() -> Outcome {
     hub_mcp_outcome(&repo_dir())
 }
@@ -221,6 +236,8 @@ inventory::submit! { Check { id: "hooks.copilot", run: copilot } }
 inventory::submit! { Check { id: "hooks.copilot.timeout", run: copilot_timeout } }
 inventory::submit! { Check { id: "hooks.cline", run: cline } }
 inventory::submit! { Check { id: "hooks.windsurf", run: windsurf } }
+inventory::submit! { Check { id: "hooks.opencode", run: opencode } }
+inventory::submit! { Check { id: "hooks.kiro", run: kiro } }
 inventory::submit! { Check { id: "hub.mcp", run: hub_mcp } }
 inventory::submit! { Check { id: "repo.precommit", run: repo_precommit } }
 

@@ -8,6 +8,8 @@ pub mod codex;
 pub mod copilot;
 pub mod cursor;
 pub mod gemini_cli;
+pub mod kiro;
+pub mod opencode;
 
 use crate::{Decision, Event, Vault, decide};
 use serde_json::Value;
@@ -117,6 +119,8 @@ pub fn handle(agent: &str, event: &str, input: &str, v: &dyn Vault) -> Option<Ha
         "gemini-cli" => (gemini_cli::parse, gemini_cli::render, gemini_cli::malformed),
         "copilot" => (copilot::parse, copilot::render, copilot::malformed),
         "cline" => (cline::parse, cline::render, cline::malformed),
+        "opencode" => (opencode::parse, opencode::render, opencode::malformed),
+        "kiro" => (kiro::parse, kiro::render, kiro::malformed),
         _ => return None,
     };
     let bad_in = || Handled {
@@ -227,6 +231,20 @@ fn guard(agent: &str) -> Option<Guard> {
             primary: cline::primary,
             shell: cline::shell_keys,
             content: cline::content_keys,
+        },
+        "opencode" => Guard {
+            call: opencode::call,
+            known: opencode::KNOWN_TOOLS,
+            primary: opencode::primary,
+            shell: opencode::shell_keys,
+            content: opencode::content_keys,
+        },
+        "kiro" => Guard {
+            call: kiro::call,
+            known: kiro::KNOWN_TOOLS,
+            primary: kiro::primary,
+            shell: kiro::shell_keys,
+            content: kiro::content_keys,
         },
         _ => return None,
     })

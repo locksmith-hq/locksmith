@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "locksmith": {
+      "args": [],
+      "command": "locksmith-mcp"
+    }
+  }
+}

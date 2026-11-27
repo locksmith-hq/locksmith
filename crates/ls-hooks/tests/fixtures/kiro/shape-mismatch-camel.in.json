@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","toolName":"read_file","toolInput":{"path":"__CWD__/.env"}}

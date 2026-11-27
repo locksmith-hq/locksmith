@@ -1,0 +1,15 @@
+{
+  "hooks": [
+    {
+      "action": {
+        "command": "command -v smith >/dev/null 2>&1 || { echo 'Locksmith hook unavailable: run smith doctor' >&2; exit 2; }; smith hook kiro PreToolUse",
+        "type": "command"
+      },
+      "enabled": true,
+      "matcher": "",
+      "name": "locksmith",
+      "trigger": "PreToolUse"
+    }
+  ],
+  "version": "v1"
+}

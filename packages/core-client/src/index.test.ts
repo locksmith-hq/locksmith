@@ -21,10 +21,11 @@ describe("contract drift", () => {
   });
 
   const ops = Object.values(spec.paths).flatMap((p) => Object.values(p).map((o) => o.operationId));
-  it("has exactly the eight OC-9 G1 operations", () => {
+  it("has exactly the eight OC-9 G1 operations plus the two B1-5 enrollment ones and the JWKS read", () => {
     expect([...ops].sort()).toEqual([
-      "appendAuditEvent", "mintAgentToken", "mintWorkloadToken", "signAuditCheckpoint",
-      "unwrapDek", "verifyAgentToken", "verifyWorkloadToken", "wrapDek",
+      "appendAuditEvent", "generateEnrollmentSecret", "getAgentTokenJwks", "mintAgentToken", "mintWorkloadToken",
+      "signAuditCheckpoint", "unwrapDek", "verifyAgentToken", "verifyEnrollmentSecret",
+      "verifyWorkloadToken", "wrapDek",
     ]);
   });
   it("has a fixture and a client method for every operation", () => {
@@ -49,6 +50,21 @@ describe("core client", () => {
     const req = f.mock.calls[0]![0] as Request;
     expect(req.url).toBe("http://core/v1/deks/wrap");
     expect(req.headers.get("authorization")).toBe("Bearer svc");
+  });
+  it("generates and verifies enrollment secrets without sending the secret back on verify", async () => {
+    const f = vi.fn()
+      .mockImplementationOnce(async () => json(fixtures.generateEnrollmentSecret))
+      .mockImplementationOnce(async () => json(fixtures.verifyEnrollmentSecret));
+    const c = createCoreClient({ baseUrl: "http://core", token: "svc", fetch: f });
+    const g = await c.generateEnrollmentSecret({ org_id: fixtureIds.org, agent_id: fixtureIds.agent });
+    expect(g).toEqual(fixtures.generateEnrollmentSecret);
+    const v = await c.verifyEnrollmentSecret({ enrollment_secret: g.enrollment_secret, enrollment_hash: null });
+    expect(v).toEqual(fixtures.verifyEnrollmentSecret);
+    const [gen, ver] = f.mock.calls.map((call) => call[0] as Request);
+    expect(gen!.url).toBe("http://core/v1/enrollment-secrets/generate");
+    expect(ver!.url).toBe("http://core/v1/enrollment-secrets/verify");
+    expect(await ver!.json()).toEqual({ enrollment_secret: g.enrollment_secret, enrollment_hash: null });
+    expect(JSON.stringify(v)).not.toContain("lse_");
   });
   it("throws CoreError with the problem on 401", async () => {
     const f = vi.fn().mockImplementation(async () => json(unauthorized, 401));

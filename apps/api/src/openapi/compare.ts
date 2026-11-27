@@ -15,11 +15,27 @@ function normalise(v: Json, doc: Frozen, seen: string[] = []): Json {
     return normalise(doc.components?.schemas?.[name], doc, [...seen, name]);
   }
   const drop = new Set(["description", "summary", "example", "examples", "title", "$schema", "format", "deprecated"]);
+  // zod bounds every integer to the JS safe range and writes a nullable as `anyOf`; utoipa writes `oneOf` and no bounds.
+  const safeBound = (k: string, x: Json) =>
+    o.type === "integer" && (k === "minimum" || k === "maximum") && Math.abs(Number(x)) === Number.MAX_SAFE_INTEGER;
+  // `additionalProperties: {}` (any value) and `propertyNames` of string keys describe a free-form object, as `type: object` does.
+  const freeForm = (k: string, x: Json) =>
+    (k === "additionalProperties" && typeof x === "object" && x !== null && Object.keys(x).length === 0) ||
+    (k === "propertyNames" && JSON.stringify(x) === '{"type":"string"}');
+  // `oneOf: [{type: T}, {type: "null"}]` of a bare scalar is `type: [T, "null"]`.
+  const alt = (o.anyOf ?? o.oneOf) as Record<string, Json>[] | undefined;
+  if (Object.keys(o).length === 1 && Array.isArray(alt) && alt.length === 2) {
+    const [x, y] = alt.map((a) => normalise(a, doc, seen) as Record<string, Json>);
+    const scalar = (a: Record<string, Json> | undefined) =>
+      a && Object.keys(a).length === 1 && typeof a.type === "string";
+    if (scalar(x) && y?.type === "null" && Object.keys(y).length === 1 && x!.type !== "null")
+      return { type: [x!.type, "null"] };
+  }
   return Object.fromEntries(
     Object.entries(o)
-      .filter(([k]) => !drop.has(k))
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, x]) => [k, normalise(x, doc, seen)]),
+      .filter(([k, x]) => !drop.has(k) && !safeBound(k, x) && !freeForm(k, x))
+      .map(([k, x]): [string, Json] => [k === "anyOf" ? "oneOf" : k, normalise(x, doc, seen)])
+      .sort(([a], [b]) => a.localeCompare(b)),
   );
 }
 

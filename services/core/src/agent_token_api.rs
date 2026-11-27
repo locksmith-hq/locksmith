@@ -83,6 +83,22 @@ pub(crate) fn mint_response(signer: &AgentTokenSigner, agent: Uuid, org: Uuid) -
     })
 }
 
+/// `GET /v1/agent-tokens/jwks`: the public key set agent tokens verify against (public keys only).
+/// The NestJS API serves it at `/.well-known/jwks.json`; empty when signing is not configured there,
+/// but the core answers 503 so the caller can tell "not configured" from "no keys".
+pub async fn jwks(State(state): State<AppState>) -> Response {
+    let Some(signer) = state.agent_signer() else {
+        return problem(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "agent signing key not configured",
+        );
+    };
+    Json(ls_agent_token::JwkSet {
+        keys: vec![signer.jwk().clone()],
+    })
+    .into_response()
+}
+
 pub async fn mint(State(state): State<AppState>, body: Bytes) -> Response {
     let Ok(req) = serde_json::from_slice::<MintRequest>(&body) else {
         return problem(StatusCode::BAD_REQUEST, "malformed request");

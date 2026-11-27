@@ -57,7 +57,8 @@
       ],
       "ignoreDependencies": [
         "kysely-codegen",
-        "@types/express"
+        "@nestjs/platform-express",
+        "pino-http"
       ]
     }
   }

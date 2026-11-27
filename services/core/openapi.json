@@ -272,6 +272,150 @@
         ],
         "type": "string"
       },
+      "EnrollmentSecretReason": {
+        "description": "Why a presented enrollment secret was refused.",
+        "enum": [
+          "malformed",
+          "unknown_agent",
+          "wrong_secret"
+        ],
+        "type": "string"
+      },
+      "EnrollmentSecretVerdict": {
+        "additionalProperties": false,
+        "description": "Verdict on a presented enrollment secret; never echoes the secret. The routing ids are set whenever the secret is well-formed (also when `valid` is false), so they are not proof of identity unless `valid`.",
+        "properties": {
+          "agent_id": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "org_id": {
+            "oneOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EnrollmentSecretReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid"
+        ],
+        "type": "object"
+      },
+      "GenerateEnrollmentSecretRequest": {
+        "additionalProperties": false,
+        "description": "Make an enrollment secret for an agent the caller is registering (or rotating); the core stores nothing and makes no authorization decision.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "org_id"
+        ],
+        "type": "object"
+      },
+      "GeneratedEnrollmentSecret": {
+        "additionalProperties": false,
+        "description": "`enrollment_secret` is shown to the human once and never stored; the caller stores only `enrollment_hash`. Format: `lse_` + base64url (no padding) of `org_id(16) || agent_id(16) || random(32)`. It is an agent enrollment credential, not a vault secret.",
+        "properties": {
+          "enrollment_hash": {
+            "description": "Argon2id PHC string over all 64 secret bytes.",
+            "pattern": "^\\$argon2id\\$",
+            "type": "string"
+          },
+          "enrollment_secret": {
+            "pattern": "^lse_[A-Za-z0-9_-]{86}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrollment_secret",
+          "enrollment_hash"
+        ],
+        "type": "object"
+      },
+      "Jwk": {
+        "additionalProperties": false,
+        "description": "One public key in the JWKS (RFC 7517, RFC 8037 `OKP`/`Ed25519`).",
+        "properties": {
+          "alg": {
+            "const": "EdDSA"
+          },
+          "crv": {
+            "const": "Ed25519"
+          },
+          "kid": {
+            "description": "The RFC 7638 SHA-256 thumbprint of this key.",
+            "type": "string"
+          },
+          "kty": {
+            "const": "OKP"
+          },
+          "use": {
+            "const": "sig"
+          },
+          "x": {
+            "description": "The public key, base64url without padding.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alg",
+          "crv",
+          "kid",
+          "kty",
+          "use",
+          "x"
+        ],
+        "type": "object"
+      },
+      "JwkSet": {
+        "additionalProperties": false,
+        "description": "The key set agent tokens verify against. Public keys only.",
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/Jwk"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
       "MintAgentTokenRequest": {
         "additionalProperties": false,
         "description": "Mint for an agent the caller (the NestJS API) has already authenticated; the core makes no authorization decision.",
@@ -463,6 +607,30 @@
         ],
         "type": "object"
       },
+      "VerifyEnrollmentSecretRequest": {
+        "additionalProperties": false,
+        "description": "A presented enrollment secret and the hash the caller stored for the agent its routing ids name. `enrollment_hash` is required: `null` means no such agent, and the core then spends the same Argon2id work against a dummy hash.",
+        "properties": {
+          "enrollment_hash": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enrollment_secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrollment_secret",
+          "enrollment_hash"
+        ],
+        "type": "object"
+      },
       "VerifyReason": {
         "description": "Why a token was refused. A coarse code only.",
         "enum": [
@@ -615,7 +783,7 @@
     }
   },
   "info": {
-    "description": "Internal only: reachable on the internal network by the NestJS API. Owner decision OC-9 G1. Bodies carry ids, ciphertext, tokens and verdicts; never plaintext secrets or key bytes.",
+    "description": "Internal only: reachable on the internal network by the NestJS API. Owner decision OC-9 G1. Bodies carry ids, ciphertext, tokens and verdicts; never plaintext vault secrets or key bytes. The one credential returned is the agent enrollment secret from `generateEnrollmentSecret`, shown once to the human and never stored.",
     "license": {
       "name": "see repository"
     },
@@ -624,6 +792,53 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/agent-tokens/jwks": {
+      "get": {
+        "description": "The Ed25519 public key agent tokens are signed with. The NestJS API serves it at `/.well-known/jwks.json`. 503 when the signing key is not configured.",
+        "operationId": "getAgentTokenJwks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JwkSet"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (database or KMS) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Public keys that verify agent tokens",
+        "tags": [
+          "tokens"
+        ]
+      }
+    },
     "/v1/agent-tokens/mint": {
       "post": {
         "description": "Mints the 15-minute EdDSA agent token (`agent_token.rs`). The core does not decide whether the agent may have one.",
@@ -1071,6 +1286,156 @@
         "summary": "Generate and wrap a DEK",
         "tags": [
           "keys"
+        ]
+      }
+    },
+    "/v1/enrollment-secrets/generate": {
+      "post": {
+        "description": "Makes an agent enrollment secret and its Argon2id hash (moved from the control plane's `enrollment.rs`). The secret is returned only here; the core keeps nothing.",
+        "operationId": "generateEnrollmentSecret",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateEnrollmentSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratedEnrollmentSecret"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (the Argon2id worker or the random source) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Generate an agent enrollment secret",
+        "tags": [
+          "tokens"
+        ]
+      }
+    },
+    "/v1/enrollment-secrets/verify": {
+      "post": {
+        "description": "Verifies a presented enrollment secret against the stored hash (or the dummy hash when `enrollment_hash` is null, so an unknown agent costs the same work). A secret that does not verify is a 200 with `valid: false` and a coarse reason, not an error. The secret is never echoed.",
+        "operationId": "verifyEnrollmentSecret",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEnrollmentSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentSecretVerdict"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Cache-Control": {
+                "description": "`no-store`",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Malformed or out-of-range input."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid caller credentials; nothing was done."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A dependency (the Argon2id worker or the random source) is unavailable; retry."
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Verify an agent enrollment secret",
+        "tags": [
+          "tokens"
         ]
       }
     },

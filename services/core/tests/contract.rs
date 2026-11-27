@@ -105,14 +105,19 @@ fn good_body(path: &str) -> Option<Value> {
             json!({"org_id": ORG, "seq": 7, "hash": "ab".repeat(32), "at": "2025-11-17T12:00:00Z"})
         }
         "/v1/deks/wrap" => json!({"binding": binding()}),
+        "/v1/enrollment-secrets/generate" => json!({"org_id": ORG, "agent_id": AGENT}),
+        // Malformed and unknown-agent verdicts need no prior response.
+        "/v1/enrollment-secrets/verify" => {
+            json!({"enrollment_secret": "lse_nope", "enrollment_hash": null})
+        }
         // verify and unwrap need a prior response; see `chained_operations_match_the_contract`.
         _ => return None,
     })
 }
 
 #[test]
-fn the_contract_has_the_eight_operations() {
-    assert_eq!(operations().len(), 8);
+fn the_contract_has_the_ten_operations() {
+    assert_eq!(operations().len(), 10);
 }
 
 #[tokio::test]
@@ -192,4 +197,21 @@ async fn chained_operations_match_the_contract() {
     .await;
     assert_eq!(st, StatusCode::OK, "{v}");
     assert_matches_contract("/v1/deks/unwrap", 200, &v);
+
+    let (st, generated) = call(
+        "/v1/enrollment-secrets/generate",
+        json!({"org_id": ORG, "agent_id": AGENT}),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_matches_contract("/v1/enrollment-secrets/generate", 200, &generated);
+    for hash in [generated["enrollment_hash"].clone(), Value::Null] {
+        let (st, v) = call(
+            "/v1/enrollment-secrets/verify",
+            json!({"enrollment_secret": generated["enrollment_secret"], "enrollment_hash": hash}),
+        )
+        .await;
+        assert_eq!(st, StatusCode::OK);
+        assert_matches_contract("/v1/enrollment-secrets/verify", 200, &v);
+    }
 }

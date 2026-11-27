@@ -1,7 +1,8 @@
 // Typed client for the internal Rust core service (OC-9 G1). Types are generated from
 // services/core/openapi.json (`npm run gen`); a drift test fails when they disagree.
 // Nothing here logs or persists a request or response body: tokens only live in the objects
-// handed to the caller, and the API carries no plaintext secret or key bytes by design.
+// handed to the caller, and the API carries no plaintext vault secret or key bytes by design
+// (the agent enrollment secret from generateEnrollmentSecret is returned once, for display).
 import createClient, { type Client } from "openapi-fetch";
 import type { components, paths } from "./schema";
 
@@ -15,6 +16,7 @@ export type SignCheckpointResponse = S["SignCheckpointResponse"];
 export type MintAgentTokenRequest = S["MintAgentTokenRequest"];
 export type MintWorkloadTokenRequest = S["MintWorkloadTokenRequest"];
 export type MintedToken = S["MintedToken"];
+export type JwkSet = S["JwkSet"];
 export type VerifyTokenRequest = S["VerifyTokenRequest"];
 export type VerifyWorkloadTokenRequest = S["VerifyWorkloadTokenRequest"];
 export type AgentTokenVerdict = S["AgentTokenVerdict"];
@@ -23,6 +25,10 @@ export type WrapDekRequest = S["WrapDekRequest"];
 export type WrapDekResponse = S["WrapDekResponse"];
 export type UnwrapDekRequest = S["UnwrapDekRequest"];
 export type UnwrapDekResponse = S["UnwrapDekResponse"];
+export type GenerateEnrollmentSecretRequest = S["GenerateEnrollmentSecretRequest"];
+export type GeneratedEnrollmentSecret = S["GeneratedEnrollmentSecret"];
+export type VerifyEnrollmentSecretRequest = S["VerifyEnrollmentSecretRequest"];
+export type EnrollmentSecretVerdict = S["EnrollmentSecretVerdict"];
 export type Problem = S["Problem"];
 
 export type CoreRawClient = Client<paths>;
@@ -54,7 +60,7 @@ function unwrap<T>(r: { data?: T; error?: unknown; response: Response }): T {
 }
 
 export function createCoreClient(opts: CoreClientOptions) {
-  const raw: CoreRawClient = createClient<paths>({ baseUrl: opts.baseUrl, fetch: opts.fetch });
+  const raw: CoreRawClient = createClient<paths>({ baseUrl: opts.baseUrl, ...(opts.fetch ? { fetch: opts.fetch } : {}) });
   raw.use({
     onRequest({ request }) {
       const token = typeof opts.token === "function" ? opts.token() : opts.token;
@@ -70,8 +76,16 @@ export function createCoreClient(opts: CoreClientOptions) {
     verifyAgentToken: async (body: VerifyTokenRequest) => unwrap(await raw.POST("/v1/agent-tokens/verify", { body })),
     mintWorkloadToken: async (body: MintWorkloadTokenRequest) => unwrap(await raw.POST("/v1/workload-tokens/mint", { body })),
     verifyWorkloadToken: async (body: VerifyWorkloadTokenRequest) => unwrap(await raw.POST("/v1/workload-tokens/verify", { body })),
+    /** The public key set agent tokens verify against (public keys only). */
+    getAgentTokenJwks: async () => unwrap(await raw.GET("/v1/agent-tokens/jwks")),
     wrapDek: async (body: WrapDekRequest) => unwrap(await raw.POST("/v1/deks/wrap", { body })),
     unwrapDek: async (body: UnwrapDekRequest) => unwrap(await raw.POST("/v1/deks/unwrap", { body })),
+    /** The returned `enrollment_secret` is shown to the human once; store only `enrollment_hash`. */
+    generateEnrollmentSecret: async (body: GenerateEnrollmentSecretRequest) =>
+      unwrap(await raw.POST("/v1/enrollment-secrets/generate", { body })),
+    /** `enrollment_hash: null` for an unknown agent (the core then runs the dummy-hash path). */
+    verifyEnrollmentSecret: async (body: VerifyEnrollmentSecretRequest) =>
+      unwrap(await raw.POST("/v1/enrollment-secrets/verify", { body })),
   };
 }
 export type CoreClient = ReturnType<typeof createCoreClient>;

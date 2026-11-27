@@ -71,7 +71,8 @@ export class Normaliser {
     const out: Record<string, string> = {};
     for (const name of KEPT_HEADERS) {
       const v = get(name);
-      if (v !== null) out[name] = this.text(v);
+      // `charset=utf-8` is implied for JSON; Express adds it and axum does not, so it is not part of the contract.
+      if (v !== null) out[name] = this.text(name === "content-type" ? v.replace(/;\s*charset=utf-8$/i, "") : v);
     }
     return out;
   }

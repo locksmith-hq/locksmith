@@ -15,14 +15,14 @@ export const AuditEventSchema = z.object({
 });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 
-export const AuditCheckpointSchema = z.object({
+const AuditCheckpointSchema = z.object({
   seq: z.number().int(),
   digest: z.string(),
   at: z.string(),
   key_id: z.string(),
 });
 
-export const AuditVerifyRunSchema = z.object({
+const AuditVerifyRunSchema = z.object({
   id: z.string(),
   mode: z.string(),
   started_at: z.string(),

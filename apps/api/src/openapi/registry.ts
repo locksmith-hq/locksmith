@@ -10,6 +10,7 @@ import {
   Project,
   ProjectParams,
 } from "../projects/projects.schemas.js";
+import { AuditEventSchema, AuditStatusSchema } from "../audit/audit.schemas.js";
 import {
   NewWorkloadIdentity,
   WorkloadIdentityParams,
@@ -141,5 +142,20 @@ export const workloadIdentityRoutes: RouteDef[] = [
     path: "/v1/workload-identities/{id}",
     params: WorkloadIdentityParams,
     responses: { 204: null, ...E(401, 403, 404, 409, 503) },
+  }),
+];
+
+/** Audit read routes (task 6.5 slice): held to the frozen contract by `audit.contract.test.ts`; not in `routes` until the flip. */
+export const auditRoutes: RouteDef[] = [
+  defineRoute({
+    method: "GET",
+    path: "/v1/audit/events",
+    query: PageQuerySchema,
+    responses: { 200: Paged(AuditEventSchema), ...E(400, 401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/v1/audit/status",
+    responses: { 200: AuditStatusSchema, ...E(401, 403, 404, 503) },
   }),
 ];

@@ -32,15 +32,21 @@ function decodeCursor(cursor: string): string | null {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-/** Rust `PageParams::resolve`, after the query parse. */
-export function resolvePage(raw: unknown): Page {
+/** The query shared by every list: a validated limit and the raw cursor (Rust `PageParams`, before decoding). */
+export function parsePageQuery(raw: unknown): { limit: number; cursor: string | undefined } {
   const parsed = PageQuery.safeParse(raw);
   if (!parsed.success) throw new ProblemException("validation", "invalid query parameters");
-  const { limit: l, cursor: c } = parsed.data;
+  const { limit: l, cursor } = parsed.data;
   if (l !== undefined && !/^\d{1,10}$/.test(l)) throw new ProblemException("validation", "invalid query parameters");
   const limit = l === undefined ? DEFAULT_PAGE_LIMIT : Number(l);
   if (limit === 0 || limit > MAX_PAGE_LIMIT)
     throw new ProblemException("validation", `\`limit\` must be between 1 and ${MAX_PAGE_LIMIT}`);
+  return { limit, cursor };
+}
+
+/** Rust `PageParams::resolve`, after the query parse. */
+export function resolvePage(raw: unknown): Page {
+  const { limit, cursor: c } = parsePageQuery(raw);
   if (c === undefined) return { limit, after: null };
   const after = decodeCursor(c);
   if (after === null) throw new ProblemException("validation", "`cursor` is not valid");

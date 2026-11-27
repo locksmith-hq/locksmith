@@ -59,6 +59,8 @@ import { Label } from "@locksmith-hq/label";
 import { LiveDot } from "@locksmith-hq/live-dot";
 import { Pill } from "@locksmith-hq/pill";
 import { ScopeChip } from "@locksmith-hq/scope-chip";
+import { Switch } from "@locksmith-hq/switch";
+import { CopyableId } from "@locksmith-hq/copyable-id";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@locksmith-hq/select";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 
@@ -214,6 +216,15 @@ const Scopes = ({ scopes }: { scopes: readonly string[] }) => (
       </li>
     ))}
   </ul>
+);
+
+/** A kit card around a form; the form keeps its aria-label so it stays a named landmark. */
+const FormCard = ({ children, ...p }: React.ComponentProps<"form">) => (
+  <Card className="p-4">
+    <form className="flex flex-wrap items-center gap-3" {...p}>
+      {children}
+    </form>
+  </Card>
 );
 
 const Head = ({ title, sub, children }: { title: string; sub?: React.ReactNode; children?: React.ReactNode }) => (
@@ -1219,8 +1230,7 @@ export function Agents(_: ScreenProps) {
         title="Agents"
         sub="Agents use secrets through the gateway without ever holding them. Grants say which secrets an agent may relay."
       />
-      <form
-        className="card"
+      <FormCard
         aria-label="Control plane"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1229,34 +1239,41 @@ export function Agents(_: ScreenProps) {
           setClient(api.agentsClient());
         }}
       >
-        <input
+        <Input
+          className="w-80"
           aria-label="Control plane URL"
           value={cfg.url}
           onChange={(e) => setCfg({ ...cfg, url: e.target.value.trim() })}
         />
-        <input aria-label="Org id" value={cfg.org} onChange={(e) => setCfg({ ...cfg, org: e.target.value.trim() })} />
-        <button type="submit" className="btn sm">
+        <Input
+          className="w-56"
+          aria-label="Org id"
+          value={cfg.org}
+          onChange={(e) => setCfg({ ...cfg, org: e.target.value.trim() })}
+        />
+        <Button type="submit" variant="outline" size="sm">
           Connect
-        </button>
-      </form>
+        </Button>
+      </FormCard>
       {err && <Alert>{err}</Alert>}
       {!client ? (
         <Empty icon="key">Enter an org id to list agents.</Empty>
       ) : (
         <>
           {secret && (
-            <div className="card" role="region" aria-label="Enrollment secret">
-              <p>Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.</p>
-              <code className="block" data-testid="enrollment-secret">
+            <Card role="region" aria-label="Enrollment secret" className="flex flex-col items-start gap-2 p-4">
+              <p className="m-0 text-sm">
+                Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.
+              </p>
+              <code className="block font-mono text-[13px] break-all" data-testid="enrollment-secret">
                 {secret.value}
               </code>
-              <button type="button" className="btn sm" onClick={() => setSecret(null)}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setSecret(null)}>
                 Dismiss
-              </button>
-            </div>
+              </Button>
+            </Card>
           )}
-          <form
-            className="card"
+          <FormCard
             aria-label="Create agent"
             onSubmit={(e) => {
               e.preventDefault();
@@ -1267,11 +1284,17 @@ export function Agents(_: ScreenProps) {
               });
             }}
           >
-            <input aria-label="Agent name" required value={name} onChange={(e) => setName(e.target.value)} />
-            <button type="submit" className="btn primary sm">
+            <Input
+              className="w-56"
+              aria-label="Agent name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button type="submit" size="sm">
               Create agent
-            </button>
-          </form>
+            </Button>
+          </FormCard>
           {!agents ? (
             <Loading what="agents" />
           ) : agents.length === 0 ? (
@@ -1279,30 +1302,32 @@ export function Agents(_: ScreenProps) {
               <b>No agents yet.</b>
             </Empty>
           ) : (
-            <div className="sessions">
+            <div className="flex flex-col gap-3">
               {agents.map((a) => (
-                <article key={a.id} className="card" aria-label={`Agent ${a.name}`}>
-                  <div className="who">
+                <Card key={a.id} role="article" aria-label={`Agent ${a.name}`} className="flex flex-col gap-3 p-4">
+                  <div className="flex flex-wrap items-baseline gap-3">
                     <b>{a.name}</b>
-                    <span className="mono">{a.id}</span>
+                    <CopyableId value={a.id} />
                   </div>
-                  <ul>
+                  <ul className="m-0 flex list-none flex-col gap-2 p-0">
                     {(grants[a.id] ?? []).map((g) => (
-                      <li key={g.id}>
-                        <span className="mono">{g.secret_name}</span> ({g.mode}){" "}
+                      <li key={g.id} className="flex flex-wrap items-center gap-2 text-[13px]">
+                        <span className="font-mono">{g.secret_name}</span> ({g.mode}){" "}
                         {g.expires_at ? `expires ${g.expires_at}` : "no expiry"}
-                        <button
+                        <Button
                           type="button"
-                          className="btn sm danger-text"
+                          variant="destructive"
+                          size="xs"
                           aria-label={`Revoke ${g.secret_name} for ${a.name}`}
                           onClick={() => void run(() => client.revokeGrant(a.id, g.id))}
                         >
                           Revoke
-                        </button>
+                        </Button>
                       </li>
                     ))}
                   </ul>
                   <form
+                    className="flex flex-wrap items-center gap-3"
                     onSubmit={(e) => {
                       e.preventDefault();
                       void run(async () => {
@@ -1315,25 +1340,28 @@ export function Agents(_: ScreenProps) {
                       });
                     }}
                   >
-                    <input
+                    <Input
+                      className="w-56"
                       aria-label={`Secret id for ${a.name}`}
                       required
                       value={secretId[a.id] ?? ""}
                       onChange={(e) => setSecretId({ ...secretId, [a.id]: e.target.value.trim() })}
                     />
-                    <button type="submit" className="btn sm">
+                    <Button type="submit" variant="outline" size="sm">
                       Grant
-                    </button>
+                    </Button>
                   </form>
-                  <button
+                  <Button
                     type="button"
-                    className="btn sm danger-text"
+                    variant="destructive"
+                    size="sm"
+                    className="self-start"
                     aria-label={`Delete ${a.name}`}
                     onClick={() => void run(() => client.deleteAgent(a.id))}
                   >
                     Delete agent
-                  </button>
-                </article>
+                  </Button>
+                </Card>
               ))}
             </div>
           )}
@@ -1398,8 +1426,7 @@ export function WorkloadIdentities(_: ScreenProps) {
         <Empty icon="key">Connect a control plane and org id on the Agents screen first.</Empty>
       ) : (
         <>
-          <form
-            className="card"
+          <FormCard
             aria-label="Create workload identity"
             onSubmit={(e) => {
               e.preventDefault();
@@ -1409,38 +1436,60 @@ export function WorkloadIdentities(_: ScreenProps) {
               });
             }}
           >
-            <select
-              aria-label="Issuer preset"
-              value={preset}
-              onChange={(e) => setPreset(e.target.value as api.WorkloadPreset)}
-            >
-              <option value="github">GitHub Actions</option>
-              <option value="kubernetes">Kubernetes</option>
-            </select>
-            <input aria-label="Policy name" required value={f.name} onChange={set("name")} />
-            <input
+            <Select value={preset} onValueChange={(v) => setPreset(v as api.WorkloadPreset)}>
+              <SelectTrigger aria-label="Issuer preset" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="github">GitHub Actions</SelectItem>
+                <SelectItem value="kubernetes">Kubernetes</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input className="w-48" aria-label="Policy name" required value={f.name} onChange={set("name")} />
+            <Input
+              className="w-48"
               aria-label="Agent id"
               required
               value={f.agentId}
               onChange={(e) => setF({ ...f, agentId: e.target.value.trim() })}
             />
-            <input aria-label="Audience" required value={f.audience} onChange={set("audience")} />
+            <Input className="w-56" aria-label="Audience" required value={f.audience} onChange={set("audience")} />
             {preset === "github" ? (
               <>
-                <input
+                <Input
+                  className="w-56"
                   aria-label="Repository (owner/repo)"
                   required
                   value={f.repository}
                   onChange={set("repository")}
                 />
-                <input aria-label="Ref (optional)" value={f.ref} onChange={set("ref")} />
-                <input aria-label="Environment (optional)" value={f.environment} onChange={set("environment")} />
+                <Input className="w-48" aria-label="Ref (optional)" value={f.ref} onChange={set("ref")} />
+                <Input
+                  className="w-48"
+                  aria-label="Environment (optional)"
+                  value={f.environment}
+                  onChange={set("environment")}
+                />
               </>
             ) : (
               <>
-                <input aria-label="Issuer URL" type="url" required value={f.issuer} onChange={set("issuer")} />
-                <input aria-label="Namespace" required value={f.namespace} onChange={set("namespace")} />
-                <input
+                <Input
+                  className="w-64"
+                  aria-label="Issuer URL"
+                  type="url"
+                  required
+                  value={f.issuer}
+                  onChange={set("issuer")}
+                />
+                <Input
+                  className="w-48"
+                  aria-label="Namespace"
+                  required
+                  value={f.namespace}
+                  onChange={set("namespace")}
+                />
+                <Input
+                  className="w-48"
                   aria-label="Service account"
                   required
                   value={f.serviceaccount}
@@ -1449,15 +1498,14 @@ export function WorkloadIdentities(_: ScreenProps) {
               </>
             )}
             {hasPrefixCondition(body.conditions) && (
-              <p role="alert" className="alert" data-testid="prefix-warning">
-                <Icon name="alert" />A condition ends in * and matches every value with that prefix. Prefer exact
-                values.
-              </p>
+              <KitAlert variant="destructive" data-testid="prefix-warning" className="basis-full">
+                <CircleAlert />A condition ends in * and matches every value with that prefix. Prefer exact values.
+              </KitAlert>
             )}
-            <button type="submit" className="btn primary sm">
+            <Button type="submit" size="sm">
               Create workload identity
-            </button>
-          </form>
+            </Button>
+          </FormCard>
           {!items ? (
             <Loading what="workload identities" />
           ) : items.length === 0 ? (
@@ -1465,23 +1513,28 @@ export function WorkloadIdentities(_: ScreenProps) {
               <b>No workload identities yet.</b>
             </Empty>
           ) : (
-            <div className="sessions">
+            <div className="flex flex-col gap-3">
               {items.map((w) => (
-                <article key={w.id} className="card" aria-label={`Workload identity ${w.name}`}>
-                  <div className="who">
+                <Card
+                  key={w.id}
+                  role="article"
+                  aria-label={`Workload identity ${w.name}`}
+                  className="flex flex-col gap-3 p-4"
+                >
+                  <div className="flex flex-wrap items-baseline gap-3">
                     <b>{w.name}</b>
-                    <span className="mono">
+                    <span className="font-mono text-[13px] text-muted-foreground">
                       {w.issuer_kind} {w.issuer}
                     </span>
                   </div>
-                  <p>
-                    Handle: <code className="mono">{w.handle}</code> (not a secret) · audience {w.audience} · agent{" "}
-                    <span className="mono">{w.agent_id}</span> · last used {w.last_used_at ?? "never"}
+                  <p className="m-0 text-[13px]">
+                    Handle: <code className="font-mono">{w.handle}</code> (not a secret) · audience {w.audience} · agent{" "}
+                    <span className="font-mono">{w.agent_id}</span> · last used {w.last_used_at ?? "never"}
                   </p>
-                  <ul>
+                  <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px]">
                     {w.conditions.map((c) => (
                       <li key={`${c.claim}=${c.pattern}`}>
-                        <span className="mono">
+                        <span className="font-mono">
                           {c.claim} = {c.pattern}
                         </span>
                         {isPrefixPattern(c) ? " (prefix match)" : ""}
@@ -1489,33 +1542,36 @@ export function WorkloadIdentities(_: ScreenProps) {
                     ))}
                   </ul>
                   {hasPrefixCondition(w.conditions) && (
-                    <p className="alert">
-                      <Icon name="alert" />
+                    <KitAlert variant="destructive">
+                      <CircleAlert />
                       This policy uses a prefix (*) condition.
-                    </p>
+                    </KitAlert>
                   )}
-                  {confirming === w.id ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn sm danger-text"
-                        onClick={() => {
-                          setConfirming(null);
-                          void run(() => client.deleteWorkloadIdentity(w.id));
-                        }}
-                      >
-                        Confirm delete {w.name}
-                      </button>
-                      <button type="button" className="btn sm" onClick={() => setConfirming(null)}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="btn sm danger-text" onClick={() => setConfirming(w.id)}>
-                      Delete {w.name}
-                    </button>
-                  )}
-                </article>
+                  <div className="flex gap-2">
+                    {confirming === w.id ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            setConfirming(null);
+                            void run(() => client.deleteWorkloadIdentity(w.id));
+                          }}
+                        >
+                          Confirm delete {w.name}
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button type="button" variant="destructive" size="sm" onClick={() => setConfirming(w.id)}>
+                        Delete {w.name}
+                      </Button>
+                    )}
+                  </div>
+                </Card>
               ))}
             </div>
           )}
@@ -1718,6 +1774,7 @@ function RowActions({
   if (mode === "edit") {
     return (
       <form
+        className="flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void onRename(value).then(
@@ -1726,23 +1783,30 @@ function RowActions({
           );
         }}
       >
-        <input aria-label={`New name for ${name}`} required value={value} onChange={(e) => setValue(e.target.value)} />
-        <button type="submit" className="btn sm">
+        <Input
+          className="w-48"
+          aria-label={`New name for ${name}`}
+          required
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button type="submit" variant="outline" size="sm">
           Save
-        </button>
-        <button type="button" className="btn sm quiet" onClick={() => setMode("")}>
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setMode("")}>
           Cancel
-        </button>
+        </Button>
       </form>
     );
   }
   if (mode === "confirm") {
     return (
-      <span role="alertdialog" aria-label={`Delete ${name}?`}>
-        Delete {name}?{" "}
-        <button
+      <span role="alertdialog" aria-label={`Delete ${name}?`} className="flex items-center gap-2 text-[13px]">
+        Delete {name}?
+        <Button
           type="button"
-          className="btn sm danger-text"
+          variant="destructive"
+          size="sm"
           onClick={() =>
             void onDelete().then(
               () => setMode(""),
@@ -1751,30 +1815,29 @@ function RowActions({
           }
         >
           Confirm delete
-        </button>
-        <button type="button" className="btn sm quiet" onClick={() => setMode("")}>
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setMode("")}>
           Cancel
-        </button>
+        </Button>
       </span>
     );
   }
   return (
-    <>
-      <button type="button" className="btn sm" onClick={() => setMode("edit")}>
+    <span className="flex items-center gap-2">
+      <Button type="button" variant="outline" size="sm" onClick={() => setMode("edit")}>
         Rename {name}
-      </button>
-      <button type="button" className="btn sm danger-text" onClick={() => setMode("confirm")}>
+      </Button>
+      <Button type="button" variant="destructive" size="sm" onClick={() => setMode("confirm")}>
         Delete {name}
-      </button>
-    </>
+      </Button>
+    </span>
   );
 }
 
 function CreateForm({ label, onCreate }: { label: string; onCreate: (name: string) => Promise<unknown> }) {
   const [name, setName] = useState("");
   return (
-    <form
-      className="card"
+    <FormCard
       aria-label={`Create ${label}`}
       onSubmit={(e) => {
         e.preventDefault();
@@ -1784,11 +1847,17 @@ function CreateForm({ label, onCreate }: { label: string; onCreate: (name: strin
         );
       }}
     >
-      <input aria-label={`${label} name`} required value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="submit" className="btn primary sm">
+      <Input
+        className="w-56"
+        aria-label={`${label} name`}
+        required
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <Button type="submit" size="sm">
         Create {label}
-      </button>
-    </form>
+      </Button>
+    </FormCard>
   );
 }
 
@@ -1831,9 +1900,9 @@ function useCpList<T>(fn: () => Promise<T[]>, deps: unknown[]) {
 
 function ListWait({ what, l }: { what: string; l: { failed: boolean; retry: () => void } }) {
   return l.failed ? (
-    <button type="button" className="btn sm" onClick={l.retry}>
+    <Button type="button" variant="outline" size="sm" onClick={l.retry}>
       Retry
-    </button>
+    </Button>
   ) : (
     <Loading what={what} />
   );
@@ -1871,12 +1940,18 @@ function ProjectsView({ client }: { client: Client }) {
           <b>No projects yet.</b>
         </Empty>
       ) : (
-        <ul>
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {ps.items.map((p) => (
-            <li key={p.id}>
-              <button type="button" className="link" aria-pressed={sel?.id === p.id} onClick={() => setSel(p)}>
+            <li key={p.id} className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="link"
+                aria-pressed={sel?.id === p.id}
+                className="aria-pressed:font-semibold"
+                onClick={() => setSel(p)}
+              >
                 {p.name}
-              </button>
+              </Button>
               <RowActions
                 name={p.name}
                 onRename={(name) => ps.run(() => client.updateProject(p.id, { name }))}
@@ -1893,9 +1968,7 @@ function ProjectsView({ client }: { client: Client }) {
       )}
       {sel && (
         <section aria-label={`Environments of ${sel.name}`}>
-          <div className="sec-h spaced">
-            <h2>Environments of {sel.name}</h2>
-          </div>
+          <h2 className="mt-2 mb-3 text-base font-semibold">Environments of {sel.name}</h2>
           {es.err && <Alert>{es.err}</Alert>}
           <CreateForm
             label="environment"
@@ -1908,9 +1981,9 @@ function ProjectsView({ client }: { client: Client }) {
               <b>No environments yet.</b>
             </Empty>
           ) : (
-            <ul>
+            <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {es.items.map((e) => (
-                <li key={e.id}>
+                <li key={e.id} className="flex flex-wrap items-center gap-3">
                   {e.name}
                   <RowActions
                     name={e.name}
@@ -1967,45 +2040,53 @@ function SecretsView({ client }: { client: Client }) {
         </Empty>
       ) : (
         <>
-          <label>
-            Project{" "}
-            <select
-              aria-label="Project"
+          <div className="flex items-center gap-2 text-[13px] font-semibold">
+            Project
+            <Select
               value={project}
-              onChange={(e) => {
-                setPid(e.target.value);
+              onValueChange={(v) => {
+                setPid(v);
                 setEid("");
                 setOpen(null);
               }}
             >
-              {ps.items.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <SelectTrigger aria-label="Project" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ps.items.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {es.items && es.items.length === 0 ? (
             <Empty icon="key">No environments in this project.</Empty>
           ) : (
             es.items && (
-              <label>
-                Environment{" "}
-                <select
-                  aria-label="Environment"
+              <div className="flex items-center gap-2 text-[13px] font-semibold">
+                Environment
+                <Select
                   value={env}
-                  onChange={(e) => {
-                    setEid(e.target.value);
+                  onValueChange={(v) => {
+                    setEid(v);
                     setOpen(null);
                   }}
                 >
-                  {es.items.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <SelectTrigger aria-label="Environment" size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {es.items.map((x) => (
+                      <SelectItem key={x.id} value={x.id}>
+                        {x.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )
           )}
           {env &&
@@ -2014,12 +2095,12 @@ function SecretsView({ client }: { client: Client }) {
             ) : ss.items.length === 0 ? (
               <Empty icon="key">No secrets in this environment.</Empty>
             ) : (
-              <ul>
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
                 {ss.items.map((s) => (
-                  <li key={s.id}>
-                    <button type="button" className="link" onClick={() => setOpen(s)}>
+                  <li key={s.id} className="flex items-center gap-2 text-[13px]">
+                    <Button type="button" variant="link" onClick={() => setOpen(s)}>
                       {s.name}
-                    </button>{" "}
+                    </Button>
                     ({plural(s.version_count, "version")})
                   </li>
                 ))}
@@ -2038,10 +2119,13 @@ function SecretDetail({ client, secret, onClose }: { client: Client; secret: Sec
   const v = useLoad<SecretVersion[]>(() => client.listSecretVersions(p, e, id), [p, e, id]);
   const d = s.data ?? secret;
   return (
-    <div className="card" role="region" aria-label={`Secret ${secret.name}`}>
-      <b>{d.name}</b>
-      {d.description && <p>{d.description}</p>}
-      <p className="muted small">Updated {d.updated_at}</p>
+    <Card role="region" aria-label={`Secret ${secret.name}`} className="flex flex-col items-start gap-3 p-4">
+      <div className="flex flex-wrap items-baseline gap-3">
+        <b>{d.name}</b>
+        <CopyableId value={d.id} />
+      </div>
+      {d.description && <p className="m-0 text-sm">{d.description}</p>}
+      <p className="m-0 text-[13px] text-muted-foreground">Updated {d.updated_at}</p>
       {s.alert}
       {v.alert}
       {!v.data && !v.err ? (
@@ -2049,33 +2133,33 @@ function SecretDetail({ client, secret, onClose }: { client: Client; secret: Sec
       ) : (
         v.data &&
         (v.data.length === 0 ? (
-          <p className="quiet-state">No versions yet.</p>
+          <p className="m-0 text-[13px] text-muted-foreground">No versions yet.</p>
         ) : (
-          <table className="grid">
-            <caption className="sr-only">Versions of {secret.name}</caption>
-            <thead>
-              <tr>
-                <th className="num">Version</th>
-                <th>Key</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableCaption className="sr-only">Versions of {secret.name}</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-right">Version</TableHead>
+                <TableHead>Key</TableHead>
+                <TableHead>Created</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {v.data.map((x) => (
-                <tr key={x.version}>
-                  <td className="num mono">{x.version}</td>
-                  <td className="mono">{x.key_id}</td>
-                  <td className="mono nowrap">{x.created_at}</td>
-                </tr>
+                <TableRow key={x.version}>
+                  <TableCell className="text-right font-mono">{x.version}</TableCell>
+                  <TableCell className="font-mono">{x.key_id}</TableCell>
+                  <TableCell className="font-mono whitespace-nowrap">{x.created_at}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         ))
       )}
-      <button type="button" className="btn sm quiet" onClick={onClose}>
+      <Button type="button" variant="ghost" size="sm" onClick={onClose}>
         Close
-      </button>
-    </div>
+      </Button>
+    </Card>
   );
 }
 
@@ -2125,29 +2209,27 @@ export function McpTools(_: ScreenProps) {
           const rows = tools.filter((t) => t.layer === layer);
           if (rows.length === 0) return null;
           return (
-            <div key={layer} className="card" role="group" aria-label={`${layerName(layer)} tools`}>
-              <h2>{layerName(layer)}</h2>
-              <ul>
+            <Card key={layer} role="group" aria-label={`${layerName(layer)} tools`} className="flex flex-col gap-3 p-4">
+              <h2 className="m-0 text-base font-semibold">{layerName(layer)}</h2>
+              <ul className="m-0 flex list-none flex-col gap-3 p-0">
                 {rows.map((t) => (
-                  <li key={t.tool}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        role="switch"
+                  <li key={t.tool} className="flex flex-wrap items-center gap-3">
+                    <Label className="gap-2">
+                      <Switch
                         aria-label={`${t.tool} (${layer})`}
                         checked={t.enabled}
-                        onChange={(e) => void toggle(t, e.target.checked)}
-                      />{" "}
+                        onCheckedChange={(on) => void toggle(t, on)}
+                      />
                       <strong>{t.tool}</strong>
-                    </label>{" "}
-                    <span className="muted">
+                    </Label>
+                    <span className="text-[13px] text-muted-foreground">
                       {t.description} {t.default_enabled ? "On by default" : "Off by default"}
                       {t.overridden ? ", changed" : ""}
                     </span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </Card>
           );
         })
       )}
@@ -2196,39 +2278,39 @@ export function McpClients(_: ScreenProps) {
       ) : clients.length === 0 ? (
         <Empty icon="sessions">No MCP clients have signed in yet.</Empty>
       ) : (
-        <div className="table-wrap">
-          <table className="grid">
-            <caption className="sr-only">MCP clients</caption>
-            <thead>
-              <tr>
-                <th>Client</th>
-                <th>Layer</th>
-                <th>Principal</th>
-                <th>Last seen</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="py-0">
+          <Table>
+            <TableCaption className="sr-only">MCP clients</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
+                <TableHead>Layer</TableHead>
+                <TableHead>Principal</TableHead>
+                <TableHead>Last seen</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {clients.map((c) => (
-                <tr key={c.id}>
-                  <td className="strong">{label(c)}</td>
-                  <td>{layerName(c.layer)}</td>
-                  <td className="mono">{c.principal}</td>
-                  <td className="mono nowrap">{c.last_seen_at}</td>
-                  <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
-                  <td>
+                <TableRow key={c.id}>
+                  <TableCell className="font-semibold">{label(c)}</TableCell>
+                  <TableCell>{layerName(c.layer)}</TableCell>
+                  <TableCell className="font-mono">{c.principal}</TableCell>
+                  <TableCell className="font-mono whitespace-nowrap">{c.last_seen_at}</TableCell>
+                  <TableCell>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</TableCell>
+                  <TableCell>
                     {!c.revoked_at && (
-                      <button type="button" className="btn sm" onClick={() => void revoke(c)}>
+                      <Button type="button" variant="outline" size="sm" onClick={() => void revoke(c)}>
                         Revoke {label(c)}
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </section>
   );
@@ -2266,31 +2348,31 @@ export function Bindings(_: ScreenProps) {
       ) : items.length === 0 ? (
         <Empty icon="key">The gateway has not published any bindings yet.</Empty>
       ) : (
-        <div className="table-wrap">
-          <table className="grid">
-            <caption className="sr-only">Bindings</caption>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Kind</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="py-0">
+          <Table>
+            <TableCaption className="sr-only">Bindings</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {items.map((b) => (
-                <tr key={`${b.kind}:${b.name}`}>
-                  <td className="strong">{b.name}</td>
-                  <td>{BINDING_KIND[b.kind] ?? b.kind}</td>
-                  <td className="mono">
+                <TableRow key={`${b.kind}:${b.name}`}>
+                  <TableCell className="font-semibold">{b.name}</TableCell>
+                  <TableCell>{BINDING_KIND[b.kind] ?? b.kind}</TableCell>
+                  <TableCell className="font-mono">
                     {bindingDetails(b)
                       .map(([l, v]) => `${l}: ${v}`)
                       .join(" · ")}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </section>
   );

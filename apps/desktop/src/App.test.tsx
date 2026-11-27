@@ -703,7 +703,8 @@ test("workload identities: list, prefix warning, create, delete with confirm, no
   });
   expect(JSON.stringify(sent)).not.toMatch(/token|secret|password/i);
 
-  await userEvent.selectOptions(screen.getByLabelText("Issuer preset"), "kubernetes");
+  await userEvent.click(screen.getByRole("combobox", { name: "Issuer preset" }));
+  await userEvent.click(await screen.findByRole("option", { name: "Kubernetes" }));
   await userEvent.type(screen.getByLabelText("Policy name"), "k1");
   await userEvent.type(screen.getByLabelText("Agent id"), "a1");
   await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");
@@ -926,4 +927,48 @@ test("overview, timeline and sessions are built from kit components", async () =
   expect(within(toggle.closest("li")!).getByText("Human started")).toHaveAttribute("data-slot", "badge");
   expect(container.querySelector("[data-slot=page-header]")).not.toBeNull();
   expect(container.querySelector("[data-slot=scope-chip]")).not.toBeNull();
+});
+
+test("control-plane screens are built from kit components, with no old class hooks", async () => {
+  const client = {
+    ...cpClient(),
+    listAgents: vi.fn().mockResolvedValue([{ id: "a1", name: "bot", description: "" }]),
+    listGrants: vi.fn().mockResolvedValue([{ id: "g1", secret_name: "STRIPE", mode: "relay", expires_at: null }]),
+    listWorkloadIdentities: vi.fn().mockResolvedValue([
+      {
+        id: "w1",
+        name: "ci",
+        agent_id: "a1",
+        audience: "aud",
+        issuer_kind: "github",
+        issuer: "https://token.actions.githubusercontent.com",
+        handle: "lsw_abc",
+        conditions: [{ claim: "ref", pattern: "refs/heads/rel-*" }],
+        last_used_at: null,
+      },
+    ]),
+    listMcpTools: vi.fn().mockResolvedValue([mcpTool("hub", "list_projects", true, true)]),
+    listMcpClients: vi.fn().mockResolvedValue([mcpClient("c1", "Claude")]),
+    listBindings: vi.fn().mockResolvedValue([{ kind: "aws", name: "role", role: "r", region: "us-east-1" }]),
+  };
+  m.agentsClient.mockReturnValue(client as never);
+  const { container } = render(<App />);
+  const screens: [string, string, string][] = [
+    ["Agents", "button", "input"],
+    ["Workload identities", "button", "input"],
+    ["Projects", "button", "input"],
+    ["Secrets", "button", "select-trigger"],
+    ["MCP tools", "switch", "card"],
+    ["MCP clients", "button", "table"],
+    ["Bindings", "table", "card"],
+  ];
+  for (const [tab, a, b] of screens) {
+    await nav(tab);
+    await screen.findByRole("heading", { level: 1, name: tab });
+    await waitFor(() => expect(container.querySelector("[data-slot=loader]")).toBeNull());
+    for (const slot of ["page-header", a, b]) {
+      expect(container.querySelector(`[data-slot=${slot}]`), `${tab}: ${slot}`).not.toBeNull();
+    }
+    expect(container.querySelector(".btn, .card, .sessions, .who, .table-wrap, .link"), tab).toBeNull();
+  }
 });

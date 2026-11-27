@@ -307,7 +307,7 @@ export function App() {
             <pre className="mb-4 rounded-lg border bg-card px-4 py-3">
               <code>locksmithd</code>
             </pre>
-            <p className="muted small">Detail: {down}</p>
+            <p className="text-[13px] text-muted-foreground">Detail: {down}</p>
           </section>
         ) : (
           <>
@@ -343,7 +343,7 @@ export function App() {
                       {since !== undefined && (
                         <span className="before:mx-1.5 before:content-['·']">
                           since{" "}
-                          <time className="mono text-foreground" dateTime={new Date(since * 1000).toISOString()}>
+                          <time className="font-mono text-foreground" dateTime={new Date(since * 1000).toISOString()}>
                             {clock(since)}
                           </time>
                         </span>

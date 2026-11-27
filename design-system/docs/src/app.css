@@ -1,0 +1,130 @@
+/* Demo app layout only; components come from bundle.css. */
+.demo { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+.demo-nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 24px 16px; background: var(--sidebar); border-right: 1px solid var(--border); }
+.demo-brand { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; padding: 0 8px; color: var(--foreground); text-decoration: none; }
+.demo-theme { margin: 0 0 2px; }
+.demo-group a { padding: 4px 8px; border-radius: 4px; color: var(--muted-foreground); text-decoration: none; font-size: 13px; }
+.demo-group a:hover { background: var(--accent); color: var(--foreground); }
+.demo main { padding: 40px 40px 80px; max-width: 1080px; }
+
+.demo-intro { max-width: 60ch; margin-bottom: 28px; }
+.demo-intro h1 { margin: 0; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: -0.025em; }
+.demo-intro p { margin: 10px 0 0; font-size: 16px; line-height: 24px; color: var(--muted-foreground); }
+
+/* The scene: one screen of the product, on the page background like a window into the app. */
+.scene { padding: 24px 24px 28px; border: 1px solid var(--input); border-radius: 8px; background: var(--background); }
+.scene .screen-head { margin-top: 4px; }
+.scene .screen-head h1 { font: 600 22px/28px var(--font-mono); font-variant-ligatures: none; letter-spacing: -0.01em; }
+.scene-body { margin-top: 16px; min-height: 196px; } /* the grants table height, so the page does not jump when it loads */
+.scene-body > .loader { min-height: 196px; padding: 0; }
+
+
+.demo-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.demo-row:has(.field) { align-items: flex-start; }
+.demo-col { display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 720px) { .demo { grid-template-columns: 1fr; } .demo-nav { display: none; } .demo main { padding: 20px 16px 48px; } .scene { padding: 16px; } }
+.loader-box { width: 180px; border: 1px dashed var(--input); border-radius: 6px; }
+.loader-box .loader { padding: 24px 0; }
+.motion { display: grid; grid-template-columns: max-content 200px minmax(0, 1fr); gap: 10px 16px; align-items: center; font-size: 13px; }
+.motion-track { height: 12px; border-radius: 3px; background: var(--input); box-shadow: inset 0 1px 1px rgba(30, 25, 15, 0.14); }
+.motion-track i { display: block; width: 28px; height: 100%; border-radius: 2px; background: var(--brand); animation: demo-throw var(--ease-bolt) both; }
+@keyframes demo-throw { from { transform: none; } to { transform: translateX(172px); } }
+.type-spec { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 14px 20px; align-items: baseline; font-size: 13px; }
+.demo-group { display: flex; flex-direction: column; gap: 1px; }
+.demo-group h2 { margin: 0 0 4px; padding: 0 8px; font-size: 12px; line-height: 18px; font-weight: 600; color: var(--foreground); }
+.demo-filter { position: relative; display: flex; }
+.demo-divider { margin: 6px 0 -4px; padding: 10px 8px 0; border-top: 1px solid var(--border); font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+.demo-fold summary { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; list-style: none; cursor: pointer; font-size: 12px; line-height: 18px; font-weight: 600; color: var(--foreground); }
+.demo-fold summary::-webkit-details-marker { display: none; }
+.demo-fold summary:hover { background: var(--accent); }
+.demo-fold summary:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.demo-fold summary svg { flex: none; width: 14px; height: 14px; color: var(--muted-foreground); transform: rotate(-90deg); transition: transform var(--duration-fast) var(--ease-out); }
+.demo-fold[open] summary svg { transform: none; }
+.demo-fold[open] summary { margin-bottom: 2px; }
+.demo-fold-items { display: flex; flex-direction: column; gap: 1px; } /* <details> content is not a flex child of the details box */
+.demo-fold-items a { padding-left: 28px; }
+.demo-count { margin-left: auto; font: 500 11px var(--font-mono); color: var(--muted-foreground); }
+.demo-none { margin: 0; padding: 0 8px; font-size: 13px; color: var(--muted-foreground); }
+.demo-nav { gap: 10px; }
+.demo-nav .demo-fold { gap: 1px; }
+.demo-group a[aria-current="page"] { background: var(--sidebar-accent); color: var(--foreground); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border); }
+
+/* One component per page: what it is, then the live specimen on a stage. */
+.page .demo-intro { margin-bottom: 24px; }
+.stage { padding: 32px 28px; border: 1px solid var(--input); border-radius: 8px; background: var(--background); }
+.pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); }
+.pager a { display: flex; flex-direction: column; gap: 2px; color: var(--foreground); font-weight: 600; text-decoration: none; }
+.pager a:hover { color: var(--brand-text); }
+.pager a[data-next] { margin-left: auto; text-align: right; }
+.pager .muted { font-size: 12px; font-weight: 400; }
+
+/* Overview index: every page, by group. */
+.index { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 28px 24px; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--foreground); }
+.index h2 { margin: 0 0 8px; font-size: 13px; line-height: 19px; font-weight: 600; }
+.index ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.index a { color: var(--muted-foreground); font-size: 13px; text-decoration: none; }
+.index a:hover { color: var(--brand-text); text-decoration: underline; text-underline-offset: 3px; }
+
+/* API: how to install a component, and its props. */
+.api { display: flex; flex-direction: column; gap: 12px; margin-top: 32px; }
+.api h2 { margin: 12px 0 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.api p { margin: 0; max-width: 60ch; }
+
+/* Site chrome on shadcn parts. */
+.demo-theme { width: 100%; }
+.demo-theme [data-slot="toggle-group-item"] { flex: 1 1 auto; }
+.demo-filter [data-slot="input"] { height: 32px; padding-right: 32px; font-size: 13px; }
+.demo-filter [data-slot="kbd"] { position: absolute; right: 6px; top: 5px; pointer-events: none; }
+.demo-filter:focus-within [data-slot="kbd"] { display: none; }
+.demo a { color: inherit; }
+.api-parts { display: flex; flex-wrap: wrap; gap: 6px; }
+.api-req { color: var(--brand-text); font-size: 11px; }
+.api code, .api-parts code { padding: 1px 5px; border-radius: 3px; background: var(--muted); color: var(--chip-text); font-size: 12px; }
+.api [data-slot="table-cell"] { vertical-align: top; white-space: normal; }
+.api [data-slot="code-block"] code { padding: 0; background: none; color: inherit; }
+
+/* Gallery: every demo in a grid, for reviewing the look. */
+.demo main:has(.gallery) { max-width: none; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 12px; }
+.gallery section { min-width: 0; padding: 14px 16px 18px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.gallery h2 { margin: 0 0 12px; font: 600 11px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
+.demo:has(.gallery) { grid-template-columns: minmax(0, 1fr); }
+.demo:has(.gallery) .demo-nav { display: none; }
+.demo:has(.gallery) main { padding: 16px; }
+
+/* Controls above a demo that switch its state. */
+.demo-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding-bottom: 14px; border-bottom: 1px dashed var(--input); }
+
+/* A labelled grid of one component's variants. */
+.demo-variants { display: grid; grid-template-columns: max-content minmax(0, 320px); gap: 14px 20px; align-items: center; width: 100%; font-size: 12px; color: var(--muted-foreground); }
+
+/* Colour and icon pages. */
+.colors { display: grid; gap: 28px; width: 100%; }
+.colors h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.colors p { max-width: 70ch; margin: 4px 0 12px; font-size: 13px; line-height: 19px; color: var(--muted-foreground); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.swatch { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 2px 10px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); text-align: left; cursor: copy; }
+.swatch:hover { background: var(--state-hover); }
+.swatch i { grid-row: span 2; width: 36px; height: 36px; border: 1px solid var(--input); border-radius: 4px; }
+.swatch b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12px var(--font-mono); }
+.swatch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--font-mono); color: var(--muted-foreground); }
+.state-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.state-row:not(.live) > span { padding: 8px 14px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px; font-weight: 500; }
+.state-row > .off { border-color: var(--state-disabled-border); background: var(--state-disabled-background); color: var(--state-disabled-foreground); }
+.icons { display: grid; gap: 16px; width: 100%; }
+.icons-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 13px; color: var(--muted-foreground); }
+.icons-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.icons-grid button { display: grid; justify-items: center; gap: 8px; padding: 14px 6px 10px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--foreground); cursor: copy; }
+.icons-grid button:hover { border-color: var(--border); background: var(--state-hover); }
+.icons-grid button:active { background: var(--state-active); }
+.icons-grid svg { width: 20px; height: 20px; }
+.icons-grid span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--font-mono); color: var(--muted-foreground); }
+
+/* Chart demos: panels in a two-column grid, as on a dashboard. */
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; width: 100%; }
+.chart-panel { margin: 0; padding: 14px 14px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); }
+.chart-panel figcaption { display: grid; gap: 2px; margin-bottom: 10px; }
+.chart-panel figcaption b { font-size: 14px; font-weight: 600; }
+.chart-panel figcaption span { font-size: 12px; color: var(--muted-foreground); }
+.chart-total { fill: var(--foreground); font: 600 22px var(--font-mono); }
+.chart-total-label { fill: var(--muted-foreground); font: 500 11px var(--font-sans); }

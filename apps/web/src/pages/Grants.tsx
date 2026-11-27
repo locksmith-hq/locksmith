@@ -1,8 +1,11 @@
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { PageHeader } from "@locksmith-hq/page-header";
 import { useState } from "react";
 import type { Agent, AgentGrant, Client } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
 import { useQuery } from "@tanstack/react-query";
-import { Head } from "@locksmith/ui";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
 
@@ -16,26 +19,28 @@ export function Grants({ client, agent, onError }: { client: Client; agent: Agen
   const act = (f: () => Promise<unknown>) => f().then(refresh, (e) => onError(errMsg(e)));
 
   return (
-    <div aria-label={`Grants for ${agent.name}`}>
+    <div aria-label={`Grants for ${agent.name}`} className="flex w-full flex-col gap-2">
       <QueryState query={q} empty="No grants yet.">
         {(grants: AgentGrant[]) => (
-          <ul className="plain">
+          <ul className="flex w-full flex-col gap-1">
             {grants.map((g) => (
-              <li key={g.id}>
+              <li key={g.id} className="flex flex-wrap items-center gap-2 text-muted-foreground">
                 {g.secret_name} ({g.mode}) {g.expires_at ? `expires ${g.expires_at}` : "no expiry"}
-                <button
-                  className="btn sm quiet danger-text"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-(--destructive-text)"
                   onClick={() => void act(() => client.revokeGrant(agent.id, g.id))}
                 >
                   Revoke {g.secret_name}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
         )}
       </QueryState>
       <form
-        className="inline-form"
+        className="flex flex-wrap items-center gap-2 [&_[data-slot=input]]:w-60"
         onSubmit={(e) => {
           e.preventDefault();
           void act(async () => {
@@ -49,21 +54,21 @@ export function Grants({ client, agent, onError }: { client: Client; agent: Agen
           });
         }}
       >
-        <input
+        <Input
           aria-label={`Secret id for ${agent.name}`}
           required
           value={secretId}
           onChange={(e) => setSecretId(e.target.value.trim())}
         />
-        <input
+        <Input
           aria-label={`Expiry for ${agent.name}`}
           type="datetime-local"
           value={expires}
           onChange={(e) => setExpires(e.target.value)}
         />
-        <button type="submit" className="btn sm primary">
+        <Button size="sm" type="submit">
           Grant {agent.name}
-        </button>
+        </Button>
       </form>
     </div>
   );
@@ -75,17 +80,17 @@ export function GrantsPage({ client }: { client: Client }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <section aria-label="Grants">
-      <Head title="Grants" />
+      <PageHeader title="Grants" />
       {error && (
-        <p role="alert" className="state">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       <QueryState query={q} empty="No agents yet, so no grants.">
         {(agents: Agent[]) => (
-          <ul className="list">
+          <ul className="divide-y rounded-md border bg-card">
             {agents.map((a) => (
-              <li key={a.id} className="row">
+              <li key={a.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
                 <strong>{a.name}</strong>
                 <Grants client={client} agent={a} onError={setError} />
               </li>

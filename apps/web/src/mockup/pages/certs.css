@@ -1,21 +1,21 @@
 /* Certificates: status words, the authority tree, detail views and a few small helpers. Tokens only. */
-.cstat { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.cstat { font-size: 12px; font-weight: 600; color: var(--muted-foreground); white-space: nowrap; }
 .cstat[data-s="Valid"], .cstat[data-s="Active"] { color: var(--live-text); }
 .cstat[data-s="Expiring soon"] { color: var(--warning-text); }
-.cstat[data-s="Expired"], .cstat[data-s="Revoked"] { color: var(--danger-text); }
+.cstat[data-s="Expired"], .cstat[data-s="Revoked"] { color: var(--destructive-text); }
 .cstat[data-s="Disabled"], .cstat[data-s="Cannot renew"] { color: var(--warning-text); }
 .grid tr[data-bad="true"] .ct-link { color: var(--warning-text); }
-.ct-link { color: var(--text); text-decoration: none; }
+.ct-link { color: var(--foreground); text-decoration: none; }
 .ct-link:hover { text-decoration: underline; }
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin: 0; font-size: 13px; }
-.kv dt { color: var(--muted); }
+.kv dt { color: var(--muted-foreground); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 .ct-kv { margin-top: 10px; }
 .ct-note { margin: 4px 0 0; }
 .tree-name { display: inline-flex; align-items: center; gap: 8px; }
-.elbow { flex: none; width: 14px; height: 14px; margin-top: -8px; border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); border-bottom-left-radius: 6px; }
+.elbow { flex: none; width: 14px; height: 14px; margin-top: -8px; border-left: 1px solid var(--input); border-bottom: 1px solid var(--input); border-bottom-left-radius: 6px; }
 .stack { display: grid; gap: 10px; justify-items: start; }
-.field-err { margin: 8px 0 0; color: var(--danger-text); font-size: 13px; font-weight: 600; }
+.field-err { margin: 8px 0 0; color: var(--destructive-text); font-size: 13px; font-weight: 600; }
 .panel.form .add.certs { grid-template-columns: repeat(auto-fit, minmax(160px, auto)); align-items: end; }
 .set-ctl code { overflow-wrap: anywhere; }
 .num-in { width: 90px !important; }
@@ -29,19 +29,19 @@
 .ct-col .plain { margin-bottom: 0; }
 .ct-col .inline-form { margin-top: 10px; }
 .ct-sort { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.ct-sort svg { width: 11px; height: 11px; opacity: 0; transition: transform 160ms var(--ease); }
+.ct-sort svg { width: 11px; height: 11px; opacity: 0; transition: transform 160ms var(--ease-out); }
 .ct-sort[data-dir] svg { opacity: 1; transform: rotate(90deg); }
 .ct-sort[data-dir="-1"] svg { transform: rotate(-90deg); }
-.ct-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.ct-sort:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
 .ct-chain { margin: 12px 0 0; padding: 0; list-style: none; }
 .ct-chain li { position: relative; display: flex; flex-direction: column; padding: 0 0 18px 40px; min-height: 28px; font-size: 13px; }
 .ct-chain li:last-child { padding-bottom: 0; }
-.ct-chain li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 30px; bottom: 2px; border-left: 1px solid var(--border-strong); }
-.ct-dot { position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--raised); color: var(--muted); }
+.ct-chain li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 30px; bottom: 2px; border-left: 1px solid var(--input); }
+.ct-dot { position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--input); background: var(--popover); color: var(--muted-foreground); }
 .ct-dot svg { width: 14px; height: 14px; }
 .ct-time li { align-items: flex-start; padding: 8px 0; }
 .ct-time li > :nth-child(2) { flex: 1; }
-.ct-ico { display: grid; place-items: center; width: 20px; height: 20px; color: var(--muted); }
+.ct-ico { display: grid; place-items: center; width: 20px; height: 20px; color: var(--muted-foreground); }
 .ct-ico svg { width: 14px; height: 14px; }
 .ct-form { display: grid; gap: 14px; margin-top: 12px; justify-items: start; }
 .ct-form .field { width: min(100%, 420px); }

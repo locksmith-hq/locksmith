@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, MemoryRouter } from "react-router";
 import { Shell } from "./Shell";
-import { Loader } from "./Loader";
 import { createClient, type Client } from "@locksmith/control-plane-client";
 import { withUnauthorizedHandler } from "./api/client";
-import { Logo, VaultMark } from "@locksmith/ui";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Button } from "@locksmith-hq/button";
+import { Card } from "@locksmith-hq/card";
+import { Loader } from "@locksmith-hq/loader";
+import { Mark } from "@locksmith-hq/mark";
+import { Wordmark } from "@locksmith-hq/wordmark";
 import { createAuth, defaultConfig, type AuthService, type AuthState, type Provider } from "./auth";
 
 let defaultAuth: AuthService | undefined;
@@ -95,30 +99,38 @@ const ICONS: Partial<Record<Provider, React.ReactNode>> = { google: <GoogleG />,
 function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
   const providers = auth.providers ?? ["github", "google", "email"];
   return (
-    <main className="login">
-      <div className="login-card">
-        <VaultMark size={72} />
-        <h1 className="login-title">
-          <span className="wordmark">locksmith</span>
+    <main className="grid min-h-screen place-items-center p-6">
+      <Card className="w-full max-w-sm items-center gap-4 px-7 pt-9 pb-6 text-center">
+        <Mark size={72} />
+        <h1>
+          <Wordmark size={22} />
         </h1>
-        <p className="login-tag">Your agents use credentials without ever holding them.</p>
+        <p className="text-[15px] leading-[22px] text-muted-foreground">
+          Your agents use credentials without ever holding them.
+        </p>
         {notice && (
-          <p role="alert" className="login-notice">
-            {notice}
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
         )}
-        <section aria-label="Sign in" className="login-choices">
+        <section aria-label="Sign in" className="flex w-full flex-col gap-2.5">
           {providers.map((p, i) => (
-            <button key={p} className={i === 0 ? "btn primary" : "btn"} onClick={() => void auth.signIn(p)}>
+            <Button
+              key={p}
+              variant={i === 0 ? "default" : "outline"}
+              size="lg"
+              className="w-full"
+              onClick={() => void auth.signIn(p)}
+            >
               {ICONS[p]}
               {CHOICES[p]}
-            </button>
+            </Button>
           ))}
         </section>
-        <p className="login-foot">
-          <Logo size={14} /> Access is invite-only.
+        <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Mark small size={14} /> Access is invite-only.
         </p>
-      </div>
+      </Card>
     </main>
   );
 }

@@ -1,4 +1,13 @@
 // Agent Gateway pages: hosts, grants and settings. All state lives in ./gateway-data so the pages agree.
+import { Badge } from "@locksmith-hq/badge";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useState } from "react";
 import {
   Crumbs,
@@ -49,9 +58,9 @@ function NotFound({ what, href, back }: { what: string; href: string; back: stri
     <section>
       <Crumbs trail={[[back, href], ["Not found"]]} />
       <Head title="Not found" sub={`There is no ${what} with that address. It may have been removed.`}>
-        <a className="btn primary" href={href}>
-          Back to {back.toLowerCase()}
-        </a>
+        <Button asChild>
+          <a href={href}>Back to {back.toLowerCase()}</a>
+        </Button>
       </Head>
       <Empty icon="search">
         <b>Nothing here.</b> Check the address, or go back to the list.
@@ -97,60 +106,60 @@ function HostList({ say }: { say: Say }) {
         title="Allowed hosts"
         sub="A secret is only ever added to a call to a host on this list. Anywhere else, the gateway refuses the call."
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Allow a host
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={submit} aria-label="Allow a host">
-          <h2>Allow a host</h2>
-          <div className="add">
-            <label className="field">
-              Host name
-              <input
-                name="host"
-                required
-                autoFocus
-                placeholder="api.example.com"
-                autoComplete="off"
-                spellCheck={false}
-                aria-invalid={bad}
-                onChange={() => setBad(false)}
-              />
-            </label>
-            <label className="field">
-              Secret that may go there
-              <select name="name">
-                {NAMES.map((n) => (
-                  <option key={n}>{n}</option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Allow host
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              onClick={() => {
-                setAdding(false);
-                setBad(false);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-          {bad && (
-            <p className="gw-warn" role="alert">
-              <Icon name="alert" />
-              Enter a host name only, such as api.example.com. No https:// and no path.
+        <Card className="panel form">
+          <form className="contents" onSubmit={submit} aria-label="Allow a host">
+            <h2>Allow a host</h2>
+            <div className="add">
+              <Label className="field">
+                Host name
+                <Input
+                  name="host"
+                  required
+                  autoFocus
+                  placeholder="api.example.com"
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={bad}
+                  onChange={() => setBad(false)}
+                />
+              </Label>
+              <Label className="field">
+                Secret that may go there
+                <Dropdown name="name">
+                  {NAMES.map((n) => (
+                    <Option key={n}>{n}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Button type="submit">Allow host</Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setBad(false);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {bad && (
+              <p className="gw-warn" role="alert">
+                <Icon name="alert" />
+                Enter a host name only, such as api.example.com. No https:// and no path.
+              </p>
+            )}
+            <p className="hint">
+              Only that secret goes to that host. Other secrets stay blocked there until you allow them too.
             </p>
-          )}
-          <p className="hint">
-            Only that secret goes to that host. Other secrets stay blocked there until you allow them too.
-          </p>
-        </form>
+          </form>
+        </Card>
       )}
       {hosts.length === 0 ? (
         <Empty icon="http">
@@ -159,67 +168,71 @@ function HostList({ say }: { say: Say }) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Host</th>
-                <th>Secrets that may go there</th>
-                <th>Last request</th>
-                <th className="num">Last 7 days</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Host</TableHead>
+                <TableHead>Secrets that may go there</TableHead>
+                <TableHead>Last request</TableHead>
+                <TableHead className="num">Last 7 days</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {hosts.flatMap((h) => [
-                <tr key={h.host}>
-                  <td className="mono">
+                <TableRow key={h.host}>
+                  <TableCell className="mono">
                     <a className="strong" href={`#/access/hosts/${encodeURIComponent(h.host)}`}>
                       {h.host}
                     </a>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <ul className="scopes-t mono" aria-label={`Secrets allowed at ${h.host}`}>
                       {h.names.map((n) => (
                         <li key={n}>{n} </li>
                       ))}
                     </ul>
-                  </td>
-                  <td className="muted">
+                  </TableCell>
+                  <TableCell className="muted">
                     {lastCall(reqs, h.host) === null ? "Never used" : ago(lastCall(reqs, h.host))}
-                  </td>
-                  <td className="num mono">{h.week.toLocaleString("en-US")}</td>
-                  <td className="num">
-                    <button
+                  </TableCell>
+                  <TableCell className="num mono">{h.week.toLocaleString("en-US")}</TableCell>
+                  <TableCell className="num">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
                       type="button"
-                      className="btn sm quiet danger-text"
                       aria-label={`Remove ${h.host}`}
                       onClick={() => (h.week > 0 ? setRemoving(h.host) : remove(h))}
                     >
                       Remove
-                    </button>
-                  </td>
-                </tr>,
+                    </Button>
+                  </TableCell>
+                </TableRow>,
                 removing === h.host && (
-                  <tr key={`${h.host}-x`} className="detail">
-                    <td colSpan={5}>
-                      <p className="alert" role="alert" style={{ margin: 0 }}>
-                        {plural(h.week, "call")} went to {h.host} in the last 7 days. After removal, the gateway refuses
-                        them and agents see an error.
-                        <button type="button" className="btn sm danger" onClick={() => remove(h)}>
-                          Remove anyway
-                        </button>
-                        <button type="button" className="btn sm quiet" onClick={() => setRemoving(null)}>
-                          Keep host
-                        </button>
-                      </p>
-                    </td>
-                  </tr>
+                  <TableRow key={`${h.host}-x`} className="detail">
+                    <TableCell colSpan={5}>
+                      <Alert variant="destructive" style={{ margin: 0 }}>
+                        <AlertDescription>
+                          {plural(h.week, "call")} went to {h.host} in the last 7 days. After removal, the gateway
+                          refuses them and agents see an error.
+                          <Button variant="destructive" size="sm" type="button" onClick={() => remove(h)}>
+                            Remove anyway
+                          </Button>
+                          <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(null)}>
+                            Keep host
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    </TableCell>
+                  </TableRow>
                 ),
               ])}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -243,23 +256,24 @@ function HostList({ say }: { say: Say }) {
                 <a className="mono strong" href={`#/access/hosts/${encodeURIComponent(a.host)}`}>
                   {a.host}
                 </a>{" "}
-                <span className="badge" data-by="agent">
+                <Badge variant="secondary" data-by="agent">
                   Blocked
-                </span>
+                </Badge>
                 <p>
                   <span className="mono">{a.agent}</span> tried to send <span className="mono">{a.name}</span> there{" "}
                   {ago(a.at)}. No credential left the gateway.
                 </p>
               </div>
               <span className="meta">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
-                  className="btn sm"
                   aria-label={`Allow ${a.name} at ${a.host}`}
                   onClick={() => allow(a.host, a.name)}
                 >
                   Allow this host
-                </button>
+                </Button>
               </span>
             </li>
           ))}
@@ -306,10 +320,10 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
         }
       >
         {!h && first && (
-          <button type="button" className="btn primary" onClick={() => allow(first)}>
+          <Button type="button" onClick={() => allow(first)}>
             <Icon name="unlock" />
             Allow {first} here
-          </button>
+          </Button>
         )}
       </Head>
       <div className="sec-h">
@@ -326,14 +340,16 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
           {names.map((n) => (
             <li key={n}>
               <span className="mono strong">{n}</span>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-(--destructive-text)"
                 type="button"
-                className="btn sm quiet danger-text"
                 aria-label={`Stop sending ${n} to ${host}`}
                 onClick={() => dropName(n)}
               >
                 Remove
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -346,15 +362,15 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
             if (choice) allow(choice);
           }}
         >
-          <select aria-label="Secret to allow" value={choice} onChange={(e) => setPick(e.target.value)}>
+          <Dropdown aria-label="Secret to allow" value={choice} onChange={(e) => setPick(e)}>
             {free.map((n) => (
-              <option key={n}>{n}</option>
+              <Option key={n}>{n}</Option>
             ))}
-          </select>
-          <button type="submit" className="btn sm">
+          </Dropdown>
+          <Button variant="outline" size="sm" type="submit">
             <Icon name="plus" />
             Allow secret
-          </button>
+          </Button>
         </form>
       )}
 
@@ -368,32 +384,32 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Agent</th>
-                <th>Secret</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Agent</TableHead>
+                <TableHead>Secret</TableHead>
+                <TableHead>Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {mine.map((r) => (
-                <tr key={r.id}>
-                  <td className="muted">{ago(r.at)}</td>
-                  <td className="mono">{r.agent}</td>
-                  <td className="mono">{r.name}</td>
-                  <td>
+                <TableRow key={r.id}>
+                  <TableCell className="muted">{ago(r.at)}</TableCell>
+                  <TableCell className="mono">{r.agent}</TableCell>
+                  <TableCell className="mono">{r.name}</TableCell>
+                  <TableCell>
                     {r.result === "Allowed" ? (
                       <span className="gw-ok">Allowed</span>
                     ) : (
                       <span className="gw-bad">Blocked</span>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -522,9 +538,8 @@ function Grants({ say }: PageProps) {
         title="Grants"
         sub="A grant lets an agent use a secret through the gateway. It never lets the agent read the value."
       >
-        <button
+        <Button
           type="button"
-          className="btn primary"
           onClick={() => {
             setAdding(true);
             setNotice(null);
@@ -533,7 +548,7 @@ function Grants({ say }: PageProps) {
         >
           <Icon name="plus" />
           Give an agent access
-        </button>
+        </Button>
       </Head>
       {gw.paused && (
         <p className="gw-notice" role="status">
@@ -545,90 +560,88 @@ function Grants({ say }: PageProps) {
         </p>
       )}
       {adding && (
-        <form className="panel form" onSubmit={give} aria-label="Give an agent access">
-          <h2>Give an agent access</h2>
-          <div className="add">
-            <label className="field">
-              Agent
-              <select name="agent" value={addAgent} onChange={(e) => setAddAgent(e.target.value)}>
-                {agents.map((a) => (
-                  <option key={a.name}>{a.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Secret
-              <select name="secret" disabled={freeSecrets.length === 0}>
-                {freeSecrets.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {label(s)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Expires after
-              <select name="expiry" defaultValue={defaultExpiry}>
-                {EXPIRY.map(([l], i) => (
-                  <option key={l} value={i}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="btn primary" disabled={freeSecrets.length === 0}>
-              Give access
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              onClick={() => {
-                setAdding(false);
-                setNotice(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-          {freeSecrets.length === 0 && <p className="hint">{addAgent} already has access to every secret.</p>}
-          {notice && <Blocked why={notice} />}
-          <p className="hint">The agent can ask the gateway to use the secret. It is never handed the value.</p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={give} aria-label="Give an agent access">
+            <h2>Give an agent access</h2>
+            <div className="add">
+              <Label className="field">
+                Agent
+                <Dropdown name="agent" value={addAgent} onChange={(e) => setAddAgent(e)}>
+                  {agents.map((a) => (
+                    <Option key={a.name}>{a.name}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Secret
+                <Dropdown name="secret" disabled={freeSecrets.length === 0}>
+                  {freeSecrets.map((s) => (
+                    <Option key={s.id} value={s.id}>
+                      {label(s)}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Expires after
+                <Dropdown name="expiry" defaultValue={defaultExpiry}>
+                  {EXPIRY.map(([l], i) => (
+                    <Option key={l} value={i}>
+                      {l}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Button type="submit" disabled={freeSecrets.length === 0}>
+                Give access
+              </Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setNotice(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {freeSecrets.length === 0 && <p className="hint">{addAgent} already has access to every secret.</p>}
+            {notice && <Blocked why={notice} />}
+            <p className="hint">The agent can ask the gateway to use the secret. It is never handed the value.</p>
+          </form>
+        </Card>
       )}
       <div className="toolbar">
-        <label className="field">
+        <Label className="field">
           Agent
-          <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-            <option value="all">All agents</option>
+          <Dropdown value={agent} onChange={(e) => setAgent(e)}>
+            <Option value="all">All agents</Option>
             {agents.map((a) => (
-              <option key={a.name}>{a.name}</option>
+              <Option key={a.name}>{a.name}</Option>
             ))}
-          </select>
-        </label>
-        <label className="field">
+          </Dropdown>
+        </Label>
+        <Label className="field">
           Project
-          <select value={project} onChange={(e) => setProject(e.target.value)}>
-            <option value="all">All projects</option>
+          <Dropdown value={project} onChange={(e) => setProject(e)}>
+            <Option value="all">All projects</Option>
             {projectIds.map((p) => (
-              <option key={p}>{p}</option>
+              <Option key={p}>{p}</Option>
             ))}
-          </select>
-        </label>
-        <fieldset className="seg inline">
-          <legend className="sr-only">Quick filter</legend>
-          <label>
-            <input type="radio" name="gw-quick" checked={quick === "all"} onChange={() => setQuick("all")} />
+          </Dropdown>
+        </Label>
+        <ToggleGroup type="single" value={String(quick)} aria-label="Quick filter">
+          <ToggleGroupItem size="sm" value="all" onClick={() => setQuick("all")}>
             All<span className="n">{all.length}</span>
-          </label>
-          <label>
-            <input type="radio" name="gw-quick" checked={quick === "none"} onChange={() => setQuick("none")} />
+          </ToggleGroupItem>
+          <ToggleGroupItem size="sm" value="none" onClick={() => setQuick("none")}>
             No expiry<span className="n">{count((r) => r.expires === null)}</span>
-          </label>
-          <label>
-            <input type="radio" name="gw-quick" checked={quick === "soon"} onChange={() => setQuick("soon")} />
+          </ToggleGroupItem>
+          <ToggleGroupItem size="sm" value="soon" onClick={() => setQuick("soon")}>
             Expiring within a day<span className="n">{count((r) => r.expires !== null && r.expires - NOW <= DAY)}</span>
-          </label>
-        </fieldset>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
       {shown.length === 0 ? (
         <Empty icon="key">
@@ -639,36 +652,37 @@ function Grants({ say }: PageProps) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Secret</th>
-                <th>Expires</th>
-                <th>Last used</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Agent</TableHead>
+                <TableHead>Secret</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead>Last used</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {shown.flatMap((r) => [
-                <tr key={r.key}>
-                  <td className="mono strong">{r.agent}</td>
-                  <td>
+                <TableRow key={r.key}>
+                  <TableCell className="mono strong">{r.agent}</TableCell>
+                  <TableCell>
                     <a className="mono strong" href={`#/secrets/${r.project}`}>
                       {r.name}
                     </a>
                     <div className="muted small">
                       {r.project} / {r.env}
                     </div>
-                  </td>
-                  <td className={r.expires === null ? "prod" : ""}>{when(r.expires)}</td>
-                  <td className="muted">{ago(r.last)}</td>
-                  <td className="num">
-                    <button
+                  </TableCell>
+                  <TableCell className={r.expires === null ? "prod" : ""}>{when(r.expires)}</TableCell>
+                  <TableCell className="muted">{ago(r.last)}</TableCell>
+                  <TableCell className="num">
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       type="button"
-                      className="btn sm quiet"
                       aria-expanded={editing === r.key}
                       aria-label={`Change expiry of ${r.agent} on ${r.name} in ${r.project}/${r.env}`}
                       onClick={() => {
@@ -685,20 +699,22 @@ function Grants({ say }: PageProps) {
                       }}
                     >
                       Change expiry
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
                       type="button"
-                      className="btn sm quiet danger-text"
                       aria-label={`Revoke ${r.agent} on ${r.name} in ${r.project}/${r.env}`}
                       onClick={() => revoke(r)}
                     >
                       Revoke
-                    </button>
-                  </td>
-                </tr>,
+                    </Button>
+                  </TableCell>
+                </TableRow>,
                 editing === r.key && (
-                  <tr key={`${r.key}-e`} className="detail">
-                    <td colSpan={5}>
+                  <TableRow key={`${r.key}-e`} className="detail">
+                    <TableCell colSpan={5}>
                       <form
                         className="gw-edit"
                         onSubmit={(e) => {
@@ -709,41 +725,42 @@ function Grants({ say }: PageProps) {
                         <label className="muted small" htmlFor={`gw-exp-${r.key}`}>
                           Expires after
                         </label>
-                        <select
+                        <Dropdown
                           id={`gw-exp-${r.key}`}
                           value={pick}
                           onChange={(e) => {
-                            setPick(Number(e.target.value));
+                            setPick(Number(e));
                             setNotice(null);
                           }}
                         >
                           {EXPIRY.map(([l], i) => (
-                            <option key={l} value={i}>
+                            <Option key={l} value={i}>
                               {l} from now
-                            </option>
+                            </Option>
                           ))}
-                        </select>
-                        <button type="submit" className="btn sm primary">
+                        </Dropdown>
+                        <Button size="sm" type="submit">
                           Save
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           type="button"
-                          className="btn sm quiet"
                           onClick={() => {
                             setEditing(null);
                             setNotice(null);
                           }}
                         >
                           Cancel
-                        </button>
+                        </Button>
                         {notice && <Blocked why={notice} />}
                       </form>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ),
               ])}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -772,11 +789,11 @@ const Pick = ({
   options: readonly string[];
   onChange: (v: string) => void;
 }) => (
-  <select aria-label={name} value={value} onChange={(e) => onChange(e.target.value)}>
+  <Dropdown aria-label={name} value={value} onChange={(e) => onChange(e)}>
     {options.map((o) => (
-      <option key={o}>{o}</option>
+      <Option key={o}>{o}</Option>
     ))}
-  </select>
+  </Dropdown>
 );
 
 // Agent Gateway settings: guardrails, the default grant length, the fixed session and redaction notes, and the pause switch.
@@ -798,7 +815,7 @@ function GatewaySettings({ say }: PageProps) {
         title="Settings"
         sub="Guardrails for grants and blocked calls, how long a new grant lasts, and the pause switch."
       />
-      <section className="panel" aria-labelledby="gw-guard">
+      <Card className="panel" role="region" aria-labelledby="gw-guard">
         <h2 id="gw-guard">Guardrails</h2>
         <Row
           title="Access to production needs a second person"
@@ -829,8 +846,8 @@ function GatewaySettings({ say }: PageProps) {
             onChange={(v) => setS({ ...s, onBlocked: v })}
           />
         </Row>
-      </section>
-      <section className="panel" aria-labelledby="gw-access">
+      </Card>
+      <Card className="panel" role="region" aria-labelledby="gw-access">
         <h2 id="gw-access">Access</h2>
         <Row
           title="A new grant expires after"
@@ -855,8 +872,8 @@ function GatewaySettings({ say }: PageProps) {
         >
           <span className="fixed">Always on</span>
         </Row>
-      </section>
-      <section className="panel danger-zone" aria-labelledby="gw-pause">
+      </Card>
+      <Card className="panel danger-zone" role="region" aria-labelledby="gw-pause">
         <h2 id="gw-pause">Pause all agents</h2>
         <p className="muted">
           Revokes every live session and stops new ones until you resume. Use it if you think an agent is doing
@@ -864,9 +881,8 @@ function GatewaySettings({ say }: PageProps) {
         </p>
         <p style={{ margin: "12px 0 0" }}>
           {paused ? (
-            <button
+            <Button
               type="button"
-              className="btn primary"
               onClick={() => {
                 setSaved((g) => ({ ...g, paused: false }));
                 say("Agents resumed");
@@ -874,11 +890,11 @@ function GatewaySettings({ say }: PageProps) {
             >
               <Icon name="unlock" />
               Resume agents
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              variant="destructive"
               type="button"
-              className="btn danger"
               onClick={() => {
                 setSaved((g) => ({ ...g, paused: true }));
                 say("Agents paused");
@@ -886,7 +902,7 @@ function GatewaySettings({ say }: PageProps) {
             >
               <Icon name="lock" />
               Pause all agents
-            </button>
+            </Button>
           )}
           {paused && (
             <span className="gw-warn" role="status" style={{ display: "inline-flex", marginLeft: 12 }}>
@@ -895,16 +911,14 @@ function GatewaySettings({ say }: PageProps) {
             </span>
           )}
         </p>
-      </section>
+      </Card>
       {dirty && (
         <div className="savebar" role="status">
           <span>You have unsaved changes.</span>
-          <button type="button" className="btn quiet" onClick={() => setS(cur)}>
+          <Button variant="ghost" type="button" onClick={() => setS(cur)}>
             Discard
-          </button>
-          <button type="submit" className="btn primary">
-            Save changes
-          </button>
+          </Button>
+          <Button type="submit">Save changes</Button>
         </div>
       )}
     </form>

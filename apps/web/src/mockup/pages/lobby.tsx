@@ -1,5 +1,7 @@
 // Secret Management lobby: what needs attention across projects, and how each project stands.
 // Secrets and grants come from the same store as the Agent Gateway Grants page, so a fix here shows there.
+import { Button } from "@locksmith-hq/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useState } from "react";
 import { Empty, Head, Icon, NOW, DAY, ago, plural, projects, type PageProps, type Pages } from "../kit";
 import { useSecrets, type Secret } from "./gateway-data";
@@ -56,9 +58,10 @@ function Overview({ say }: PageProps) {
     const where = `${s.name} in ${s.project}/${s.env}`;
     if (a.kind === "noexpiry")
       return (
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
-          className="btn sm"
           aria-label={`Set expiry to 7 days for ${where}`}
           onClick={() => {
             edit(s.id, (x) => ({
@@ -69,13 +72,14 @@ function Overview({ say }: PageProps) {
           }}
         >
           Set expiry to 7 days
-        </button>
+        </Button>
       );
     if (a.kind === "unused" && s.grants.length > 0)
       return (
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
-          className="btn sm"
           aria-label={`Remove unused grants for ${where}`}
           onClick={() => {
             edit(s.id, (x) => ({ ...x, grants: [] }));
@@ -83,13 +87,19 @@ function Overview({ say }: PageProps) {
           }}
         >
           Remove unused {s.grants.length === 1 ? "grant" : "grants"}
-        </button>
+        </Button>
       );
     if (a.kind === "unused")
       return (
-        <button type="button" className="btn sm danger" aria-label={`Delete ${where}`} onClick={() => setConfirm(a.id)}>
+        <Button
+          variant="destructive"
+          size="sm"
+          type="button"
+          aria-label={`Delete ${where}`}
+          onClick={() => setConfirm(a.id)}
+        >
           Delete secret
-        </button>
+        </Button>
       );
     return null;
   };
@@ -125,9 +135,10 @@ function Overview({ say }: PageProps) {
                 {confirm === a.id && (
                   <p className="lb-confirm" role="alert">
                     Delete {a.s.name} from {a.s.project}/{a.s.env}? Its versions go with it and this cannot be undone.
-                    <button
+                    <Button
+                      variant="destructive"
+                      size="sm"
                       type="button"
-                      className="btn sm danger"
                       onClick={() => {
                         setSecs((ss) => ss.filter((x) => x.id !== a.s.id));
                         setConfirm(null);
@@ -135,10 +146,10 @@ function Overview({ say }: PageProps) {
                       }}
                     >
                       Delete secret
-                    </button>
-                    <button type="button" className="btn sm quiet" onClick={() => setConfirm(null)}>
+                    </Button>
+                    <Button variant="ghost" size="sm" type="button" onClick={() => setConfirm(null)}>
                       Keep it
-                    </button>
+                    </Button>
                   </p>
                 )}
               </div>
@@ -152,32 +163,32 @@ function Overview({ say }: PageProps) {
         <span className="n">{projects.length}</span>
       </div>
       <div className="table-wrap">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>Environments</th>
-              <th className="num">Secrets</th>
-              <th className="num">Agents with access</th>
-              <th>Last change</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Project</TableHead>
+              <TableHead>Environments</TableHead>
+              <TableHead className="num">Secrets</TableHead>
+              <TableHead className="num">Agents with access</TableHead>
+              <TableHead>Last change</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map(({ p, n, agents, last }) => (
-              <tr key={p.id}>
-                <td>
+              <TableRow key={p.id}>
+                <TableCell>
                   <a href={`#/secrets/${p.id}`} className="strong">
                     {p.id}
                   </a>
-                </td>
-                <td className="muted">{p.envs.join(", ")}</td>
-                <td className="num mono">{n}</td>
-                <td className="num mono">{agents}</td>
-                <td className="muted">{last === null ? "No secrets" : ago(last)}</td>
-              </tr>
+                </TableCell>
+                <TableCell className="muted">{p.envs.join(", ")}</TableCell>
+                <TableCell className="num mono">{n}</TableCell>
+                <TableCell className="num mono">{agents}</TableCell>
+                <TableCell className="muted">{last === null ? "No secrets" : ago(last)}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </section>
   );

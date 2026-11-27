@@ -1,4 +1,10 @@
-import { Head } from "@locksmith/ui";
+import { Card } from "@locksmith-hq/card";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Button } from "@locksmith-hq/button";
+import { Dropdown, Option } from "../Dropdown";
+import { PageHeader } from "@locksmith-hq/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useEffect, useRef, useState } from "react";
 import {
   auditOutcomeMatches as auditMatches,
@@ -74,19 +80,19 @@ export function Activity({ client }: { client: Client }) {
 
   return (
     <section aria-label="Audit">
-      <Head title="Activity" />
+      <PageHeader title="Activity" />
       {error && (
-        <div role="alert" className="state">
-          <p>{error}</p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
           {!events && (
-            <button className="btn sm" onClick={() => setAttempt((n) => n + 1)}>
+            <Button variant="outline" size="sm" className="w-fit" onClick={() => setAttempt((n) => n + 1)}>
               Retry
-            </button>
+            </Button>
           )}
-        </div>
+        </Alert>
       )}
       {status && (
-        <div aria-label="Chain status" className="panel">
+        <Card role="region" aria-label="Chain status" className="mb-4 gap-1 px-5">
           <p>Head seq: {status.head_seq}</p>
           <p>
             Latest checkpoint:{" "}
@@ -95,16 +101,16 @@ export function Activity({ client }: { client: Client }) {
               : "none yet"}
           </p>
           <p data-testid="verify-result">{chainSummary(status)}</p>
-        </div>
+        </Card>
       )}
-      <label>
+      <Label className="mb-3">
         Outcome{" "}
-        <select aria-label="Outcome filter" value={filter} onChange={(e) => setFilter(e.target.value as AuditFilter)}>
-          <option value="all">All</option>
-          <option value="denied">Denied</option>
-          <option value="redaction_failed">Redaction failed</option>
-        </select>
-      </label>
+        <Dropdown aria-label="Outcome filter" value={filter} onChange={(e) => setFilter(e as AuditFilter)}>
+          <Option value="all">All</Option>
+          <Option value="denied">Denied</Option>
+          <Option value="redaction_failed">Redaction failed</Option>
+        </Dropdown>
+      </Label>
       {!events ? (
         error ? null : (
           <p>Reading the ledger…</p>
@@ -114,37 +120,37 @@ export function Activity({ client }: { client: Client }) {
       ) : !events.some((e) => auditMatches(e, filter)) ? (
         <p>No matching events{next ? " loaded yet" : ""}.</p>
       ) : (
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>Seq</th>
-              <th>Time</th>
-              <th>Kind</th>
-              <th>Actor</th>
-              <th>Target</th>
-              <th>Outcome</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Seq</TableHead>
+              <TableHead>Time</TableHead>
+              <TableHead>Kind</TableHead>
+              <TableHead>Actor</TableHead>
+              <TableHead>Target</TableHead>
+              <TableHead>Outcome</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {events
               .filter((e) => auditMatches(e, filter))
               .map((e) => (
-                <tr key={e.id}>
-                  <td>{e.seq}</td>
-                  <td>{e.at}</td>
-                  <td>{e.kind}</td>
-                  <td>{e.actor}</td>
-                  <td>{e.target ?? ""}</td>
-                  <td>{e.outcome}</td>
-                </tr>
+                <TableRow key={e.id}>
+                  <TableCell>{e.seq}</TableCell>
+                  <TableCell>{e.at}</TableCell>
+                  <TableCell>{e.kind}</TableCell>
+                  <TableCell>{e.actor}</TableCell>
+                  <TableCell>{e.target ?? ""}</TableCell>
+                  <TableCell>{e.outcome}</TableCell>
+                </TableRow>
               ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
       {next && (
-        <button className="btn" disabled={loadingMore} onClick={more}>
+        <Button variant="outline" className="mt-3" disabled={loadingMore} onClick={more}>
           Load more
-        </button>
+        </Button>
       )}
     </section>
   );

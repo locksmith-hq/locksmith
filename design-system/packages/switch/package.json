@@ -1,0 +1,46 @@
+{
+  "name": "@locksmith-hq/switch",
+  "version": "0.1.0",
+  "description": "Locksmith design system: Switch, from shadcn/ui.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/locksmith-hq/locksmith.git",
+    "directory": "design-system/packages/switch"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "oxlint -c ../../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../../.oxfmtrc.json ."
+  },
+  "dependencies": {
+    "cn": "^0.5.2",
+    "radix-ui": "^1.8.1"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "react-dom": ">=19"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}

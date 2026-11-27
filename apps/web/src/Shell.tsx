@@ -1,6 +1,24 @@
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Logo } from "@locksmith/ui";
+import { ChevronsUpDown } from "lucide-react";
+import { Button } from "@locksmith-hq/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@locksmith-hq/dropdown-menu";
+import { Mark } from "@locksmith-hq/mark";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@locksmith-hq/sidebar";
+import { Wordmark } from "@locksmith-hq/wordmark";
 import type { Client } from "@locksmith/control-plane-client";
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -15,7 +33,6 @@ import { Projects } from "./pages/Projects";
 import { McpTools } from "./pages/McpTools";
 import { McpClients } from "./pages/McpClients";
 import { EmptyPage } from "./pages/EmptyPage";
-import "./shell.css";
 
 const NAV: ReadonlyArray<{ heading?: string; items: ReadonlyArray<readonly [path: string, label: string]> }> = [
   { items: [["overview", "Home"]] },
@@ -57,35 +74,18 @@ function EnvironmentsRedirect({ client, selected }: { client: Client; selected?:
 
 /** Org switcher (top right). Single org until a workspace API lists the user's orgs (T3 progress.md). */
 function OrgSwitcher({ name }: { name: string }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    const away = (e: MouseEvent) => {
-      if (!(e.target as Element).closest(".shell-org")) setOpen(false);
-    };
-    document.addEventListener("keydown", esc);
-    document.addEventListener("mousedown", away);
-    return () => {
-      document.removeEventListener("keydown", esc);
-      document.removeEventListener("mousedown", away);
-    };
-  }, [open]);
   return (
-    <div className="shell-org" aria-label="Organization">
-      <button aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        {name} ▾
-      </button>
-      {open && (
-        <ul role="menu">
-          <li role="menuitem" aria-current="true">
-            {name}
-          </li>
-        </ul>
-      )}
-    </div>
+    // not modal: the page behind stays clickable, and a click on it closes the menu
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          {name} <ChevronsUpDown />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem aria-current="true">{name}</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -100,35 +100,50 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="shell">
-        <aside className="shell-side">
-          <div className="shell-brand">
-            <Logo size={28} /> Locksmith
-          </div>
-          <nav aria-label="Pages">
-            {NAV.map((g, i) => (
-              <div key={i} className="shell-group">
-                {g.heading && <p className="shell-nav-h">{g.heading}</p>}
-                {g.items.map(([path, label]) => (
-                  <NavLink key={path} to={`/${path}`}>
-                    {label}
-                  </NavLink>
-                ))}
-              </div>
-            ))}
-          </nav>
-          <div className="shell-user">
-            {user ? <span data-testid="signed-in-as">{user}</span> : <span>Signed in</span>}
-            {onSignOut && (
-              <button className="shell-signout" onClick={onSignOut}>
-                Sign out
-              </button>
-            )}
-          </div>
-        </aside>
-        <main className="shell-main">
-          <header className="shell-top">
-            <OrgSwitcher name="Locksmith" />
+      <SidebarProvider>
+        <Sidebar collapsible="none" className="sticky top-0 h-svh border-r">
+          <SidebarHeader>
+            <div className="flex items-center gap-2.5 px-2 py-1.5">
+              <Mark small size={26} />
+              <Wordmark />
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <nav aria-label="Pages">
+              {NAV.map((g, i) => (
+                <SidebarGroup key={i}>
+                  {g.heading && <SidebarGroupLabel>{g.heading}</SidebarGroupLabel>}
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {g.items.map(([path, label]) => (
+                        <SidebarMenuItem key={path}>
+                          <SidebarMenuButton asChild>
+                            <NavLink to={`/${path}`}>{label}</NavLink>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))}
+            </nav>
+          </SidebarContent>
+          <SidebarFooter>
+            <div className="flex flex-col items-start gap-2 rounded-md border bg-card p-2.5 text-[13px] break-all">
+              {user ? <span data-testid="signed-in-as">{user}</span> : <span>Signed in</span>}
+              {onSignOut && (
+                <Button variant="outline" size="sm" onClick={onSignOut}>
+                  Sign out
+                </Button>
+              )}
+            </div>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset className="min-w-0 p-6">
+          <header className="mb-4 flex justify-end">
+            <div aria-label="Organization">
+              <OrgSwitcher name="Locksmith" />
+            </div>
           </header>
           <Routes>
             <Route index element={<Navigate to="/overview" replace />} />
@@ -145,8 +160,8 @@ export function Shell({ client, user, onSignOut }: { client: Client; user?: stri
             <Route path="activity" element={<Activity client={client} />} />
             <Route path="*" element={<EmptyPage title="Not found" />} />
           </Routes>
-        </main>
-      </div>
+        </SidebarInset>
+      </SidebarProvider>
     </QueryClientProvider>
   );
 }

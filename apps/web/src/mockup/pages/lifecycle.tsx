@@ -1,5 +1,14 @@
 // Lifecycle pages inside one Secret Management project: dynamic secrets, history, rotation, syncs. Sample data only.
 // All four read one store per project (lifecycleStore), so a change on one page shows on the others.
+import { Badge } from "@locksmith-hq/badge";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { Fragment, useState, type FormEvent } from "react";
 import {
   Empty,
@@ -77,51 +86,51 @@ function Dynamic({ project, say }: PageProps) {
         title="Dynamic secrets"
         sub={`Credentials that exist only while something uses them. Each one is created on request and deleted when its lifetime ends, in ${p}.`}
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Add definition
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add definition">
-          <h2>Add a definition</h2>
-          <div className="add lc-add">
-            <label className="field">
-              Name
-              <input name="name" required autoFocus placeholder="Read-only Postgres user" autoComplete="off" />
-            </label>
-            <label className="field">
-              Connection
-              <select name="conn">
-                {targets.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.provider})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Lives for
-              <select name="ttl" defaultValue={10}>
-                {[5, 10, 15, 30].map((m) => (
-                  <option key={m} value={m}>
-                    {mins(m)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Add definition
-            </button>
-            <button type="button" className="btn quiet" onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            Locksmith uses the connection to create the credential when an agent or machine with a grant asks, and
-            deletes it when the time is up. Nobody sees the value; the gateway applies it for the caller.
-          </p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add definition">
+            <h2>Add a definition</h2>
+            <div className="add lc-add">
+              <Label className="field">
+                Name
+                <Input name="name" required autoFocus placeholder="Read-only Postgres user" autoComplete="off" />
+              </Label>
+              <Label className="field">
+                Connection
+                <Dropdown name="conn">
+                  {targets.map((c) => (
+                    <Option key={c.id} value={c.id}>
+                      {c.name} ({c.provider})
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Lives for
+                <Dropdown name="ttl" defaultValue={10}>
+                  {[5, 10, 15, 30].map((m) => (
+                    <Option key={m} value={m}>
+                      {mins(m)}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Button type="submit">Add definition</Button>
+              <Button variant="ghost" type="button" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              Locksmith uses the connection to create the credential when an agent or machine with a grant asks, and
+              deletes it when the time is up. Nobody sees the value; the gateway applies it for the caller.
+            </p>
+          </form>
+        </Card>
       )}
       {s.defs.length === 0 ? (
         <Empty icon="power">
@@ -143,39 +152,44 @@ function Dynamic({ project, say }: PageProps) {
                     {d.what}. Lives {mins(d.ttl)}.
                   </p>
                   {removing === d.id && (
-                    <p className="alert" role="alert" style={{ margin: "10px 0 0" }}>
-                      {n
-                        ? `Removing this revokes ${plural(n, "live lease")} now and stops new ones.`
-                        : "Removing this stops new leases. Nothing is live."}
-                      <button
-                        type="button"
-                        className="btn sm danger"
-                        onClick={() => {
-                          up((x) => removeDef(x, d.id));
-                          setRemoving(null);
-                          say(`Removed ${d.name}`);
-                        }}
-                      >
-                        Remove anyway
-                      </button>
-                      <button type="button" className="btn sm quiet" onClick={() => setRemoving(null)}>
-                        Keep
-                      </button>
-                    </p>
+                    <Alert variant="destructive" style={{ margin: "10px 0 0" }}>
+                      <AlertDescription>
+                        {n
+                          ? `Removing this revokes ${plural(n, "live lease")} now and stops new ones.`
+                          : "Removing this stops new leases. Nothing is live."}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          type="button"
+                          onClick={() => {
+                            up((x) => removeDef(x, d.id));
+                            setRemoving(null);
+                            say(`Removed ${d.name}`);
+                          }}
+                        >
+                          Remove anyway
+                        </Button>
+                        <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(null)}>
+                          Keep
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </div>
                 <span className="meta">
                   <span className="lc-st" data-t={n ? "live" : undefined}>
                     {n ? `${n} live` : "None live"}
                   </span>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-(--destructive-text)"
                     type="button"
-                    className="btn sm quiet danger-text"
                     aria-label={`Remove ${d.name}`}
                     onClick={() => setRemoving(d.id)}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </span>
               </li>
             );
@@ -192,40 +206,42 @@ function Dynamic({ project, say }: PageProps) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Definition</th>
-                <th>Asked by</th>
-                <th>Created</th>
-                <th>Expires</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Definition</TableHead>
+                <TableHead>Asked by</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {live.map((l) => {
                 const d = s.defs.find((x) => x.id === l.def);
                 return (
-                  <tr key={l.id}>
-                    <td className="strong">{d?.name ?? "Removed definition"}</td>
-                    <td>
+                  <TableRow key={l.id}>
+                    <TableCell className="strong">{d?.name ?? "Removed definition"}</TableCell>
+                    <TableCell>
                       <span className="mono">{l.who}</span>{" "}
-                      <span className="badge" data-by={l.kind === "Agent" ? "agent" : undefined}>
+                      <Badge variant="secondary" data-by={l.kind === "Agent" ? "agent" : undefined}>
                         {l.kind}
-                      </span>
-                    </td>
-                    <td className="muted">{ago(l.created)}</td>
-                    <td>
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="muted">{ago(l.created)}</TableCell>
+                    <TableCell>
                       <span className="lc-st" data-t={l.expires - NOW < 5 * MIN ? "warn" : undefined}>
                         {inTime(l.expires)}
                       </span>
-                    </td>
-                    <td className="num">
-                      <button
+                    </TableCell>
+                    <TableCell className="num">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-(--destructive-text)"
                         type="button"
-                        className="btn sm quiet danger-text"
                         aria-label={`Revoke lease for ${l.who}`}
                         onClick={() => {
                           up((x) => revoke(x, l.id));
@@ -233,13 +249,13 @@ function Dynamic({ project, say }: PageProps) {
                         }}
                       >
                         Revoke
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -272,20 +288,18 @@ function History({ project, say }: PageProps) {
         sub={`Every change to the secrets and lifecycle settings in ${p}: who did it and what changed. Values are never shown.`}
       />
       <div className="toolbar">
-        <fieldset className="seg inline">
-          <legend className="sr-only">Environment</legend>
+        <ToggleGroup type="single" value={String(env)} aria-label="Environment">
           {["All", ...envsOf(p)].map((e) => (
-            <label key={e}>
-              <input type="radio" name="hist-env" checked={env === e} onChange={() => setEnv(e)} />
+            <ToggleGroupItem key={e} size="sm" value={String(e)} onClick={() => setEnv(e)}>
               {e}
               <span className="n">{e === "All" ? base.length : base.filter((r) => r.env === e).length}</span>
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
         <label className="search">
           <span className="sr-only">Find by secret name</span>
           <Icon name="search" />
-          <input type="search" placeholder="Find by name" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input type="search" placeholder="Find by name" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
       </div>
       {days.length === 0 ? (
@@ -293,16 +307,17 @@ function History({ project, say }: PageProps) {
           {filtered ? (
             <>
               <b>Nothing matches these filters.</b>{" "}
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 type="button"
-                className="btn sm"
                 onClick={() => {
                   setEnv("All");
                   setQ("");
                 }}
               >
                 Clear filters
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -322,7 +337,7 @@ function History({ project, say }: PageProps) {
                   </span>
                   <div>
                     <b>{e.act}</b> <span className="mono">{e.name}</span>{" "}
-                    {e.env && <span className="badge">{e.env}</span>}
+                    {e.env && <Badge variant="secondary">{e.env}</Badge>}
                     <p>
                       {e.who}: {e.note}
                     </p>
@@ -345,15 +360,16 @@ function History({ project, say }: PageProps) {
                       <span className="lc-st">Undone</span>
                     ) : (
                       canRoll(s, e) && (
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
                           type="button"
-                          className="btn sm"
                           aria-expanded={asking === e.id}
                           aria-label={`Roll back ${e.name} in ${e.env} to here`}
                           onClick={() => setAsking(asking === e.id ? null : e.id)}
                         >
                           Roll back to here
-                        </button>
+                        </Button>
                       )
                     )}
                   </span>
@@ -417,71 +433,70 @@ function Rotation({ project, say }: PageProps) {
         title="Rotation"
         sub={`How and how often each secret in ${p} is replaced, so a leaked value stops working on a schedule.`}
       >
-        <button
+        <Button
           type="button"
-          className="btn primary"
           onClick={() => setAdding(true)}
           disabled={adding || free.length === 0}
           title={free.length === 0 ? "Every secret already has a rule" : undefined}
         >
           <Icon name="plus" />
           Add rotation rule
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add rotation rule">
-          <h2>Add a rotation rule</h2>
-          <div className="add lc-add">
-            <label className="field">
-              Secret
-              <select name="sid" autoFocus>
-                {free.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name} ({x.env})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              How
-              <select value={mode} onChange={(e) => setMode(e.target.value as "auto" | "manual")}>
-                <option value="auto">Automatically, through a connection</option>
-                <option value="manual">Remind me to do it by hand</option>
-              </select>
-            </label>
-            {mode === "auto" && (
-              <label className="field">
-                Connection
-                <select name="via">
-                  {rotTargets.map((c) => (
-                    <option key={c.id}>{c.name}</option>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add rotation rule">
+            <h2>Add a rotation rule</h2>
+            <div className="add lc-add">
+              <Label className="field">
+                Secret
+                <Dropdown name="sid" autoFocus>
+                  {free.map((x) => (
+                    <Option key={x.id} value={x.id}>
+                      {x.name} ({x.env})
+                    </Option>
                   ))}
-                </select>
-              </label>
-            )}
-            <label className="field">
-              Every
-              <select name="every" defaultValue={30}>
-                {[7, 14, 30, 60, 90].map((d) => (
-                  <option key={d} value={d}>
-                    {plural(d, "day")}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Add rule
-            </button>
-            <button type="button" className="btn quiet" onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            {mode === "auto"
-              ? "Locksmith creates the new value through the connection, saves it as a new version and keeps agent grants working. Nobody sees either value."
-              : "Locksmith reminds the project admins when the secret is due. You change it at the source, then mark it as rotated here."}
-          </p>
-        </form>
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                How
+                <Dropdown value={mode} onChange={(e) => setMode(e as "auto" | "manual")}>
+                  <Option value="auto">Automatically, through a connection</Option>
+                  <Option value="manual">Remind me to do it by hand</Option>
+                </Dropdown>
+              </Label>
+              {mode === "auto" && (
+                <Label className="field">
+                  Connection
+                  <Dropdown name="via">
+                    {rotTargets.map((c) => (
+                      <Option key={c.id}>{c.name}</Option>
+                    ))}
+                  </Dropdown>
+                </Label>
+              )}
+              <Label className="field">
+                Every
+                <Dropdown name="every" defaultValue={30}>
+                  {[7, 14, 30, 60, 90].map((d) => (
+                    <Option key={d} value={d}>
+                      {plural(d, "day")}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Button type="submit">Add rule</Button>
+              <Button variant="ghost" type="button" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              {mode === "auto"
+                ? "Locksmith creates the new value through the connection, saves it as a new version and keeps agent grants working. Nobody sees either value."
+                : "Locksmith reminds the project admins when the secret is due. You change it at the source, then mark it as rotated here."}
+            </p>
+          </form>
+        </Card>
       )}
       {rows.length === 0 ? (
         <Empty icon="rotate">
@@ -495,50 +510,55 @@ function Rotation({ project, say }: PageProps) {
             rule.
           </p>
           <div className="table-wrap">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th>Secret</th>
-                  <th>How</th>
-                  <th>Every</th>
-                  <th>Next due</th>
-                  <th>Status</th>
-                  <th>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Secret</TableHead>
+                  <TableHead>How</TableHead>
+                  <TableHead>Every</TableHead>
+                  <TableHead>Next due</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>
                     <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {rows.map(({ r, sec, due }) => {
                   const left = due - NOW;
                   const t = left < 0 ? "danger" : left < 7 * DAY ? "warn" : "live";
                   return (
-                    <tr key={sec.id}>
-                      <td>
-                        <span className="strong mono">{sec.name}</span> <span className="badge">{sec.env}</span>
-                      </td>
-                      <td>{r.mode === "auto" ? <>Automatic, through {r.via}</> : "Reminder to rotate by hand"}</td>
-                      <td className="nowrap">{plural(r.every, "day")}</td>
-                      <td className="nowrap">
+                    <TableRow key={sec.id}>
+                      <TableCell>
+                        <span className="strong mono">{sec.name}</span> <Badge variant="secondary">{sec.env}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {r.mode === "auto" ? <>Automatic, through {r.via}</> : "Reminder to rotate by hand"}
+                      </TableCell>
+                      <TableCell className="nowrap">{plural(r.every, "day")}</TableCell>
+                      <TableCell className="nowrap">
                         {left < 0 ? `${plural(Math.ceil(-left / DAY), "day")} ago` : inTime(due)}
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <span className="lc-st" data-t={t}>
                           {left < 0 ? "Overdue" : left < 7 * DAY ? "Due soon" : "On schedule"}
                         </span>
-                      </td>
-                      <td className="num nowrap">
-                        <button
+                      </TableCell>
+                      <TableCell className="num nowrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
                           type="button"
-                          className="btn sm"
                           aria-label={`${r.mode === "auto" ? "Rotate" : "Mark as rotated:"} ${sec.name} in ${sec.env}`}
                           onClick={() => rotate(r, sec.name)}
                         >
                           {r.mode === "auto" ? "Rotate now" : "Mark as rotated"}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-(--destructive-text)"
                           type="button"
-                          className="btn sm quiet danger-text"
                           aria-label={`Remove the rule for ${sec.name} in ${sec.env}`}
                           title="The secret stays; it just stops being rotated"
                           onClick={() => {
@@ -547,13 +567,13 @@ function Rotation({ project, say }: PageProps) {
                           }}
                         >
                           Remove rule
-                        </button>
-                      </td>
-                    </tr>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </>
       )}
@@ -595,49 +615,49 @@ function Syncs({ project, say }: PageProps) {
         title="Syncs"
         sub={`Keep copies of ${p} secrets where your apps run. Locksmith pushes again each time a secret changes.`}
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Add sync
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add sync">
-          <h2>Add a sync</h2>
-          <div className="add lc-add">
-            <label className="field">
-              Copy from
-              <select name="env">
-                {envs.map((e) => (
-                  <option key={e}>{e}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              To connection
-              <select name="conn">
-                {syncTargets.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({dest(c)})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Target
-              <input name="target" required placeholder="acme/api-service" autoComplete="off" />
-            </label>
-            <button type="submit" className="btn primary">
-              Add and sync
-            </button>
-            <button type="button" className="btn quiet" onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            The first push happens now. The destination then holds real values, so anyone who can read it can read them.
-            Locksmith can only push; it never reads them back.
-          </p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add sync">
+            <h2>Add a sync</h2>
+            <div className="add lc-add">
+              <Label className="field">
+                Copy from
+                <Dropdown name="env">
+                  {envs.map((e) => (
+                    <Option key={e}>{e}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                To connection
+                <Dropdown name="conn">
+                  {syncTargets.map((c) => (
+                    <Option key={c.id} value={c.id}>
+                      {c.name} ({dest(c)})
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Target
+                <Input name="target" required placeholder="acme/api-service" autoComplete="off" />
+              </Label>
+              <Button type="submit">Add and sync</Button>
+              <Button variant="ghost" type="button" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              The first push happens now. The destination then holds real values, so anyone who can read it can read
+              them. Locksmith can only push; it never reads them back.
+            </p>
+          </form>
+        </Card>
       )}
       {s.syncs.length === 0 ? (
         <Empty icon="relay">
@@ -667,24 +687,27 @@ function Syncs({ project, say }: PageProps) {
                     · {plural(count(y.env), "secret")} · last run {ago(y.at)} · via {y.c.name}
                   </p>
                   {removing === y.id && (
-                    <p className="alert" role="alert" style={{ margin: "10px 0 0" }}>
-                      Removing this stops copying {plural(count(y.env), "secret")} to {dest(y.c)}. What is already there
-                      stays and goes stale; Locksmith does not delete it.
-                      <button
-                        type="button"
-                        className="btn sm danger"
-                        onClick={() => {
-                          up((x) => removeSync(x, y.id));
-                          setRemoving(null);
-                          say("Removed the sync");
-                        }}
-                      >
-                        Remove sync
-                      </button>
-                      <button type="button" className="btn sm quiet" onClick={() => setRemoving(null)}>
-                        Keep
-                      </button>
-                    </p>
+                    <Alert variant="destructive" style={{ margin: "10px 0 0" }}>
+                      <AlertDescription>
+                        Removing this stops copying {plural(count(y.env), "secret")} to {dest(y.c)}. What is already
+                        there stays and goes stale; Locksmith does not delete it.
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          type="button"
+                          onClick={() => {
+                            up((x) => removeSync(x, y.id));
+                            setRemoving(null);
+                            say("Removed the sync");
+                          }}
+                        >
+                          Remove sync
+                        </Button>
+                        <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(null)}>
+                          Keep
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </div>
                 <span className="meta">
@@ -696,9 +719,10 @@ function Syncs({ project, say }: PageProps) {
                       say(on ? "Sync resumed" : "Sync paused. Nothing is pushed until you resume");
                     }}
                   />
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
-                    className="btn sm"
                     disabled={!y.on}
                     aria-label={`Sync ${y.env} to ${y.target} now`}
                     onClick={() => {
@@ -711,15 +735,17 @@ function Syncs({ project, say }: PageProps) {
                     }}
                   >
                     Sync now
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-(--destructive-text)"
                     type="button"
-                    className="btn sm quiet danger-text"
                     aria-label={`Remove sync of ${y.env} to ${y.target}`}
                     onClick={() => setRemoving(y.id)}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </span>
               </li>
             );

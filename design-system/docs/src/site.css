@@ -1,0 +1,7 @@
+/* The site's stylesheet, set up the way an app using the kit does it. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../../packages/styles/index.css";
+/* Tailwind must see the classes written inside the components. An app points this at node_modules/@locksmith-hq. */
+@source "../../packages";
+@import "./app.css";

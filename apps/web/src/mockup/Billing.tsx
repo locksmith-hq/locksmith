@@ -1,4 +1,12 @@
 // Usage and billing for one workspace (mockup, sample data). Prices are placeholders, not decided pricing.
+import { Badge } from "@locksmith-hq/badge";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useState } from "react";
 import "./billing.css";
 
@@ -113,7 +121,7 @@ export function Billing({
         </div>
       </div>
 
-      <div className="panel sub">
+      <Card className="panel sub">
         <div>
           <h2>{now.id} plan</h2>
           <p className="muted">
@@ -127,28 +135,29 @@ export function Billing({
           </p>
         </div>
         {now.perSeat && (
-          <button
+          <Button
+            variant="outline"
             type="button"
-            className="btn"
             onClick={() => {
               setDraft(seats);
               setChoosing(now.id);
             }}
           >
             Change seats
-          </button>
+          </Button>
         )}
-        <a
-          className="btn"
-          href="#plans"
-          onClick={(e) => {
-            e.preventDefault();
-            document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" });
-          }}
-        >
-          Change plan
-        </a>
-      </div>
+        <Button asChild variant="outline">
+          <a
+            href="#plans"
+            onClick={(e) => {
+              e.preventDefault();
+              document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Change plan
+          </a>
+        </Button>
+      </Card>
       <p className="hint">
         If a payment ever fails, your secrets stay readable and exportable. We never lock you out of your own data over
         a bill.
@@ -182,24 +191,26 @@ export function Billing({
 
       <div className="sec-h spaced" id="plans">
         <h2>Plans</h2>
-        <fieldset className="seg inline" style={{ marginLeft: "auto" }}>
-          <legend className="sr-only">Billing period</legend>
-          <label>
-            <input type="radio" name="period" checked={!yearly} onChange={() => setYearly(false)} />
+        <ToggleGroup
+          type="single"
+          value={yearly ? "yearly" : "monthly"}
+          aria-label="Billing period"
+          style={{ marginLeft: "auto" }}
+        >
+          <ToggleGroupItem size="sm" value="monthly" onClick={() => setYearly(false)}>
             Monthly
-          </label>
-          <label>
-            <input type="radio" name="period" checked={yearly} onChange={() => setYearly(true)} />
+          </ToggleGroupItem>
+          <ToggleGroupItem size="sm" value="yearly" onClick={() => setYearly(true)}>
             Yearly
-          </label>
-        </fieldset>
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
       <div className="hub-grid plans">
         {PLANS.map((p) => (
           <div key={p.id} className="plan" data-on={p.id === plan || undefined}>
             <h3>
               {p.id}
-              {p.id === plan && <span className="badge">Current plan</span>}
+              {p.id === plan && <Badge variant="secondary">Current plan</Badge>}
             </h3>
             <p className="price">
               {price(p) === null ? (
@@ -226,24 +237,23 @@ export function Billing({
               ))}
             </ul>
             {p.id === plan ? (
-              <button type="button" className="btn" disabled>
+              <Button variant="outline" type="button" disabled>
                 You are on this plan
-              </button>
+              </Button>
             ) : p.monthly === null ? (
-              <a className="btn" href="mailto:sales@locksmith.example">
-                Talk to us
-              </a>
+              <Button asChild variant="outline">
+                <a href="mailto:sales@locksmith.example">Talk to us</a>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="btn primary"
                 onClick={() => {
                   setDraft(Math.max(seats, used[0]!));
                   setChoosing(p.id);
                 }}
               >
                 {p.monthly === 0 ? "Move to Free" : `Subscribe to ${p.id}`}
-              </button>
+              </Button>
             )}
           </div>
         ))}
@@ -251,92 +261,98 @@ export function Billing({
       <p className="hint">Prices on this page are placeholders. Self-hosting Locksmith is free and open source.</p>
 
       {next && (
-        <form
-          className="panel form enroll"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (tooFew) return;
-            if (next.perSeat) setSeats(draft);
-            if (next.id !== plan) setPlan(next.id);
-            setChoosing(null);
-          }}
-          aria-label="Confirm subscription"
-        >
-          <h2>
-            {next.monthly === 0
-              ? `Move ${name} to Free`
-              : next.id === plan
-                ? `Change seats for ${name}`
-                : `Subscribe ${name} to ${next.id}`}
-          </h2>
-          {next.perSeat && (
-            <label className="field seats">
-              Seats
-              <span className="stepper">
-                <button
-                  type="button"
-                  className="btn sm"
-                  aria-label="One seat fewer"
-                  onClick={() => setDraft((d) => Math.max(1, d - 1))}
-                >
-                  −
-                </button>
-                <input
-                  type="number"
-                  min={1}
-                  value={draft}
-                  onChange={(e) => setDraft(Math.max(1, Number(e.target.value) || 1))}
-                />
-                <button
-                  type="button"
-                  className="btn sm"
-                  aria-label="One seat more"
-                  onClick={() => setDraft((d) => d + 1)}
-                >
-                  +
-                </button>
-              </span>
-            </label>
-          )}
-          {next.monthly === 0 ? (
-            <p className="muted">
-              The paid subscription ends at the close of this billing period. Limits drop to 3 users and 1 project;
-              nothing is deleted.
-            </p>
-          ) : next.perSeat ? (
-            <p className="muted">
-              {draft} seats at ${price(next)} each, billed {yearly ? "once a year" : "every month"}:{" "}
-              <b className="strong">
-                ${n(total)} {yearly ? "a year" : "a month"}
-              </b>
-              . {name} has {used[0]} users today.
-            </p>
-          ) : (
-            <p className="muted">
-              One fixed price for up to {next.users} users, billed {yearly ? "once a year" : "every month"}:{" "}
-              <b className="strong">
-                ${n(total)} {yearly ? "a year" : "a month"}
-              </b>
-              .
-            </p>
-          )}
-          {tooFew && (
-            <p className="alert" role="alert" style={{ marginTop: 12 }}>
-              You have {used[0]} users. Remove users first, or keep at least {used[0]} seats.
-            </p>
-          )}
-          <div className="inline-form" style={{ marginTop: 14 }}>
-            <button type="submit" className="btn primary" disabled={tooFew}>
-              {next.monthly === 0 ? "Move to Free" : next.id === plan ? "Update seats" : "Continue to payment"}
-            </button>
-            <button type="button" className="btn quiet" onClick={() => setChoosing(null)}>
-              Cancel
-            </button>
-          </div>
-          {next.monthly !== 0 && (
-            <p className="hint">Card details are entered on the payment provider's page, never in Locksmith.</p>
-          )}
-        </form>
+        <Card className="panel form enroll">
+          <form
+            className="contents"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (tooFew) return;
+              if (next.perSeat) setSeats(draft);
+              if (next.id !== plan) setPlan(next.id);
+              setChoosing(null);
+            }}
+            aria-label="Confirm subscription"
+          >
+            <h2>
+              {next.monthly === 0
+                ? `Move ${name} to Free`
+                : next.id === plan
+                  ? `Change seats for ${name}`
+                  : `Subscribe ${name} to ${next.id}`}
+            </h2>
+            {next.perSeat && (
+              <Label className="field seats">
+                Seats
+                <span className="stepper">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    aria-label="One seat fewer"
+                    onClick={() => setDraft((d) => Math.max(1, d - 1))}
+                  >
+                    −
+                  </Button>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={draft}
+                    onChange={(e) => setDraft(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    aria-label="One seat more"
+                    onClick={() => setDraft((d) => d + 1)}
+                  >
+                    +
+                  </Button>
+                </span>
+              </Label>
+            )}
+            {next.monthly === 0 ? (
+              <p className="muted">
+                The paid subscription ends at the close of this billing period. Limits drop to 3 users and 1 project;
+                nothing is deleted.
+              </p>
+            ) : next.perSeat ? (
+              <p className="muted">
+                {draft} seats at ${price(next)} each, billed {yearly ? "once a year" : "every month"}:{" "}
+                <b className="strong">
+                  ${n(total)} {yearly ? "a year" : "a month"}
+                </b>
+                . {name} has {used[0]} users today.
+              </p>
+            ) : (
+              <p className="muted">
+                One fixed price for up to {next.users} users, billed {yearly ? "once a year" : "every month"}:{" "}
+                <b className="strong">
+                  ${n(total)} {yearly ? "a year" : "a month"}
+                </b>
+                .
+              </p>
+            )}
+            {tooFew && (
+              <Alert variant="destructive" style={{ marginTop: 12 }}>
+                <AlertDescription>
+                  You have {used[0]} users. Remove users first, or keep at least {used[0]} seats.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="inline-form" style={{ marginTop: 14 }}>
+              <Button type="submit" disabled={tooFew}>
+                {next.monthly === 0 ? "Move to Free" : next.id === plan ? "Update seats" : "Continue to payment"}
+              </Button>
+              <Button variant="ghost" type="button" onClick={() => setChoosing(null)}>
+                Cancel
+              </Button>
+            </div>
+            {next.monthly !== 0 && (
+              <p className="hint">Card details are entered on the payment provider's page, never in Locksmith.</p>
+            )}
+          </form>
+        </Card>
       )}
 
       {plan === "Team" && (
@@ -345,32 +361,32 @@ export function Billing({
             <h2>Invoices</h2>
           </div>
           <div className="table-wrap">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th>Invoice</th>
-                  <th>Date</th>
-                  <th>For</th>
-                  <th className="num">Total</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>For</TableHead>
+                  <TableHead className="num">Total</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {INVOICES.map((v) => (
-                  <tr key={v.id}>
-                    <td className="mono">{v.id}</td>
-                    <td>{v.date}</td>
-                    <td>{v.what}</td>
-                    <td className="num">{v.total}</td>
-                    <td className="num">
-                      <button type="button" className="btn sm quiet">
+                  <TableRow key={v.id}>
+                    <TableCell className="mono">{v.id}</TableCell>
+                    <TableCell>{v.date}</TableCell>
+                    <TableCell>{v.what}</TableCell>
+                    <TableCell className="num">{v.total}</TableCell>
+                    <TableCell className="num">
+                      <Button variant="ghost" size="sm" type="button">
                         Download
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </>
       )}

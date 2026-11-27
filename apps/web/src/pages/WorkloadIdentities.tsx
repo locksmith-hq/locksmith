@@ -1,3 +1,9 @@
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { PageHeader } from "@locksmith-hq/page-header";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../Dropdown";
 import { useCallback, useEffect, useState } from "react";
 import {
   buildWorkloadIdentity,
@@ -52,52 +58,53 @@ export function WorkloadIdentities({ client }: { client: Client }) {
 
   return (
     <section aria-label="Workload identities">
-      <h2>Workload identities</h2>
-      <p>
-        Let a CI job or cluster workload exchange its own OIDC token for a short-lived agent token. Nothing secret is
-        stored or shown here: the policy handle is not a secret.
-      </p>
-      {error && <p role="alert">{error}</p>}
-      <form onSubmit={create} aria-label="Create workload identity">
-        <label>
+      <PageHeader
+        title="Workload identities"
+        lede="Let a CI job or cluster workload exchange its own OIDC token for a short-lived agent token. Nothing secret is stored or shown here: the policy handle is not a secret."
+      />
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <form onSubmit={create} aria-label="Create workload identity" className="mb-4 flex max-w-md flex-col gap-2">
+        <Label>
           Issuer preset{" "}
-          <select
-            aria-label="Issuer preset"
-            value={preset}
-            onChange={(e) => setPreset(e.target.value as WorkloadPreset)}
-          >
-            <option value="github">GitHub Actions</option>
-            <option value="kubernetes">Kubernetes</option>
-          </select>
-        </label>
-        <input aria-label="Policy name" required value={f.name} onChange={set("name")} />
-        <input
+          <Dropdown aria-label="Issuer preset" value={preset} onChange={(e) => setPreset(e as WorkloadPreset)}>
+            <Option value="github">GitHub Actions</Option>
+            <Option value="kubernetes">Kubernetes</Option>
+          </Dropdown>
+        </Label>
+        <Input aria-label="Policy name" required value={f.name} onChange={set("name")} />
+        <Input
           aria-label="Agent id"
           required
           value={f.agentId}
           onChange={(e) => setF({ ...f, agentId: e.target.value.trim() })}
         />
-        <input aria-label="Audience" required value={f.audience} onChange={set("audience")} />
+        <Input aria-label="Audience" required value={f.audience} onChange={set("audience")} />
         {preset === "github" ? (
           <>
             <p>Issuer: {GITHUB_ISSUER}</p>
-            <input aria-label="Repository (owner/repo)" required value={f.repository} onChange={set("repository")} />
-            <input aria-label="Ref (optional)" value={f.ref} onChange={set("ref")} />
-            <input aria-label="Environment (optional)" value={f.environment} onChange={set("environment")} />
+            <Input aria-label="Repository (owner/repo)" required value={f.repository} onChange={set("repository")} />
+            <Input aria-label="Ref (optional)" value={f.ref} onChange={set("ref")} />
+            <Input aria-label="Environment (optional)" value={f.environment} onChange={set("environment")} />
           </>
         ) : (
           <>
-            <input aria-label="Issuer URL" type="url" required value={f.issuer} onChange={set("issuer")} />
-            <input aria-label="Namespace" required value={f.namespace} onChange={set("namespace")} />
-            <input aria-label="Service account" required value={f.serviceaccount} onChange={set("serviceaccount")} />
+            <Input aria-label="Issuer URL" type="url" required value={f.issuer} onChange={set("issuer")} />
+            <Input aria-label="Namespace" required value={f.namespace} onChange={set("namespace")} />
+            <Input aria-label="Service account" required value={f.serviceaccount} onChange={set("serviceaccount")} />
           </>
         )}
         {prefixWarn && (
-          <p role="alert" data-testid="prefix-warning">
+          <p role="alert" data-testid="prefix-warning" className="text-(--warning-text)">
             Warning: a condition ends in * and matches every value with that prefix. Prefer exact values.
           </p>
         )}
-        <button type="submit">Create workload identity</button>
+        <Button type="submit" className="self-start">
+          Create workload identity
+        </Button>
       </form>
       {!items ? (
         error ? null : (
@@ -106,15 +113,19 @@ export function WorkloadIdentities({ client }: { client: Client }) {
       ) : items.length === 0 ? (
         <p>No workload identities yet.</p>
       ) : (
-        <ul>
+        <ul className="divide-y rounded-md border bg-card">
           {items.map((w) => (
-            <li key={w.id} aria-label={`Workload identity ${w.name}`}>
+            <li
+              key={w.id}
+              aria-label={`Workload identity ${w.name}`}
+              className="flex flex-col items-start gap-1 px-4 py-3"
+            >
               <strong>{w.name}</strong> ({w.issuer_kind}) {w.issuer} aud {w.audience} agent {w.agent_id}
               <div>
                 Handle: <code>{w.handle}</code>
               </div>
               <div>Last used: {w.last_used_at ?? "never"}</div>
-              <ul>
+              <ul className="list-disc pl-5 font-mono text-xs">
                 {w.conditions.map((c) => (
                   <li key={`${c.claim}=${c.pattern}`}>
                     {c.claim} = {c.pattern}
@@ -125,7 +136,9 @@ export function WorkloadIdentities({ client }: { client: Client }) {
               {hasPrefixCondition(w.conditions) && <p>Warning: this policy uses a prefix (*) condition.</p>}
               {confirming === w.id ? (
                 <>
-                  <button
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     onClick={() => {
                       setConfirming(null);
                       setError(null);
@@ -133,11 +146,20 @@ export function WorkloadIdentities({ client }: { client: Client }) {
                     }}
                   >
                     Confirm delete {w.name}
-                  </button>
-                  <button onClick={() => setConfirming(null)}>Cancel</button>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                    Cancel
+                  </Button>
                 </>
               ) : (
-                <button onClick={() => setConfirming(w.id)}>Delete {w.name}</button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-(--destructive-text)"
+                  onClick={() => setConfirming(w.id)}
+                >
+                  Delete {w.name}
+                </Button>
               )}
             </li>
           ))}

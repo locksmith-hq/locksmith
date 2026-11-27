@@ -1,7 +1,11 @@
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList } from "@locksmith-hq/breadcrumb";
+import { Label } from "@locksmith-hq/label";
+import { Dropdown, Option } from "../Dropdown";
+import { PageHeader } from "@locksmith-hq/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Route, Routes, useParams } from "react-router";
-import { Head } from "@locksmith/ui";
 import type { Client, Environment, Project, Secret, SecretVersion } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
 
@@ -24,51 +28,57 @@ function SecretList({ client }: { client: Client }) {
   });
   return (
     <>
-      <Head title="Secrets" />
+      <PageHeader title="Secrets" />
       <QueryState query={projects} empty="No projects yet, so no secrets.">
         {(ps: Project[]) => (
-          <label className="muted">
+          <Label className="mb-3 text-muted-foreground">
             Project{" "}
-            <select
+            <Dropdown
               aria-label="Project"
               value={project}
               onChange={(e) => {
-                setPid(e.target.value);
+                setPid(e);
                 setEid("");
               }}
             >
               {ps.map((p) => (
-                <option key={p.id} value={p.id}>
+                <Option key={p.id} value={p.id}>
                   {p.name}
-                </option>
+                </Option>
               ))}
-            </select>
-          </label>
+            </Dropdown>
+          </Label>
         )}
       </QueryState>
       {project && (
         <QueryState query={envs} empty="No environments in this project.">
           {(es: Environment[]) => (
-            <label className="muted">
+            <Label className="mb-3 text-muted-foreground">
               Environment{" "}
-              <select aria-label="Environment" value={env} onChange={(e) => setEid(e.target.value)}>
+              <Dropdown aria-label="Environment" value={env} onChange={(e) => setEid(e)}>
                 {es.map((x) => (
-                  <option key={x.id} value={x.id}>
+                  <Option key={x.id} value={x.id}>
                     {x.name}
-                  </option>
+                  </Option>
                 ))}
-              </select>
-            </label>
+              </Dropdown>
+            </Label>
           )}
         </QueryState>
       )}
       {project && env && (
         <QueryState query={secrets} empty="No secrets in this environment.">
           {(items: Secret[]) => (
-            <ul className="list">
+            <ul className="divide-y rounded-md border bg-card">
               {items.map((s) => (
-                <li key={s.id} className="row">
-                  <Link to={`/secrets/${project}/${env}/${s.id}`}>{s.name}</Link> ({s.version_count} versions)
+                <li key={s.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                  <Link
+                    className="font-medium underline-offset-3 hover:underline"
+                    to={`/secrets/${project}/${env}/${s.id}`}
+                  >
+                    {s.name}
+                  </Link>{" "}
+                  ({s.version_count} versions)
                 </li>
               ))}
             </ul>
@@ -88,39 +98,45 @@ function SecretDetail({ client }: { client: Client }) {
   });
   return (
     <>
-      <nav className="crumbs">
-        <Link to="/secrets">All secrets</Link>
-      </nav>
+      <Breadcrumb className="mb-3">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link to="/secrets">All secrets</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
       <QueryState query={secret}>
         {(s: Secret) => (
           <>
-            <Head title={s.name} />
+            <PageHeader title={s.name} />
             <p>{s.description}</p>
             <p>Updated {s.updated_at}</p>
           </>
         )}
       </QueryState>
-      <h3>Versions</h3>
+      <h3 className="mt-4 mb-2 text-base font-semibold">Versions</h3>
       <QueryState query={versions} empty="No versions yet.">
         {(vs: SecretVersion[]) => (
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Version</th>
-                <th>Key</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Version</TableHead>
+                <TableHead>Key</TableHead>
+                <TableHead>Created</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {vs.map((v) => (
-                <tr key={v.version}>
-                  <td>{v.version}</td>
-                  <td>{v.key_id}</td>
-                  <td>{v.created_at}</td>
-                </tr>
+                <TableRow key={v.version}>
+                  <TableCell>{v.version}</TableCell>
+                  <TableCell>{v.key_id}</TableCell>
+                  <TableCell>{v.created_at}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </QueryState>
     </>

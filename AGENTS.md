@@ -17,6 +17,7 @@ Locksmith is an open-source secrets platform and credential gateway for AI codin
 | `apps/` | web, docs, desktop (Tauri), and `api` (the NestJS API) |
 | `packages/` | shared TypeScript |
 | `integrations/` | thin agent plugins |
+| `design-system/` | the component packages published as `@locksmith-hq/*` and their docs site. Owner-reviewed (CODEOWNERS): do not take work here unless the owner asks |
 | `infra/` | compose, helm (AWS and OpenTofu live in the private `locksmith-cloud` repo) |
 | `tests/` | e2e and adversarial tests |
 | `scripts/` | tooling |
@@ -38,6 +39,10 @@ CI jobs call the same `just` recipes as `just ci`, so run `just quick` locally a
 - Never block unlock or export because of licensing, billing or update failures.
 - Use Rust for anything that touches plaintext secrets, keys or proxies. The NestJS API never receives plaintext secrets or key bytes; it calls the Rust core.
 - Any test that needs an AWS API (STS, S3, DynamoDB, SQS, Cognito, KMS...) runs against Floci (https://github.com/floci-io/floci, `floci` in compose, `localhost:4566`), never real AWS, moto or LocalStack.
+
+## UI rules
+- **Every web UI is built from the design system.** Websites and apps (`apps/web`, `apps/desktop`, `apps/docs` and any new one) use the `@locksmith-hq/*` components and `@locksmith-hq/styles` from `design-system/`. Do not hand-write a button, input, dialog, table or other control that the kit has, and do not add another UI library. If the kit lacks what you need, add it to the kit first (owner-reviewed), then use it.
+- **Every design system component is built on shadcn/ui** (https://ui.shadcn.com). When shadcn has the component, use its source unchanged and give it the Locksmith look in `design-system/packages/styles/theme.css`. When it has none, write ours the shadcn way: compose shadcn parts, pass `className` and native props through, set a `data-slot`, use lucide icons. See `design-system/README.md`.
 
 ## How we work
 - **Evidence and reuse:** base decisions on evidence, not guesses. Reuse a maintained OSS package before writing one.

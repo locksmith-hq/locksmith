@@ -1,4 +1,11 @@
 // MCP: how AI tools connect to Locksmith, in three layers with very different risk. Sample data; nothing is served.
+import { Tabs as KitTabs, TabsList, TabsTrigger } from "@locksmith-hq/tabs";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { Button } from "@locksmith-hq/button";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { Fragment, useState } from "react";
 import { agents } from "../data";
 import { Empty, Head, Icon, Switch, ago, plural, type PageProps } from "../kit";
@@ -54,14 +61,18 @@ const isLayer = (s: string | undefined): s is Layer => s === "hub" || s === "age
 function Tabs({ at }: { at: string }) {
   const [clients] = useClients();
   return (
-    <nav className="tabs" aria-label="MCP">
-      {TABS.map(([k, label]) => (
-        <a key={k} href={k ? `#/mcp/${k}` : "#/mcp"} aria-current={at === k ? "page" : undefined}>
-          {label}
-          {k === "clients" && <span className="n">{clients.length}</span>}
-        </a>
-      ))}
-    </nav>
+    <KitTabs value={at || "index"} className="mb-5">
+      <TabsList variant="line" aria-label="MCP">
+        {TABS.map(([k, label]) => (
+          <TabsTrigger key={k} value={k || "index"} asChild>
+            <a href={k ? `#/mcp/${k}` : "#/mcp"}>
+              {label}
+              {k === "clients" && <span className="n">{clients.length}</span>}
+            </a>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </KitTabs>
   );
 }
 
@@ -128,36 +139,36 @@ function Overview() {
       />
       <Tabs at="" />
       <div className="table-wrap pf-scroll">
-        <table className="grid pf-compare">
-          <thead>
-            <tr>
-              <th>
+        <Table className="pf-compare">
+          <TableHeader>
+            <TableRow>
+              <TableHead>
                 <span className="sr-only">Question</span>
-              </th>
+              </TableHead>
               {LAYERS.map((l) => (
-                <th key={l} scope="col">
+                <TableHead key={l} scope="col">
                   <a href={`#/mcp/${l}`}>{NAME[l]}</a>
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map(([q, f]) => (
-              <tr key={q}>
-                <th scope="row">{q}</th>
+              <TableRow key={q}>
+                <TableHead scope="row">{q}</TableHead>
                 {LAYERS.map((l) => (
-                  <td key={l}>{f(l)}</td>
+                  <TableCell key={l}>{f(l)}</TableCell>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <p className="hint">
         Use the Hub MCP for your own assistant to ask about Locksmith, the Agent MCP for coding agents doing a job, and
         the Local MCP when one developer works on a laptop without the cloud.
       </p>
-      <div className="panel pf-rule">
+      <Card className="panel pf-rule">
         <h2>
           <Icon name="shield" /> An agent never receives a stored secret value
         </h2>
@@ -167,7 +178,7 @@ function Overview() {
           <b>issue a short-lived credential</b>: a dynamic secret that lives minutes and works for one job. It is one
           switch on the Agent MCP and the Local MCP, off by default. See <a href="#/mcp/agent">Agent MCP</a>.
         </p>
-      </div>
+      </Card>
     </>
   );
 }
@@ -202,7 +213,7 @@ function LayerTab({ layer, say }: { layer: Layer; say: PageProps["say"] }) {
       <Head title={NAME[layer]} sub={LEDE[layer]} />
       <Tabs at={layer} />
 
-      <div className="panel pf-block">
+      <Card className="panel pf-block">
         <h2>Server</h2>
         <div className="set-row">
           <div>
@@ -241,17 +252,19 @@ function LayerTab({ layer, say }: { layer: Layer; say: PageProps["say"] }) {
           </div>
         </div>
         {offAsk && (
-          <p className="alert" role="alert">
-            This disconnects {plural(live, "client")} now. {OFFING[layer]}
-            <button type="button" className="btn sm danger" onClick={turnOff}>
-              Turn off {NAME[layer]}
-            </button>
-            <button type="button" className="btn sm quiet" onClick={() => setOffAsk(false)}>
-              Keep it on
-            </button>
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>
+              This disconnects {plural(live, "client")} now. {OFFING[layer]}
+              <Button variant="destructive" size="sm" type="button" onClick={turnOff}>
+                Turn off {NAME[layer]}
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setOffAsk(false)}>
+                Keep it on
+              </Button>
+            </AlertDescription>
+          </Alert>
         )}
-      </div>
+      </Card>
 
       <h2 className="pf-h">
         Tools{" "}
@@ -272,60 +285,63 @@ function LayerTab({ layer, say }: { layer: Layer; say: PageProps["say"] }) {
         </p>
       )}
       <div className="table-wrap pf-scroll" data-dim={!on}>
-        <table className="grid pf-tools">
-          <thead>
-            <tr>
-              <th>Tool</th>
-              <th>What it does</th>
-              <th>Type</th>
-              <th>On</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="pf-tools">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tool</TableHead>
+              <TableHead>What it does</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>On</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {mine.map((t) => (
               <Fragment key={t.id}>
-                <tr data-risk={t.kind === "credential" ? "credential" : undefined}>
-                  <td>
+                <TableRow data-risk={t.kind === "credential" ? "credential" : undefined}>
+                  <TableCell>
                     <code>{t.name}</code>
-                  </td>
-                  <td className="wrap">{t.about}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell className="wrap">{t.about}</TableCell>
+                  <TableCell>
                     <span className="pf-kind" data-k={t.kind}>
                       {KIND_LABEL[t.kind]}
                     </span>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <Switch label={t.name} checked={t.on} onChange={(v) => flip(t, v)} />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
                 {ask === t.id && (
-                  <tr className="detail">
-                    <td colSpan={4}>
-                      <p className="alert" role="alert">
-                        <span>
-                          <b>Turn on {t.name}?</b> {t.risk}
-                        </span>
-                        <button
-                          type="button"
-                          className="btn sm danger"
-                          onClick={() => {
-                            setTool(t.id, true);
-                            setAsk(null);
-                          }}
-                        >
-                          Turn on {t.name}
-                        </button>
-                        <button type="button" className="btn sm quiet" onClick={() => setAsk(null)}>
-                          Keep it off
-                        </button>
-                      </p>
-                    </td>
-                  </tr>
+                  <TableRow className="detail">
+                    <TableCell colSpan={4}>
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          <span>
+                            <b>Turn on {t.name}?</b> {t.risk}
+                          </span>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            type="button"
+                            onClick={() => {
+                              setTool(t.id, true);
+                              setAsk(null);
+                            }}
+                          >
+                            Turn on {t.name}
+                          </Button>
+                          <Button variant="ghost" size="sm" type="button" onClick={() => setAsk(null)}>
+                            Keep it off
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    </TableCell>
+                  </TableRow>
                 )}
               </Fragment>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       {!on && <p className="hint">The server is off, so no client can call any of these.</p>}
 
@@ -347,34 +363,34 @@ function AgentTable() {
         all.
       </p>
       <div className="table-wrap pf-scroll">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>Agent</th>
-              <th>Machine</th>
-              <th>May connect</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Agent</TableHead>
+              <TableHead>Machine</TableHead>
+              <TableHead>May connect</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {agents.map((a) => (
-              <tr key={a.name}>
-                <td>
+              <TableRow key={a.name}>
+                <TableCell>
                   <span className="strong">{a.name}</span>
                   <br />
                   <span className="muted">{a.description}</span>
-                </td>
-                <td className="mono">{a.machine}</td>
-                <td>
+                </TableCell>
+                <TableCell className="mono">{a.machine}</TableCell>
+                <TableCell>
                   <Switch
                     label={`${a.name} may connect`}
                     checked={access[a.name] ?? false}
                     onChange={(v) => setAccess((s) => ({ ...s, [a.name]: v }))}
                   />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </>
   );
@@ -461,7 +477,7 @@ function Connect({ layer }: { layer: Layer }) {
     }
   };
   return (
-    <div className="panel pf-block pf-top">
+    <Card className="panel pf-block pf-top">
       <h2>Connect a client</h2>
       <p className="muted">
         {layer === "local"
@@ -470,28 +486,28 @@ function Connect({ layer }: { layer: Layer }) {
             ? "Add the Hub MCP to your assistant, then sign in as yourself."
             : "Add this on the agent's machine. The token is the one given when the agent was enrolled."}
       </p>
-      <label className="field pf-client">
+      <Label className="field pf-client">
         Client
-        <select
+        <Dropdown
           value={app}
           onChange={(e) => {
-            setApp(e.target.value as App);
+            setApp(e as App);
             setCopied("");
           }}
         >
           {APPS.map((a) => (
-            <option key={a}>{a}</option>
+            <Option key={a}>{a}</Option>
           ))}
-        </select>
-      </label>
+        </Dropdown>
+      </Label>
       <p className="pf-when">{s.note}</p>
       <pre className="pf-code" tabIndex={0} aria-label={`Setup for ${app}`}>
         <code>{s.text}</code>
       </pre>
       <div className="pf-btns">
-        <button type="button" className="btn sm" onClick={copy}>
+        <Button variant="outline" size="sm" type="button" onClick={copy}>
           {copied === "ok" ? "Copied" : "Copy"}
-        </button>
+        </Button>
         <span role="status" className="pf-when">
           {copied === "ok"
             ? "Copied to your clipboard."
@@ -506,7 +522,7 @@ function Connect({ layer }: { layer: Layer }) {
           and cannot be shown again.
         </p>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -544,41 +560,43 @@ function Clients({ say }: { say: PageProps["say"] }) {
         </Empty>
       ) : (
         <div className="table-wrap pf-scroll">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Client</th>
-                <th>Layer</th>
-                <th>Signed in as</th>
-                <th>Last call</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
+                <TableHead>Layer</TableHead>
+                <TableHead>Signed in as</TableHead>
+                <TableHead>Last call</TableHead>
+                <TableHead>
                   <span className="sr-only">Disconnect</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {clients.map((c) => (
-                <tr key={c.id}>
-                  <td>
+                <TableRow key={c.id}>
+                  <TableCell>
                     <span className="strong">{c.app}</span> <span className="muted">on {c.host}</span>
-                  </td>
-                  <td>{NAME[c.layer]}</td>
-                  <td>{c.as}</td>
-                  <td>{ago(c.last)}</td>
-                  <td className="num">
-                    <button
+                  </TableCell>
+                  <TableCell>{NAME[c.layer]}</TableCell>
+                  <TableCell>{c.as}</TableCell>
+                  <TableCell>{ago(c.last)}</TableCell>
+                  <TableCell className="num">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
                       type="button"
-                      className="btn sm quiet danger-text"
                       aria-label={`Disconnect ${c.app} on ${c.host} (${NAME[c.layer]})`}
                       onClick={() => drop(c.id)}
                     >
                       Disconnect
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </>

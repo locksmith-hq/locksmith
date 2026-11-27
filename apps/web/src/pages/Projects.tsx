@@ -1,7 +1,11 @@
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList } from "@locksmith-hq/breadcrumb";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { PageHeader } from "@locksmith-hq/page-header";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Route, Routes, useParams } from "react-router";
-import { Head } from "@locksmith/ui";
 import type { Client, Environment, Project } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
 
@@ -23,7 +27,7 @@ function RowActions({
   if (editing) {
     return (
       <form
-        className="inline-form"
+        className="flex flex-wrap items-center gap-2 [&_[data-slot=input]]:w-60"
         onSubmit={(e) => {
           e.preventDefault();
           void onRename(value).then(
@@ -32,22 +36,27 @@ function RowActions({
           );
         }}
       >
-        <input aria-label={`New name for ${name}`} value={value} onChange={(e) => setValue(e.target.value)} />
-        <button type="submit" className="btn sm primary">
+        <Input aria-label={`New name for ${name}`} value={value} onChange={(e) => setValue(e.target.value)} />
+        <Button size="sm" type="submit">
           Save
-        </button>
-        <button type="button" className="btn sm quiet" onClick={() => setEditing(false)}>
+        </Button>
+        <Button variant="ghost" size="sm" type="button" onClick={() => setEditing(false)}>
           Cancel
-        </button>
+        </Button>
       </form>
     );
   }
   if (confirming) {
     return (
-      <span role="alertdialog" className="inline-form" aria-label={`Delete ${name}?`}>
+      <span
+        role="alertdialog"
+        className="flex flex-wrap items-center gap-2 [&_[data-slot=input]]:w-60"
+        aria-label={`Delete ${name}?`}
+      >
         Delete {name}?
-        <button
-          className="btn sm danger"
+        <Button
+          variant="destructive"
+          size="sm"
           onClick={() =>
             void onDelete().then(
               () => setConfirming(false),
@@ -56,21 +65,21 @@ function RowActions({
           }
         >
           Confirm delete
-        </button>
-        <button className="btn sm quiet" onClick={() => setConfirming(false)}>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
           Cancel
-        </button>
+        </Button>
       </span>
     );
   }
   return (
     <>
-      <button className="btn sm" onClick={() => setEditing(true)}>
+      <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
         Rename {name}
-      </button>
-      <button className="btn sm quiet danger-text" onClick={() => setConfirming(true)}>
+      </Button>
+      <Button variant="ghost" size="sm" className="text-(--destructive-text)" onClick={() => setConfirming(true)}>
         Delete {name}
-      </button>
+      </Button>
     </>
   );
 }
@@ -79,7 +88,7 @@ function CreateForm({ label, onCreate }: { label: string; onCreate: (name: strin
   const [name, setName] = useState("");
   return (
     <form
-      className="panel form inline-form"
+      className="mb-4 flex flex-wrap items-center gap-2 [&_[data-slot=input]]:w-60"
       onSubmit={(e) => {
         e.preventDefault();
         void onCreate(name).then(
@@ -88,10 +97,8 @@ function CreateForm({ label, onCreate }: { label: string; onCreate: (name: strin
         );
       }}
     >
-      <input aria-label={`${label} name`} value={name} onChange={(e) => setName(e.target.value)} required />
-      <button type="submit" className="btn primary">
-        Create {label}
-      </button>
+      <Input aria-label={`${label} name`} value={name} onChange={(e) => setName(e.target.value)} required />
+      <Button type="submit">Create {label}</Button>
     </form>
   );
 }
@@ -109,19 +116,21 @@ function ProjectList({ client }: { client: Client }) {
   const err = create.error ?? rename.error ?? del.error;
   return (
     <>
-      <Head title="Projects" />
+      <PageHeader title="Projects" />
       {err && (
-        <p role="alert" className="state">
-          {errMsg(err)}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{errMsg(err)}</AlertDescription>
+        </Alert>
       )}
       <CreateForm label="project" onCreate={(n) => create.mutateAsync(n)} />
       <QueryState query={q} empty="No projects yet.">
         {(items: Project[]) => (
-          <ul className="list">
+          <ul className="divide-y rounded-md border bg-card">
             {items.map((p) => (
-              <li key={p.id} className="row">
-                <Link to={`/projects/${p.id}`}>{p.name}</Link>
+              <li key={p.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                <Link className="mr-auto font-medium underline-offset-3 hover:underline" to={`/projects/${p.id}`}>
+                  {p.name}
+                </Link>
                 <RowActions
                   name={p.name}
                   onRename={(name) => rename.mutateAsync({ id: p.id, name })}
@@ -150,22 +159,28 @@ function ProjectDetail({ client }: { client: Client }) {
   const err = create.error ?? rename.error ?? del.error;
   return (
     <>
-      <Head title="Environments" />
-      <nav className="crumbs">
-        <Link to="/projects">All projects</Link>
-      </nav>
+      <PageHeader title="Environments" />
+      <Breadcrumb className="mb-3">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link to="/projects">All projects</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
       {err && (
-        <p role="alert" className="state">
-          {errMsg(err)}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{errMsg(err)}</AlertDescription>
+        </Alert>
       )}
       <CreateForm label="environment" onCreate={(n) => create.mutateAsync(n)} />
       <QueryState query={q} empty="No environments yet.">
         {(items: Environment[]) => (
-          <ul className="list">
+          <ul className="divide-y rounded-md border bg-card">
             {items.map((e) => (
-              <li key={e.id} className="row">
-                {e.name}
+              <li key={e.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                <span className="mr-auto font-medium">{e.name}</span>
                 <RowActions
                   name={e.name}
                   onRename={(name) => rename.mutateAsync({ env: e.id, name })}

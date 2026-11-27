@@ -378,13 +378,7 @@ fn keys(v: &Value) -> Vec<&str> {
 
 #[tokio::test]
 async fn workload_exchange_mints_a_gateway_verifiable_agent_token() {
-    let capture = common::Capture::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(capture.clone())
-        .with_max_level(tracing::Level::TRACE)
-        .with_ansi(false)
-        .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let capture = common::capture_logs();
 
     let f = Fixture::start().await;
     let external = f.token("refs/heads/main");
@@ -462,8 +456,9 @@ async fn workload_exchange_mints_a_gateway_verifiable_agent_token() {
     // The external token is in no log line and no stored row; the claims logged are the ones
     // the policy names.
     let logs = capture.contents();
+    let all_logs = capture.all_contents();
     let ledger_and_rows = f.dump_text().await;
-    for haystack in [&logs, &ledger_and_rows] {
+    for haystack in [&all_logs, &ledger_and_rows] {
         assert!(!haystack.contains(&external), "external token leaked");
         assert!(!haystack.contains(external.split('.').nth(2).unwrap()));
         assert!(!haystack.contains("canary-actor-name"));
@@ -474,13 +469,7 @@ async fn workload_exchange_mints_a_gateway_verifiable_agent_token() {
 
 #[tokio::test]
 async fn workload_exchange_every_failure_is_the_same_401() {
-    let capture = common::Capture::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(capture.clone())
-        .with_max_level(tracing::Level::TRACE)
-        .with_ansi(false)
-        .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let capture = common::capture_logs();
 
     let f = Fixture::start().await;
     let url = f.issuer.uri();
@@ -581,13 +570,14 @@ async fn workload_exchange_every_failure_is_the_same_401() {
 
     // No external token text anywhere.
     let logs = capture.contents();
+    let all_logs = capture.all_contents();
     let rows = f.dump_text().await;
     for (_, _, token) in &cases {
         if token.len() > 20 {
-            assert!(!logs.contains(token.as_str()) && !rows.contains(token.as_str()));
+            assert!(!all_logs.contains(token.as_str()) && !rows.contains(token.as_str()));
         }
     }
-    assert!(!logs.contains("canary-actor-name") && !rows.contains("canary-actor-name"));
+    assert!(!all_logs.contains("canary-actor-name") && !rows.contains("canary-actor-name"));
     assert!(logs.contains("reason=\"claims\"") || logs.contains("reason=claims"));
 
     // Malformed bodies are rejected before any credential check, without echoing the token.
@@ -865,22 +855,6 @@ async fn workload_abuse_per_source_rate_limit_counts_each_address_separately() {
 
 // ---- Task 4.2: abuse cases for the exchange ------------------------------------------------
 
-/// Log capture with span open and close events, so the span fields are in it too.
-fn capture_logs() -> (common::Capture, tracing::subscriber::DefaultGuard) {
-    let capture = common::Capture::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(capture.clone())
-        .with_max_level(tracing::Level::TRACE)
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
-        .with_ansi(false)
-        .finish();
-    let guard = tracing::subscriber::set_default(subscriber);
-    // Tests share one process under `cargo test`: a callsite first hit by a test with no
-    // subscriber caches "never", so re-evaluate every callsite against this subscriber.
-    tracing::callsite::rebuild_interest_cache();
-    (capture, guard)
-}
-
 /// When `WORKLOAD_ABUSE_ARTIFACT_DIR` is set (tests/adversarial/cases/D4.sh), write what an
 /// attacker could read after the run (logs, the org ledger, a dump of every table) there, for
 /// the shared leak oracle. Never contains the canary unless the code under test leaks it.
@@ -1138,7 +1112,7 @@ async fn workload_abuse_policy_handle_of_another_org_is_refused() {
 
 #[tokio::test]
 async fn workload_abuse_canary_external_token_is_in_no_log_span_or_ledger() {
-    let (capture, _guard) = capture_logs();
+    let capture = common::capture_logs();
     let f = Fixture::start().await;
     let canary = std::env::var("ADVERSARIAL_CANARY_FILE")
         .ok()
@@ -1185,6 +1159,7 @@ async fn workload_abuse_canary_external_token_is_in_no_log_span_or_ledger() {
     );
 
     let logs = capture.contents();
+    let all_logs = capture.all_contents();
     let ledger = format!("{:?}", f.ledger().await);
     let rows = f.dump_text().await;
     assert!(
@@ -1199,12 +1174,12 @@ async fn workload_abuse_canary_external_token_is_in_no_log_span_or_ledger() {
         for needle in
             std::iter::once(t.as_str()).chain(parts.iter().copied().filter(|p| p.len() > 16))
         {
-            for (where_, hay) in [("logs", &logs), ("ledger", &ledger), ("rows", &rows)] {
+            for (where_, hay) in [("logs", &all_logs), ("ledger", &ledger), ("rows", &rows)] {
                 assert!(!hay.contains(needle), "token material in {where_}");
             }
         }
     }
-    for (where_, hay) in [("logs", &logs), ("ledger", &ledger), ("rows", &rows)] {
+    for (where_, hay) in [("logs", &all_logs), ("ledger", &ledger), ("rows", &rows)] {
         assert!(!hay.contains(&canary), "canary in {where_}");
     }
     // The minted agent token is Locksmith's own and does not embed the external one.
@@ -1219,5 +1194,5 @@ async fn workload_abuse_canary_external_token_is_in_no_log_span_or_ledger() {
                 .unwrap_or(false)
         );
     }
-    write_artifacts("canary", &logs, &ledger, &rows);
+    write_artifacts("canary", &all_logs, &ledger, &rows);
 }

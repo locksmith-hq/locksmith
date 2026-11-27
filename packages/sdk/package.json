@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "gen": "openapi-typescript ../../services/control-plane/openapi.json -o src/schema.d.ts",
+    "gen": "node merge-specs.mjs merged.openapi.json && openapi-typescript merged.openapi.json -o src/schema.d.ts && rm merged.openapi.json",
     "lint": "oxlint -c ../../.oxlintrc.json .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

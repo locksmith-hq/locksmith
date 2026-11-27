@@ -1,5 +1,6 @@
 target/
 node_modules/
+.venv/
 dist/
 !crates/locksmithd/dist/
 .DS_Store

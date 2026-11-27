@@ -1,6 +1,6 @@
 set positional-arguments
 
-ci: fmt lint test-rust test-web tree-check public-check migration-guard
+ci: fmt lint test-rust test-web tree-check public-check migration-guard api-types-check
 
 # Fast local check: fmt + lint only for files committed on this branch since `base`.
 # The full `just ci` runs in GitHub Actions on every PR.
@@ -23,6 +23,12 @@ quick base="origin/main":
         esac
       done
       if [ -n "$pkgs" ]; then cargo clippy $pkgs --all-targets -- -D warnings; fi
+    fi
+    py=$(grep -E '^integrations/.*\.py$' <<<"$files" || true)
+    if [ -n "$py" ]; then
+      command -v uvx >/dev/null || { echo "quick: uvx is missing (https://docs.astral.sh/uv/)" >&2; exit 1; }
+      uvx ruff@0.17.6 check --line-length 110 $py
+      uvx ruff@0.17.6 format --check --line-length 110 $py
     fi
     if grep -qE '\.(tsx?|mjs|js)$|^knip\.json$|^\.oxfmtrc\.json$|^\.oxlintrc\.json$' <<<"$files"; then npx turbo run lint format:check knip typecheck; fi
 
@@ -61,10 +67,18 @@ apps-build: desktop-test
 apps-build-test:
     scripts/apps-build.test.sh
 
-# Regenerate packages/api-types from crates/ls-ipc (ts-rs).
+# Regenerate packages/api-types from crates/ls-ipc (ts-rs). CI runs this one.
 api-types:
     cargo test -p ls-ipc --features ts export_bindings
     npx --yes oxfmt@0.79.0 -c .oxfmtrc.json packages/api-types/src
+
+# Regenerate apps/api/src/db/types.ts: throwaway Postgres (docker), the Rust `locksmith-migrate`, kysely-codegen.
+api-types-db:
+    scripts/api-types.sh
+
+# Fail if apps/api/src/db/types.ts differs from the migrated schema (needs docker).
+api-types-check:
+    scripts/api-types.sh --check
 
 tree-check:
     scripts/tree-check.sh
@@ -230,6 +244,10 @@ audit-smoke:
     just audit-verify
     just leak-scan --explain --require-coverage --dir "$dir"
 
+# B2 smoke check of the core service in `just up` (health, audit append, token mint and verify, DEK wrap and unwrap).
+core-check:
+    bash scripts/core-check.sh
+
 # Run locksmith-api against `just up`: dev auth on, loopback bind, OTLP to the LGTM container.
 api:
     #!/usr/bin/env bash
@@ -243,6 +261,11 @@ api:
 # `just api-contract --diff <url-a> <url-b>` compares two servers (needs `just up` and `just api`).
 api-contract *args:
     bash scripts/api-contract.sh {{args}}
+
+# NC-1: regenerate apps/api/openapi.nest.json from the zod registry, then check it (drift test).
+api-openapi:
+    npm run openapi:emit --workspace @locksmith/api
+    npm test --workspace @locksmith/api -- src/openapi
 
 # T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
 # Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.
@@ -366,6 +389,17 @@ agent-smoke name:
 test-e2e:
     cargo nextest run -p ls-e2e
 
+# Python integrations: `uv run pytest` in every integrations/*/pyproject.toml (needs uv).
+test-python:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v uv >/dev/null || { echo "test-python: uv is missing (https://docs.astral.sh/uv/)" >&2; exit 1; }
+    for f in integrations/*/pyproject.toml; do
+      [ -e "$f" ] || continue
+      echo "+ uv run --directory $(dirname "$f") --locked pytest" >&2
+      uv run --directory "$(dirname "$f")" --locked pytest
+    done
+
 # Run one component's tests by directory name (see docs/testing.md): `just test control-plane`.
 test name:
     #!/usr/bin/env bash
@@ -391,6 +425,7 @@ test name:
         pkg=$(cargo metadata --no-deps --format-version 1 | jq -r --arg m "$PWD/$dir/Cargo.toml" '.packages[]|select(.manifest_path==$m)|.name')
         if [ -n "$pkg" ]; then run cargo nextest run -p "$pkg" --no-tests pass
         elif [ -f "$dir/package.json" ] && jq -e '.scripts.test' "$dir/package.json" >/dev/null; then run npm test --workspace "$dir"
+        elif [ -f "$dir/pyproject.toml" ]; then run uv run --directory "$dir" --locked pytest
         else
           cov=$(awk -F'|' -v d="\`$dir\`" '$2 ~ d {print $6}' docs/testing.md)
           echo "just test: $n has no tests of its own; covered by:$cov" >&2

@@ -23,7 +23,38 @@ import {
   type Secret,
   type SecretVersion,
 } from "@locksmith/control-plane-client";
-import { Icon, type IconName } from "@locksmith/ui";
+import {
+  Braces,
+  CircleAlert,
+  Code,
+  FileText,
+  Globe,
+  KeyRound,
+  Plus,
+  RotateCw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  SquareTerminal,
+  Ticket,
+  AppWindow,
+  CircleHelp,
+  Users,
+  Database,
+  Cloud,
+  Play,
+  GitBranch,
+  type LucideIcon,
+} from "lucide-react";
+import { Alert as KitAlert } from "@locksmith-hq/alert";
+import { Badge } from "@locksmith-hq/badge";
+import { Button } from "@locksmith-hq/button";
+import { EmptyState } from "@locksmith-hq/empty-state";
+import { Loader } from "@locksmith-hq/loader";
+import { PageHeader } from "@locksmith-hq/page-header";
+import { Pill } from "@locksmith-hq/pill";
+import { ScopeChip } from "@locksmith-hq/scope-chip";
 
 export interface ScreenProps {
   st: StatusView | null;
@@ -115,56 +146,74 @@ function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { data, err, load, alert: err ? <Alert>{err}</Alert> : null };
 }
 
+const ICONS = {
+  alert: CircleAlert,
+  broken: ShieldAlert,
+  shield: ShieldCheck,
+  key: KeyRound,
+  token: Ticket,
+  plus: Plus,
+  rotate: RotateCw,
+  search: Search,
+  http: Globe,
+  doc: FileText,
+  sessions: Users,
+  run: Play,
+  git: GitBranch,
+  db: Database,
+  aws: Cloud,
+  s_terminal: SquareTerminal,
+  s_window: AppWindow,
+  s_code: Code,
+  s_spark: Sparkles,
+  s_unknown: CircleHelp,
+  s_claude: Braces,
+} satisfies Record<string, LucideIcon>;
+type IconName = keyof typeof ICONS;
+const Icon = ({ name, className }: { name: IconName; className?: string }) => {
+  const I = ICONS[name];
+  return <I className={className} aria-hidden="true" />;
+};
+
 const Alert = ({ children }: { children: React.ReactNode }) => (
-  <p role="alert" className="alert">
-    <Icon name="alert" />
+  <KitAlert variant="destructive" className="mb-4 font-semibold">
+    <CircleAlert />
     {children}
-  </p>
+  </KitAlert>
 );
 const Loading = ({ what }: { what: string }) => (
-  <p className="state" aria-busy="true">
+  <Loader className="py-4" aria-busy="true">
     Reading {what}…
-  </p>
+  </Loader>
 );
-const Empty = ({ icon, children }: { icon: IconName; children: React.ReactNode }) => (
-  <div className="state empty">
-    <span className="state-ic">
-      <Icon name={icon} />
-    </span>
-    <div>{children}</div>
-  </div>
+const Empty = ({ children }: { icon?: IconName; children: React.ReactNode }) => (
+  <EmptyState size="compact" title={children} />
 );
 
-const SCOPE_ICONS = ["run", "git", "http", "db", "aws"];
+const SCOPE_ICON_EL: Record<string, React.ReactNode> = {
+  run: <Icon name="run" />,
+  git: <Icon name="git" />,
+  http: <Icon name="http" />,
+  db: <Icon name="db" />,
+  aws: <Icon name="aws" />,
+};
 const Scopes = ({ scopes }: { scopes: readonly string[] }) => (
-  <ul className="scopes" aria-label={scopes.length ? `Scopes granted: ${scopes.join(", ")}` : "No scopes granted"}>
+  <ul
+    className="m-0 flex list-none flex-wrap gap-1.5 p-0"
+    aria-label={scopes.length ? `Scopes granted: ${scopes.join(", ")}` : "No scopes granted"}
+  >
     {scopes.map((s) => (
-      <li key={s} className="scope">
-        {SCOPE_ICONS.includes(s) && <Icon name={s as IconName} />}
-        {s}
+      <li key={s}>
+        <ScopeChip icon={SCOPE_ICON_EL[s]}>{s}</ScopeChip>
       </li>
     ))}
   </ul>
 );
 
-const Head = ({
-  id,
-  title,
-  sub,
-  children,
-}: {
-  id: string;
-  title: string;
-  sub?: React.ReactNode;
-  children?: React.ReactNode;
-}) => (
-  <div className="screen-head">
-    <div>
-      <h1 id={id}>{title}</h1>
-      {sub && <p className="lede">{sub}</p>}
-    </div>
+const Head = ({ title, sub, children }: { title: string; sub?: React.ReactNode; children?: React.ReactNode }) => (
+  <PageHeader title={title} lede={sub}>
     {children}
-  </div>
+  </PageHeader>
 );
 
 export function Overview({ st, act, go }: ScreenProps) {
@@ -195,10 +244,10 @@ export function Overview({ st, act, go }: ScreenProps) {
         Overview
       </h1>
 
-      <div className="sec-h">
-        <h2>Sessions</h2>
+      <div className="mb-3 flex items-baseline gap-2.5">
+        <h2 className="m-0 text-base font-semibold">Sessions</h2>
         {st && (
-          <span className="n">
+          <span className="text-[13px] text-muted-foreground">
             {live.length} active{ended.length > 0 && ` · ${ended.length} ended`}
           </span>
         )}
@@ -219,50 +268,64 @@ export function Overview({ st, act, go }: ScreenProps) {
 
       {cp && (
         <section aria-label="Control plane counts">
-          <div className="sec-h spaced">
-            <h2>Control plane</h2>
+          <div className="mt-8 mb-3 flex items-baseline gap-2.5">
+            <h2 className="m-0 text-base font-semibold">Control plane</h2>
           </div>
-          <p className="quiet-state" data-testid="cp-counts">
+          <p className="m-0 text-sm text-muted-foreground" data-testid="cp-counts">
             Projects: <b data-testid="count-projects">{cp.projects ?? "n/a"}</b> · Agents:{" "}
             <b data-testid="count-agents">{cp.agents ?? "n/a"}</b>
           </p>
         </section>
       )}
 
-      <div className="sec-h spaced">
-        <h2 id="h-events">Activity</h2>
-        <button type="button" className="link" onClick={() => go("Audit")}>
+      <div className="mt-8 mb-3 flex items-baseline gap-2.5">
+        <h2 id="h-events" className="m-0 text-base font-semibold">
+          Activity
+        </h2>
+        <Button type="button" variant="link" size="sm" className="ml-auto" onClick={() => go("Audit")}>
           Open audit
-        </button>
+        </Button>
       </div>
       {ev.alert}
       {!ev.data && !ev.err ? (
         <Loading what="the ledger" />
       ) : events.length === 0 ? (
-        <p className="quiet-state">Nothing in the ledger yet.</p>
+        <p className="m-0 text-sm text-muted-foreground">Nothing in the ledger yet.</p>
       ) : (
-        <ol className="log" aria-labelledby="h-events">
+        <ol className="m-0 flex list-none flex-col p-0 text-[13px]" aria-labelledby="h-events">
           {events.map((e) => {
             const k = kind(e);
             const who = leaseOf(e.session_id);
             const target = e.target ?? "";
             return (
-              <li key={e.seq} data-kind={k}>
-                <time className="mono" dateTime={new Date(e.ts * 1000).toISOString()} title={stamp(e.ts)}>
+              <li
+                key={e.seq}
+                data-kind={k}
+                className="grid grid-cols-[64px_10px_minmax(110px,160px)_minmax(0,1fr)_auto] items-center gap-3 border-b border-border py-2 last:border-b-0"
+              >
+                <time
+                  className="font-mono text-muted-foreground"
+                  dateTime={new Date(e.ts * 1000).toISOString()}
+                  title={stamp(e.ts)}
+                >
                   {clockS(e.ts)}
                 </time>
-                <span className="mk" aria-hidden="true" />
-                <span className="what">{label(e.action)}</span>
-                <span className="mono tgt" title={target}>
+                <span
+                  className="size-2 rounded-full bg-muted-foreground data-[k=blocked]:bg-destructive data-[k=allowed]:bg-emerald-500"
+                  data-k={k}
+                  aria-hidden="true"
+                />
+                <span className="font-medium">{label(e.action)}</span>
+                <span data-slot="event-target" className="truncate font-mono" title={target}>
                   {target}
                 </span>
-                <span className="who-s" title={e.session_id ?? e.actor_exe}>
+                <span className="text-muted-foreground" title={e.session_id ?? e.actor_exe}>
                   {who ? (
                     <>
-                      {agent(who.command)} <span className="mono">{e.session_id}</span>
+                      {agent(who.command)} <span className="font-mono">{e.session_id}</span>
                     </>
                   ) : e.session_id ? (
-                    <span className="mono">{e.session_id}</span>
+                    <span className="font-mono">{e.session_id}</span>
                   ) : (
                     e.actor_exe.split("/").pop()
                   )}
@@ -274,13 +337,13 @@ export function Overview({ st, act, go }: ScreenProps) {
       )}
       {ver.data &&
         (ver.data.broken_at === null ? (
-          <p className="log-foot">
-            <Icon name="shield" />
+          <p className="mt-3 flex items-center gap-2 text-[13px] text-muted-foreground">
+            <Icon name="shield" className="size-4" />
             Ledger chain verified · {ver.data.events.toLocaleString("en-US")} entries
           </p>
         ) : (
-          <p className="log-foot bad">
-            <Icon name="broken" />
+          <p className="mt-3 flex items-center gap-2 text-[13px] font-semibold text-destructive">
+            <Icon name="broken" className="size-4" />
             Ledger BROKEN at seq {ver.data.broken_at}
           </p>
         ))}
@@ -311,7 +374,7 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
   for (let t = Math.ceil((now + 1) / step) * step; t < now + span; t += step)
     if ((t - now) / span > 0.12 && (t - now) / span < 0.95) ticks.push(t);
   const x = (t: number) => `${(Math.max(0, t - now) / span) * 100}%`;
-  const grid = ticks.map((t) => <i key={t} className="tick" style={{ left: x(t) }} />);
+  const grid = ticks.map((t) => <i key={t} className="absolute inset-y-0 w-px bg-border" style={{ left: x(t) }} />);
   const revokedAt = (id: string) => events.find((e) => e.action === "REVOKE" && e.target === id)?.ts;
   const endedLabel = (l: LeaseInfo) => {
     if (l.state === "expired") return `expired ${clock(l.expires_at)}`;
@@ -319,28 +382,31 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
     return t ? `revoked ${clock(t)}` : l.state;
   };
   return (
-    <div className="tl-list" role="list" aria-label="Sessions">
+    <div className="flex flex-col rounded-lg border border-border bg-card" role="list" aria-label="Sessions">
       {live.length > 0 && (
-        <div className="tl-row tl-axis" aria-hidden="true">
+        <div
+          className="grid grid-cols-[minmax(150px,200px)_minmax(90px,140px)_minmax(0,1fr)_72px_72px] items-center gap-3.5 border-b border-border px-4 py-3 last:border-b-0 py-2 text-xs text-muted-foreground"
+          aria-hidden="true"
+        >
           <span>Agent</span>
           <span>Scopes</span>
-          <span className="tl">
-            <b className="tick-l now" style={{ left: 0 }}>
+          <span className="relative h-4">
+            <b className="absolute font-medium" style={{ left: 0 }}>
               now
             </b>
             {grid}
             {ticks.map((t) => (
-              <b key={t} className="tick-l mono" style={{ left: x(t) }}>
+              <b key={t} className="absolute font-mono font-normal" style={{ left: x(t) }}>
                 {clock(t)}
               </b>
             ))}
           </span>
-          <span className="r">Left</span>
+          <span className="text-right">Left</span>
           <span />
         </div>
       )}
       {live.length === 0 && (
-        <div className="tl-row tl-empty" role="listitem">
+        <div className="px-4 py-4 text-sm text-muted-foreground" role="listitem">
           {locked ? (
             <p>No sessions. The vault is locked, so no agent can start one until you unlock it.</p>
           ) : (
@@ -359,35 +425,42 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
           <div
             key={l.id}
             role="listitem"
-            className="tl-row"
+            className="group grid grid-cols-[minmax(150px,200px)_minmax(90px,140px)_minmax(0,1fr)_72px_72px] items-center gap-3.5 border-b border-border px-4 py-3 last:border-b-0 data-[striking]:opacity-40 data-[striking]:transition-opacity"
             data-soon={soon || undefined}
             data-striking={striking === l.id || undefined}
             aria-label={`${name} session ${l.id}`}
           >
             <Who l={l} />
             <ScopeText scopes={l.scopes} />
-            <span className="tl" aria-hidden="true">
+            <span className="relative h-2 rounded-full bg-muted" aria-hidden="true">
               {grid}
-              <span className="bar" style={{ width: x(l.expires_at) }} />
+              <span
+                className="absolute inset-y-0 left-0 rounded-full bg-emerald-500 group-data-[soon]:bg-amber-500"
+                style={{ width: x(l.expires_at) }}
+              />
             </span>
-            <span className="r mono left" title={`Expires ${clock(l.expires_at)}`}>
+            <span data-slot="lease-left" className="text-right font-mono" title={`Expires ${clock(l.expires_at)}`}>
               {left(rest)}
               <span className="sr-only"> left, expires {clock(l.expires_at)}</span>
             </span>
-            <button
+            <Button
               type="button"
-              className="btn sm quiet danger-text reveal"
+              variant="destructive"
+              size="sm"
               aria-label={`Revoke ${name} session ${l.id}`}
               disabled={striking !== null}
               onClick={() => onRevoke(l.id)}
             >
               Revoke
-            </button>
+            </Button>
           </div>
         );
       })}
       {ended.length > 0 && (
-        <div className="tl-div" role="presentation">
+        <div
+          className="border-b border-border bg-muted/40 px-4 py-1.5 text-xs font-medium text-muted-foreground"
+          role="presentation"
+        >
           <span>Recently ended</span>
         </div>
       )}
@@ -395,13 +468,15 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
         <div
           key={l.id}
           role="listitem"
-          className="tl-row ended"
+          className="grid grid-cols-[minmax(150px,200px)_minmax(90px,140px)_minmax(0,1fr)_72px_72px] items-center gap-3.5 border-b border-border px-4 py-3 last:border-b-0 text-muted-foreground"
           data-state={l.state}
           aria-label={`${agent(l.command)} session ${l.id}, ${endedLabel(l)}`}
         >
           <Who l={l} struck />
           <ScopeText scopes={l.scopes} />
-          <span className="tl mono end">{endedLabel(l)}</span>
+          <span data-slot="lease-end" className="font-mono">
+            {endedLabel(l)}
+          </span>
           <span />
           <span />
         </div>
@@ -413,18 +488,27 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
 const Who = ({ l, struck }: { l: LeaseInfo; struck?: boolean }) => {
   const name = agent(l.command);
   return (
-    <span className="who" title={l.command}>
-      <span className="who-1">
+    <span className="flex min-w-0 flex-col gap-0.5" title={l.command}>
+      <span className="flex items-center gap-2">
         <SourceMark kind={l.source.kind} />
-        {struck ? <s className="who-name">{name}</s> : <b className="who-name">{name}</b>}
-        <span className="mono id">{l.id}</span>
+        {struck ? (
+          <s data-slot="who-name" className="font-semibold">
+            {name}
+          </s>
+        ) : (
+          <b data-slot="who-name" className="font-semibold">
+            {name}
+          </b>
+        )}
+        <span className="font-mono text-xs text-muted-foreground">{l.id}</span>
       </span>
-      <span className="who-2">
-        {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
+      <span className="text-xs text-muted-foreground">
+        {l.project} /{" "}
+        <span className={l.env === "production" ? "font-semibold text-destructive" : undefined}>{l.env}</span>
       </span>
       {(l.report?.model ?? l.report?.agent) || l.started_by === "agent" ? (
-        <span className="who-2 who-3">
-          <span className="src-lbl">{l.source.label} ·</span> <ReportedModel l={l} />
+        <span className="text-xs text-muted-foreground">
+          <span>{l.source.label} ·</span> <ReportedModel l={l} />
         </span>
       ) : null}
     </span>
@@ -433,7 +517,7 @@ const Who = ({ l, struck }: { l: LeaseInfo; struck?: boolean }) => {
 
 const ScopeText = ({ scopes }: { scopes: readonly string[] }) => (
   <ul
-    className="scopes-t mono"
+    className="m-0 flex list-none flex-col p-0 font-mono text-xs text-muted-foreground"
     aria-label={scopes.length ? `Scopes granted: ${scopes.join(", ")}` : "No scopes granted"}
   >
     {scopes.map((s) => (
@@ -462,11 +546,11 @@ const isClaude = (k: SourceKind) => k === "claude_code_cli" || k === "claude_des
 /** Source glyph; the two Claude kinds get the Claude mark, labelled so it is findable and announced. */
 const SourceMark = ({ kind }: { kind: SourceKind }) =>
   isClaude(kind) ? (
-    <span className="src-claude" role="img" aria-label="Claude" title="Claude">
-      <Icon name="s_claude" />
+    <span className="inline-flex text-primary" role="img" aria-label="Claude" title="Claude">
+      <Icon name="s_claude" className="size-4" />
     </span>
   ) : (
-    <Icon name={SOURCE_GLYPH[kind] ?? "s_unknown"} />
+    <Icon name={SOURCE_GLYPH[kind] ?? "s_unknown"} className="size-4" />
   );
 /** The agent's own model claim with its 'unverified' tooltip; nothing for a human-started session that reported none. */
 const ReportedModel = ({ l }: { l: LeaseInfo }) => {
@@ -474,7 +558,7 @@ const ReportedModel = ({ l }: { l: LeaseInfo }) => {
   const text = claim ? `${claim} (reported by agent)` : l.started_by === "agent" ? "model not reported" : null;
   return (
     text && (
-      <span className={claim ? "reported" : "muted"} title={`${text}. ${SELF_REPORTED}`}>
+      <span className={claim ? "italic" : undefined} title={`${text}. ${SELF_REPORTED}`}>
         {text}
       </span>
     )
@@ -502,28 +586,39 @@ export function Sessions({ st, act }: ScreenProps) {
     const rest = l.expires_at - now;
     const name = l.source.label;
     return (
-      <li key={l.id} className="sess" data-state={l.state} data-open={open === l.id || undefined}>
-        <div className="sess-main">
+      <li
+        key={l.id}
+        className="border-b border-border last:border-b-0"
+        data-state={l.state}
+        data-open={open === l.id || undefined}
+      >
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_72px_80px] items-center gap-3.5 px-4 py-3">
           <button
             type="button"
-            className="sess-toggle"
+            className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             aria-expanded={open === l.id}
             aria-label={`${name} session ${l.id}`}
             onClick={() => setOpen(open === l.id ? null : l.id)}
           >
-            <span className="av" data-kind={l.source.kind}>
+            <span
+              className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"
+              data-kind={l.source.kind}
+            >
               <SourceMark kind={l.source.kind} />
             </span>
-            <span className="who">
-              <span className="who-1">
-                <b className="who-name">{name}</b>
-                {l.host && <span className="muted"> in {l.host}</span>}
-                <span className="badge" data-by={l.started_by}>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="flex flex-wrap items-center gap-2">
+                <b data-slot="who-name" className="font-semibold">
+                  {name}
+                </b>
+                {l.host && <span className="text-muted-foreground"> in {l.host}</span>}
+                <Badge variant={l.started_by === "agent" ? "secondary" : "outline"} data-by={l.started_by}>
                   {l.started_by === "agent" ? "Agent started" : "Human started"}
-                </span>
+                </Badge>
               </span>
-              <span className="who-2">
-                {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
+              <span className="text-xs text-muted-foreground">
+                {l.project} /{" "}
+                <span className={l.env === "production" ? "font-semibold text-destructive" : undefined}>{l.env}</span>
                 {(l.report?.model ?? l.report?.agent) || l.started_by === "agent" ? (
                   <>
                     {" "}
@@ -534,7 +629,7 @@ export function Sessions({ st, act }: ScreenProps) {
             </span>
           </button>
           <Scopes scopes={l.scopes} />
-          <span className="r mono left">
+          <span data-slot="lease-left" className="text-right font-mono text-sm">
             {active ? (
               <>
                 {left(rest)}
@@ -545,9 +640,10 @@ export function Sessions({ st, act }: ScreenProps) {
             )}
           </span>
           {active ? (
-            <button
+            <Button
               type="button"
-              className="btn sm quiet danger-text"
+              variant="destructive"
+              size="sm"
               aria-label={`Revoke ${name} session ${l.id}`}
               onClick={() =>
                 act(
@@ -557,13 +653,13 @@ export function Sessions({ st, act }: ScreenProps) {
               }
             >
               Revoke
-            </button>
+            </Button>
           ) : (
             <span />
           )}
         </div>
         {open === l.id && (
-          <dl className="sess-det">
+          <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-4 gap-y-1.5 border-t border-border bg-muted/30 px-4 py-3 text-[13px] [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:break-all [&_dd.mono]:font-mono">
             <dt>Session</dt>
             <dd className="mono">{l.id}</dd>
             <dt>Command</dt>
@@ -599,12 +695,8 @@ export function Sessions({ st, act }: ScreenProps) {
     );
   };
   return (
-    <section className="screen" aria-labelledby="h-sessions">
-      <Head
-        id="h-sessions"
-        title="Sessions"
-        sub="Every agent that has been given access, who started it and when it runs out."
-      />
+    <section className="flex flex-col gap-4" aria-label="Sessions">
+      <Head title="Sessions" sub="Every agent that has been given access, who started it and when it runs out." />
       {!st ? (
         <Loading what="sessions" />
       ) : all.length === 0 ? (
@@ -623,21 +715,22 @@ export function Sessions({ st, act }: ScreenProps) {
       ) : (
         <>
           {live.length > 0 && (
-            <ul className="sess-list" aria-label="Active sessions">
+            <ul className="m-0 list-none rounded-lg border border-border bg-card p-0" aria-label="Active sessions">
               {live.map(row)}
             </ul>
           )}
           {ended.length > 0 && (
             <>
-              <div className="sec-h spaced">
-                <h2>Recently ended</h2>
-              </div>
-              <ul className="sess-list" aria-label="Ended sessions">
+              <h2 className="mt-4 mb-0 text-base font-semibold">Recently ended</h2>
+              <ul
+                className="m-0 list-none rounded-lg border border-border bg-card p-0 text-muted-foreground"
+                aria-label="Ended sessions"
+              >
                 {ended.map(row)}
               </ul>
             </>
           )}
-          <p className="log-foot">
+          <p className="m-0 text-[13px] text-muted-foreground">
             Source and host are hints read from process names and paths. Any process running as you can imitate them.
           </p>
         </>
@@ -679,9 +772,8 @@ export function Keys({ st }: ScreenProps) {
     void put(name.trim());
   };
   return (
-    <section className="screen" aria-labelledby="h-keys">
+    <section className="flex flex-col gap-4" aria-label="Keys">
       <Head
-        id="h-keys"
         title="Keys"
         sub="Key names only. Values go in and out through a native Locksmith prompt, never this window."
       />
@@ -790,9 +882,8 @@ export function Tokens({ st }: ScreenProps) {
     await t.load();
   };
   return (
-    <section className="screen" aria-labelledby="h-tokens">
+    <section className="flex flex-col gap-4" aria-label="Tokens">
       <Head
-        id="h-tokens"
         title="Tokens"
         sub={
           <>
@@ -883,9 +974,8 @@ export function Relays(_: ScreenProps) {
   const r = useLoad(api.relayInfo, []);
   const info = r.data;
   return (
-    <section className="screen" aria-labelledby="h-relays">
+    <section className="flex flex-col gap-4" aria-label="Relays">
       <Head
-        id="h-relays"
         title="Relays"
         sub="Each relay signs or forwards requests on an agent's behalf; the key stays in Locksmith."
       />
@@ -968,8 +1058,8 @@ export function Audit(_: ScreenProps) {
     }
   };
   return (
-    <section className="screen" aria-labelledby="h-audit">
-      <Head id="h-audit" title="Audit" sub="Every access, block and change, newest first, in a hash-chained ledger.">
+    <section className="flex flex-col gap-4" aria-label="Audit">
+      <Head title="Audit" sub="Every access, block and change, newest first, in a hash-chained ledger.">
         <label className="search">
           <Icon name="search" />
           <span className="sr-only">Filter</span>
@@ -1085,9 +1175,8 @@ export function Agents(_: ScreenProps) {
   };
 
   return (
-    <section className="screen" aria-labelledby="h-agents">
+    <section className="flex flex-col gap-4" aria-label="Agents">
       <Head
-        id="h-agents"
         title="Agents"
         sub="Agents use secrets through the gateway without ever holding them. Grants say which secrets an agent may relay."
       />
@@ -1260,9 +1349,8 @@ export function WorkloadIdentities(_: ScreenProps) {
   };
 
   return (
-    <section className="screen" aria-labelledby="h-wl">
+    <section className="flex flex-col gap-4" aria-label="Workload identities">
       <Head
-        id="h-wl"
         title="Workload identities"
         sub="A CI job or cluster workload exchanges its own OIDC token for a short-lived agent token. Nothing secret is entered or shown here."
       />
@@ -1445,12 +1533,8 @@ export function OrgAudit(_: ScreenProps) {
   const v = status?.latest_verify;
 
   return (
-    <section className="screen" aria-labelledby="h-org-audit">
-      <Head
-        id="h-org-audit"
-        title="Org audit"
-        sub="The control plane's hash-chained ledger of relays and changes, newest first."
-      />
+    <section className="flex flex-col gap-4" aria-label="Org audit">
+      <Head title="Org audit" sub="The control plane's hash-chained ledger of relays and changes, newest first." />
       {err && <Alert>{err}</Alert>}
       {!client ? (
         <Empty icon="doc">Connect a control plane on the Agents screen to see its audit ledger.</Empty>
@@ -1711,8 +1795,8 @@ export function Projects(_: ScreenProps) {
   const client = api.agentsClient();
   if (!client)
     return (
-      <section className="screen" aria-labelledby="h-projects">
-        <Head id="h-projects" title="Projects" />
+      <section className="flex flex-col gap-4" aria-label="Projects">
+        <Head title="Projects" />
         <NoClient what="projects" />
       </section>
     );
@@ -1727,8 +1811,8 @@ function ProjectsView({ client }: { client: Client }) {
     [client, sel?.id],
   );
   return (
-    <section className="screen" aria-labelledby="h-projects">
-      <Head id="h-projects" title="Projects" sub="Projects hold environments, and environments hold secrets." />
+    <section className="flex flex-col gap-4" aria-label="Projects">
+      <Head title="Projects" sub="Projects hold environments, and environments hold secrets." />
       {ps.err && <Alert>{ps.err}</Alert>}
       <CreateForm label="project" onCreate={(n) => ps.run(() => client.createProject({ name: n }))} />
       {!ps.items ? (
@@ -1799,8 +1883,8 @@ export function Secrets(_: ScreenProps) {
   const client = api.agentsClient();
   if (!client)
     return (
-      <section className="screen" aria-labelledby="h-secrets">
-        <Head id="h-secrets" title="Secrets" />
+      <section className="flex flex-col gap-4" aria-label="Secrets">
+        <Head title="Secrets" />
         <NoClient what="secret metadata" />
       </section>
     );
@@ -1823,12 +1907,8 @@ function SecretsView({ client }: { client: Client }) {
     [client, project, env],
   );
   return (
-    <section className="screen" aria-labelledby="h-secrets">
-      <Head
-        id="h-secrets"
-        title="Secrets"
-        sub="Metadata only. Secret values never leave the vault and are not shown here."
-      />
+    <section className="flex flex-col gap-4" aria-label="Secrets">
+      <Head title="Secrets" sub="Metadata only. Secret values never leave the vault and are not shown here." />
       {(ps.err || es.err || ss.err) && <Alert>{ps.err || es.err || ss.err}</Alert>}
       {!ps.items ? (
         <ListWait what="projects" l={ps} />
@@ -1980,8 +2060,8 @@ export function McpTools(_: ScreenProps) {
     }
   };
   return (
-    <section className="screen" aria-labelledby="h-mcp-tools">
-      <Head id="h-mcp-tools" title="MCP tools" sub="Which tools the Hub and the Gateway offer to MCP clients." />
+    <section className="flex flex-col gap-4" aria-label="MCP tools">
+      <Head title="MCP tools" sub="Which tools the Hub and the Gateway offer to MCP clients." />
       {err && <Alert>{err}</Alert>}
       {!client ? (
         <Empty icon="key">Connect a control plane on the Agents screen to manage MCP tools.</Empty>
@@ -2055,12 +2135,8 @@ export function McpClients(_: ScreenProps) {
   };
   const label = (c: api.McpClient) => c.client_name || c.client_id;
   return (
-    <section className="screen" aria-labelledby="h-mcp-clients">
-      <Head
-        id="h-mcp-clients"
-        title="MCP clients"
-        sub="Apps that signed in over MCP. Revoking one refuses its next call."
-      />
+    <section className="flex flex-col gap-4" aria-label="MCP clients">
+      <Head title="MCP clients" sub="Apps that signed in over MCP. Revoking one refuses its next call." />
       {err && <Alert>{err}</Alert>}
       {!client ? (
         <Empty icon="sessions">Connect a control plane on the Agents screen to see MCP clients.</Empty>
@@ -2129,12 +2205,8 @@ export function Bindings(_: ScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <section className="screen" aria-labelledby="h-bindings">
-      <Head
-        id="h-bindings"
-        title="Bindings"
-        sub="What the gateway can reach for agents. Secrets and passwords are never shown."
-      />
+    <section className="flex flex-col gap-4" aria-label="Bindings">
+      <Head title="Bindings" sub="What the gateway can reach for agents. Secrets and passwords are never shown." />
       {err && <Alert>{err}</Alert>}
       {!client ? (
         <Empty icon="key">Connect a control plane on the Agents screen to see bindings.</Empty>

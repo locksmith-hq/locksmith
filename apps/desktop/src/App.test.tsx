@@ -74,7 +74,7 @@ const nav = (tab: string) =>
 
 test("overview lists sessions, revoke and revoke all", async () => {
   const { container } = render(<App />);
-  expect(await screen.findByText("claude", { selector: ".who-name" })).toBeInTheDocument();
+  expect(await screen.findByText("claude", { selector: "[data-slot=who-name]" })).toBeInTheDocument();
   expect(screen.getByRole("banner", { name: "Vault" })).toHaveTextContent("Unlocked1 session");
   await go("Revoke claude session L1");
   // The card is struck through first, then the revoke goes out.
@@ -106,7 +106,7 @@ test("keys: defaults to the live session's project and names the sessions that c
     leases: [{ ...lease, project: "acme", env: "staging", scopes: ["run"] }],
   });
   render(<App />);
-  await screen.findByText("claude", { selector: ".who-name" });
+  await screen.findByText("claude", { selector: "[data-slot=who-name]" });
   await nav("Keys");
   await waitFor(() => expect(m.keyNames).toHaveBeenCalledWith("acme", "staging"));
   expect(await screen.findByText(/Usable now by/)).toHaveTextContent("L1 (claude)");
@@ -165,7 +165,7 @@ test("audit: BROKEN shows seq", async () => {
 test("errors show the message", async () => {
   m.revoke.mockRejectedValue({ code: "Locked", message: "vault is locked" });
   render(<App />);
-  await screen.findByText("claude", { selector: ".who-name" });
+  await screen.findByText("claude", { selector: "[data-slot=who-name]" });
   await go("Revoke claude session L1");
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("vault is locked"));
 });
@@ -186,7 +186,7 @@ test("the agent is the basename of the command's first word", async () => {
 
 test("ended sessions appear only when the daemon returns them", async () => {
   render(<App />);
-  await screen.findByText("claude", { selector: ".who-name" });
+  await screen.findByText("claude", { selector: "[data-slot=who-name]" });
   expect(screen.queryByText("Recently ended")).toBeNull();
   m.status.mockResolvedValue({
     locked: false,
@@ -202,9 +202,9 @@ test("ended sessions appear only when the daemon returns them", async () => {
     `revoked ${hhmm}`,
   );
   // No REVOKE event for L9 in the loaded ledger: plain "revoked".
-  expect(screen.getByRole("listitem", { name: "claude session L9, revoked" }).querySelector(".end")).toHaveTextContent(
-    /^revoked$/,
-  );
+  expect(
+    screen.getByRole("listitem", { name: "claude session L9, revoked" }).querySelector("[data-slot=lease-end]"),
+  ).toHaveTextContent(/^revoked$/);
 });
 
 test("activity reads as a log: sentence-case labels, blocked rows marked, full target in a tooltip", async () => {
@@ -217,7 +217,7 @@ test("activity reads as a log: sentence-case labels, blocked rows marked, full t
   render(<App />);
   const used = (await screen.findByText("Key used")).closest("li")!;
   expect(used).toHaveAttribute("data-kind", "allowed");
-  expect(used.querySelector(".tgt")).toHaveAttribute("title", "acme/dev/KEY http:api.x.com");
+  expect(used.querySelector("[data-slot=event-target]")).toHaveAttribute("title", "acme/dev/KEY http:api.x.com");
   expect(used).toHaveTextContent("claude L1");
   expect(screen.getByText("Blocked hook").closest("li")).toHaveAttribute("data-kind", "blocked");
   expect(screen.getByText("Revoked").closest("li")).toHaveAttribute("data-kind", "revoked");
@@ -319,7 +319,9 @@ test("sessions: tab count, source, host, badges, reported model, unknown source,
   expect(h1).not.toHaveTextContent("reported");
   expect(screen.getAllByText(/Source and host are hints/)).toHaveLength(1);
   expect(
-    within(screen.getByRole("list", { name: "Ended sessions" })).getByText("revoked", { selector: ".left" }),
+    within(screen.getByRole("list", { name: "Ended sessions" })).getByText("revoked", {
+      selector: "[data-slot=lease-left]",
+    }),
   ).toBeInTheDocument();
   await userEvent.click(within(a1).getByRole("button", { name: "Claude Code session A1" }));
   expect(within(a1).getByText("/bin/claude · pid 1")).toBeInTheDocument();
@@ -908,4 +910,18 @@ test("bindings: AWS rows show role, region, vend, max duration and allowed actio
     "Region: us-east-1 · Vend credentials: no · Max duration: 1800s · Allowed actions: s3:GetObject, sts:GetCallerIdentity",
   );
   expect(container.textContent).not.toMatch(/SECRET-ID-VALUE|EXT-VALUE|SAK-VALUE|TOKEN-VALUE/);
+});
+
+test("overview, timeline and sessions are built from kit components", async () => {
+  const { container } = render(<App />);
+  await screen.findByText("claude", { selector: "[data-slot=who-name]" });
+  // The revoke action is a kit button; the old `.btn` hooks are gone.
+  const revoke = screen.getByRole("button", { name: "Revoke claude session L1" });
+  expect(revoke).toHaveAttribute("data-slot", "button");
+  expect(container.querySelector(".btn, .tl-row, .sess")).toBeNull();
+  await nav("Sessions");
+  const toggle = await screen.findByRole("button", { name: "Claude Code session L1" });
+  expect(within(toggle.closest("li")!).getByText("Human started")).toHaveAttribute("data-slot", "badge");
+  expect(container.querySelector("[data-slot=page-header]")).not.toBeNull();
+  expect(container.querySelector("[data-slot=scope-chip]")).not.toBeNull();
 });

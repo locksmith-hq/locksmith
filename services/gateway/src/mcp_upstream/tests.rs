@@ -4,7 +4,7 @@
 //! no reachable control plane, KMS or upstream. The hop itself is tested in `hop_tests.rs`.
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
@@ -461,69 +461,40 @@ async fn mcp_upstream_does_not_shadow_mcp() {
     assert!(caps.get("tools").is_some(), "{caps}");
 }
 
-#[derive(Clone, Default)]
-struct Capture(Arc<Mutex<Vec<u8>>>);
-
-impl std::io::Write for Capture {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().unwrap().write(buf)
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
 /// Under the gateway's filter (`RUST_LOG=trace` plus [`crate::mcp_endpoint::cap_rmcp_logs`])
 /// rmcp logs nothing below `warn` (so no upstream notification, which can quote the credential, either) for `/mcp/upstream/{name}`, so no MCP message is logged whole;
 /// without the cap the same exchange does log at `debug` (the capture works).
 #[tokio::test]
 async fn mcp_upstream_rmcp_logs_are_capped_like_mcp() {
-    async fn run(capped: bool) -> String {
-        let cap = Capture::default();
-        let writer = cap.clone();
-        let base = tracing_subscriber::EnvFilter::new("trace,rmcp::service=trace");
-        let filter = if capped {
-            crate::mcp_endpoint::cap_rmcp_logs(base)
-        } else {
-            base
-        };
-        let subscriber = tracing_subscriber::fmt()
-            .with_env_filter(filter)
-            .with_writer(move || writer.clone())
-            .with_ansi(false)
-            .finish();
-        let _guard = tracing::subscriber::set_default(subscriber);
-        let h = harness();
-        h.grants.set(AGENT, vec![grant(SECRET, "relay", None)]);
-        let t = token(600);
-        let auth = format!("Bearer {t}");
-        let a = initialize(&h.app, GITHUB, &t).await;
-        assert_eq!(a.status, StatusCode::OK);
-        let sid = a.session().expect("session id");
-        for body in [
-            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
-            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
-            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"x","arguments":{}}}"#,
-        ] {
-            send(&h.app, GITHUB, Some(&auth), HOST, Some(&sid), body).await;
-        }
-        let logs = cap.0.lock().unwrap().clone();
-        let text = String::from_utf8_lossy(&logs).into_owned();
-        assert!(!text.contains(&t), "agent token in the logs");
-        text
+    use crate::test_capture::Which;
+    let cap = crate::test_capture::start();
+    let h = harness();
+    h.grants.set(AGENT, vec![grant(SECRET, "relay", None)]);
+    let t = token(600);
+    let auth = format!("Bearer {t}");
+    let a = initialize(&h.app, GITHUB, &t).await;
+    assert_eq!(a.status, StatusCode::OK);
+    let sid = a.session().expect("session id");
+    for body in [
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"x","arguments":{}}}"#,
+    ] {
+        send(&h.app, GITHUB, Some(&auth), HOST, Some(&sid), body).await;
     }
+    let text = |w| String::from_utf8_lossy(&cap.all(w)).into_owned();
+    let (uncapped, capped) = (text(Which::Plain), text(Which::Capped));
+    assert!(!uncapped.contains(&t), "agent token in the logs");
+    assert!(!capped.contains(&t), "agent token in the logs");
     let below_warn = |text: &str| {
         text.lines().any(|l| {
             (l.contains("DEBUG") || l.contains("TRACE") || l.contains(" INFO"))
                 && l.contains(" rmcp")
         })
     };
-    // Warm-up: the first scoped subscriber of a test binary can miss events while other tests
-    // register the same callsites in parallel.
-    run(false).await;
-    let uncapped = run(false).await;
+    // rmcp serves from its own spawned task, outside this test's root span, so both reads
+    // cover the whole process: the uncapped capture saw rmcp debug logs, the capped one none.
     assert!(below_warn(&uncapped), "capture saw rmcp debug logs");
-    let capped = run(true).await;
     assert!(!below_warn(&capped), "rmcp logged below warn");
 }
 

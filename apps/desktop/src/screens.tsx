@@ -53,7 +53,6 @@ import { Button } from "@locksmith-hq/button";
 import { EmptyState } from "@locksmith-hq/empty-state";
 import { Loader } from "@locksmith-hq/loader";
 import { PageHeader } from "@locksmith-hq/page-header";
-import { Pill } from "@locksmith-hq/pill";
 import { ScopeChip } from "@locksmith-hq/scope-chip";
 
 export interface ScreenProps {
@@ -385,7 +384,7 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
     <div className="flex flex-col rounded-lg border border-border bg-card" role="list" aria-label="Sessions">
       {live.length > 0 && (
         <div
-          className="grid grid-cols-[minmax(150px,200px)_minmax(90px,140px)_minmax(0,1fr)_72px_72px] items-center gap-3.5 border-b border-border px-4 py-3 last:border-b-0 py-2 text-xs text-muted-foreground"
+          className="grid grid-cols-[minmax(150px,200px)_minmax(90px,140px)_minmax(0,1fr)_72px_72px] items-center gap-3.5 border-b border-border px-4 py-2 last:border-b-0 text-xs text-muted-foreground"
           aria-hidden="true"
         >
           <span>Agent</span>

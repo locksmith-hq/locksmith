@@ -23,7 +23,6 @@
     "@locksmith-hq/loader": "*",
     "@locksmith-hq/mark": "*",
     "@locksmith-hq/page-header": "*",
-    "@locksmith-hq/pill": "*",
     "@locksmith-hq/scope-chip": "*",
     "@locksmith-hq/sidebar": "*",
     "@locksmith-hq/styles": "*",

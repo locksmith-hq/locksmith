@@ -8,6 +8,7 @@ import { UsersModule } from "./users/users.module.js";
 import { OrgsModule } from "./orgs/orgs.module.js";
 import { AgentsModule } from "./agents/agents.module.js";
 import { ProjectsModule } from "./projects/projects.module.js";
+import { SecretsModule } from "./secrets/secrets.module.js";
 import { WorkloadIdentitiesModule } from "./workload-identities/workload-identities.module.js";
 import { AuditReadsModule } from "./audit/audit.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
@@ -39,6 +40,7 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
     OrgsModule,
     AgentsModule,
     ProjectsModule,
+    SecretsModule,
     WorkloadIdentitiesModule,
     AuditReadsModule,
     JobsModule,

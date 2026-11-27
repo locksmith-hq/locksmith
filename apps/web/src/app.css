@@ -1,0 +1,6 @@
+/* The live console's stylesheet: Tailwind plus the Locksmith kit. The mockup (mockup.html) has its own. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@locksmith-hq/styles";
+/* Tailwind must see the classes written inside the kit's components. */
+@source "../../../design-system/packages";

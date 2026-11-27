@@ -12,6 +12,11 @@
       ],
       "project": [
         "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss",
+        "tw-animate-css",
+        "@locksmith-hq/styles"
       ]
     },
     "apps/desktop": {
@@ -58,6 +63,26 @@
       "ignoreDependencies": [
         "kysely-codegen",
         "@types/express"
+      ]
+    },
+    "design-system/packages/*": {
+      "entry": [
+        "src/index.tsx",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ]
+    },
+    "design-system/docs": {
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "*.mjs"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss",
+        "tw-animate-css",
+        "@locksmith-hq/styles"
       ]
     }
   }

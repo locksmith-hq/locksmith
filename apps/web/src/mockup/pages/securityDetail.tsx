@@ -1,4 +1,8 @@
 // Security product: the detail view for one finding.
+import { Badge } from "@locksmith-hq/badge";
+import { Card } from "@locksmith-hq/card";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
 import { useState } from "react";
 import { Crumbs, Empty, Head, Icon, ago } from "../kit";
 import { dismiss, href, mask, reopen, resolve, sevLabel, useWorld } from "./securityStore";
@@ -27,32 +31,30 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
       <Crumbs trail={[["Findings", href("findings")], [f.kind]]} />
       <Head title={f.kind} sub={`Found in ${f.srcName}, first seen ${ago(f.first)}. The value is always hidden here.`}>
         {open ? (
-          <button
+          <Button
             type="button"
-            className="btn primary"
             onClick={() => {
               setW(resolve(w, f.id));
               say("Marked resolved");
             }}
           >
             Mark resolved
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
             type="button"
-            className="btn primary"
             onClick={() => {
               setW(reopen(w, f.id));
               say("Finding reopened");
             }}
           >
             Reopen finding
-          </button>
+          </Button>
         )}
       </Head>
       <div className="detail-cols sc-cols">
         <div className="sc-stack">
-          <section className="panel" aria-labelledby="fd-what">
+          <Card className="panel" role="region" aria-labelledby="fd-what">
             <h2 id="fd-what">What and where</h2>
             <dl className="sc-facts">
               {(
@@ -75,7 +77,7 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
                     "Status",
                     <span key="t">
                       {f.status}
-                      {f.rotationOpened && open && <span className="badge">Rotation opened</span>}
+                      {f.rotationOpened && open && <Badge variant="secondary">Rotation opened</Badge>}
                       {f.reason && <span className="muted"> ({f.reason})</span>}
                     </span>,
                   ],
@@ -96,10 +98,10 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
                 </div>
               ))}
             </pre>
-          </section>
+          </Card>
         </div>
         <div className="sc-stack">
-          <section className="panel" aria-labelledby="fd-secret">
+          <Card className="panel" role="region" aria-labelledby="fd-secret">
             <h2 id="fd-secret">Matching Locksmith secret</h2>
             {f.secret && project ? (
               <>
@@ -113,10 +115,12 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
                   <p className="small">A rotation was opened automatically. You still approve the new value.</p>
                 )}
                 <p style={{ margin: "10px 0 0" }}>
-                  <a className="btn sm" href={`#/secrets/${project}/rotation`}>
-                    <Icon name="rotate" />
-                    Open rotation for {project}
-                  </a>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={`#/secrets/${project}/rotation`}>
+                      <Icon name="rotate" />
+                      Open rotation for {project}
+                    </a>
+                  </Button>
                 </p>
               </>
             ) : (
@@ -124,8 +128,8 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
                 No Locksmith secret matches this value. Revoke it where it was issued and create a new one.
               </p>
             )}
-          </section>
-          <section className="panel" aria-labelledby="fd-act">
+          </Card>
+          <Card className="panel" role="region" aria-labelledby="fd-act">
             <h2 id="fd-act">Not a real secret?</h2>
             {asking ? (
               <form
@@ -137,7 +141,7 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
                   say("Marked as not a secret");
                 }}
               >
-                <input
+                <Input
                   name="reason"
                   aria-label="Why is this not a secret?"
                   placeholder="Why is this not a secret?"
@@ -145,24 +149,24 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
                   autoFocus
                   autoComplete="off"
                 />
-                <button type="submit" className="btn sm">
+                <Button variant="outline" size="sm" type="submit">
                   Save reason
-                </button>
-                <button type="button" className="btn sm quiet" onClick={() => setAsking(false)}>
+                </Button>
+                <Button variant="ghost" size="sm" type="button" onClick={() => setAsking(false)}>
                   Cancel
-                </button>
+                </Button>
               </form>
             ) : open ? (
-              <button type="button" className="btn sm quiet" onClick={() => setAsking(true)}>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setAsking(true)}>
                 Not a secret
-              </button>
+              </Button>
             ) : (
               <p className="small muted">
                 {f.status === "Resolved" ? "This finding is resolved." : "This finding was dismissed."} Reopen it if
                 that was a mistake.
               </p>
             )}
-          </section>
+          </Card>
         </div>
       </div>
     </section>

@@ -1,4 +1,5 @@
 // Rollback confirmation for the History page.
+import { Button } from "@locksmith-hq/button";
 import { plural } from "../kit";
 import { later, stamp, type Entry, type P } from "./lifecycleStore";
 
@@ -23,12 +24,12 @@ export function RollbackAsk({
       </p>
       <p>The current value is kept as a new version, so you can roll forward again. Nobody sees any value.</p>
       <p>
-        <button type="button" className="btn sm danger" onClick={onApply}>
+        <Button variant="destructive" size="sm" type="button" onClick={onApply}>
           Roll back {e.name}
-        </button>{" "}
-        <button type="button" className="btn sm quiet" onClick={onCancel}>
+        </Button>{" "}
+        <Button variant="ghost" size="sm" type="button" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </p>
     </div>
   );

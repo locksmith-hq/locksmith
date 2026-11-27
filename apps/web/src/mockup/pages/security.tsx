@@ -1,5 +1,12 @@
 // Security product: findings, sources, rules and settings. Sample data only; nothing is scanned or saved.
 // All four pages (and the finding view in securityDetail.tsx) read one shared store in securityStore.ts.
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { Fragment, useState } from "react";
 import { Empty, Head, Icon, Switch, ago, plural, type Pages, type PageProps } from "../kit";
 import { FindingView } from "./securityDetail";
@@ -59,9 +66,9 @@ function FindingList() {
         {open.length === 0 ? "No open findings." : `${plural(open.length, "open finding")}, ${crit} critical.`}
       </p>
       <div className="toolbar">
-        <label className="field sc-search">
+        <Label className="field sc-search">
           Search
-          <input
+          <Input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -69,17 +76,15 @@ function FindingList() {
             autoComplete="off"
             spellCheck={false}
           />
-        </label>
-        <fieldset className="seg inline">
-          <legend className="sr-only">Status</legend>
+        </Label>
+        <ToggleGroup type="single" value={String(status)} aria-label="Status">
           {STATUSES.map((s) => (
-            <label key={s}>
-              <input type="radio" name="fstatus" checked={status === s} onChange={() => setStatus(s)} />
+            <ToggleGroupItem key={s} size="sm" value={String(s)} onClick={() => setStatus(s)}>
               {s}
               {s !== "All" && <span className="n">{rows.filter((f) => f.status === s).length}</span>}
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
       </div>
       {shown.length === 0 ? (
         <Empty icon="shield">
@@ -88,20 +93,20 @@ function FindingList() {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid fnd">
-            <thead>
-              <tr>
-                <th>Found</th>
-                <th>Where</th>
-                <th>First seen</th>
-                <th>Severity</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="fnd">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Found</TableHead>
+                <TableHead>Where</TableHead>
+                <TableHead>First seen</TableHead>
+                <TableHead>Severity</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {shown.map((f) => (
-                <tr key={f.id}>
-                  <td>
+                <TableRow key={f.id}>
+                  <TableCell>
                     <a className="strong" href={href("findings", f.id)}>
                       {f.kind}
                     </a>
@@ -110,26 +115,26 @@ function FindingList() {
                         Matches <span className="mono">{f.secret}</span>
                       </div>
                     )}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     {where(f)}
                     <div className="mono muted">{f.spot}</div>
-                  </td>
-                  <td className="muted">{ago(f.first)}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell className="muted">{ago(f.first)}</TableCell>
+                  <TableCell>
                     <span className="sev" data-sev={f.sev.toLowerCase()}>
                       {sevLabel(f)}
                     </span>
-                  </td>
-                  <td className={f.status === "Open" ? "st-open" : "st-done"}>
+                  </TableCell>
+                  <TableCell className={f.status === "Open" ? "st-open" : "st-done"}>
                     {f.status}
                     {f.status === "Open" && f.rotationOpened && <div className="small">Rotation opened</div>}
                     {f.reason && f.status === "Not a secret" && <div className="small muted">{f.reason}</div>}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -174,9 +179,9 @@ function Sources({ say }: PageProps) {
   return (
     <section>
       <Head title="Sources" sub="Repositories, build logs and agent sessions that are checked for exposed secrets.">
-        <button
+        <Button
+          variant="outline"
           type="button"
-          className="btn"
           onClick={() => {
             const r = scan(
               w,
@@ -188,47 +193,43 @@ function Sources({ say }: PageProps) {
         >
           <Icon name="search" />
           Scan all sources
-        </button>
-        <button
-          type="button"
-          className="btn primary"
-          onClick={() => setAdding(true)}
-          disabled={adding || free.length === 0}
-        >
+        </Button>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding || free.length === 0}>
           <Icon name="plus" />
           Add a source
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add a source">
-          <h2>Add a source</h2>
-          <div className="add share">
-            <label className="field">
-              Repository
-              <select name="repo" autoFocus>
-                {free.map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Scan
-              <select name="what">
-                <option value="code">The code</option>
-                <option value="ci">Its build logs</option>
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Add source
-            </button>
-            <button type="button" className="btn quiet sc-start" onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            Repositories come from your GitHub connection in Integrations. Locksmith reads them and never changes them.
-          </p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add a source">
+            <h2>Add a source</h2>
+            <div className="add share">
+              <Label className="field">
+                Repository
+                <Dropdown name="repo" autoFocus>
+                  {free.map((r) => (
+                    <Option key={r}>{r}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Scan
+                <Dropdown name="what">
+                  <Option value="code">The code</Option>
+                  <Option value="ci">Its build logs</Option>
+                </Dropdown>
+              </Label>
+              <Button type="submit">Add source</Button>
+              <Button variant="ghost" className="sc-start" type="button" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              Repositories come from your GitHub connection in Integrations. Locksmith reads them and never changes
+              them.
+            </p>
+          </form>
+        </Card>
       )}
       <p className="sc-note">
         <Icon name="shield" />
@@ -265,25 +266,23 @@ function Sources({ say }: PageProps) {
                           {n} open
                         </span>
                         <label className="small sc-sw">
-                          <input
-                            type="checkbox"
-                            className="switch"
-                            role="switch"
-                            aria-label={`Scan ${s.name}`}
+                          <Switch
+                            label={`Scan ${s.name}`}
                             checked={s.on && !(g === "Agent transcripts" && !w.settings.transcripts)}
                             disabled={g === "Agent transcripts" && !w.settings.transcripts}
-                            onChange={(e) =>
+                            onChange={(on) =>
                               setW({
                                 ...w,
-                                sources: rows.map((x) => (x.id === s.id ? { ...x, on: e.target.checked } : x)),
+                                sources: rows.map((x) => (x.id === s.id ? { ...x, on: on } : x)),
                               })
                             }
                           />
                           {reason ? "Off" : "On"}
                         </label>
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
                           type="button"
-                          className="btn sm"
                           disabled={!!reason}
                           aria-label={`Scan ${s.name} now`}
                           onClick={() => {
@@ -293,10 +292,12 @@ function Sources({ say }: PageProps) {
                           }}
                         >
                           Scan now
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-(--destructive-text)"
                           type="button"
-                          className="btn sm quiet danger-text"
                           aria-label={`Remove ${s.name}`}
                           onClick={() => {
                             setW({ ...w, sources: rows.filter((x) => x.id !== s.id) });
@@ -304,7 +305,7 @@ function Sources({ say }: PageProps) {
                           }}
                         >
                           Remove
-                        </button>
+                        </Button>
                       </span>
                     </li>
                   );
@@ -334,22 +335,22 @@ function Rules({ say }: PageProps) {
       <Head title="Rules" sub="Decide what counts as a secret: the built-in detectors and the paths to skip." />
       <h2 className="group-h">Built-in detectors</h2>
       <div className="table-wrap">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>Detector</th>
-              <th>What it looks for</th>
-              <th className="num">Findings</th>
-              <th>On</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Detector</TableHead>
+              <TableHead>What it looks for</TableHead>
+              <TableHead className="num">Findings</TableHead>
+              <TableHead>On</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {w.det.map((d) => (
-              <tr key={d.id}>
-                <td className="strong">{d.name}</td>
-                <td className="muted">{d.about}</td>
-                <td className="num mono">{count(d.id)}</td>
-                <td>
+              <TableRow key={d.id}>
+                <TableCell className="strong">{d.name}</TableCell>
+                <TableCell className="muted">{d.about}</TableCell>
+                <TableCell className="num mono">{count(d.id)}</TableCell>
+                <TableCell>
                   <Switch
                     label={`Detect ${d.name}`}
                     checked={d.on}
@@ -358,11 +359,11 @@ function Rules({ say }: PageProps) {
                       say(`${d.name} is ${on ? "on" : "off"}`);
                     }}
                   />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <h2 className="group-h">
         Ignored paths<span className="n">{w.paths.length}</span>
@@ -381,7 +382,7 @@ function Rules({ say }: PageProps) {
           setPath("");
         }}
       >
-        <input
+        <Input
           aria-label="Path to ignore"
           placeholder="vendor/**"
           value={path}
@@ -389,9 +390,9 @@ function Rules({ say }: PageProps) {
           spellCheck={false}
           autoComplete="off"
         />
-        <button type="submit" className="btn sm" disabled={!path.trim()}>
+        <Button variant="outline" size="sm" type="submit" disabled={!path.trim()}>
           Ignore path
-        </button>
+        </Button>
       </form>
       {w.paths.length === 0 ? (
         <Empty icon="doc">
@@ -413,9 +414,11 @@ function Rules({ say }: PageProps) {
                     {n === 0 ? "No findings in these files" : `${plural(n, "finding")} in these files`}
                   </span>
                 </span>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-(--destructive-text)"
                   type="button"
-                  className="btn sm quiet danger-text"
                   aria-label={`Stop ignoring ${p}`}
                   onClick={() =>
                     setPaths(
@@ -425,7 +428,7 @@ function Rules({ say }: PageProps) {
                   }
                 >
                   Remove
-                </button>
+                </Button>
               </li>
             );
           })}
@@ -453,14 +456,7 @@ function SecuritySettings({ say }: PageProps) {
   const [s, setS] = useState<Settings>(saved);
   const dirty = JSON.stringify(s) !== JSON.stringify(saved);
   const sw = (k: keyof Settings, label: string) => (
-    <input
-      type="checkbox"
-      className="switch"
-      role="switch"
-      aria-label={label}
-      checked={s[k]}
-      onChange={(e) => setS((x) => ({ ...x, [k]: e.target.checked }))}
-    />
+    <Switch label={label} checked={s[k]} onChange={(on) => setS((x) => ({ ...x, [k]: on }))} />
   );
   const tCount = w.sources.filter((x) => x.group === "Agent transcripts").length;
   return (
@@ -484,7 +480,7 @@ function SecuritySettings({ say }: PageProps) {
           </>
         }
       />
-      <section className="panel" aria-labelledby="sec-when">
+      <Card className="panel" role="region" aria-labelledby="sec-when">
         <h2 id="sec-when">When to scan</h2>
         <Row title="Scan on every push" about="Checks the new commits on every branch as soon as they arrive.">
           {sw("onPush", "Scan on every push")}
@@ -505,8 +501,8 @@ function SecuritySettings({ say }: PageProps) {
         >
           {sw("transcripts", "Scan agent transcripts")}
         </Row>
-      </section>
-      <section className="panel" aria-labelledby="sec-after">
+      </Card>
+      <Card className="panel" role="region" aria-labelledby="sec-after">
         <h2 id="sec-after">After a finding</h2>
         <Row
           title="Open a rotation automatically"
@@ -514,16 +510,14 @@ function SecuritySettings({ say }: PageProps) {
         >
           {sw("autoRotate", "Open a rotation automatically")}
         </Row>
-      </section>
+      </Card>
       {dirty && (
         <div className="savebar" role="status">
           <span>You have unsaved changes.</span>
-          <button type="button" className="btn quiet" onClick={() => setS(saved)}>
+          <Button variant="ghost" type="button" onClick={() => setS(saved)}>
             Discard
-          </button>
-          <button type="submit" className="btn primary">
-            Save changes
-          </button>
+          </Button>
+          <Button type="submit">Save changes</Button>
         </div>
       )}
     </form>

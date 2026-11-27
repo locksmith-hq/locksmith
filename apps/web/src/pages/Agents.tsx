@@ -1,7 +1,11 @@
+import { Card } from "@locksmith-hq/card";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { PageHeader } from "@locksmith-hq/page-header";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Agent, Client } from "@locksmith/control-plane-client";
-import { Head } from "@locksmith/ui";
 import { Grants } from "./Grants";
 import { QueryState } from "../QueryState";
 
@@ -39,44 +43,55 @@ export function Agents({ client }: { client: Client }) {
 
   return (
     <>
-      <Head title="Agents" />
+      <PageHeader title="Agents" />
       {error && (
-        <p role="alert" className="state">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {secret && (
-        <section aria-label="Enrollment secret" className="panel">
+        <Card role="region" aria-label="Enrollment secret" className="mb-4 gap-3 px-5">
           <p>Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.</p>
-          <code data-testid="enrollment-secret">{secret.value}</code>
-          <button
-            className="btn sm"
-            onClick={() =>
-              void navigator.clipboard?.writeText(secret.value).catch(() => setError("Could not copy to the clipboard"))
-            }
-          >
-            Copy
-          </button>
-          <button className="btn sm" onClick={() => setSecret(null)}>
-            Dismiss
-          </button>
-        </section>
+          <code data-testid="enrollment-secret" className="break-all">
+            {secret.value}
+          </code>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void navigator.clipboard
+                  ?.writeText(secret.value)
+                  .catch(() => setError("Could not copy to the clipboard"))
+              }
+            >
+              Copy
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setSecret(null)}>
+              Dismiss
+            </Button>
+          </div>
+        </Card>
       )}
-      <form onSubmit={create} aria-label="Create agent" className="panel form inline-form">
-        <input aria-label="Agent name" required value={name} onChange={(e) => setName(e.target.value)} />
-        <input aria-label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-        <button type="submit" className="btn primary">
-          Create agent
-        </button>
+      <form
+        onSubmit={create}
+        aria-label="Create agent"
+        className="mb-4 flex flex-wrap items-center gap-2 [&_[data-slot=input]]:w-60"
+      >
+        <Input aria-label="Agent name" required value={name} onChange={(e) => setName(e.target.value)} />
+        <Input aria-label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <Button type="submit">Create agent</Button>
       </form>
       <QueryState query={q} empty="No agents yet.">
         {(agents: Agent[]) => (
-          <ul className="list">
+          <ul className="divide-y rounded-md border bg-card">
             {agents.map((a) => (
-              <li key={a.id} className="row">
-                <strong>{a.name}</strong> {a.description}
-                <button
-                  className="btn sm quiet danger-text"
+              <li key={a.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                <strong>{a.name}</strong> <span className="mr-auto text-muted-foreground">{a.description}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-(--destructive-text)"
                   onClick={() =>
                     void run(async () => {
                       await client.deleteAgent(a.id);
@@ -85,7 +100,7 @@ export function Agents({ client }: { client: Client }) {
                   }
                 >
                   Delete {a.name}
-                </button>
+                </Button>
                 <Grants client={client} agent={a} onError={setError} />
               </li>
             ))}

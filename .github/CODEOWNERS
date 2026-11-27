@@ -18,3 +18,9 @@
 /LICENSING.md @tomer555
 /crates/ls-license/ @tomer555
 /crates/ls-entitlements/ @tomer555
+
+# Design system: the published component packages (@locksmith-hq/*), their docs site and their release.
+# Every change waits for the owner; agents may propose changes here but never merge them.
+/design-system/ @tomer555
+/.changeset/ @tomer555
+/.github/workflows/design-system-release.yml @tomer555

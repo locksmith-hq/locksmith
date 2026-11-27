@@ -1,7 +1,9 @@
+import { Card } from "@locksmith-hq/card";
+import { Button } from "@locksmith-hq/button";
+import { PageHeader } from "@locksmith-hq/page-header";
 import { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { Head } from "@locksmith/ui";
 import type { Client } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
 
@@ -35,19 +37,19 @@ export function Overview({ client }: { client: Client }) {
 
   return (
     <>
-      <Head title="Overview" />
-      <section aria-label="Counts" className="panel">
+      <PageHeader title="Overview" />
+      <Card role="region" aria-label="Counts" className="mb-4 gap-1 px-5">
         <QueryState query={projects} isEmpty={() => false}>
           {(p) => <p data-testid="count-projects">Projects: {p.length}</p>}
         </QueryState>
         <QueryState query={agents} isEmpty={() => false}>
           {(a) => <p data-testid="count-agents">Agents: {a.length}</p>}
         </QueryState>
-      </section>
+      </Card>
       {!dismissed && (
-        <section aria-label="Get started" className="panel">
-          <h2>Get started</h2>
-          <ol>
+        <Card role="region" aria-label="Get started" className="mb-4 gap-3 px-5">
+          <h2 className="text-base font-semibold">Get started</h2>
+          <ol className="list-decimal pl-5 [&_a]:underline [&_a]:underline-offset-3">
             <li>
               <Link to="/projects">Create a project</Link>
             </li>
@@ -58,13 +60,13 @@ export function Overview({ client }: { client: Client }) {
               <Link to="/agents">Register an agent</Link>
             </li>
           </ol>
-          <button className="btn sm" onClick={dismiss}>
+          <Button variant="outline" size="sm" className="self-start" onClick={dismiss}>
             Dismiss
-          </button>
-        </section>
+          </Button>
+        </Card>
       )}
-      <section aria-label="Recent activity" className="panel">
-        <h2>Recent activity</h2>
+      <Card role="region" aria-label="Recent activity" className="gap-3 px-5">
+        <h2 className="text-base font-semibold">Recent activity</h2>
         <QueryState query={audit} isEmpty={(d) => d.items.length === 0} empty="No activity yet.">
           {(d) => (
             <ul>
@@ -76,7 +78,7 @@ export function Overview({ client }: { client: Client }) {
             </ul>
           )}
         </QueryState>
-      </section>
+      </Card>
     </>
   );
 }

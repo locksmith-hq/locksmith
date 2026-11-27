@@ -1,5 +1,10 @@
 // Workspace settings (mockup, nothing is saved anywhere). Kept to what an owner actually changes:
 // the name, how people sign in, getting data out, and deleting the workspace.
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Card } from "@locksmith-hq/card";
+import { Switch } from "./kit";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
 import { useState } from "react";
 import "./settings.css";
 
@@ -24,16 +29,7 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
   const [confirm, setConfirm] = useState("");
   const dirty = JSON.stringify(s) !== JSON.stringify(saved);
   const set = <K extends keyof S>(k: K, v: S[K]) => setS((x) => ({ ...x, [k]: v }));
-  const toggle = (k: Flag, label: string) => (
-    <input
-      type="checkbox"
-      className="switch"
-      role="switch"
-      aria-label={label}
-      checked={s[k]}
-      onChange={(e) => set(k, e.target.checked)}
-    />
-  );
+  const toggle = (k: Flag, label: string) => <Switch label={label} checked={s[k]} onChange={(on) => set(k, on)} />;
   const noSignIn = !s.password && !s.google && !s.github;
 
   return (
@@ -57,13 +53,13 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
         </div>
       </div>
 
-      <section className="panel" aria-labelledby="set-general">
+      <Card className="panel" role="region" aria-labelledby="set-general">
         <h2 id="set-general">General</h2>
         <Row
           title={org ? "Organization name" : "Workspace name"}
           about="Shown in the selector at the top right and on invoices."
         >
-          <input aria-label="Name" value={s.name} onChange={(e) => set("name", e.target.value)} required />
+          <Input aria-label="Name" value={s.name} onChange={(e) => set("name", e.target.value)} required />
         </Row>
         <Row
           title="Region"
@@ -71,9 +67,9 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
         >
           <span className="fixed">United States (us-east-1)</span>
         </Row>
-      </section>
+      </Card>
 
-      <section className="panel" aria-labelledby="set-signin">
+      <Card className="panel" role="region" aria-labelledby="set-signin">
         <h2 id="set-signin">Sign-in</h2>
         <Row title="Email and password">{toggle("password", "Allow email and password")}</Row>
         <Row title="Google">{toggle("google", "Allow Google sign-in")}</Row>
@@ -85,13 +81,13 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
           {toggle("twoStep", "Require a second step")}
         </Row>
         {noSignIn && (
-          <p className="alert" role="alert">
-            Every sign-in method is off. Turn one on, or nobody can sign in.
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>Every sign-in method is off. Turn one on, or nobody can sign in.</AlertDescription>
+          </Alert>
         )}
-      </section>
+      </Card>
 
-      <section className="panel" aria-labelledby="set-data">
+      <Card className="panel" role="region" aria-labelledby="set-data">
         <h2 id="set-data">Take your data out</h2>
         <p className="muted">
           Locksmith's servers cannot read your secret values, so an export is made on your own machine, one project and
@@ -104,37 +100,37 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
           The file holds real values. Treat it like the secrets themselves. Export works on every plan and is never
           blocked by a billing problem.
         </p>
-      </section>
+      </Card>
 
-      <section className="panel danger-zone" aria-labelledby="set-danger">
+      <Card className="panel danger-zone" role="region" aria-labelledby="set-danger">
         <h2 id="set-danger">Delete {org ? "this organization" : "this workspace"}</h2>
         <p className="muted">
           Deletes every project, secret, grant and connection in {name}. Agents lose access at once. This cannot be
           undone, so export what you need first.
         </p>
         <div className="inline-form" style={{ marginTop: 12 }}>
-          <input
+          <Input
             aria-label={`Type ${name} to confirm`}
             placeholder={`Type ${name} to confirm`}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             autoComplete="off"
           />
-          <button type="button" className="btn danger" disabled={confirm !== name}>
+          <Button variant="destructive" type="button" disabled={confirm !== name}>
             Delete {name}
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
 
       {dirty && (
         <div className="savebar" role="status">
           <span>You have unsaved changes.</span>
-          <button type="button" className="btn quiet" onClick={() => setS(saved)}>
+          <Button variant="ghost" type="button" onClick={() => setS(saved)}>
             Discard
-          </button>
-          <button type="submit" className="btn primary" disabled={noSignIn}>
+          </Button>
+          <Button type="submit" disabled={noSignIn}>
             Save changes
-          </button>
+          </Button>
         </div>
       )}
     </form>

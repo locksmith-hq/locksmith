@@ -87,6 +87,12 @@ afterEach(() => vi.unstubAllGlobals());
 
 const mk = (path = "/agents") => render(<App client={createClient("org1")} initialPath={path} />);
 
+// Opens a kit Select by its label and picks the option with this text.
+async function choose(label: string, option: string) {
+  await userEvent.click(screen.getByRole("combobox", { name: label }));
+  await userEvent.click(await screen.findByRole("option", { name: option }));
+}
+
 test("lists agents and grants, sending the org header", async () => {
   mk();
   expect(await screen.findByText("bot")).toBeInTheDocument();
@@ -238,15 +244,14 @@ test("audit outcome filter narrows to denied and redaction_failed events", async
   mk();
   await userEvent.click(screen.getByRole("link", { name: "Activity" }));
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
-  const sel = screen.getByRole("combobox", { name: "Outcome filter" });
-  await userEvent.selectOptions(sel, "denied");
+  await choose("Outcome filter", "Denied");
   expect(screen.getByText("relay.denied")).toBeInTheDocument();
   expect(screen.queryByText("agent.created")).toBeNull();
   expect(screen.queryByText("relay.outcome")).toBeNull();
-  await userEvent.selectOptions(sel, "redaction_failed");
+  await choose("Outcome filter", "Redaction failed");
   expect(screen.getByText("relay.outcome")).toBeInTheDocument();
   expect(screen.queryByText("relay.denied")).toBeNull();
-  await userEvent.selectOptions(sel, "all");
+  await choose("Outcome filter", "All");
   expect(screen.getByText("agent.created")).toBeInTheDocument();
 });
 
@@ -310,7 +315,7 @@ test("workload identities: list, prefix warning, create with presets, delete wit
   expect(JSON.stringify(sent)).not.toMatch(/token|secret|password/i);
 
   // Kubernetes preset compiles namespace and service account to `sub`.
-  await userEvent.selectOptions(screen.getByLabelText("Issuer preset"), "kubernetes");
+  await choose("Issuer preset", "Kubernetes");
   await userEvent.type(screen.getByLabelText("Policy name"), "k1");
   await userEvent.type(screen.getByLabelText("Agent id"), ID);
   await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");

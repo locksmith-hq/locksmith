@@ -1,5 +1,6 @@
+import { PageHeader } from "@locksmith-hq/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useQuery } from "@tanstack/react-query";
-import { Head } from "@locksmith/ui";
 import { bindingDetails, type BindingSummary, type Client } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";
 
@@ -10,31 +11,31 @@ export function Bindings({ client }: { client: Client }) {
   const q = useQuery({ queryKey: ["bindings"], queryFn: () => client.listBindings() });
   return (
     <section aria-label="Bindings">
-      <Head title="Bindings" />
+      <PageHeader title="Bindings" />
       <QueryState query={q} empty="The gateway has not published any bindings yet.">
         {(bindings: BindingSummary[]) => (
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Kind</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {bindings.map((b) => (
-                <tr key={`${b.kind}:${b.name}`}>
-                  <td>{b.name}</td>
-                  <td>{KIND[b.kind] ?? b.kind}</td>
-                  <td>
+                <TableRow key={`${b.kind}:${b.name}`}>
+                  <TableCell>{b.name}</TableCell>
+                  <TableCell>{KIND[b.kind] ?? b.kind}</TableCell>
+                  <TableCell>
                     {bindingDetails(b)
                       .map(([l, v]) => `${l}: ${v}`)
                       .join(" · ")}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </QueryState>
     </section>

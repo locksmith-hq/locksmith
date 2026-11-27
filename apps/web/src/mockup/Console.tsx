@@ -1,5 +1,25 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Icon, Logo, VaultMark, type IconName } from "@locksmith/ui";
+import { Wordmark } from "@locksmith-hq/wordmark";
+import {
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@locksmith-hq/sidebar";
+import { Popover, PopoverContent, PopoverTrigger } from "@locksmith-hq/popover";
+import { Tabs, TabsList, TabsTrigger } from "@locksmith-hq/tabs";
+import { Badge } from "@locksmith-hq/badge";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
+import { Fragment, useEffect, useLayoutEffect, useState } from "react";
+import { Icon, Logo, type IconName } from "./kit";
+import { Loader as KitLoader } from "@locksmith-hq/loader";
 import * as seed from "./data";
 import { Billing } from "./Billing";
 import { Settings } from "./Settings";
@@ -7,7 +27,7 @@ import { PAGES } from "./pages";
 import { useSecrets } from "./pages/gateway-data";
 import { useNotices } from "./pages/platform-store";
 import "./settings.css";
-import { NOW } from "@locksmith/ui";
+import { NOW } from "./kit";
 import { type Agent, type Secret, type Session } from "./data";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -82,65 +102,84 @@ const Check = () => (
     <path d="M3.5 8.5l3 3 6-7" />
   </svg>
 );
-/** Closes a `<details>` selector on Escape or when focus leaves it. */
-const dismiss = {
-  onKeyDown: (e: React.KeyboardEvent<HTMLDetailsElement>) => {
-    if (e.key === "Escape") e.currentTarget.open = false;
-  },
-  onBlur: (e: React.FocusEvent<HTMLDetailsElement>) => {
-    if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.open = false;
-  },
-};
+/** A workspace-style selector: a kit Popover on a quiet button. The menu body is given a way to shut it. */
+function Selector({
+  className,
+  title,
+  summary,
+  children,
+}: {
+  className?: string;
+  title: string;
+  summary: React.ReactNode;
+  children: (shut: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={className ? `ws ${className}` : "ws"}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" className="org" title={title}>
+            {summary}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="ws-menu">
+          {children(() => setOpen(false))}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 const me = seed.members[0]!;
-const AppearanceSeg = ({ name, value, set }: { name: string; value: Appearance; set: (a: Appearance) => void }) => (
-  <fieldset className="seg">
-    <legend className="sr-only">Appearance</legend>
+const AppearanceSeg = ({ value, set }: { value: Appearance; set: (a: Appearance) => void }) => (
+  <ToggleGroup type="single" value={String(value)} aria-label="Appearance" className="w-full">
     {APPEARANCE.map(([v, label, icon]) => (
-      <label key={v} title={`Appearance: ${label}`}>
-        <input type="radio" name={name} checked={value === v} onChange={() => set(v)} />
+      <ToggleGroupItem key={v} title={`Appearance: ${label}`} size="sm" value={String(v)} onClick={() => set(v)}>
         <Icon name={icon} />
         {label}
-      </label>
+      </ToggleGroupItem>
     ))}
-  </fieldset>
+  </ToggleGroup>
 );
 
 function Account({ appearance, setAppearance }: { appearance: Appearance; setAppearance: (a: Appearance) => void }) {
   return (
     <section>
       <Head title="User settings" sub="These follow you across every workspace you belong to." />
-      <form className="panel form" onSubmit={(e) => e.preventDefault()}>
-        <h2>Profile</h2>
-        <div className="add">
-          <label className="field">
-            Name
-            <input defaultValue={me.name} autoComplete="name" />
-          </label>
-          <label className="field">
-            Email
-            <input defaultValue={me.email} readOnly style={{ width: 260 }} />
-          </label>
-          <button type="submit" className="btn">
-            Save
-          </button>
-          <span />
-        </div>
-      </form>
-      <div className="panel form">
+      <Card className="panel form">
+        <form className="contents" onSubmit={(e) => e.preventDefault()}>
+          <h2>Profile</h2>
+          <div className="add">
+            <Label className="field">
+              Name
+              <Input defaultValue={me.name} autoComplete="name" />
+            </Label>
+            <Label className="field">
+              Email
+              <Input defaultValue={me.email} readOnly style={{ width: 260 }} />
+            </Label>
+            <Button variant="outline" type="submit">
+              Save
+            </Button>
+            <span />
+          </div>
+        </form>
+      </Card>
+      <Card className="panel form">
         <h2>Appearance</h2>
         <p className="muted">System follows your computer's light or dark setting.</p>
         <div style={{ maxWidth: 280, marginTop: 12 }}>
-          <AppearanceSeg name="appearance-page" value={appearance} set={setAppearance} />
+          <AppearanceSeg value={appearance} set={setAppearance} />
         </div>
-      </div>
-      <div className="panel">
+      </Card>
+      <Card className="panel">
         <h2>Sign out</h2>
         <p className="muted">Ends this browser's session. Agents and their grants are not affected.</p>
-        <button type="button" className="btn" style={{ marginTop: 12 }}>
+        <Button variant="outline" type="button" style={{ marginTop: 12 }}>
           Sign out
-        </button>
-      </div>
+        </Button>
+      </Card>
     </section>
   );
 }
@@ -148,70 +187,58 @@ function Account({ appearance, setAppearance }: { appearance: Appearance; setApp
 /** A product stops being "Planned" once its first page exists, either built in or in ./pages. */
 const built = (p: seed.Product) => !!p.href || !!PAGES[`${p.id}/${seed.spaces[p.id]?.[0]?.[0]}`];
 /** The wordmark: the product's own typeface in spaced capitals. */
-const Word = () => (
-  <span
-    className="wordmark"
-    aria-label="Locksmith"
-    style={{ fontWeight: 600, letterSpacing: "0.13em", textTransform: "uppercase", fontSize: "1.02em" }}
-  >
-    locksmith
-  </span>
-);
+const Word = () => <Wordmark />;
 
 /** Loading state: the small mark, its dial turning one notch at a time while the bolts draw in and out (all CSS). */
-const Loader = () => (
-  <div className="loader" role="status">
-    <span className="logo">
-      <VaultMark small size={42} />
-    </span>
-    <span className="sr-only">Loading</span>
-  </div>
-);
+const Loader = () => <KitLoader className="page-loader" />;
 
 /** Picks who the console is working for: one person, or an organization with members and teams. */
 function Workspace({ at, pick }: { at: number; pick: (i: number) => void }) {
-  const ref = useRef<HTMLDetailsElement>(null);
-  const close = () => {
-    ref.current!.open = false;
-  };
   const w = seed.workspaces[at]!;
   return (
-    <details className="ws" ref={ref} {...dismiss}>
-      <summary className="org" title="Switch workspace">
-        <span className="av">{w.name[0]}</span>
-        <span>
-          {w.name}
-          <small>{w.org ? "Organization" : "Personal"}</small>
-        </span>
-        <Chevrons />
-      </summary>
-      <div className="ws-menu">
-        {seed.workspaces.map((x, i) => (
-          <button
-            key={x.name}
-            type="button"
-            aria-current={i === at || undefined}
-            onClick={() => {
-              pick(i);
-              close();
-            }}
-          >
-            <span className="av">{x.name[0]}</span>
-            <span>
-              {x.name}
-              <small>{x.sub}</small>
-            </span>
-            {i === at && <Check />}
-          </button>
-        ))}
-        <a href="#/welcome" onClick={close}>
-          <span className="av">
-            <Icon name="plus" />
+    <Selector
+      title="Switch workspace"
+      summary={
+        <>
+          <span className="av">{w.name[0]}</span>
+          <span>
+            {w.name}
+            <small>{w.org ? "Organization" : "Personal"}</small>
           </span>
-          New workspace
-        </a>
-      </div>
-    </details>
+          <Chevrons />
+        </>
+      }
+    >
+      {(shut) => (
+        <>
+          {seed.workspaces.map((x, i) => (
+            <Button
+              variant="ghost"
+              key={x.name}
+              type="button"
+              aria-current={i === at || undefined}
+              onClick={() => {
+                pick(i);
+                shut();
+              }}
+            >
+              <span className="av">{x.name[0]}</span>
+              <span>
+                {x.name}
+                <small>{x.sub}</small>
+              </span>
+              {i === at && <Check />}
+            </Button>
+          ))}
+          <a href="#/welcome" onClick={shut}>
+            <span className="av">
+              <Icon name="plus" />
+            </span>
+            New workspace
+          </a>
+        </>
+      )}
+    </Selector>
   );
 }
 
@@ -313,16 +340,19 @@ export function Console() {
   const base = product === "access" ? "#/access" : product === "secrets" ? `#/secrets/${route[1]}` : `#/app/${product}`;
   const tab = (product === "access" ? route[1] : route[2]) ?? items[0]?.[0] ?? "";
   const link = (id: string, label: string, icon: IconName, count?: number) => (
-    <a
-      key={id}
-      href={`#/${id}`}
-      title={label}
-      aria-current={route.join("/").startsWith(id) || (id === "home" && !route.length) ? "page" : undefined}
-    >
-      <Icon name={icon} />
-      {label}
-      {count !== undefined && <span className="count">{count}</span>}
-    </a>
+    <SidebarMenuItem key={id}>
+      <SidebarMenuButton asChild>
+        <a
+          href={`#/${id}`}
+          title={label}
+          aria-current={route.join("/").startsWith(id) || (id === "home" && !route.length) ? "page" : undefined}
+        >
+          <Icon name={icon} />
+          {label}
+          {count !== undefined && <span className="count">{count}</span>}
+        </a>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 
   const revoke = (ids: string[]) => {
@@ -343,98 +373,122 @@ export function Console() {
   return (
     <div className="app" data-folded={folded || undefined}>
       <aside className="side">
-        <a className="brand" href="#/home" aria-label="Locksmith home">
-          <Logo size={34} />
-          <Word />
-        </a>
-        {product ? (
-          <>
-            <nav className="nav" aria-label={seed.products.find((x) => x.id === product)!.name}>
-              {items.map(([t, label, icon, group], i) => (
-                <Fragment key={t}>
-                  {group && group !== items[i - 1]?.[3] && <p className="nav-h">{group}</p>}
-                  <a href={`${base}/${t}`} title={label} aria-current={tab === t ? "page" : undefined}>
-                    <Icon name={icon} />
-                    {label}
-                    {t === "secrets" && <span className="count">{own.length}</span>}
-                    {product === "access" && t === "sessions" && <span className="count">{live.length}</span>}
-                  </a>
-                </Fragment>
-              ))}
+        <SidebarProvider className="contents">
+          <a className="brand" href="#/home" aria-label="Locksmith home">
+            <Logo size={34} />
+            <Word />
+          </a>
+          {product ? (
+            <>
+              <nav className="nav" aria-label={seed.products.find((x) => x.id === product)!.name}>
+                <SidebarMenu>
+                  {items.map(([t, label, icon, group], i) => (
+                    <Fragment key={t}>
+                      {group && group !== items[i - 1]?.[3] && (
+                        <SidebarGroupLabel asChild>
+                          <li className="nav-h">{group}</li>
+                        </SidebarGroupLabel>
+                      )}
+                      <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                          <a href={`${base}/${t}`} title={label} aria-current={tab === t ? "page" : undefined}>
+                            <Icon name={icon} />
+                            {label}
+                            {t === "secrets" && <span className="count">{own.length}</span>}
+                            {product === "access" && t === "sessions" && <span className="count">{live.length}</span>}
+                          </a>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    </Fragment>
+                  ))}
+                </SidebarMenu>
+              </nav>
+            </>
+          ) : lobby ? (
+            <nav className="nav" aria-label="Secret Management">
+              <SidebarMenu>
+                {seed.spaces["secrets-lobby"]!.map(([t, label, icon]) => (
+                  <SidebarMenuItem key={t}>
+                    <SidebarMenuButton asChild>
+                      <a
+                        href={t === "projects" ? "#/secrets" : t === "sharing" ? "#/sharing" : `#/sm/${t}`}
+                        title={label}
+                        aria-current={lobbyTab === t ? "page" : undefined}
+                      >
+                        <Icon name={icon} />
+                        {label}
+                        {t === "projects" && (
+                          <span className="count">{seed.projects.filter((x) => acl.roleIn(x.id)).length}</span>
+                        )}
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
             </nav>
-          </>
-        ) : lobby ? (
-          <nav className="nav" aria-label="Secret Management">
-            {seed.spaces["secrets-lobby"]!.map(([t, label, icon]) => (
-              <a
-                key={t}
-                href={t === "projects" ? "#/secrets" : t === "sharing" ? "#/sharing" : `#/sm/${t}`}
-                title={label}
-                aria-current={lobbyTab === t ? "page" : undefined}
-              >
-                <Icon name={icon} />
-                {label}
-                {t === "projects" && (
-                  <span className="count">{seed.projects.filter((x) => acl.roleIn(x.id)).length}</span>
-                )}
-              </a>
-            ))}
-          </nav>
-        ) : (
-          <>
-            <nav className="nav" aria-label="Main">
-              {link("home", "Home", "grid")}
-              {link("notifications", "Notifications", "alert", unread || undefined)}
-              {link("integrations", "Integrations", "s_code")}
-              {link("mcp", "MCP", "s_terminal")}
-              {isAdmin && (
+          ) : (
+            <>
+              <nav className="nav" aria-label="Main">
+                <SidebarMenu>
+                  {link("home", "Home", "grid")}
+                  {link("notifications", "Notifications", "alert", unread || undefined)}
+                  {link("integrations", "Integrations", "s_code")}
+                  {link("mcp", "MCP", "s_terminal")}
+                  {isAdmin && (
+                    <>
+                      <SidebarGroupLabel asChild>
+                        <li className="nav-h">Administration</li>
+                      </SidebarGroupLabel>
+                      {ws.org && link("members", "User Management", "sessions", seed.members.length)}
+                      {link("billing", "Usage and billing", "clock")}
+                      {link("settings", "Settings", "s_window")}
+                    </>
+                  )}
+                </SidebarMenu>
+              </nav>
+            </>
+          )}
+          <div className="side-foot">
+            <Selector
+              className="user"
+              title="Your account"
+              summary={
                 <>
-                  <p className="nav-h">Administration</p>
-                  {ws.org && link("members", "User Management", "sessions", seed.members.length)}
-                  {link("billing", "Usage and billing", "clock")}
-                  {link("settings", "Settings", "s_window")}
+                  <span className="av">{me.name[0]}</span>
+                  <span>
+                    {me.name}
+                    <small>{me.email}</small>
+                  </span>
+                  <Chevrons />
+                </>
+              }
+            >
+              {(shut) => (
+                <>
+                  <a href="#/account" onClick={shut}>
+                    <span className="av">
+                      <Icon name="sessions" />
+                    </span>
+                    User settings
+                  </a>
+                  <AppearanceSeg value={appearance} set={setAppearance} />
+                  <Button variant="ghost" type="button">
+                    <span className="av">
+                      <Icon name="power" />
+                    </span>
+                    Sign out
+                  </Button>
                 </>
               )}
-            </nav>
-          </>
-        )}
-        <div className="side-foot">
-          <details className="ws user" {...dismiss}>
-            <summary className="org" title="Your account">
-              <span className="av">{me.name[0]}</span>
-              <span>
-                {me.name}
-                <small>{me.email}</small>
-              </span>
-              <Chevrons />
-            </summary>
-            <div className="ws-menu">
-              <a
-                href="#/account"
-                onClick={(e) => {
-                  e.currentTarget.closest("details")!.open = false;
-                }}
-              >
-                <span className="av">
-                  <Icon name="sessions" />
-                </span>
-                User settings
-              </a>
-              <AppearanceSeg name="appearance-menu" value={appearance} set={setAppearance} />
-              <button type="button">
-                <span className="av">
-                  <Icon name="power" />
-                </span>
-                Sign out
-              </button>
-            </div>
-          </details>
-        </div>
+            </Selector>
+          </div>
+        </SidebarProvider>
       </aside>
 
       <div className="work">
         <header className="vault" aria-label={proj ? "Project" : "Workspace"} data-paused={paused}>
-          <button
+          <Button
+            variant="ghost"
             type="button"
             className="fold"
             aria-pressed={folded}
@@ -446,7 +500,7 @@ export function Console() {
               <rect x="2" y="3" width="12" height="10" rx="1.75" />
               <path d="M6 3v10" />
             </svg>
-          </button>
+          </Button>
           <nav className="crumbbar" aria-label="Breadcrumb">
             {crumbProduct && <ProductSwitch id={crumbProduct} />}
             {proj ? (
@@ -490,15 +544,15 @@ export function Console() {
           </div>
           <div className="acts">
             {viewerAt !== 0 && (
-              <button type="button" className="btn sm" onClick={() => preview(0)}>
+              <Button variant="outline" size="sm" type="button" onClick={() => preview(0)}>
                 Stop preview
-              </button>
+              </Button>
             )}
             {paused && (
-              <button type="button" className="btn primary" onClick={resume}>
+              <Button type="button" onClick={resume}>
                 <Icon name="unlock" />
                 Resume agents
-              </button>
+              </Button>
             )}
             <a
               className="bell"
@@ -628,7 +682,7 @@ function Hub({ db, org, name }: { db: Db; org: boolean; name: string }) {
                   </span>
                   <span className="pname">
                     {p.name}
-                    {!built(p) && <span className="badge">Planned</span>}
+                    {!built(p) && <Badge variant="secondary">Planned</Badge>}
                   </span>
                   <span className="pblurb">{p.blurb}</span>
                   {stats[p.id] && (
@@ -727,73 +781,66 @@ function Integrations({ say }: { say: (note: string) => void }) {
         title="Integrations"
         sub="Connections to the systems outside Locksmith. Set one up here once; each product then picks it from a list."
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Add connection
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add connection">
-          <h2>Add a connection</h2>
-          <div className="add share">
-            <label className="field">
-              Kind
-              <select value={newKind} onChange={(e) => setNewKind(e.target.value as seed.Kind)}>
-                {seed.kinds.map((k) => (
-                  <option key={k}>{k}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              System
-              <select name="provider" key={newKind}>
-                {seed.providers[newKind].map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Name
-              <input name="name" required autoFocus placeholder="Staging account" autoComplete="off" />
-            </label>
-            <label className="field">
-              Who may use it
-              <select name="scope">
-                <option>All projects</option>
-                {seed.projects.map((p) => (
-                  <option key={p.id}>{p.id}</option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Connect
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              style={{ justifySelf: "start" }}
-              onClick={() => setAdding(false)}
-            >
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            The next step signs you in to that system. Its credential is kept as a Locksmith secret and rotated like any
-            other; nobody sees it here.
-          </p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add connection">
+            <h2>Add a connection</h2>
+            <div className="add share">
+              <Label className="field">
+                Kind
+                <Dropdown value={newKind} onChange={(e) => setNewKind(e as seed.Kind)}>
+                  {seed.kinds.map((k) => (
+                    <Option key={k}>{k}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                System
+                <Dropdown name="provider" key={newKind}>
+                  {seed.providers[newKind].map((p) => (
+                    <Option key={p}>{p}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Name
+                <Input name="name" required autoFocus placeholder="Staging account" autoComplete="off" />
+              </Label>
+              <Label className="field">
+                Who may use it
+                <Dropdown name="scope">
+                  <Option>All projects</Option>
+                  {seed.projects.map((p) => (
+                    <Option key={p.id}>{p.id}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Button type="submit">Connect</Button>
+              <Button variant="ghost" type="button" style={{ justifySelf: "start" }} onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              The next step signs you in to that system. Its credential is kept as a Locksmith secret and rotated like
+              any other; nobody sees it here.
+            </p>
+          </form>
+        </Card>
       )}
       <div className="toolbar">
-        <fieldset className="seg inline">
-          <legend className="sr-only">Kind</legend>
+        <ToggleGroup type="single" value={String(kind)} aria-label="Kind">
           {(["All", ...seed.kinds] as const).map((k) => (
-            <label key={k}>
-              <input type="radio" name="kind" checked={kind === k} onChange={() => setKind(k)} />
+            <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setKind(k)}>
               {k}
               {k !== "All" && <span className="n">{rows.filter((c) => c.kind === k).length}</span>}
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
       </div>
       {shown.length === 0 ? (
         <div className="state empty">
@@ -839,27 +886,31 @@ function Integrations({ say }: { say: (note: string) => void }) {
                   </p>
                 )}
                 {removing === c.id && (
-                  <p className="alert" role="alert" style={{ margin: "10px 0 0" }}>
-                    Removing this stops {c.uses.map(([p, what]) => `${what} in ${p}`).join(", ")}.
-                    <button type="button" className="btn sm danger" onClick={() => remove(c)}>
-                      Remove anyway
-                    </button>
-                    <button type="button" className="btn sm quiet" onClick={() => setRemoving(null)}>
-                      Keep
-                    </button>
-                  </p>
+                  <Alert variant="destructive" style={{ margin: "10px 0 0" }}>
+                    <AlertDescription>
+                      Removing this stops {c.uses.map(([p, what]) => `${what} in ${p}`).join(", ")}.
+                      <Button variant="destructive" size="sm" type="button" onClick={() => remove(c)}>
+                        Remove anyway
+                      </Button>
+                      <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(null)}>
+                        Keep
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
                 )}
               </div>
               <span className="meta">
                 <span title="Which projects may pick this connection">{c.scope}</span>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-(--destructive-text)"
                   type="button"
-                  className="btn sm quiet danger-text"
                   aria-label={`Remove ${c.name}`}
                   onClick={() => (c.uses.length ? setRemoving(c.id) : remove(c))}
                 >
                   Remove
-                </button>
+                </Button>
               </span>
             </li>
           ))}
@@ -899,67 +950,67 @@ function Sharing({ say }: { say: (note: string) => void }) {
         title="Secret sharing"
         sub="Hand one secret to a person outside this workspace through a link that expires and counts its views. Agents never get these links."
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Share a secret
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={create} aria-label="Share a secret">
-          <h2>Share a secret</h2>
-          <div className="add share">
-            <label className="field">
-              What it is
-              <input
-                name="label"
-                required
-                autoFocus
-                placeholder="Staging DB password for Sam"
-                autoComplete="off"
-                style={{ width: 300 }}
-              />
-            </label>
-            <label className="field">
-              Value
-              <input name="value" type="password" required autoComplete="off" placeholder="Paste the value" />
-            </label>
-            <label className="field">
-              Expires after
-              <select name="ttl" defaultValue={86400}>
-                <option value={3600}>1 hour</option>
-                <option value={86400}>1 day</option>
-                <option value={604800}>7 days</option>
-              </select>
-            </label>
-            <label className="field">
-              Can be opened
-              <select name="views" defaultValue={1}>
-                <option value={1}>Once</option>
-                <option value={5}>5 times</option>
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Create link
-            </button>
-            <button type="button" className="btn quiet" onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            The value is encrypted in this browser and the key travels only inside the link, so Locksmith cannot read
-            it. After the last view or the expiry, the link shows nothing.
-          </p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={create} aria-label="Share a secret">
+            <h2>Share a secret</h2>
+            <div className="add share">
+              <Label className="field">
+                What it is
+                <Input
+                  name="label"
+                  required
+                  autoFocus
+                  placeholder="Staging DB password for Sam"
+                  autoComplete="off"
+                  style={{ width: 300 }}
+                />
+              </Label>
+              <Label className="field">
+                Value
+                <Input name="value" type="password" required autoComplete="off" placeholder="Paste the value" />
+              </Label>
+              <Label className="field">
+                Expires after
+                <Dropdown name="ttl" defaultValue={86400}>
+                  <Option value={3600}>1 hour</Option>
+                  <Option value={86400}>1 day</Option>
+                  <Option value={604800}>7 days</Option>
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Can be opened
+                <Dropdown name="views" defaultValue={1}>
+                  <Option value={1}>Once</Option>
+                  <Option value={5}>5 times</Option>
+                </Dropdown>
+              </Label>
+              <Button type="submit">Create link</Button>
+              <Button variant="ghost" type="button" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              The value is encrypted in this browser and the key travels only inside the link, so Locksmith cannot read
+              it. After the last view or the expiry, the link shows nothing.
+            </p>
+          </form>
+        </Card>
       )}
       {once && (
-        <div className="panel once" role="status">
+        <Card className="panel once" role="status">
           <h2>Copy the link now</h2>
           <p>It is shown once. Anyone with the link can open the secret until it expires or runs out of views.</p>
           <code className="block">https://share.locksmith.example/s/{once}#sample-key-not-real</code>
-          <button type="button" className="btn sm" style={{ marginTop: 12 }} onClick={() => setOnce(null)}>
+          <Button variant="outline" size="sm" type="button" style={{ marginTop: 12 }} onClick={() => setOnce(null)}>
             I have copied it
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
       {rows.length === 0 ? (
         <div className="state empty">
@@ -972,31 +1023,33 @@ function Sharing({ say }: { say: (note: string) => void }) {
         </div>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Shared secret</th>
-                <th>Created by</th>
-                <th>Created</th>
-                <th>Expires</th>
-                <th>Opened</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Shared secret</TableHead>
+                <TableHead>Created by</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead>Opened</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="strong">{r.label}</td>
-                  <td>{r.by}</td>
-                  <td className="muted">{ago(r.created)}</td>
-                  <td>{until(r.expires).replace("expires ", "")}</td>
-                  <td className="mono">
+                <TableRow key={r.id}>
+                  <TableCell className="strong">{r.label}</TableCell>
+                  <TableCell>{r.by}</TableCell>
+                  <TableCell className="muted">{ago(r.created)}</TableCell>
+                  <TableCell>{until(r.expires).replace("expires ", "")}</TableCell>
+                  <TableCell className="mono">
                     {r.views} of {r.maxViews}
-                  </td>
-                  <td className="num">
-                    <button
+                  </TableCell>
+                  <TableCell className="num">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
                       type="button"
-                      className="btn sm quiet danger-text"
                       aria-label={`Revoke link: ${r.label}`}
                       onClick={() => {
                         setRows((x) => x.filter((y) => y !== r));
@@ -1004,12 +1057,12 @@ function Sharing({ say }: { say: (note: string) => void }) {
                       }}
                     >
                       Revoke
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -1054,131 +1107,136 @@ function Members({ acl, tab }: { acl: Acl; tab?: string }) {
         sub="Who is in this organization, what their role lets them do, and which projects they can open."
       >
         {at === "users" && (
-          <button type="button" className="btn primary" onClick={() => setInviting(true)} disabled={inviting}>
+          <Button type="button" onClick={() => setInviting(true)} disabled={inviting}>
             <Icon name="plus" />
             Invite user
-          </button>
+          </Button>
         )}
       </Head>
-      <nav className="tabs" aria-label="User Management">
-        <a href="#/members" aria-current={at === "users" ? "page" : undefined}>
-          Users <span className="n">{users.length}</span>
-        </a>
-        <a href="#/members/groups" aria-current={at === "groups" ? "page" : undefined}>
-          Groups <span className="n">{seed.groups.length}</span>
-        </a>
-        <a href="#/members/roles" aria-current={at === "roles" ? "page" : undefined}>
-          Roles
-        </a>
-      </nav>
+      <Tabs value={at} className="mb-5">
+        <TabsList variant="line" aria-label="User Management">
+          <TabsTrigger value="users" asChild>
+            <a href="#/members">
+              Users <span className="n">{users.length}</span>
+            </a>
+          </TabsTrigger>
+          <TabsTrigger value="groups" asChild>
+            <a href="#/members/groups">
+              Groups <span className="n">{seed.groups.length}</span>
+            </a>
+          </TabsTrigger>
+          <TabsTrigger value="roles" asChild>
+            <a href="#/members/roles">Roles</a>
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {at === "users" && (
         <>
           {inviting && (
-            <form className="panel form" onSubmit={invite} aria-label="Invite user">
-              <h2>Invite a user</h2>
-              <div className="add share">
-                <label className="field">
-                  Email
-                  <input
-                    name="email"
-                    type="email"
-                    required
-                    autoFocus
-                    placeholder="name@acme.example"
-                    autoComplete="off"
-                    style={{ width: 260 }}
-                  />
-                </label>
-                <label className="field">
-                  Role
-                  <select name="role" defaultValue="Member">
-                    {roles.map((r) => (
-                      <option key={r.name}>{r.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Group
-                  <select name="group">
-                    {seed.groups.map((g) => (
-                      <option key={g.name}>{g.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <span />
-                <button type="submit" className="btn primary">
-                  Send invite
-                </button>
-                <button
-                  type="button"
-                  className="btn quiet"
-                  style={{ justifySelf: "start" }}
-                  onClick={() => setInviting(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-              <p className="hint">
-                They get an email with a link. Until they accept, they are listed as invited and can open nothing.
-              </p>
-            </form>
+            <Card className="panel form">
+              <form className="contents" onSubmit={invite} aria-label="Invite user">
+                <h2>Invite a user</h2>
+                <div className="add share">
+                  <Label className="field">
+                    Email
+                    <Input
+                      name="email"
+                      type="email"
+                      required
+                      autoFocus
+                      placeholder="name@acme.example"
+                      autoComplete="off"
+                      style={{ width: 260 }}
+                    />
+                  </Label>
+                  <Label className="field">
+                    Role
+                    <Dropdown name="role" defaultValue="Member">
+                      {roles.map((r) => (
+                        <Option key={r.name}>{r.name}</Option>
+                      ))}
+                    </Dropdown>
+                  </Label>
+                  <Label className="field">
+                    Group
+                    <Dropdown name="group">
+                      {seed.groups.map((g) => (
+                        <Option key={g.name}>{g.name}</Option>
+                      ))}
+                    </Dropdown>
+                  </Label>
+                  <span />
+                  <Button type="submit">Send invite</Button>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    style={{ justifySelf: "start" }}
+                    onClick={() => setInviting(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                <p className="hint">
+                  They get an email with a link. Until they accept, they are listed as invited and can open nothing.
+                </p>
+              </form>
+            </Card>
           )}
           <div className="table-wrap">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Role</th>
-                  <th>Group</th>
-                  <th>Projects</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Group</TableHead>
+                  <TableHead>Projects</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {users.map((u) => (
-                  <tr key={u.email}>
-                    <td>
+                  <TableRow key={u.email}>
+                    <TableCell>
                       <span className="strong">{u.name}</span>
                       <br />
                       <span className="mono muted">{u.email}</span>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       {u.i === 0 ? (
                         "Owner"
                       ) : (
-                        <select
+                        <Dropdown
                           aria-label={`Role of ${u.name}`}
                           value={u.role}
-                          onChange={(e) =>
-                            setUsers((us) => us.map((x) => (x === u ? { ...x, role: e.target.value } : x)))
-                          }
+                          onChange={(e) => setUsers((us) => us.map((x) => (x === u ? { ...x, role: e } : x)))}
                         >
                           {roles.map((r) => (
-                            <option key={r.name}>{r.name}</option>
+                            <Option key={r.name}>{r.name}</Option>
                           ))}
-                        </select>
+                        </Dropdown>
                       )}
-                    </td>
-                    <td>{u.team}</td>
-                    <td className={elevated(u.role) ? "muted" : undefined}>
+                    </TableCell>
+                    <TableCell>{u.team}</TableCell>
+                    <TableCell className={elevated(u.role) ? "muted" : undefined}>
                       {u.invited ? <span className="muted">After they accept</span> : projectsOf(u)}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       {u.invited ? (
-                        <span className="badge" data-by="agent">
+                        <Badge variant="secondary" data-by="agent">
                           Invited
-                        </span>
+                        </Badge>
                       ) : (
                         <span className="muted">Active {ago(u.seen)}</span>
                       )}
-                    </td>
-                    <td className="num nowrap">
+                    </TableCell>
+                    <TableCell className="num nowrap">
                       {u.i > 0 && (
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
                           type="button"
-                          className="btn sm"
                           title="See the console as this person sees it"
                           onClick={() => {
                             acl.preview(u.i);
@@ -1186,23 +1244,25 @@ function Members({ acl, tab }: { acl: Acl; tab?: string }) {
                           }}
                         >
                           Preview as
-                        </button>
+                        </Button>
                       )}
                       {u.i !== 0 && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-(--destructive-text)"
                           type="button"
-                          className="btn sm quiet danger-text"
                           aria-label={`${u.invited ? "Cancel invite for" : "Remove"} ${u.name}`}
                           onClick={() => setUsers((us) => us.filter((x) => x !== u))}
                         >
                           {u.invited ? "Cancel invite" : "Remove"}
-                        </button>
+                        </Button>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </>
       )}
@@ -1210,33 +1270,33 @@ function Members({ acl, tab }: { acl: Acl; tab?: string }) {
       {at === "groups" && (
         <>
           <div className="table-wrap">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th>Group</th>
-                  <th>Members</th>
-                  <th>Projects the group can open</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Group</TableHead>
+                  <TableHead>Members</TableHead>
+                  <TableHead>Projects the group can open</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {seed.groups.map((g) => (
-                  <tr key={g.name}>
-                    <td>
+                  <TableRow key={g.name}>
+                    <TableCell>
                       <span className="strong">{g.name}</span>
                       <br />
                       <span className="muted">{g.about}</span>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       {users
                         .filter((u) => u.team === g.name)
                         .map((u) => u.name)
                         .join(", ")}
-                    </td>
-                    <td className="mono">{g.projects}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="mono">{g.projects}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
           <p className="hint">
             Add a group to a project and everyone in the group gets that access. Remove a person from the group and they
@@ -1248,37 +1308,37 @@ function Members({ acl, tab }: { acl: Acl; tab?: string }) {
       {at === "roles" && (
         <>
           <div className="table-wrap">
-            <table className="grid matrix">
-              <thead>
-                <tr>
-                  <th>Permission</th>
+            <Table className="matrix">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Permission</TableHead>
                   {roles.map((r) => (
-                    <th key={r.name}>{r.name}</th>
+                    <TableHead key={r.name}>{r.name}</TableHead>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {seed.permissions.map(([area, key, label], i) => (
                   <Fragment key={key}>
                     {area !== seed.permissions[i - 1]?.[0] && (
-                      <tr className="area">
-                        <th colSpan={roles.length + 1} scope="colgroup">
+                      <TableRow className="area">
+                        <TableHead colSpan={roles.length + 1} scope="colgroup">
                           {area}
-                        </th>
-                      </tr>
+                        </TableHead>
+                      </TableRow>
                     )}
-                    <tr>
-                      <td>{label}</td>
+                    <TableRow>
+                      <TableCell>{label}</TableCell>
                       {roles.map((r) => (
-                        <td key={r.name}>
+                        <TableCell key={r.name}>
                           {r.can.includes(key) ? <span className="yes">Yes</span> : <span className="muted">No</span>}
-                        </td>
+                        </TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   </Fragment>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
           <p className="hint">
             These three roles are fixed. They cover the organization; what someone may do inside one project is set by
@@ -1310,53 +1370,55 @@ function ProjectMembers({ acl, id }: { acl: Acl; id: string }) {
         sub={`People who can open ${id}. Admins manage members and settings, developers change secrets and grants, viewers only read names and activity.`}
       />
       <div className="table-wrap">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role in this project</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Role in this project</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {added.map((m) => (
-              <tr key={m.email}>
-                <td className="strong">{m.name}</td>
-                <td className="mono">{m.email}</td>
-                <td>
-                  <select
+              <TableRow key={m.email}>
+                <TableCell className="strong">{m.name}</TableCell>
+                <TableCell className="mono">{m.email}</TableCell>
+                <TableCell>
+                  <Dropdown
                     aria-label={`Role of ${m.name}`}
                     value={here[m.email]}
-                    onChange={(e) => set(m.email, e.target.value as seed.ProjectRole)}
+                    onChange={(e) => set(m.email, e as seed.ProjectRole)}
                   >
                     {ROLES.map((r) => (
-                      <option key={r}>{r}</option>
+                      <Option key={r}>{r}</Option>
                     ))}
-                  </select>
-                </td>
-                <td className="num">
-                  <button
+                  </Dropdown>
+                </TableCell>
+                <TableCell className="num">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-(--destructive-text)"
                     type="button"
-                    className="btn sm quiet danger-text"
                     aria-label={`Remove ${m.name} from ${id}`}
                     onClick={() => set(m.email)}
                   >
                     Remove
-                  </button>
-                </td>
-              </tr>
+                  </Button>
+                </TableCell>
+              </TableRow>
             ))}
             {admins.map((m) => (
-              <tr key={m.email}>
-                <td className="strong">{m.name}</td>
-                <td className="mono">{m.email}</td>
-                <td className="muted">Admin, as organization {m.role.toLowerCase()}</td>
-                <td />
-              </tr>
+              <TableRow key={m.email}>
+                <TableCell className="strong">{m.name}</TableCell>
+                <TableCell className="mono">{m.email}</TableCell>
+                <TableCell className="muted">Admin, as organization {m.role.toLowerCase()}</TableCell>
+                <TableCell />
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       {free.length > 0 && (
         <form
@@ -1368,21 +1430,21 @@ function ProjectMembers({ acl, id }: { acl: Acl; id: string }) {
             set(String(f.get("who")), f.get("role") as seed.ProjectRole);
           }}
         >
-          <select name="who" aria-label="Member">
+          <Dropdown name="who" aria-label="Member">
             {free.map((m) => (
-              <option key={m.email} value={m.email}>
+              <Option key={m.email} value={m.email}>
                 {m.name}
-              </option>
+              </Option>
             ))}
-          </select>
-          <select name="role" aria-label="Role" defaultValue="Developer">
+          </Dropdown>
+          <Dropdown name="role" aria-label="Role" defaultValue="Developer">
             {ROLES.map((r) => (
-              <option key={r}>{r}</option>
+              <Option key={r}>{r}</Option>
             ))}
-          </select>
-          <button type="submit" className="btn sm">
+          </Dropdown>
+          <Button variant="outline" size="sm" type="submit">
             Add to project
-          </button>
+          </Button>
         </form>
       )}
     </section>
@@ -1405,24 +1467,20 @@ function Welcome({ pick }: { pick: (i: number) => void }) {
         title="Create a workspace"
         sub="A workspace holds your projects, agents and people. You can add people later, so start with whichever fits today."
       />
-      <fieldset className="seg inline">
-        <legend className="sr-only">Who is this workspace for</legend>
+      <ToggleGroup type="single" value={String(who)} aria-label="Who is this workspace for">
         {WHO.map((w, i) => (
-          <label key={w}>
-            <input type="radio" name="who" checked={who === i} onChange={() => setWho(i)} />
+          <ToggleGroupItem key={w} size="sm" value={String(i)} onClick={() => setWho(i)}>
             {w}
-          </label>
+          </ToggleGroupItem>
         ))}
-      </fieldset>
+      </ToggleGroup>
       <div className="add" style={{ margin: "16px 0 20px", gridTemplateColumns: "auto 1fr" }}>
-        <label className="field">
+        <Label className="field">
           {who === 0 ? "Workspace name" : "Organization name"}
-          <input required autoFocus placeholder={who === 0 ? "Tomer" : "Acme"} autoComplete="off" />
-        </label>
+          <Input required autoFocus placeholder={who === 0 ? "Tomer" : "Acme"} autoComplete="off" />
+        </Label>
       </div>
-      <button type="submit" className="btn primary">
-        Create workspace
-      </button>
+      <Button type="submit">Create workspace</Button>
     </form>
   );
 }
@@ -1480,29 +1538,30 @@ function Overview({ db }: { db: Db }) {
         title="Sessions"
         sub="What agents hold right now, and until when. A session is a 15-minute token; revoking it stops the agent at once."
       >
-        <button
+        <Button
+          variant="ghost"
+          className="text-(--destructive-text)"
           type="button"
-          className="btn quiet danger-text"
           disabled={!live.length}
           onClick={() => db.revoke(live.map((s) => s.id))}
         >
           Revoke all
-        </button>
+        </Button>
         {db.paused ? (
-          <button type="button" className="btn primary" onClick={db.resume}>
+          <Button type="button" onClick={db.resume}>
             <Icon name="unlock" />
             Resume agents
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
+            variant="destructive"
             type="button"
-            className="btn danger"
             title="Revokes every session and stops new tokens until you resume"
             onClick={db.pause}
           >
             <Icon name="lock" />
             Pause agents
-          </button>
+          </Button>
         )}
       </Head>
       <div className="sec-h">
@@ -1561,15 +1620,17 @@ function Overview({ db }: { db: Db }) {
             <span className="r mono left" title={`Token expires ${clock(s.expires)}`}>
               {left(s.expires - NOW)}
             </span>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              className="reveal text-(--destructive-text)"
               type="button"
-              className="btn sm quiet danger-text reveal"
               aria-label={`Revoke ${s.agent} session ${s.id}`}
               disabled={striking !== null}
               onClick={() => revokeOne(s.id)}
             >
               Revoke
-            </button>
+            </Button>
           </div>
         ))}
         {ended.length > 0 && (
@@ -1630,81 +1691,99 @@ const Log = ({ events }: { events: seed.Event[] }) =>
 /** Inside a project the sidebar belongs to that project; this switches to a sibling or back to the list. */
 /** Inside a product space: jump to another product without going back to Home. */
 function ProductSwitch({ id }: { id: string }) {
-  const ref = useRef<HTMLDetailsElement>(null);
-  const close = () => {
-    ref.current!.open = false;
-  };
   const at = seed.products.find((x) => x.id === id)!;
   return (
-    <details className="ws" ref={ref} {...dismiss}>
-      <summary className="org" title="Switch product">
-        <span className="pic" data-tint={at.tint}>
-          <Icon name={at.icon} />
-        </span>
-        <span>
-          {at.name}
-          <small>Product</small>
-        </span>
-        <Chevrons />
-      </summary>
-      <div className="ws-menu">
-        {seed.products.map((x) => (
-          <a key={x.id} href={x.href ?? `#/app/${x.id}`} aria-current={x.id === id || undefined} onClick={close}>
-            <span className="pic" data-tint={x.tint}>
-              <Icon name={x.icon} />
-            </span>
-            {x.name}
-            {x.id === id ? <Check /> : !built(x) && <span className="badge">Planned</span>}
-          </a>
-        ))}
-      </div>
-    </details>
+    <Selector
+      title="Switch product"
+      summary={
+        <>
+          <span className="pic" data-tint={at.tint}>
+            <Icon name={at.icon} />
+          </span>
+          <span>
+            {at.name}
+            <small>Product</small>
+          </span>
+          <Chevrons />
+        </>
+      }
+    >
+      {(shut) => (
+        <>
+          {seed.products.map((x) => (
+            <a key={x.id} href={x.href ?? `#/app/${x.id}`} aria-current={x.id === id || undefined} onClick={shut}>
+              <span className="pic" data-tint={x.tint}>
+                <Icon name={x.icon} />
+              </span>
+              {x.name}
+              {x.id === id ? <Check /> : !built(x) && <Badge variant="secondary">Planned</Badge>}
+            </a>
+          ))}
+        </>
+      )}
+    </Selector>
   );
 }
 
 function ProjectSwitch({ id, tab, can }: { id: string; tab: string; can: (projectId: string) => boolean }) {
-  const ref = useRef<HTMLDetailsElement>(null);
   const [q, setQ] = useState("");
-  const close = () => {
-    ref.current!.open = false;
-    setQ("");
-  };
   const found = seed.projects.filter((x) => can(x.id) && x.id.includes(q.trim().toLowerCase()));
   return (
-    <details className="ws" ref={ref} {...dismiss}>
-      <summary className="org" title="Switch project">
-        <span className="av">{id[0]!.toUpperCase()}</span>
-        <span>
-          {id}
-          <small>Project</small>
-        </span>
-        <Chevrons />
-      </summary>
-      <div className="ws-menu">
-        <input
-          type="search"
-          aria-label="Find a project"
-          placeholder="Find a project"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        {/* Switching keeps the page you are on, so Access stays Access in the next project. */}
-        {found.map((x) => (
-          <a key={x.id} href={`#/secrets/${x.id}/${tab}`} aria-current={x.id === id || undefined} onClick={close}>
-            <span className="av">{x.id[0]!.toUpperCase()}</span>
-            {x.id}
-            {x.id === id && <Check />}
-          </a>
-        ))}
-        {found.length === 0 && <p className="muted small">No project matches “{q}”.</p>}
-        <a className="all" href="#/secrets" onClick={close}>
-          <span className="av">
-            <Icon name="grid" />
+    <Selector
+      title="Switch project"
+      summary={
+        <>
+          <span className="av">{id[0]!.toUpperCase()}</span>
+          <span>
+            {id}
+            <small>Project</small>
           </span>
-          All projects
-        </a>
-      </div>
-    </details>
+          <Chevrons />
+        </>
+      }
+    >
+      {(shut) => (
+        <>
+          <Input
+            type="search"
+            aria-label="Find a project"
+            placeholder="Find a project"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          {/* Switching keeps the page you are on, so Access stays Access in the next project. */}
+          {found.map((x) => (
+            <a
+              key={x.id}
+              href={`#/secrets/${x.id}/${tab}`}
+              aria-current={x.id === id || undefined}
+              onClick={() => {
+                shut();
+                setQ("");
+              }}
+            >
+              <span className="av">{x.id[0]!.toUpperCase()}</span>
+              {x.id}
+              {x.id === id && <Check />}
+            </a>
+          ))}
+          {found.length === 0 && <p className="muted small">No project matches “{q}”.</p>}
+          <a
+            className="all"
+            href="#/secrets"
+            onClick={() => {
+              shut();
+              setQ("");
+            }}
+          >
+            <span className="av">
+              <Icon name="grid" />
+            </span>
+            All projects
+          </a>
+        </>
+      )}
+    </Selector>
   );
 }
 
@@ -1717,27 +1796,29 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
         <p className="state">No agent has access to anything in this project.</p>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Secret</th>
-                <th>Environment</th>
-                <th>Expires</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Agent</TableHead>
+                <TableHead>Secret</TableHead>
+                <TableHead>Environment</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map(({ s, g }) => (
-                <tr key={s.id + g.agent}>
-                  <td className="strong">{g.agent}</td>
-                  <td className="mono">{s.name}</td>
-                  <td className={s.env === "production" ? "prod" : undefined}>{s.env}</td>
-                  <td className="muted">{until(g.expires)}</td>
-                  <td className="num">
-                    <button
+                <TableRow key={s.id + g.agent}>
+                  <TableCell className="strong">{g.agent}</TableCell>
+                  <TableCell className="mono">{s.name}</TableCell>
+                  <TableCell className={s.env === "production" ? "prod" : undefined}>{s.env}</TableCell>
+                  <TableCell className="muted">{until(g.expires)}</TableCell>
+                  <TableCell className="num">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
                       type="button"
-                      className="btn sm quiet danger-text"
                       aria-label={`Revoke ${g.agent} from ${s.name} in ${s.env}`}
                       onClick={() =>
                         db.setSecrets((ss) =>
@@ -1746,12 +1827,12 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
                       }
                     >
                       Revoke
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -1765,7 +1846,7 @@ function ProjectSettings({ p }: { p: seed.Project }) {
   return (
     <section>
       <Head title="Settings" sub={`The environments of ${p.id}, its description, and deleting it.`} />
-      <div className="panel form">
+      <Card className="panel form">
         <h2>Environments</h2>
         <p className="muted">
           Each environment holds its own set of secrets. The last one is treated as production: access to it can be made
@@ -1775,38 +1856,43 @@ function ProjectSettings({ p }: { p: seed.Project }) {
           {envs.map((e, i) => (
             <li key={e}>
               <span className="mono">{e}</span>
-              {i === envs.length - 1 && <span className="badge">Production</span>}
+              {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
               {envs.length > 1 && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-(--destructive-text)"
                   type="button"
-                  className="btn sm quiet danger-text"
                   aria-label={`Remove environment ${e}`}
                   onClick={() => setGone(e)}
                 >
                   Remove
-                </button>
+                </Button>
               )}
             </li>
           ))}
         </ul>
         {gone && (
-          <p className="alert" role="alert">
-            Removing {gone} deletes every secret in it and the access agents have to them.
-            <button
-              type="button"
-              className="btn sm danger"
-              style={{ marginLeft: "auto" }}
-              onClick={() => {
-                setEnvs((x) => x.filter((e) => e !== gone));
-                setGone(null);
-              }}
-            >
-              Remove {gone}
-            </button>
-            <button type="button" className="btn sm quiet" onClick={() => setGone(null)}>
-              Keep
-            </button>
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>
+              Removing {gone} deletes every secret in it and the access agents have to them.
+              <Button
+                variant="destructive"
+                size="sm"
+                type="button"
+                style={{ marginLeft: "auto" }}
+                onClick={() => {
+                  setEnvs((x) => x.filter((e) => e !== gone));
+                  setGone(null);
+                }}
+              >
+                Remove {gone}
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setGone(null)}>
+                Keep
+              </Button>
+            </AlertDescription>
+          </Alert>
         )}
         <form
           className="inline-form"
@@ -1821,7 +1907,7 @@ function ProjectSettings({ p }: { p: seed.Project }) {
             f.reset();
           }}
         >
-          <input
+          <Input
             name="env"
             required
             aria-label="New environment name"
@@ -1829,41 +1915,43 @@ function ProjectSettings({ p }: { p: seed.Project }) {
             autoComplete="off"
             spellCheck={false}
           />
-          <button type="submit" className="btn sm">
+          <Button variant="outline" size="sm" type="submit">
             Add environment
-          </button>
+          </Button>
         </form>
-      </div>
-      <form className="panel form" onSubmit={(e) => e.preventDefault()}>
-        <h2>Description</h2>
-        <div className="add" style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}>
-          <label className="field">
-            What this project is
-            <input defaultValue={p.description} style={{ width: "100%" }} />
-          </label>
-          <button type="submit" className="btn">
-            Save
-          </button>
-        </div>
-      </form>
-      <div className="panel">
+      </Card>
+      <Card className="panel form">
+        <form className="contents" onSubmit={(e) => e.preventDefault()}>
+          <h2>Description</h2>
+          <div className="add" style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}>
+            <Label className="field">
+              What this project is
+              <Input defaultValue={p.description} style={{ width: "100%" }} />
+            </Label>
+            <Button variant="outline" type="submit">
+              Save
+            </Button>
+          </div>
+        </form>
+      </Card>
+      <Card className="panel">
         <h2>Delete project</h2>
         <p className="muted">
           Deletes every secret and grant in {p.id}. Agents lose access at once. This cannot be undone.
         </p>
         <div className="inline-form" style={{ marginTop: 12 }}>
-          <input
+          <Input
             aria-label={`Type ${p.id} to confirm`}
             placeholder={`Type ${p.id} to confirm`}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             autoComplete="off"
           />
-          <button type="button" className="btn danger" disabled={confirm !== p.id}>
+          <Button variant="destructive" type="button" disabled={confirm !== p.id}>
             Delete project
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     </section>
   );
 }
@@ -1881,10 +1969,10 @@ function Projects({ db, acl }: { db: Db; acl: Acl }) {
         }
       >
         {acl.isAdmin && (
-          <button type="button" className="btn primary">
+          <Button type="button">
             <Icon name="plus" />
             New project
-          </button>
+          </Button>
         )}
       </Head>
       {mine.length === 0 && (
@@ -1974,76 +2062,68 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
     <section>
       <Head title="Secrets" sub={p.description} />
       <div className="toolbar">
-        <fieldset className="seg inline">
-          <legend className="sr-only">Environment</legend>
+        <ToggleGroup type="single" value={env ?? ""} aria-label="Environment">
           {p.envs.map((v) => (
-            <label key={v}>
-              <input
-                type="radio"
-                name="env"
-                checked={v === env}
-                onChange={() => {
-                  location.hash = `#/secrets/${id}/secrets/${v}`;
-                  setOpen(null);
-                }}
-              />
+            <ToggleGroupItem
+              key={v}
+              size="sm"
+              value={v}
+              onClick={() => {
+                location.hash = `#/secrets/${id}/secrets/${v}`;
+                setOpen(null);
+              }}
+            >
               <span className={v === "production" ? "prod" : undefined}>{v}</span>
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
         <label className="search push">
           <span className="sr-only">Find a secret</span>
           <Icon name="search" />
-          <input type="search" placeholder="Find a secret" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input type="search" placeholder="Find a secret" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
-        <button
+        <Button
           type="button"
-          className="btn primary"
           onClick={() => setAdding(true)}
           disabled={adding || role === "Viewer"}
           title={role === "Viewer" ? "Viewers cannot add secrets" : undefined}
         >
           <Icon name="plus" />
           Add secret
-        </button>
+        </Button>
       </div>
 
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add secret">
-          <h2>Add a secret to {env}</h2>
-          <div className="add">
-            <label className="field">
-              Name
-              <input
-                name="name"
-                required
-                autoFocus
-                placeholder="STRIPE_SECRET_KEY"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
-            <label className="field">
-              Value
-              <input name="value" type="password" required autoComplete="off" placeholder="Paste the value" />
-            </label>
-            <button type="submit" className="btn primary">
-              Save secret
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              style={{ justifySelf: "start" }}
-              onClick={() => setAdding(false)}
-            >
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            The value is encrypted in this browser before it is sent. After you save it, nobody can read it back here:
-            not you, not an agent. It can only be replaced by a new version.
-          </p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add secret">
+            <h2>Add a secret to {env}</h2>
+            <div className="add">
+              <Label className="field">
+                Name
+                <Input
+                  name="name"
+                  required
+                  autoFocus
+                  placeholder="STRIPE_SECRET_KEY"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Label>
+              <Label className="field">
+                Value
+                <Input name="value" type="password" required autoComplete="off" placeholder="Paste the value" />
+              </Label>
+              <Button type="submit">Save secret</Button>
+              <Button variant="ghost" type="button" style={{ justifySelf: "start" }} onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              The value is encrypted in this browser before it is sent. After you save it, nobody can read it back here:
+              not you, not an agent. It can only be replaced by a new version.
+            </p>
+          </form>
+        </Card>
       )}
 
       {rows.length === 0 ? (
@@ -2065,22 +2145,23 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
         </div>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Version</th>
-                <th>Updated</th>
-                <th>Agents with access</th>
-                <th>Last used</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead>Agents with access</TableHead>
+                <TableHead>Last used</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((s) => (
                 <Fragment key={s.id}>
-                  <tr>
-                    <td>
-                      <button
+                  <TableRow>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
                         type="button"
                         className="cell-btn"
                         aria-expanded={open === s.id}
@@ -2088,30 +2169,30 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
                       >
                         <Icon name="arrow" />
                         {s.name}
-                      </button>
-                    </td>
-                    <td className="mono">v{s.version}</td>
-                    <td>{ago(s.updated)}</td>
-                    <td>
+                      </Button>
+                    </TableCell>
+                    <TableCell className="mono">v{s.version}</TableCell>
+                    <TableCell>{ago(s.updated)}</TableCell>
+                    <TableCell>
                       {s.grants.length ? (
                         s.grants.map((g) => g.agent).join(", ")
                       ) : (
                         <span className="muted">No agent</span>
                       )}
-                    </td>
-                    <td className={s.lastUsed === null ? "muted" : undefined}>{ago(s.lastUsed)}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className={s.lastUsed === null ? "muted" : undefined}>{ago(s.lastUsed)}</TableCell>
+                  </TableRow>
                   {open === s.id && (
-                    <tr className="detail">
-                      <td colSpan={5}>
+                    <TableRow className="detail">
+                      <TableCell colSpan={5}>
                         <SecretDetail s={s} db={db} patch={(f) => patch(s.id, f)} />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                 </Fragment>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -2145,36 +2226,38 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
             <li key={g.agent}>
               <span className="strong">{g.agent}</span>
               <span className="muted small">relay · {until(g.expires)}</span>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-(--destructive-text)"
                 type="button"
-                className="btn sm quiet danger-text"
                 onClick={() => {
                   patch((x) => ({ ...x, grants: x.grants.filter((y) => y !== g) }));
                   db.say(`Revoked ${g.agent} from ${s.name}`);
                 }}
               >
                 Revoke
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
         {free.length > 0 && (
           <form className="inline-form" onSubmit={grant}>
-            <select name="agent" aria-label="Agent">
+            <Dropdown name="agent" aria-label="Agent">
               {free.map((a) => (
-                <option key={a.name}>{a.name}</option>
+                <Option key={a.name}>{a.name}</Option>
               ))}
-            </select>
-            <select name="expiry" aria-label="Expiry" defaultValue={1}>
+            </Dropdown>
+            <Dropdown name="expiry" aria-label="Expiry" defaultValue={1}>
               {EXPIRY.map(([l], i) => (
-                <option key={l} value={i}>
+                <Option key={l} value={i}>
                   {l}
-                </option>
+                </Option>
               ))}
-            </select>
-            <button type="submit" className="btn sm">
+            </Dropdown>
+            <Button variant="outline" size="sm" type="submit">
               Grant access
-            </button>
+            </Button>
           </form>
         )}
       </div>
@@ -2200,7 +2283,7 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
               setRotating(false);
             }}
           >
-            <input
+            <Input
               type="password"
               required
               autoFocus
@@ -2208,18 +2291,18 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
               aria-label="New value"
               placeholder="Paste the new value"
             />
-            <button type="submit" className="btn sm">
+            <Button variant="outline" size="sm" type="submit">
               Save v{s.version + 1}
-            </button>
-            <button type="button" className="btn sm quiet" onClick={() => setRotating(false)}>
+            </Button>
+            <Button variant="ghost" size="sm" type="button" onClick={() => setRotating(false)}>
               Cancel
-            </button>
+            </Button>
           </form>
         ) : (
-          <button type="button" className="btn sm" onClick={() => setRotating(true)}>
+          <Button variant="outline" size="sm" type="button" onClick={() => setRotating(true)}>
             <Icon name="rotate" />
             New version
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -2258,46 +2341,48 @@ function Agents({ db }: { db: Db }) {
         title="Agents"
         sub="An agent is an identity you enroll on one machine. It uses secrets through the gateway and never receives a value."
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           New agent
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={create} aria-label="New agent">
-          <h2>New agent</h2>
-          <div className="add">
-            <label className="field">
-              Name
-              <input name="name" required autoFocus placeholder="claude-laptop" autoComplete="off" spellCheck={false} />
-            </label>
-            <label className="field">
-              What it is for
-              <input name="description" placeholder="Claude Code on my laptop" autoComplete="off" />
-            </label>
-            <button type="submit" className="btn primary">
-              Create agent
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              style={{ justifySelf: "start" }}
-              onClick={() => setAdding(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={create} aria-label="New agent">
+            <h2>New agent</h2>
+            <div className="add">
+              <Label className="field">
+                Name
+                <Input
+                  name="name"
+                  required
+                  autoFocus
+                  placeholder="claude-laptop"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Label>
+              <Label className="field">
+                What it is for
+                <Input name="description" placeholder="Claude Code on my laptop" autoComplete="off" />
+              </Label>
+              <Button type="submit">Create agent</Button>
+              <Button variant="ghost" type="button" style={{ justifySelf: "start" }} onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
       )}
       {once && (
-        <div className="panel once" role="status">
+        <Card className="panel once" role="status">
           <h2>Enroll {once} now</h2>
           <p>Run this on the agent's machine. The enrollment secret is shown once and cannot be retrieved again.</p>
           <code className="block">smith agent enroll --name {once} --secret lse_sample_not_a_real_secret</code>
-          <button type="button" className="btn sm" style={{ marginTop: 12 }} onClick={() => setOnce(null)}>
+          <Button variant="outline" size="sm" type="button" style={{ marginTop: 12 }} onClick={() => setOnce(null)}>
             I have copied it
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
       <ul className="sess-list">
         {db.agents.map((a) => {
@@ -2306,7 +2391,8 @@ function Agents({ db }: { db: Db }) {
           return (
             <li key={a.name} className="sess">
               <div className="sess-main">
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   className="sess-toggle"
                   aria-expanded={open === a.name}
@@ -2324,7 +2410,7 @@ function Agents({ db }: { db: Db }) {
                       {a.description} · {a.machine}
                     </span>
                   </span>
-                </button>
+                </Button>
                 <span className="muted small">{plural(gs.length, "secret")}</span>
                 <span className="r muted small nowrap">{ago(a.lastSeen)}</span>
                 <span />
@@ -2347,9 +2433,11 @@ function Agents({ db }: { db: Db }) {
                             <span className="muted small">
                               {s.project} / {s.env} · {until(s.grants.find((g) => g.agent === a.name)!.expires)}
                             </span>
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-(--destructive-text)"
                               type="button"
-                              className="btn sm quiet danger-text"
                               onClick={() =>
                                 db.setSecrets((ss) =>
                                   ss.map((x) =>
@@ -2359,7 +2447,7 @@ function Agents({ db }: { db: Db }) {
                               }
                             >
                               Revoke
-                            </button>
+                            </Button>
                           </li>
                         ))}
                       </ul>
@@ -2367,20 +2455,22 @@ function Agents({ db }: { db: Db }) {
                   </dd>
                   <dt>Enrollment</dt>
                   <dd className="inline-form">
-                    <button type="button" className="btn sm" onClick={() => setOnce(a.name)}>
+                    <Button variant="outline" size="sm" type="button" onClick={() => setOnce(a.name)}>
                       <Icon name="rotate" />
                       Rotate enrollment secret
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
                       type="button"
-                      className="btn sm quiet danger-text"
                       onClick={() => {
                         db.setAgents((as) => as.filter((x) => x !== a));
                         db.say(`Removed ${a.name}`);
                       }}
                     >
                       Remove agent
-                    </button>
+                    </Button>
                   </dd>
                 </dl>
               )}

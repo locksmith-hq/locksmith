@@ -1,5 +1,14 @@
 // Certificates product: issue, renew and revoke X.509 certificates from your own authorities (sample data only).
 // All data lives in module-level stores, so every page and detail view sees the same certificates, authorities and settings.
+import { Checkbox } from "@locksmith-hq/checkbox";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { Fragment, useState } from "react";
 import {
   createStore,
@@ -299,9 +308,9 @@ function NotFound({ trail, what, tab, list }: { trail: string; what: string; tab
         title={`${trail} not found`}
         sub={`There is no ${what} at this address. It may have been removed, or the link is mistyped.`}
       >
-        <a className="btn primary" href={href(tab)}>
-          Back to {list.toLowerCase()}
-        </a>
+        <Button asChild>
+          <a href={href(tab)}>Back to {list.toLowerCase()}</a>
+        </Button>
       </Head>
       <Empty icon="doc">
         <b>Nothing to show.</b> Go back to the list and pick another one.
@@ -362,95 +371,99 @@ function IssueForm({ onDone, say }: { onDone: () => void; say: Say }) {
     onDone();
   };
   return (
-    <form className="panel form" onSubmit={submit} aria-label="Issue certificate">
-      <h2>Issue a certificate</h2>
-      <div className="add certs">
-        <label className="field">
-          Authority
-          <select
-            value={caId}
-            onChange={(e) => {
-              setCaId(e.target.value);
-              setErr("");
-            }}
-          >
-            {issuers.map((a) => (
-              <option key={a.id} value={a.id} disabled={!live(a)}>
-                {a.name}
-                {live(a) ? "" : " (disabled)"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Profile
-          <select
-            value={profile?.id ?? ""}
-            onChange={(e) => {
-              setProfileId(e.target.value);
-              setDayText(null);
-              setErr("");
-            }}
-          >
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Name
-          <input
-            name="name"
-            required
-            autoFocus
-            autoComplete="off"
-            placeholder={profile?.pattern.replace("*", "app")}
-            onChange={() => setErr("")}
-          />
-        </label>
-        <label className="field">
-          Valid for (days)
-          <input
-            className="num-in"
-            type="number"
-            min={1}
-            value={dayValue}
-            onChange={(e) => {
-              setDayText(e.target.value);
-              setErr("");
-            }}
-          />
-        </label>
-        <button type="submit" className="btn primary" disabled={!caOk || !profile}>
-          Issue certificate
-        </button>
-        <button type="button" className="btn quiet" onClick={onDone}>
-          Cancel
-        </button>
-      </div>
-      {err && (
-        <p className="field-err" role="alert">
-          {err}
-        </p>
-      )}
-      {ca && !caOk && (
-        <p className="alert" role="alert">
-          {ca.name} is disabled, so it cannot issue certificates.{" "}
-          <A tab="authorities" id={ca.id}>
-            Open it to enable it
-          </A>
-          .
-        </p>
-      )}
-      {profile && caOk && (
-        <p className="hint">
-          {profile.name} allows {profile.pattern}, up to {plural(profile.maxDays, "day")}.{" "}
-          {profile.approval ? "A second person must approve it before it is issued." : "It is issued straight away."}
-        </p>
-      )}
-    </form>
+    <Card className="panel form">
+      <form className="contents" onSubmit={submit} aria-label="Issue certificate">
+        <h2>Issue a certificate</h2>
+        <div className="add certs">
+          <Label className="field">
+            Authority
+            <Dropdown
+              value={caId}
+              onChange={(e) => {
+                setCaId(e);
+                setErr("");
+              }}
+            >
+              {issuers.map((a) => (
+                <Option key={a.id} value={a.id} disabled={!live(a)}>
+                  {a.name}
+                  {live(a) ? "" : " (disabled)"}
+                </Option>
+              ))}
+            </Dropdown>
+          </Label>
+          <Label className="field">
+            Profile
+            <Dropdown
+              value={profile?.id ?? ""}
+              onChange={(e) => {
+                setProfileId(e);
+                setDayText(null);
+                setErr("");
+              }}
+            >
+              {profiles.map((p) => (
+                <Option key={p.id} value={p.id}>
+                  {p.name}
+                </Option>
+              ))}
+            </Dropdown>
+          </Label>
+          <Label className="field">
+            Name
+            <Input
+              name="name"
+              required
+              autoFocus
+              autoComplete="off"
+              placeholder={profile?.pattern.replace("*", "app")}
+              onChange={() => setErr("")}
+            />
+          </Label>
+          <Label className="field">
+            Valid for (days)
+            <Input
+              className="num-in"
+              type="number"
+              min={1}
+              value={dayValue}
+              onChange={(e) => {
+                setDayText(e.target.value);
+                setErr("");
+              }}
+            />
+          </Label>
+          <Button type="submit" disabled={!caOk || !profile}>
+            Issue certificate
+          </Button>
+          <Button variant="ghost" type="button" onClick={onDone}>
+            Cancel
+          </Button>
+        </div>
+        {err && (
+          <p className="field-err" role="alert">
+            {err}
+          </p>
+        )}
+        {ca && !caOk && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {ca.name} is disabled, so it cannot issue certificates.{" "}
+              <A tab="authorities" id={ca.id}>
+                Open it to enable it
+              </A>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
+        {profile && caOk && (
+          <p className="hint">
+            {profile.name} allows {profile.pattern}, up to {plural(profile.maxDays, "day")}.{" "}
+            {profile.approval ? "A second person must approve it before it is issued." : "It is issued straight away."}
+          </p>
+        )}
+      </form>
+    </Card>
   );
 }
 
@@ -489,10 +502,10 @@ function CertList({ say }: { say: Say }) {
         title="Certificates"
         sub="Every certificate your authorities have issued, with the ones closest to expiry first."
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Issue certificate
-        </button>
+        </Button>
       </Head>
       {adding && <IssueForm onDone={() => setAdding(false)} say={say} />}
       <h2 className="ct-h">Waiting for approval</h2>
@@ -525,18 +538,21 @@ function CertList({ say }: { say: Say }) {
                   </p>
                 </div>
                 <span className="meta">
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
-                    className="btn sm"
                     disabled={off || !p}
                     aria-label={`Approve ${r.name}`}
                     onClick={() => approve(r)}
                   >
                     Approve
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-(--destructive-text)"
                     type="button"
-                    className="btn sm quiet danger-text"
                     aria-label={`Decline ${r.name}`}
                     onClick={() => {
                       setPending((x) => x.filter((y) => y.id !== r.id));
@@ -544,7 +560,7 @@ function CertList({ say }: { say: Say }) {
                     }}
                   >
                     Decline
-                  </button>
+                  </Button>
                 </span>
               </li>
             );
@@ -556,20 +572,18 @@ function CertList({ say }: { say: Say }) {
         <label className="search">
           <span className="sr-only">Search by name</span>
           <Icon name="search" />
-          <input type="search" placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input type="search" placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
-        <fieldset className="seg inline">
-          <legend className="sr-only">Status</legend>
+        <ToggleGroup type="single" value={String(filter)} aria-label="Status">
           {(["All", "Valid", "Expiring soon", "Expired", "Revoked"] as const).map((s) => (
-            <label key={s}>
-              <input type="radio" name="status" checked={filter === s} onChange={() => setFilter(s)} />
+            <ToggleGroupItem key={s} size="sm" value={String(s)} onClick={() => setFilter(s)}>
               {s}
               <span className="n">
                 {s === "All" ? base.length : base.filter((c) => status(c, cfg.window) === s).length}
               </span>
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
       </div>
       <p className="sr-only" role="status">
         {plural(shown.length, "certificate")} shown, sorted by expiry, {dir === 1 ? "soonest first" : "latest first"}.
@@ -579,9 +593,9 @@ function CertList({ say }: { say: Say }) {
           {filtered ? (
             <>
               <b>No certificates match.</b>{" "}
-              <button type="button" className="btn sm" onClick={clear}>
+              <Button variant="outline" size="sm" type="button" onClick={clear}>
                 Clear search and filters
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -591,37 +605,43 @@ function CertList({ say }: { say: Say }) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Issued for</th>
-                <th>Authority</th>
-                <th>Used for</th>
-                <th aria-sort={dir === 1 ? "ascending" : "descending"}>
-                  <button type="button" className="ct-sort" data-dir={dir} onClick={() => setDir(dir === 1 ? -1 : 1)}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Issued for</TableHead>
+                <TableHead>Authority</TableHead>
+                <TableHead>Used for</TableHead>
+                <TableHead aria-sort={dir === 1 ? "ascending" : "descending"}>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className="ct-sort"
+                    data-dir={dir}
+                    onClick={() => setDir(dir === 1 ? -1 : 1)}
+                  >
                     Expires
                     <Icon name="arrow" />
-                  </button>
-                </th>
-                <th>Status</th>
-                <th>
+                  </Button>
+                </TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {shown.map((c) => {
                 const st = status(c, cfg.window),
                   cs = chainOf(auths, c.ca).at(-1),
                   blocked = stuck(c, auths);
                 return (
-                  <tr key={c.id} data-bad={st === "Expiring soon" || st === "Expired"}>
-                    <td>
+                  <TableRow key={c.id} data-bad={st === "Expiring soon" || st === "Expired"}>
+                    <TableCell>
                       <a className="ct-link mono" href={href("certificates", c.id)}>
                         {c.name}
                       </a>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       {cs ? (
                         <A tab="authorities" id={cs.id}>
                           {cs.name}
@@ -629,16 +649,16 @@ function CertList({ say }: { say: Say }) {
                       ) : (
                         "Removed authority"
                       )}
-                    </td>
-                    <td>{c.use}</td>
-                    <td className={st === "Revoked" ? "muted" : undefined}>
+                    </TableCell>
+                    <TableCell>{c.use}</TableCell>
+                    <TableCell className={st === "Revoked" ? "muted" : undefined}>
                       {st === "Revoked"
                         ? "Not applicable"
                         : c.expires <= NOW
                           ? ago(c.expires)
                           : `${inTime(c.expires)} (${date(c.expires)})`}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       <Stat s={st} />
                       {blocked && st !== "Revoked" && (
                         <>
@@ -646,12 +666,13 @@ function CertList({ say }: { say: Say }) {
                           <Stat s="Cannot renew" />
                         </>
                       )}
-                    </td>
-                    <td className="num">
+                    </TableCell>
+                    <TableCell className="num">
                       {st !== "Revoked" && !blocked && (
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
                           type="button"
-                          className="btn sm"
                           aria-label={`Renew ${c.name}`}
                           onClick={() => {
                             const d = renewWith(setCerts, c, profiles, cfg);
@@ -660,14 +681,14 @@ function CertList({ say }: { say: Say }) {
                         >
                           <Icon name="rotate" />
                           Renew
-                        </button>
+                        </Button>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -713,21 +734,23 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
         sub={`${c.use} certificate from ${ca?.name ?? "a removed authority"}. ${st === "Revoked" ? `Revoked: ${c.revoked}.` : st === "Expired" ? `It expired ${ago(c.expires)}.` : `It expires ${inTime(c.expires)}.`}`}
       >
         {canRenew && (
-          <button type="button" className="btn primary" onClick={renew}>
+          <Button type="button" onClick={renew}>
             <Icon name="rotate" />
             Renew certificate
-          </button>
+          </Button>
         )}
       </Head>
       {blocked && st !== "Revoked" && (
-        <p className="alert" role="status">
-          Cannot renew: an authority in its chain is disabled. Enable it to renew this certificate. It keeps working
-          until it expires.
-        </p>
+        <Alert role="status">
+          <AlertDescription>
+            Cannot renew: an authority in its chain is disabled. Enable it to renew this certificate. It keeps working
+            until it expires.
+          </AlertDescription>
+        </Alert>
       )}
       <div className="ct-cols">
         <div className="ct-col">
-          <section className="panel" aria-labelledby="cd-facts">
+          <Card className="panel" role="region" aria-labelledby="cd-facts">
             <h2 id="cd-facts">Details</h2>
             <dl className="kv ct-kv">
               <dt>Status</dt>
@@ -792,8 +815,8 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                 <p className="muted small ct-note">{renewNote}</p>
               </dd>
             </dl>
-          </section>
-          <section className="panel" aria-labelledby="cd-names">
+          </Card>
+          <Card className="panel" role="region" aria-labelledby="cd-names">
             <h2 id="cd-names">Names it covers</h2>
             <ul className="plain">
               {[c.name, ...c.names].map((n, i) => (
@@ -803,8 +826,8 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                 </li>
               ))}
             </ul>
-          </section>
-          <section className="panel" aria-labelledby="cd-revoke">
+          </Card>
+          <Card className="panel" role="region" aria-labelledby="cd-revoke">
             <h2 id="cd-revoke">Revoke</h2>
             {c.revoked ? (
               <p className="small">
@@ -813,31 +836,33 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
             ) : (
               <>
                 <p className="muted small">Revoking stops systems trusting it within minutes.</p>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ct-gap text-(--destructive-text)"
                   type="button"
-                  className="btn sm quiet danger-text ct-gap"
                   aria-expanded={revoking}
                   onClick={() => setRevoking(!revoking)}
                 >
                   Revoke this certificate
-                </button>
+                </Button>
                 {revoking && (
                   <div className="stack ct-gap">
-                    <label className="field">
+                    <Label className="field">
                       Reason
-                      <select value={reason} onChange={(e) => setReason(e.target.value)}>
+                      <Dropdown value={reason} onChange={(e) => setReason(e)}>
                         {REASONS.map((r) => (
-                          <option key={r}>{r}</option>
+                          <Option key={r}>{r}</Option>
                         ))}
-                      </select>
-                    </label>
-                    <p className="alert" role="alert" style={{ margin: 0 }}>
-                      This cannot be undone.
-                    </p>
+                      </Dropdown>
+                    </Label>
+                    <Alert variant="destructive" style={{ margin: 0 }}>
+                      <AlertDescription>This cannot be undone.</AlertDescription>
+                    </Alert>
                     <span className="inline-form">
-                      <button
+                      <Button
+                        variant="destructive"
                         type="button"
-                        className="btn danger"
                         onClick={() => {
                           patch((x) => addEv({ ...x, revoked: reason }, "block", `Revoked: ${reason}`));
                           setRevoking(false);
@@ -845,19 +870,19 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                         }}
                       >
                         Revoke certificate
-                      </button>
-                      <button type="button" className="btn quiet" onClick={() => setRevoking(false)}>
+                      </Button>
+                      <Button variant="ghost" type="button" onClick={() => setRevoking(false)}>
                         Keep it
-                      </button>
+                      </Button>
                     </span>
                   </div>
                 )}
               </>
             )}
-          </section>
+          </Card>
         </div>
         <div className="ct-col">
-          <section className="panel" aria-labelledby="cd-chain">
+          <Card className="panel" role="region" aria-labelledby="cd-chain">
             <h2 id="cd-chain">Chain of trust</h2>
             <ol className="ct-chain">
               {chain.map((a) => (
@@ -881,16 +906,17 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                 <span className="muted small">This certificate</span>
               </li>
             </ol>
-          </section>
-          <section className="panel" aria-labelledby="cd-dl">
+          </Card>
+          <Card className="panel" role="region" aria-labelledby="cd-dl">
             <h2 id="cd-dl">Download</h2>
             <p className="muted small">
               You get the public certificate only. The private key never leaves the machine that asked for the
               certificate, so it cannot be downloaded. The file here is fake sample text.
             </p>
-            <button
+            <Button
+              variant="outline"
+              className="ct-gap"
               type="button"
-              className="btn ct-gap"
               onClick={() => {
                 download(c);
                 say(`Downloaded the certificate for ${c.name}`);
@@ -898,9 +924,9 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
             >
               <Icon name="doc" />
               Download certificate
-            </button>
-          </section>
-          <section className="panel" aria-labelledby="cd-tl">
+            </Button>
+          </Card>
+          <Card className="panel" role="region" aria-labelledby="cd-tl">
             <h2 id="cd-tl">What happened</h2>
             <ul className="plain ct-time">
               {[...c.log]
@@ -916,7 +942,7 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                   </li>
                 ))}
             </ul>
-          </section>
+          </Card>
         </div>
       </div>
     </section>
@@ -972,8 +998,8 @@ function AuthList({ say }: { say: Say }) {
         const hit = certs.filter((c) => below(auths, a.id).includes(c.ca)).length;
         return (
           <Fragment key={a.id}>
-            <tr>
-              <td>
+            <TableRow>
+              <TableCell>
                 <span className="tree-name" style={{ paddingLeft: depth * 24 }}>
                   {depth > 0 && <span className="elbow" aria-hidden="true" />}
                   <Icon name={a.kind === "Root" ? "lock" : "shield"} />
@@ -981,54 +1007,59 @@ function AuthList({ say }: { say: Say }) {
                     <b>{a.name}</b>
                   </a>
                 </span>
-              </td>
-              <td>{a.kind === "Root" ? "Root, kept offline" : "Intermediate"}</td>
-              <td className="mono">{a.key}</td>
-              <td>{date(a.until)}</td>
-              <td>{issued(a)}</td>
-              <td>
+              </TableCell>
+              <TableCell>{a.kind === "Root" ? "Root, kept offline" : "Intermediate"}</TableCell>
+              <TableCell className="mono">{a.key}</TableCell>
+              <TableCell>{date(a.until)}</TableCell>
+              <TableCell>{issued(a)}</TableCell>
+              <TableCell>
                 <Stat s={a.status} />
-              </td>
-              <td className="num">
+              </TableCell>
+              <TableCell className="num">
                 {a.kind === "Intermediate" &&
                   (a.status === "Disabled" ? (
-                    <button
+                    <Button
+                      variant="outline"
+                      size="sm"
                       type="button"
-                      className="btn sm"
                       aria-label={`Enable ${a.name}`}
                       onClick={() => setStatus(a, "Active")}
                     >
                       Enable
-                    </button>
+                    </Button>
                   ) : (
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
                       type="button"
-                      className="btn sm quiet danger-text"
                       aria-expanded={disabling === a.id}
                       aria-label={`Disable ${a.name}`}
                       onClick={() => setDisabling(disabling === a.id ? null : a.id)}
                     >
                       Disable
-                    </button>
+                    </Button>
                   ))}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
             {disabling === a.id && (
-              <tr className="detail">
-                <td colSpan={7}>
-                  <p className="alert" role="alert" style={{ margin: 0 }}>
-                    Disabling {a.name} stops it issuing, and stops{" "}
-                    {hit === 0 ? "no certificates" : plural(hit, "certificate")} from being renewed, including any under
-                    its own intermediates. They keep working until they expire.
-                    <button type="button" className="btn sm danger" onClick={() => setStatus(a, "Disabled")}>
-                      Disable authority
-                    </button>
-                    <button type="button" className="btn sm quiet" onClick={() => setDisabling(null)}>
-                      Keep it
-                    </button>
-                  </p>
-                </td>
-              </tr>
+              <TableRow className="detail">
+                <TableCell colSpan={7}>
+                  <Alert variant="destructive" style={{ margin: 0 }}>
+                    <AlertDescription>
+                      Disabling {a.name} stops it issuing, and stops{" "}
+                      {hit === 0 ? "no certificates" : plural(hit, "certificate")} from being renewed, including any
+                      under its own intermediates. They keep working until they expire.
+                      <Button variant="destructive" size="sm" type="button" onClick={() => setStatus(a, "Disabled")}>
+                        Disable authority
+                      </Button>
+                      <Button variant="ghost" size="sm" type="button" onClick={() => setDisabling(null)}>
+                        Keep it
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </TableCell>
+              </TableRow>
             )}
             {walk(a.id, depth + 1)}
           </Fragment>
@@ -1040,59 +1071,59 @@ function AuthList({ say }: { say: Say }) {
         title="Authorities"
         sub="The certificate authorities you run: offline roots, and the intermediates beneath them that do the day-to-day signing."
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Create intermediate
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={create} aria-label="Create intermediate authority">
-          <h2>Create an intermediate authority</h2>
-          <div className="add certs">
-            <label className="field">
-              Name
-              <input name="name" required autoFocus autoComplete="off" placeholder="Acme Edge CA" />
-            </label>
-            <label className="field">
-              Signed by
-              <select name="parent">
-                {auths
-                  .filter((a) => a.status !== "Disabled")
-                  .map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
+        <Card className="panel form">
+          <form className="contents" onSubmit={create} aria-label="Create intermediate authority">
+            <h2>Create an intermediate authority</h2>
+            <div className="add certs">
+              <Label className="field">
+                Name
+                <Input name="name" required autoFocus autoComplete="off" placeholder="Acme Edge CA" />
+              </Label>
+              <Label className="field">
+                Signed by
+                <Dropdown name="parent">
+                  {auths
+                    .filter((a) => a.status !== "Disabled")
+                    .map((a) => (
+                      <Option key={a.id} value={a.id}>
+                        {a.name}
+                      </Option>
+                    ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Key type
+                <Dropdown name="key">
+                  {KEYS.map((k) => (
+                    <Option key={k}>{k}</Option>
                   ))}
-              </select>
-            </label>
-            <label className="field">
-              Key type
-              <select name="key">
-                {KEYS.map((k) => (
-                  <option key={k}>{k}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Valid for
-              <select name="years" defaultValue={3}>
-                <option value={1}>1 year</option>
-                <option value={3}>3 years</option>
-                <option value={5}>5 years</option>
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Create authority
-            </button>
-            <button type="button" className="btn quiet" onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
-          <p className="hint">
-            An intermediate cannot outlive the authority that signs it, so a long choice is cut short. Signing with an
-            offline root needs the root key ceremony; the mockup skips it.
-          </p>
-        </form>
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Valid for
+                <Dropdown name="years" defaultValue={3}>
+                  <Option value={1}>1 year</Option>
+                  <Option value={3}>3 years</Option>
+                  <Option value={5}>5 years</Option>
+                </Dropdown>
+              </Label>
+              <Button type="submit">Create authority</Button>
+              <Button variant="ghost" type="button" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">
+              An intermediate cannot outlive the authority that signs it, so a long choice is cut short. Signing with an
+              offline root needs the root key ceremony; the mockup skips it.
+            </p>
+          </form>
+        </Card>
       )}
       {auths.length === 0 ? (
         <Empty icon="shield">
@@ -1100,22 +1131,22 @@ function AuthList({ say }: { say: Say }) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Authority</th>
-                <th>Type</th>
-                <th>Key</th>
-                <th>Valid until</th>
-                <th>Issued</th>
-                <th>Status</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Authority</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Key</TableHead>
+                <TableHead>Valid until</TableHead>
+                <TableHead>Issued</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>{walk(null, 0)}</tbody>
-          </table>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>{walk(null, 0)}</TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -1151,7 +1182,7 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
         }
       />
       <div className="ct-col ct-one">
-        <section className="panel" aria-labelledby="ad-facts">
+        <Card className="panel" role="region" aria-labelledby="ad-facts">
           <h2 id="ad-facts">Details</h2>
           <dl className="kv ct-kv">
             <dt>Type</dt>
@@ -1179,8 +1210,8 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
             <dt>{isInt ? "Issued" : "Signed"}</dt>
             <dd>{isInt ? plural(mine.length, "certificate") : plural(kids.length, "intermediate")}</dd>
           </dl>
-        </section>
-        <section className="panel" aria-labelledby="ad-issued">
+        </Card>
+        <Card className="panel" role="region" aria-labelledby="ad-issued">
           <h2 id="ad-issued">Certificates it issued</h2>
           {!isInt ? (
             <p className="muted small">Roots sign intermediates only. Open an intermediate to see its certificates.</p>
@@ -1199,8 +1230,8 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
               ))}
             </ul>
           )}
-        </section>
-        <section className="panel" aria-labelledby="ad-status">
+        </Card>
+        <Card className="panel" role="region" aria-labelledby="ad-status">
           <h2 id="ad-status">{a.status === "Disabled" ? "Enable this authority" : "Disable this authority"}</h2>
           {!isInt ? (
             <p className="muted small">Roots stay offline and are not disabled here.</p>
@@ -1210,9 +1241,9 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
                 It cannot issue, and its {plural(hit, "certificate")} cannot be renewed. Enabling it lets both happen
                 again.
               </p>
-              <button type="button" className="btn ct-gap" onClick={() => setStatus("Active")}>
+              <Button variant="outline" className="ct-gap" type="button" onClick={() => setStatus("Active")}>
                 Enable authority
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -1220,27 +1251,29 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
                 Disabling stops it issuing and stops {hit === 0 ? "no certificates" : plural(hit, "certificate")} from
                 being renewed, including any under its intermediates. They keep working until they expire.
               </p>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ct-gap text-(--destructive-text)"
                 type="button"
-                className="btn sm quiet danger-text ct-gap"
                 aria-expanded={disabling}
                 onClick={() => setDisabling(!disabling)}
               >
                 Disable authority
-              </button>
+              </Button>
               {disabling && (
                 <span className="inline-form ct-gap">
-                  <button type="button" className="btn danger" onClick={() => setStatus("Disabled")}>
+                  <Button variant="destructive" type="button" onClick={() => setStatus("Disabled")}>
                     Yes, disable {a.name}
-                  </button>
-                  <button type="button" className="btn quiet" onClick={() => setDisabling(false)}>
+                  </Button>
+                  <Button variant="ghost" type="button" onClick={() => setDisabling(false)}>
                     Keep it
-                  </button>
+                  </Button>
                 </span>
               )}
             </>
           )}
-        </section>
+        </Card>
       </div>
     </section>
   );
@@ -1294,75 +1327,77 @@ function ProfileForm({ p, say }: { p: Profile; say: Say }) {
     say(`Saved ${d.name.trim()}`);
   };
   return (
-    <form className="panel" onSubmit={save} aria-label={`Rules for ${p.name}`}>
-      <h2>Rules</h2>
-      <div className="ct-form">
-        <label className="field">
-          Name
-          <input value={d.name} required autoComplete="off" onChange={(e) => set("name", e.target.value)} />
-        </label>
-        <label className="field">
-          Allowed names
-          <input value={d.pattern} required autoComplete="off" onChange={(e) => set("pattern", e.target.value)} />
-        </label>
-        <label className="field">
-          Longest lifetime (days)
-          <input
-            className="num-in"
-            type="number"
-            min={1}
-            max={825}
-            value={d.days}
-            onChange={(e) => set("days", e.target.value)}
-          />
-        </label>
-        <label className="field">
-          Key type
-          <select value={d.key} onChange={(e) => set("key", e.target.value)}>
-            {KEYS.map((k) => (
-              <option key={k}>{k}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Used for
-          <select value={d.use} onChange={(e) => set("use", e.target.value as Use)}>
-            {USES.map((u) => (
-              <option key={u}>{u}</option>
-            ))}
-          </select>
-        </label>
-        <span className="inline-form">
-          <Switch label={`${d.name} needs approval`} checked={d.approval} onChange={(on) => set("approval", on)} />{" "}
-          Needs approval before issuing
+    <Card className="panel">
+      <form className="contents" onSubmit={save} aria-label={`Rules for ${p.name}`}>
+        <h2>Rules</h2>
+        <div className="ct-form">
+          <Label className="field">
+            Name
+            <Input value={d.name} required autoComplete="off" onChange={(e) => set("name", e.target.value)} />
+          </Label>
+          <Label className="field">
+            Allowed names
+            <Input value={d.pattern} required autoComplete="off" onChange={(e) => set("pattern", e.target.value)} />
+          </Label>
+          <Label className="field">
+            Longest lifetime (days)
+            <Input
+              className="num-in"
+              type="number"
+              min={1}
+              max={825}
+              value={d.days}
+              onChange={(e) => set("days", e.target.value)}
+            />
+          </Label>
+          <Label className="field">
+            Key type
+            <Dropdown value={d.key} onChange={(e) => set("key", e)}>
+              {KEYS.map((k) => (
+                <Option key={k}>{k}</Option>
+              ))}
+            </Dropdown>
+          </Label>
+          <Label className="field">
+            Used for
+            <Dropdown value={d.use} onChange={(e) => set("use", e as Use)}>
+              {USES.map((u) => (
+                <Option key={u}>{u}</Option>
+              ))}
+            </Dropdown>
+          </Label>
+          <span className="inline-form">
+            <Switch label={`${d.name} needs approval`} checked={d.approval} onChange={(on) => set("approval", on)} />{" "}
+            Needs approval before issuing
+          </span>
+        </div>
+        <p className="hint">
+          Changes apply to new certificates and renewals. Existing certificates keep their dates until renewed.
+        </p>
+        <span className="inline-form ct-gap">
+          <Button type="submit" disabled={bad || !dirty}>
+            Save profile
+          </Button>
+          <Button
+            variant="ghost"
+            type="button"
+            disabled={!dirty}
+            onClick={() =>
+              setD({
+                name: p.name,
+                pattern: p.pattern,
+                days: String(p.maxDays),
+                key: p.key,
+                use: p.use,
+                approval: p.approval,
+              })
+            }
+          >
+            Discard changes
+          </Button>
         </span>
-      </div>
-      <p className="hint">
-        Changes apply to new certificates and renewals. Existing certificates keep their dates until renewed.
-      </p>
-      <span className="inline-form ct-gap">
-        <button type="submit" className="btn primary" disabled={bad || !dirty}>
-          Save profile
-        </button>
-        <button
-          type="button"
-          className="btn quiet"
-          disabled={!dirty}
-          onClick={() =>
-            setD({
-              name: p.name,
-              pattern: p.pattern,
-              days: String(p.maxDays),
-              key: p.key,
-              use: p.use,
-              approval: p.approval,
-            })
-          }
-        >
-          Discard changes
-        </button>
-      </span>
-    </form>
+      </form>
+    </Card>
   );
 }
 
@@ -1412,55 +1447,55 @@ function ProfileList({ say }: { say: Say }) {
         title="Profiles"
         sub="A profile is the rule set a certificate is issued under: which names it may carry, how long it lasts and whether someone must approve it."
       >
-        <button type="button" className="btn primary" onClick={() => setAdding(true)} disabled={adding}>
+        <Button type="button" onClick={() => setAdding(true)} disabled={adding}>
           <Icon name="plus" />
           Add profile
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add profile">
-          <h2>Add a profile</h2>
-          <div className="add certs">
-            <label className="field">
-              Name
-              <input name="name" required autoFocus autoComplete="off" placeholder="Edge TLS" />
-            </label>
-            <label className="field">
-              Allowed names
-              <input name="pattern" required autoComplete="off" placeholder="*.edge.acme.example" />
-            </label>
-            <label className="field">
-              Longest lifetime (days)
-              <input name="days" type="number" min={1} max={825} defaultValue={90} required />
-            </label>
-            <label className="field">
-              Key type
-              <select name="key">
-                {KEYS.map((k) => (
-                  <option key={k}>{k}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Used for
-              <select name="use">
-                {USES.map((u) => (
-                  <option key={u}>{u}</option>
-                ))}
-              </select>
-            </label>
-            <label className="inline-form">
-              <input type="checkbox" name="approval" /> Needs approval
-            </label>
-            <button type="submit" className="btn primary">
-              Add profile
-            </button>
-            <button type="button" className="btn quiet" onClick={() => setAdding(false)}>
-              Cancel
-            </button>
-          </div>
-          <p className="hint">Use * for any part of a name. A request for a name outside the pattern is refused.</p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add profile">
+            <h2>Add a profile</h2>
+            <div className="add certs">
+              <Label className="field">
+                Name
+                <Input name="name" required autoFocus autoComplete="off" placeholder="Edge TLS" />
+              </Label>
+              <Label className="field">
+                Allowed names
+                <Input name="pattern" required autoComplete="off" placeholder="*.edge.acme.example" />
+              </Label>
+              <Label className="field">
+                Longest lifetime (days)
+                <Input name="days" type="number" min={1} max={825} defaultValue={90} required />
+              </Label>
+              <Label className="field">
+                Key type
+                <Dropdown name="key">
+                  {KEYS.map((k) => (
+                    <Option key={k}>{k}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Used for
+                <Dropdown name="use">
+                  {USES.map((u) => (
+                    <Option key={u}>{u}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <label className="inline-form">
+                <Checkbox name="approval" /> Needs approval
+              </label>
+              <Button type="submit">Add profile</Button>
+              <Button variant="ghost" type="button" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+            <p className="hint">Use * for any part of a name. A request for a name outside the pattern is refused.</p>
+          </form>
+        </Card>
       )}
       {profiles.length === 0 ? (
         <Empty icon="grid">
@@ -1468,36 +1503,36 @@ function ProfileList({ say }: { say: Say }) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Profile</th>
-                <th>Allowed names</th>
-                <th>Longest lifetime</th>
-                <th>Key type</th>
-                <th>Used for</th>
-                <th>Issuance</th>
-                <th>Certificates</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Profile</TableHead>
+                <TableHead>Allowed names</TableHead>
+                <TableHead>Longest lifetime</TableHead>
+                <TableHead>Key type</TableHead>
+                <TableHead>Used for</TableHead>
+                <TableHead>Issuance</TableHead>
+                <TableHead>Certificates</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {profiles.map((p) => (
-                <tr key={p.id}>
-                  <td>
+                <TableRow key={p.id}>
+                  <TableCell>
                     <a className="ct-link" href={href("templates", p.id)}>
                       <b>{p.name}</b>
                     </a>
-                  </td>
-                  <td className="mono">{p.pattern}</td>
-                  <td>{plural(p.maxDays, "day")}</td>
-                  <td className="mono">{p.key}</td>
-                  <td>{p.use}</td>
-                  <td>{p.approval ? "Needs approval" : "Automatic"}</td>
-                  <td>{certs.filter((c) => c.profile === p.id).length}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="mono">{p.pattern}</TableCell>
+                  <TableCell>{plural(p.maxDays, "day")}</TableCell>
+                  <TableCell className="mono">{p.key}</TableCell>
+                  <TableCell>{p.use}</TableCell>
+                  <TableCell>{p.approval ? "Needs approval" : "Automatic"}</TableCell>
+                  <TableCell>{certs.filter((c) => c.profile === p.id).length}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -1541,36 +1576,32 @@ function CertSettings({ say }: PageProps) {
           <p className="lede">Defaults and rules that apply to every certificate your authorities issue.</p>
         </div>
       </div>
-      <section className="panel" aria-labelledby="cs-issue">
+      <Card className="panel" role="region" aria-labelledby="cs-issue">
         <h2 id="cs-issue">Issuing</h2>
         <Row title="Default profile" about="Chosen first in the issue form.">
-          <select aria-label="Default profile" value={s.profile} onChange={(e) => set("profile", e.target.value)}>
+          <Dropdown aria-label="Default profile" value={s.profile} onChange={(e) => set("profile", e)}>
             {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
+              <Option key={p.id} value={p.id}>
                 {p.name}
-              </option>
+              </Option>
             ))}
-          </select>
+          </Dropdown>
         </Row>
         <Row title="Default lifetime" about="A profile's longest lifetime still wins if it is shorter.">
-          <select
-            aria-label="Default lifetime"
-            value={s.lifetime}
-            onChange={(e) => set("lifetime", Number(e.target.value))}
-          >
+          <Dropdown aria-label="Default lifetime" value={s.lifetime} onChange={(e) => set("lifetime", Number(e))}>
             {LIFETIMES.map(([v, l]) => (
-              <option key={v} value={v}>
+              <Option key={v} value={v}>
                 {l}
-              </option>
+              </Option>
             ))}
-          </select>
+          </Dropdown>
         </Row>
         <Row
           title="Renew when this many days remain"
           about="Marks certificates as expiring soon, and renews automatic ones."
         >
           <span className="inline-form">
-            <input
+            <Input
               className="num-in"
               type="number"
               min={1}
@@ -1591,7 +1622,7 @@ function CertSettings({ say }: PageProps) {
           }
         >
           <span className="inline-form">
-            <input
+            <Input
               className="num-in"
               type="number"
               min={1}
@@ -1603,8 +1634,8 @@ function CertSettings({ say }: PageProps) {
             days
           </span>
         </Row>
-      </section>
-      <section className="panel" aria-labelledby="cs-enroll">
+      </Card>
+      <Card className="panel" role="region" aria-labelledby="cs-enroll">
         <h2 id="cs-enroll">Enrollment</h2>
         <Row title="ACME" about="Lets servers and tools such as certbot request and renew certificates themselves.">
           <Switch label="Allow ACME" checked={s.acme} onChange={(on) => set("acme", on)} />
@@ -1614,16 +1645,14 @@ function CertSettings({ say }: PageProps) {
             <code>https://ca.acme.example/acme/directory</code>
           </Row>
         )}
-      </section>
+      </Card>
       {dirty && (
         <div className="savebar" role="status">
           <span>You have unsaved changes.</span>
-          <button type="button" className="btn quiet" onClick={() => setS(saved)}>
+          <Button variant="ghost" type="button" onClick={() => setS(saved)}>
             Discard
-          </button>
-          <button type="submit" className="btn primary">
-            Save changes
-          </button>
+          </Button>
+          <Button type="submit">Save changes</Button>
         </div>
       )}
     </form>

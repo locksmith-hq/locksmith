@@ -1,5 +1,8 @@
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Button } from "@locksmith-hq/button";
+import { PageHeader } from "@locksmith-hq/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useEffect, useState } from "react";
-import { Head } from "@locksmith/ui";
 import type { Client, McpClient } from "@locksmith/control-plane-client";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
@@ -34,11 +37,11 @@ export function McpClients({ client }: { client: Client }) {
   const label = (c: McpClient) => c.client_name || c.client_id;
   return (
     <section aria-label="Clients">
-      <Head title="MCP clients" />
+      <PageHeader title="MCP clients" />
       {error && (
-        <p role="alert" className="state">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {!clients ? (
         error ? null : (
@@ -47,36 +50,36 @@ export function McpClients({ client }: { client: Client }) {
       ) : clients.length === 0 ? (
         <p>No MCP clients have signed in yet.</p>
       ) : (
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>Client</th>
-              <th>Layer</th>
-              <th>Principal</th>
-              <th>Last seen</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Layer</TableHead>
+              <TableHead>Principal</TableHead>
+              <TableHead>Last seen</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {clients.map((c) => (
-              <tr key={c.id}>
-                <td>{label(c)}</td>
-                <td>{layerName(c.layer)}</td>
-                <td>{c.principal}</td>
-                <td>{c.last_seen_at}</td>
-                <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
-                <td>
+              <TableRow key={c.id}>
+                <TableCell>{label(c)}</TableCell>
+                <TableCell>{layerName(c.layer)}</TableCell>
+                <TableCell>{c.principal}</TableCell>
+                <TableCell>{c.last_seen_at}</TableCell>
+                <TableCell>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</TableCell>
+                <TableCell>
                   {!c.revoked_at && (
-                    <button className="btn sm danger" onClick={() => void revoke(c)}>
+                    <Button variant="destructive" size="sm" onClick={() => void revoke(c)}>
                       Revoke {label(c)}
-                    </button>
+                    </Button>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
     </section>
   );

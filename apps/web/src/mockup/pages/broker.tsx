@@ -1,5 +1,14 @@
 // Access Broker: databases and servers reached through brokered, recorded sessions. Sample data only.
 // All five pages and their detail views read one shared store, so a change on one page shows on the others.
+import { Checkbox } from "@locksmith-hq/checkbox";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useState } from "react";
 import {
   Crumbs,
@@ -550,9 +559,9 @@ const Facts = ({ rows }: { rows: [string, React.ReactNode][] }) => (
 const CommandBox = ({ cmd, say }: { cmd: string; say: PageProps["say"] }) => (
   <div className="br-cmd">
     <code>{cmd}</code>
-    <button type="button" className="btn sm" onClick={() => void copyText(cmd, "Command", say)}>
+    <Button variant="outline" size="sm" type="button" onClick={() => void copyText(cmd, "Command", say)}>
       Copy command
-    </button>
+    </Button>
   </div>
 );
 
@@ -594,10 +603,9 @@ const WhoEditor = ({
     <div className="br-edit">
       {people.map((p) => (
         <label key={p}>
-          <input
-            type="checkbox"
+          <Checkbox
             checked={draft.includes(p)}
-            onChange={(e) => setDraft((d) => (e.target.checked ? [...d, p] : d.filter((x) => x !== p)))}
+            onCheckedChange={(on) => setDraft((d) => (on === true ? [...d, p] : d.filter((x) => x !== p)))}
           />
           {p}
         </label>
@@ -645,7 +653,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
   };
   if (done) {
     return (
-      <div className="panel form" role="status">
+      <Card className="panel form" role="status">
         {done.kind === "open" ? (
           <>
             <h2>Session {done.id} is open</h2>
@@ -654,12 +662,12 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
             </p>
             <CommandBox cmd={done.cmd} say={say} />
             <div className="inline-form">
-              <a className="btn sm primary" href={sl(done.id)}>
-                Open session
-              </a>
-              <button type="button" className="btn sm quiet" onClick={onClose}>
+              <Button asChild size="sm">
+                <a href={sl(done.id)}>Open session</a>
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={onClose}>
                 Close
-              </button>
+              </Button>
             </div>
           </>
         ) : (
@@ -670,90 +678,92 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
               session opens.
             </p>
             <div className="inline-form">
-              <a className="btn sm primary" href={`${H}/sessions`}>
-                See requests
-              </a>
-              <button type="button" className="btn sm quiet" onClick={onClose}>
+              <Button asChild size="sm">
+                <a href={`${H}/sessions`}>See requests</a>
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={onClose}>
                 Close
-              </button>
+              </Button>
             </div>
           </>
         )}
-      </div>
+      </Card>
     );
   }
   return (
-    <form className="panel form" onSubmit={submit} aria-label="Start a session">
-      <h2>Start a session</h2>
-      <div className="br-start">
-        <label className="field">
-          Who
-          <select value={who} onChange={(e) => setWho(e.target.value)}>
-            {whoOptions.map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Resource
-          <select value={res} onChange={(e) => setRes(e.target.value)}>
-            {w.res.map((x) => (
-              <option key={x.name}>{x.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Account
-          <select value={chosen?.id ?? ""} disabled={options.length === 0} onChange={(e) => setPick(e.target.value)}>
-            {options.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({LEVEL[a.level].toLowerCase()})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field br-reason">
-          Reason
-          <input
-            value={reason}
-            required
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Why this session is needed"
-            autoComplete="off"
-          />
-        </label>
-      </div>
-      {!r && <p className="hint">Add a resource first, so there is something to connect to.</p>}
-      {r && options.length === 0 && (
-        <p className="hint">
-          {who} has no account on {res}. Ask an admin to add {who} to one of its accounts under{" "}
-          <a className="link" href={`${H}/accounts`}>
-            Accounts
-          </a>
-          , or pick another resource.
-        </p>
-      )}
-      {r?.problem && (
-        <p className="hint prod">
-          {res} cannot be reached right now ({r.problem}), so a session cannot open. Fix the connection first.
-        </p>
-      )}
-      {chosen && !r?.problem && (
-        <p className="hint">
-          {ask
-            ? `${res} needs approval (${w.cfg.approval.toLowerCase()}). This sends a request and nothing connects until a second person approves.`
-            : "No approval is needed. The session opens at once and is recorded."}
-        </p>
-      )}
-      <div className="inline-form" style={{ marginTop: 12 }}>
-        <button type="submit" className="btn primary" disabled={!chosen || !r || !!r.problem}>
-          {ask ? "Ask for approval" : "Start session"}
-        </button>
-        <button type="button" className="btn quiet" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </form>
+    <Card className="panel form">
+      <form className="contents" onSubmit={submit} aria-label="Start a session">
+        <h2>Start a session</h2>
+        <div className="br-start">
+          <Label className="field">
+            Who
+            <Dropdown value={who} onChange={(e) => setWho(e)}>
+              {whoOptions.map((p) => (
+                <Option key={p}>{p}</Option>
+              ))}
+            </Dropdown>
+          </Label>
+          <Label className="field">
+            Resource
+            <Dropdown value={res} onChange={(e) => setRes(e)}>
+              {w.res.map((x) => (
+                <Option key={x.name}>{x.name}</Option>
+              ))}
+            </Dropdown>
+          </Label>
+          <Label className="field">
+            Account
+            <Dropdown value={chosen?.id ?? ""} disabled={options.length === 0} onChange={(e) => setPick(e)}>
+              {options.map((a) => (
+                <Option key={a.id} value={a.id}>
+                  {a.name} ({LEVEL[a.level].toLowerCase()})
+                </Option>
+              ))}
+            </Dropdown>
+          </Label>
+          <Label className="field br-reason">
+            Reason
+            <Input
+              value={reason}
+              required
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why this session is needed"
+              autoComplete="off"
+            />
+          </Label>
+        </div>
+        {!r && <p className="hint">Add a resource first, so there is something to connect to.</p>}
+        {r && options.length === 0 && (
+          <p className="hint">
+            {who} has no account on {res}. Ask an admin to add {who} to one of its accounts under{" "}
+            <a className="link" href={`${H}/accounts`}>
+              Accounts
+            </a>
+            , or pick another resource.
+          </p>
+        )}
+        {r?.problem && (
+          <p className="hint prod">
+            {res} cannot be reached right now ({r.problem}), so a session cannot open. Fix the connection first.
+          </p>
+        )}
+        {chosen && !r?.problem && (
+          <p className="hint">
+            {ask
+              ? `${res} needs approval (${w.cfg.approval.toLowerCase()}). This sends a request and nothing connects until a second person approves.`
+              : "No approval is needed. The session opens at once and is recorded."}
+          </p>
+        )}
+        <div className="inline-form" style={{ marginTop: 12 }}>
+          <Button type="submit" disabled={!chosen || !r || !!r.problem}>
+            {ask ? "Ask for approval" : "Start session"}
+          </Button>
+          <Button variant="ghost" type="button" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 
@@ -787,74 +797,72 @@ function Resources({ say }: PageProps) {
         title="Resources"
         sub="The databases and servers people and agents can reach through the broker, without ever holding a password."
       >
-        <button type="button" className="btn primary" disabled={adding} onClick={() => setAdding(true)}>
+        <Button type="button" disabled={adding} onClick={() => setAdding(true)}>
           <Icon name="plus" />
           Add resource
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add resource">
-          <h2>Add a resource</h2>
-          <div className="add share">
-            <label className="field">
-              Name
-              <input
-                name="name"
-                required
-                autoFocus
-                placeholder="reports-db"
-                autoComplete="off"
-                onChange={() => setErr("")}
-              />
-            </label>
-            <label className="field">
-              Kind
-              <select name="kind">
-                {kinds.map((k) => (
-                  <option key={k}>{k}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Where it is
-              <input name="where" required placeholder="Production · eu-west-1" autoComplete="off" />
-            </label>
-            <button type="submit" className="btn primary">
-              Add resource
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              onClick={() => {
-                setAdding(false);
-                setErr("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-          {err && (
-            <p className="hint prod" role="alert">
-              {err}
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add resource">
+            <h2>Add a resource</h2>
+            <div className="add share">
+              <Label className="field">
+                Name
+                <Input
+                  name="name"
+                  required
+                  autoFocus
+                  placeholder="reports-db"
+                  autoComplete="off"
+                  onChange={() => setErr("")}
+                />
+              </Label>
+              <Label className="field">
+                Kind
+                <Dropdown name="kind">
+                  {kinds.map((k) => (
+                    <Option key={k}>{k}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Where it is
+                <Input name="where" required placeholder="Production · eu-west-1" autoComplete="off" />
+              </Label>
+              <Button type="submit">Add resource</Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setErr("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {err && (
+              <p className="hint prod" role="alert">
+                {err}
+              </p>
+            )}
+            <p className="hint">
+              The broker connects from inside your network, so the resource needs no public address. Start the place
+              with “Production” or “Staging” so approval rules apply. Add an account next, so someone can connect.
             </p>
-          )}
-          <p className="hint">
-            The broker connects from inside your network, so the resource needs no public address. Start the place with
-            “Production” or “Staging” so approval rules apply. Add an account next, so someone can connect.
-          </p>
-        </form>
+          </form>
+        </Card>
       )}
       <div className="toolbar">
-        <fieldset className="seg inline">
-          <legend className="sr-only">Kind</legend>
+        <ToggleGroup type="single" value={String(kind)} aria-label="Kind">
           {(["All", ...kinds] as const).map((k) => (
-            <label key={k}>
-              <input type="radio" name="res-kind" checked={kind === k} onChange={() => setKind(k)} />
+            <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setKind(k)}>
               {k}
               <span className="n">{k === "All" ? w.res.length : w.res.filter((r) => r.kind === k).length}</span>
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
       </div>
       {shown.length === 0 ? (
         <Empty icon="db">
@@ -863,31 +871,31 @@ function Resources({ say }: PageProps) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Resource</th>
-                <th>Kind</th>
-                <th>Where</th>
-                <th>Accounts</th>
-                <th>Live now</th>
-                <th>Health</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Resource</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Where</TableHead>
+                <TableHead>Accounts</TableHead>
+                <TableHead>Live now</TableHead>
+                <TableHead>Health</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {shown.flatMap((r) => {
                 const accts = w.accts.filter((a) => a.res === r.name).length;
                 const n = live(w).filter((s) => s.res === r.name).length;
                 return [
-                  <tr key={r.name}>
-                    <td className="strong">{r.name}</td>
-                    <td>{r.kind}</td>
-                    <td className="muted">{r.where}</td>
-                    <td>{accts}</td>
-                    <td>
+                  <TableRow key={r.name}>
+                    <TableCell className="strong">{r.name}</TableCell>
+                    <TableCell>{r.kind}</TableCell>
+                    <TableCell className="muted">{r.where}</TableCell>
+                    <TableCell>{accts}</TableCell>
+                    <TableCell>
                       {n > 0 ? (
                         <span className="br-live">
                           <i />
@@ -896,54 +904,59 @@ function Resources({ say }: PageProps) {
                       ) : (
                         <span className="muted">0</span>
                       )}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       <Health r={r} />
                       {r.fix && (
                         <p className="muted small" style={{ margin: "2px 0 0" }}>
                           {r.fix}
                         </p>
                       )}
-                    </td>
-                    <td className="num">
-                      <button
+                    </TableCell>
+                    <TableCell className="num">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-(--destructive-text)"
                         type="button"
-                        className="btn sm quiet danger-text"
                         aria-label={`Remove ${r.name}`}
                         onClick={() => setRemoving(r.name)}
                       >
                         Remove
-                      </button>
-                    </td>
-                  </tr>,
+                      </Button>
+                    </TableCell>
+                  </TableRow>,
                   removing === r.name && (
-                    <tr key={`${r.name}-x`} className="detail">
-                      <td colSpan={7}>
-                        <p className="alert" role="alert" style={{ margin: 0 }}>
-                          Removing {r.name} deletes {plural(accts, "account")} from the broker and ends{" "}
-                          {plural(n, "live session")} at once. Past recordings are kept.
-                          <button
-                            type="button"
-                            className="btn sm danger"
-                            onClick={() => {
-                              set((x) => removeRes(x, r.name));
-                              setRemoving(null);
-                              say(`Removed ${r.name}`);
-                            }}
-                          >
-                            Remove anyway
-                          </button>
-                          <button type="button" className="btn sm quiet" onClick={() => setRemoving(null)}>
-                            Keep
-                          </button>
-                        </p>
-                      </td>
-                    </tr>
+                    <TableRow key={`${r.name}-x`} className="detail">
+                      <TableCell colSpan={7}>
+                        <Alert variant="destructive" style={{ margin: 0 }}>
+                          <AlertDescription>
+                            Removing {r.name} deletes {plural(accts, "account")} from the broker and ends{" "}
+                            {plural(n, "live session")} at once. Past recordings are kept.
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              type="button"
+                              onClick={() => {
+                                set((x) => removeRes(x, r.name));
+                                setRemoving(null);
+                                say(`Removed ${r.name}`);
+                              }}
+                            >
+                              Remove anyway
+                            </Button>
+                            <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(null)}>
+                              Keep
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
+                      </TableCell>
+                    </TableRow>
                   ),
                 ];
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -990,72 +1003,67 @@ function Accounts({ say }: PageProps) {
         title="Accounts"
         sub="The privileged logins the broker holds on each resource. People and agents borrow them for a session; nobody is ever shown the password."
       >
-        <button
-          type="button"
-          className="btn primary"
-          disabled={adding || w.res.length === 0}
-          onClick={() => setAdding(true)}
-        >
+        <Button type="button" disabled={adding || w.res.length === 0} onClick={() => setAdding(true)}>
           <Icon name="plus" />
           Add account
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add account">
-          <h2>Add an account</h2>
-          <div className="br-start">
-            <label className="field">
-              Resource
-              <select name="res">
-                {w.res.map((r) => (
-                  <option key={r.name}>{r.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              Name
-              <input
-                name="name"
-                required
-                autoFocus
-                placeholder="readonly"
-                autoComplete="off"
-                onChange={() => setErr("")}
-              />
-            </label>
-            <label className="field">
-              What it can do
-              <select name="level" defaultValue="read">
-                {(Object.keys(LEVEL) as Level[]).map((l) => (
-                  <option key={l} value={l}>
-                    {LEVEL[l]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <WhoEditor label="Who may use it" draft={draft} setDraft={setDraft} />
-          {err && (
-            <p className="hint prod" role="alert">
-              {err}
-            </p>
-          )}
-          <div className="inline-form">
-            <button type="submit" className="btn primary">
-              Add account
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              onClick={() => {
-                setAdding(false);
-                setErr("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add account">
+            <h2>Add an account</h2>
+            <div className="br-start">
+              <Label className="field">
+                Resource
+                <Dropdown name="res">
+                  {w.res.map((r) => (
+                    <Option key={r.name}>{r.name}</Option>
+                  ))}
+                </Dropdown>
+              </Label>
+              <Label className="field">
+                Name
+                <Input
+                  name="name"
+                  required
+                  autoFocus
+                  placeholder="readonly"
+                  autoComplete="off"
+                  onChange={() => setErr("")}
+                />
+              </Label>
+              <Label className="field">
+                What it can do
+                <Dropdown name="level" defaultValue="read">
+                  {(Object.keys(LEVEL) as Level[]).map((l) => (
+                    <Option key={l} value={l}>
+                      {LEVEL[l]}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Label>
+            </div>
+            <WhoEditor label="Who may use it" draft={draft} setDraft={setDraft} />
+            {err && (
+              <p className="hint prod" role="alert">
+                {err}
+              </p>
+            )}
+            <div className="inline-form">
+              <Button type="submit">Add account</Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setErr("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
       )}
       {w.accts.length === 0 ? (
         <Empty icon="sessions">
@@ -1063,48 +1071,49 @@ function Accounts({ say }: PageProps) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th>Can do</th>
-                <th>Who may use it</th>
-                <th>Last used</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Account</TableHead>
+                <TableHead>Can do</TableHead>
+                <TableHead>Who may use it</TableHead>
+                <TableHead>Last used</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {w.accts.flatMap((a) => [
-                <tr key={a.id}>
-                  <td>
+                <TableRow key={a.id}>
+                  <TableCell>
                     <span className="strong mono">{a.name}</span>
                     <br />
                     <span className="muted small">on {a.res}</span>
-                  </td>
-                  <td>{LEVEL[a.level]}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell>{LEVEL[a.level]}</TableCell>
+                  <TableCell>
                     <ul className="br-who" aria-label={`Who may use ${a.id}`}>
                       {a.who.length ? a.who.map((p) => <li key={p}>{p}</li>) : <li>Nobody</li>}
                     </ul>
-                  </td>
-                  <td className="muted">{lastUsed(w, a)}</td>
-                  <td className="num">
-                    <button
+                  </TableCell>
+                  <TableCell className="muted">{lastUsed(w, a)}</TableCell>
+                  <TableCell className="num">
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       type="button"
-                      className="btn sm quiet"
                       aria-expanded={editing === a.id}
                       aria-label={`Change access for ${a.id}`}
                       onClick={() => (editing === a.id ? setEditing(null) : open(a))}
                     >
                       Change access
-                    </button>
-                  </td>
-                </tr>,
+                    </Button>
+                  </TableCell>
+                </TableRow>,
                 editing === a.id && (
-                  <tr key={`${a.id}-x`} className="detail">
-                    <td colSpan={5}>
+                  <TableRow key={`${a.id}-x`} className="detail">
+                    <TableCell colSpan={5}>
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
@@ -1125,48 +1134,53 @@ function Accounts({ say }: PageProps) {
                           </p>
                         )}
                         <div className="inline-form" style={{ marginTop: 12 }}>
-                          <button type="submit" className="btn sm primary">
+                          <Button size="sm" type="submit">
                             Save
-                          </button>
-                          <button type="button" className="btn sm quiet" onClick={() => setEditing(null)}>
+                          </Button>
+                          <Button variant="ghost" size="sm" type="button" onClick={() => setEditing(null)}>
                             Cancel
-                          </button>
+                          </Button>
                           {removing ? (
-                            <span className="alert" role="alert">
-                              Ends {plural(live(w).filter((s) => idOf(s) === a.id).length, "live session")} and nobody
-                              can use {a.id} again. Recordings stay.
-                              <button
-                                type="button"
-                                className="btn sm danger"
-                                onClick={() => {
-                                  set((x) => removeAcct(x, a.id));
-                                  say(`Removed ${a.id}`);
-                                  setEditing(null);
-                                }}
-                              >
-                                Remove anyway
-                              </button>
-                              <button type="button" className="btn sm quiet" onClick={() => setRemoving(false)}>
-                                Keep
-                              </button>
-                            </span>
+                            <Alert variant="destructive">
+                              <AlertDescription>
+                                Ends {plural(live(w).filter((s) => idOf(s) === a.id).length, "live session")} and nobody
+                                can use {a.id} again. Recordings stay.
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  type="button"
+                                  onClick={() => {
+                                    set((x) => removeAcct(x, a.id));
+                                    say(`Removed ${a.id}`);
+                                    setEditing(null);
+                                  }}
+                                >
+                                  Remove anyway
+                                </Button>
+                                <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(false)}>
+                                  Keep
+                                </Button>
+                              </AlertDescription>
+                            </Alert>
                           ) : (
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-(--destructive-text)"
                               type="button"
-                              className="btn sm quiet danger-text"
                               onClick={() => setRemoving(true)}
                             >
                               Remove account
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </form>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ),
               ])}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
       <p className="hint">
@@ -1215,16 +1229,10 @@ function SessionList({ say }: { say: PageProps["say"] }) {
         title="Sessions"
         sub="Who is connected through the broker right now, and the sessions that have ended. Terminate cuts a connection at once."
       >
-        <button
-          type="button"
-          className="btn primary"
-          aria-expanded={starting}
-          disabled={starting}
-          onClick={() => setStarting(true)}
-        >
+        <Button type="button" aria-expanded={starting} disabled={starting} onClick={() => setStarting(true)}>
           <Icon name="plus" />
           Start a session
-        </button>
+        </Button>
       </Head>
       {starting && <StartPanel onClose={() => setStarting(false)} say={say} />}
       {w.reqs.length > 0 && (
@@ -1234,46 +1242,47 @@ function SessionList({ say }: { say: PageProps["say"] }) {
             <span className="n">{w.reqs.filter((r) => r.status === "waiting").length}</span>
           </div>
           <div className="table-wrap">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th>Who</th>
-                  <th>Wants to use</th>
-                  <th>Reason</th>
-                  <th>Asked</th>
-                  <th>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Who</TableHead>
+                  <TableHead>Wants to use</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Asked</TableHead>
+                  <TableHead>
                     <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {w.reqs.map((r) => (
-                  <tr key={r.id}>
-                    <td className="strong">{r.who}</td>
-                    <td>
+                  <TableRow key={r.id}>
+                    <TableCell className="strong">{r.who}</TableCell>
+                    <TableCell>
                       <span className="mono">{r.acct.split("@")[0]}</span>{" "}
                       <span className="muted">on {r.acct.split("@")[1]}</span>
-                    </td>
-                    <td>{r.reason}</td>
-                    <td className="muted">{ago(r.asked)}</td>
-                    <td className="num">
+                    </TableCell>
+                    <TableCell>{r.reason}</TableCell>
+                    <TableCell className="muted">{ago(r.asked)}</TableCell>
+                    <TableCell className="num">
                       {r.status === "denied" ? (
                         <>
                           <span className="muted">Denied by {r.by}</span>{" "}
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             type="button"
-                            className="btn sm quiet"
                             aria-label={`Clear ${r.who}'s denied request`}
                             onClick={() => set((x) => ({ ...x, reqs: x.reqs.filter((q) => q.id !== r.id) }))}
                           >
                             Clear
-                          </button>
+                          </Button>
                         </>
                       ) : (
                         <>
-                          <button
+                          <Button
+                            size="sm"
                             type="button"
-                            className="btn sm primary"
                             title={
                               r.who === ME
                                 ? "Your own request needs a second person. This stands in for Dana Okafor approving it."
@@ -1283,28 +1292,29 @@ function SessionList({ say }: { say: PageProps["say"] }) {
                             onClick={() => approve(r)}
                           >
                             {r.who === ME ? "Approve as Dana Okafor" : "Approve"}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-(--destructive-text)"
                             type="button"
-                            className="btn sm quiet danger-text"
                             aria-label={`Deny ${r.who}'s request`}
                             onClick={() => deny(r)}
                           >
                             Deny
-                          </button>
+                          </Button>
                         </>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
       <div className="toolbar">
-        <fieldset className="seg inline">
-          <legend className="sr-only">Show</legend>
+        <ToggleGroup type="single" value={String(view)} aria-label="Show">
           {(
             [
               ["all", "All", w.sess.length],
@@ -1312,13 +1322,12 @@ function SessionList({ say }: { say: PageProps["say"] }) {
               ["ended", "Ended", ended.length],
             ] as const
           ).map(([k, l, n]) => (
-            <label key={k}>
-              <input type="radio" name="sess-view" checked={view === k} onChange={() => setView(k)} />
+            <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setView(k)}>
               {l}
               <span className="n">{n}</span>
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
       </div>
       {list.length === 0 ? (
         <Empty icon="clock">
@@ -1327,33 +1336,33 @@ function SessionList({ say }: { say: PageProps["say"] }) {
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Who</th>
-                <th>Account on resource</th>
-                <th>Started</th>
-                <th>Duration</th>
-                <th>Status</th>
-                <th>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Who</TableHead>
+                <TableHead>Account on resource</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {list.map((s) => (
-                <tr key={s.id} className={striking === s.id ? "br-strike" : undefined}>
-                  <td>
+                <TableRow key={s.id} className={striking === s.id ? "br-strike" : undefined}>
+                  <TableCell>
                     <a className="strong" href={sl(s.id)}>
                       {s.who}
                     </a>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <span className="mono">{s.acct}</span> <span className="muted">on {s.res}</span>
-                  </td>
-                  <td className="muted">{ago(s.started)}</td>
-                  <td className="mono">{dur((s.ended ?? NOW) - s.started)}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell className="muted">{ago(s.started)}</TableCell>
+                  <TableCell className="mono">{dur((s.ended ?? NOW) - s.started)}</TableCell>
+                  <TableCell>
                     {s.ended === null ? (
                       <span className="br-live">
                         <i />
@@ -1362,28 +1371,30 @@ function SessionList({ say }: { say: PageProps["say"] }) {
                     ) : (
                       <span className="muted">{s.how}</span>
                     )}
-                  </td>
-                  <td className="num">
+                  </TableCell>
+                  <TableCell className="num">
                     {s.ended === null ? (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-(--destructive-text)"
                         type="button"
-                        className="btn sm quiet danger-text"
                         disabled={striking !== null}
                         aria-label={`Terminate ${s.who} on ${s.res}`}
                         onClick={() => stop(s)}
                       >
                         Terminate
-                      </button>
+                      </Button>
                     ) : (
                       <a className="link" href={cl(s.id)} aria-label={`Open recording of ${s.id}`}>
                         Recording
                       </a>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -1408,12 +1419,12 @@ function SessionDetail({ id, say }: { id: string; say: PageProps["say"] }) {
         }
       >
         {isLive && (
-          <button type="button" className="btn danger" onClick={() => terminate(set, s, say)}>
+          <Button variant="destructive" type="button" onClick={() => terminate(set, s, say)}>
             Terminate session
-          </button>
+          </Button>
         )}
       </Head>
-      <div className="panel br-sec">
+      <Card className="panel br-sec">
         <h2>Details</h2>
         <Facts
           rows={[
@@ -1426,23 +1437,23 @@ function SessionDetail({ id, say }: { id: string; say: PageProps["say"] }) {
             ["How it ended", isLive ? `Still live. Cut off automatically after ${w.cfg.maxLen}.` : s.how],
           ]}
         />
-      </div>
+      </Card>
       {isLive && (
-        <div className="panel br-sec">
+        <Card className="panel br-sec">
           <h2>Connect</h2>
           <p className="muted small">
             Run this in a terminal. The password is never shown: the broker types it in for you.
           </p>
           <CommandBox cmd={cmdOf(s)} say={say} />
-        </div>
+        </Card>
       )}
-      <div className="panel br-sec">
+      <Card className="panel br-sec">
         <div className="sec-h">
           <h2>{isLive ? "Transcript so far" : "Transcript"}</h2>
           <span className="n">{plural(lines.length, "line")}</span>
         </div>
         <Tx lines={lines} blocked={w.cfg.blocked} />
-      </div>
+      </Card>
     </section>
   );
 }
@@ -1492,7 +1503,7 @@ function Recordings({ sub, say }: PageProps) {
         <>
           <div className="toolbar">
             <label className="br-check">
-              <input type="checkbox" checked={ui.flagged} onChange={(e) => setUiState({ flagged: e.target.checked })} />
+              <Checkbox checked={ui.flagged} onCheckedChange={(on) => setUiState({ flagged: on === true })} />
               Flagged only
             </label>
           </div>
@@ -1529,7 +1540,7 @@ function Recordings({ sub, say }: PageProps) {
               </ul>
             )}
             {sel ? (
-              <div className="panel" aria-label="Transcript">
+              <Card className="panel" aria-label="Transcript">
                 <h2>
                   {sel.who} on {sel.res}
                 </h2>
@@ -1542,30 +1553,31 @@ function Recordings({ sub, say }: PageProps) {
                   </a>
                 </p>
                 <div className="inline-form" style={{ margin: "10px 0" }}>
-                  <label className="field" style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Label className="field" style={{ flexDirection: "row", alignItems: "center" }}>
                     Search this transcript
-                    <input
+                    <Input
                       type="search"
                       value={ui.q}
                       onChange={(e) => setUiState({ q: e.target.value })}
                       placeholder="DROP, invoices…"
                     />
-                  </label>
+                  </Label>
                   <span className="muted small">
                     {shown} of {lines.length} lines
                   </span>
                 </div>
                 <Tx lines={lines} blocked={blocked} q={ui.q} />
                 <div className="inline-form" style={{ marginTop: 12 }}>
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
-                    className="btn sm"
                     onClick={() => saveText(`${sel.id}-${sel.res}.txt`, transcriptText(sel, lines, blocked), say)}
                   >
                     Download transcript
-                  </button>
+                  </Button>
                 </div>
-              </div>
+              </Card>
             ) : sub ? (
               <Empty icon="search">
                 <b>No recording called “{dec(sub)}”.</b> It may still be live, or the id is wrong.{" "}
@@ -1605,11 +1617,11 @@ function BrokerSettings({ say }: PageProps) {
   const dirty = JSON.stringify(s) !== JSON.stringify(saved);
   const cut = live(w).filter((x) => x.started + (MAXLEN[s.maxLen] ?? 4 * HOUR) <= NOW);
   const pick = (k: "maxLen" | "approval" | "keep", label: string, options: string[]) => (
-    <select aria-label={label} value={s[k]} onChange={(e) => setS((x) => ({ ...x, [k]: e.target.value }))}>
+    <Dropdown aria-label={label} value={s[k]} onChange={(e) => setS((x) => ({ ...x, [k]: e }))}>
       {options.map((o) => (
-        <option key={o}>{o}</option>
+        <Option key={o}>{o}</Option>
       ))}
-    </select>
+    </Dropdown>
   );
   const addCmd = () => {
     const c = cmd.trim();
@@ -1631,7 +1643,7 @@ function BrokerSettings({ say }: PageProps) {
   return (
     <form className="settings" onSubmit={save}>
       <Head title="Settings" sub="Limits and rules that apply to every session opened through the broker." />
-      <section className="panel" aria-labelledby="br-limits">
+      <Card className="panel" role="region" aria-labelledby="br-limits">
         <h2 id="br-limits">Session limits</h2>
         <Row
           title="Longest session"
@@ -1651,8 +1663,8 @@ function BrokerSettings({ say }: PageProps) {
         >
           {pick("approval", "A session needs approval", ["Never", "Production only", "Always"])}
         </Row>
-      </section>
-      <section className="panel" aria-labelledby="br-rec">
+      </Card>
+      <Card className="panel" role="region" aria-labelledby="br-rec">
         <h2 id="br-rec">Recording</h2>
         <Row
           title="Record every session"
@@ -1668,8 +1680,8 @@ function BrokerSettings({ say }: PageProps) {
         >
           {pick("keep", "Keep recordings for", ["30 days", "90 days", "1 year", "7 years"])}
         </Row>
-      </section>
-      <section className="panel" aria-labelledby="br-block">
+      </Card>
+      <Card className="panel" role="region" aria-labelledby="br-block">
         <h2 id="br-block">Blocked commands</h2>
         <p className="muted small">
           A command that contains one of these is stopped before it runs, for everyone including admins. Transcript
@@ -1679,14 +1691,16 @@ function BrokerSettings({ say }: PageProps) {
           {s.blocked.map((b) => (
             <li key={b}>
               <code>{b}</code>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-(--destructive-text)"
                 type="button"
-                className="btn sm quiet danger-text"
                 aria-label={`Stop blocking ${b}`}
                 onClick={() => setS((x) => ({ ...x, blocked: x.blocked.filter((y) => y !== b) }))}
               >
                 <Icon name="x" />
-              </button>
+              </Button>
             </li>
           ))}
           {s.blocked.length === 0 && (
@@ -1694,7 +1708,7 @@ function BrokerSettings({ say }: PageProps) {
           )}
         </ul>
         <div className="inline-form">
-          <input
+          <Input
             aria-label="Command to block"
             placeholder="DROP TABLE"
             value={cmd}
@@ -1707,20 +1721,18 @@ function BrokerSettings({ say }: PageProps) {
             }}
             autoComplete="off"
           />
-          <button type="button" className="btn sm" onClick={addCmd} disabled={!cmd.trim()}>
+          <Button variant="outline" size="sm" type="button" onClick={addCmd} disabled={!cmd.trim()}>
             Block command
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
       {dirty && (
         <div className="savebar" role="status">
           <span>You have unsaved changes.</span>
-          <button type="button" className="btn quiet" onClick={() => setS(saved)}>
+          <Button variant="ghost" type="button" onClick={() => setS(saved)}>
             Discard
-          </button>
-          <button type="submit" className="btn primary">
-            Save changes
-          </button>
+          </Button>
+          <Button type="submit">Save changes</Button>
         </div>
       )}
     </form>

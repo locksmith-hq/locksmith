@@ -1,5 +1,14 @@
 // KMS (product id "keys"): the keys Locksmith holds, who may use them, what was done with them, and the rules around them.
 // Keys, clients (with their permissions), the activity log and settings live in module-level stores, so every page agrees.
+import { Checkbox } from "@locksmith-hq/checkbox";
+import { Badge } from "@locksmith-hq/badge";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useState } from "react";
 import {
   Crumbs,
@@ -400,13 +409,13 @@ function Sel({
   options: [string, string][];
 }) {
   return (
-    <select aria-label={label} value={value} onChange={(x) => onChange(x.target.value)}>
+    <Dropdown aria-label={label} value={value} onChange={(x) => onChange(x)}>
       {options.map(([val, text]) => (
-        <option key={val} value={val}>
+        <Option key={val} value={val}>
           {text}
-        </option>
+        </Option>
       ))}
-    </select>
+    </Dropdown>
   );
 }
 
@@ -427,9 +436,9 @@ function NotFound({ what, list, href, name }: { what: string; list: string; href
     <section>
       <Crumbs trail={[[list, href], [name]]} />
       <Head title={`No ${what} named ${name}`} sub={`It may have been removed, or the address is mistyped.`}>
-        <a className="btn primary" href={href}>
-          Back to {list.toLowerCase()}
-        </a>
+        <Button asChild>
+          <a href={href}>Back to {list.toLowerCase()}</a>
+        </Button>
       </Head>
       <Empty icon="lock">Nothing here. Pick one from the {list.toLowerCase()} list.</Empty>
     </section>
@@ -440,23 +449,23 @@ function NotFound({ what, list, href, name }: { what: string; list: string; href
 function LogTable({ rows, kms }: { rows: Entry[]; kms: Kms }) {
   return (
     <div className="table-wrap">
-      <table className="grid kms-log">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Who</th>
-            <th>Action</th>
-            <th>Key or client</th>
-            <th>Result</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="kms-log">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Time</TableHead>
+            <TableHead>Who</TableHead>
+            <TableHead>Action</TableHead>
+            <TableHead>Key or client</TableHead>
+            <TableHead>Result</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((r, i) => (
-            <tr key={`${r.at}-${i}`}>
-              <td className="muted">{ago(r.at)}</td>
-              <td>{r.kind === "op" ? kms.clientLink(r.client) : "You"}</td>
-              <td>{r.kind === "op" ? r.op : r.text}</td>
-              <td>
+            <TableRow key={`${r.at}-${i}`}>
+              <TableCell className="muted">{ago(r.at)}</TableCell>
+              <TableCell>{r.kind === "op" ? kms.clientLink(r.client) : "You"}</TableCell>
+              <TableCell>{r.kind === "op" ? r.op : r.text}</TableCell>
+              <TableCell>
                 {r.key ? (
                   <>
                     {kms.keyLink(r.key)}
@@ -467,8 +476,8 @@ function LogTable({ rows, kms }: { rows: Entry[]; kms: Kms }) {
                 ) : (
                   <span className="muted">Workspace</span>
                 )}
-              </td>
-              <td>
+              </TableCell>
+              <TableCell>
                 {r.why ? (
                   <>
                     <span className="outcome" data-o="denied">
@@ -481,11 +490,11 @@ function LogTable({ rows, kms }: { rows: Entry[]; kms: Kms }) {
                     {r.kind === "admin" ? "Done" : "OK"}
                   </span>
                 )}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -494,45 +503,44 @@ function LogTable({ rows, kms }: { rows: Entry[]; kms: Kms }) {
 function Matrix({ client, kms }: { client: Client; kms: Kms }) {
   const live = kms.keys.filter((k) => !k.deleteAt);
   return (
-    <table className="matrix">
+    <Table className="matrix">
       <caption className="sr-only">Operations {client.name} may do, per key</caption>
-      <thead>
-        <tr>
-          <th>Key</th>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Key</TableHead>
           {OPS.map((o) => (
-            <th key={o} className="c">
+            <TableHead key={o} className="c">
               {cap(o)}
-            </th>
+            </TableHead>
           ))}
-        </tr>
-      </thead>
-      <tbody>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {live.map((k) => (
-          <tr key={k.id}>
-            <th scope="row">
+          <TableRow key={k.id}>
+            <TableHead scope="row">
               {kms.keyLink(k.name)}
               {!k.enabled && <span className="muted"> (disabled)</span>}
-            </th>
+            </TableHead>
             {OPS.map((o) => (
-              <td key={o} className="c">
+              <TableCell key={o} className="c">
                 {opsOf(k.use).includes(o) ? (
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     aria-label={`${client.name} may ${o} with ${k.name}`}
                     checked={!!client.perms[k.name]?.includes(o)}
-                    onChange={(x) => kms.setPerm(client.name, k.name, o, x.target.checked)}
+                    onCheckedChange={(on) => kms.setPerm(client.name, k.name, o, on === true)}
                   />
                 ) : (
                   <span className="na" title={`${k.name} is for ${USE[k.use].toLowerCase()}`}>
                     n/a
                   </span>
                 )}
-              </td>
+              </TableCell>
             ))}
-          </tr>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }
 
@@ -558,10 +566,10 @@ function Keys({ say, sub }: PageProps) {
   return (
     <section>
       <Head title="Keys" sub="The encryption and signing keys Locksmith holds for your apps.">
-        <button type="button" className="btn primary" disabled={adding} onClick={() => setAdding(true)}>
+        <Button type="button" disabled={adding} onClick={() => setAdding(true)}>
           <Icon name="plus" />
           Create key
-        </button>
+        </Button>
       </Head>
       <p className="kms-note">
         <Icon name="lock" />
@@ -570,50 +578,50 @@ function Keys({ say, sub }: PageProps) {
         </span>
       </p>
       {adding && (
-        <form className="panel form" onSubmit={create} aria-label="Create key">
-          <h2>Create a key</h2>
-          <div className="add share">
-            <label className="field">
-              Name
-              <input name="name" required autoFocus placeholder="order-data" autoComplete="off" spellCheck={false} />
-            </label>
-            <label className="field">
-              Used for
-              <select name="use">
-                <option value="crypt">{USE.crypt} (AES 256)</option>
-                <option value="sign">{USE.sign} (Ed25519)</option>
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Create key
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              onClick={() => {
-                setAdding(false);
-                setErr("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-          {err && (
-            <p className="kms-warn" role="alert">
-              {err}
+        <Card className="panel form">
+          <form className="contents" onSubmit={create} aria-label="Create key">
+            <h2>Create a key</h2>
+            <div className="add share">
+              <Label className="field">
+                Name
+                <Input name="name" required autoFocus placeholder="order-data" autoComplete="off" spellCheck={false} />
+              </Label>
+              <Label className="field">
+                Used for
+                <Dropdown name="use">
+                  <Option value="crypt">{USE.crypt} (AES 256)</Option>
+                  <Option value="sign">{USE.sign} (Ed25519)</Option>
+                </Dropdown>
+              </Label>
+              <Button type="submit">Create key</Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setErr("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {err && (
+              <p className="kms-warn" role="alert">
+                {err}
+              </p>
+            )}
+            <p className="hint">
+              The key is made inside Locksmith. You will never see it. Next, allow a client to use it. The default
+              rotation comes from Settings.
             </p>
-          )}
-          <p className="hint">
-            The key is made inside Locksmith. You will never see it. Next, allow a client to use it. The default
-            rotation comes from Settings.
-          </p>
-        </form>
+          </form>
+        </Card>
       )}
       <div className="toolbar">
         <label className="search">
           <span className="sr-only">Find a key by name</span>
           <Icon name="search" />
-          <input type="search" placeholder="Find a key" value={q} onChange={(x) => setQ(x.target.value)} />
+          <Input type="search" placeholder="Find a key" value={q} onChange={(x) => setQ(x.target.value)} />
         </label>
       </div>
       {kms.keys.length === 0 ? (
@@ -621,61 +629,69 @@ function Keys({ say, sub }: PageProps) {
       ) : rows.length === 0 ? (
         <Empty icon="search">
           No key matches.{" "}
-          <button type="button" className="btn sm quiet" onClick={() => setQ("")}>
+          <Button variant="ghost" size="sm" type="button" onClick={() => setQ("")}>
             Clear search
-          </button>
+          </Button>
         </Empty>
       ) : (
         <div className="table-wrap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Used for</th>
-                <th>Algorithm</th>
-                <th>Version</th>
-                <th>Rotation</th>
-                <th>Last used</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Used for</TableHead>
+                <TableHead>Algorithm</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Rotation</TableHead>
+                <TableHead>Last used</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((k) => {
                 const s = state(k);
                 const late = overdue(k);
                 return (
-                  <tr key={k.id}>
-                    <td>
+                  <TableRow key={k.id}>
+                    <TableCell>
                       <a className="mono" href={keyHref(k.name)}>
                         {k.name}
                       </a>
-                    </td>
-                    <td>{USE[k.use]}</td>
-                    <td>{k.algo}</td>
-                    <td className="mono">v{k.versions[0]!.n}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell>{USE[k.use]}</TableCell>
+                    <TableCell>{k.algo}</TableCell>
+                    <TableCell className="mono">v{k.versions[0]!.n}</TableCell>
+                    <TableCell>
                       {every(k.every)}
                       {late > 0 && !k.deleteAt && (
                         <span className="kms-late">
                           <span className="kms-warn">Rotation overdue by {days(late)}</span>
-                          <button type="button" className="btn sm" disabled={!k.enabled} onClick={() => kms.rotate(k)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            disabled={!k.enabled}
+                            onClick={() => kms.rotate(k)}
+                          >
                             <Icon name="rotate" />
                             Rotate now
-                          </button>
+                          </Button>
                         </span>
                       )}
-                    </td>
-                    <td className={kms.keyUsed(k) === null ? "muted" : undefined}>{ago(kms.keyUsed(k))}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell className={kms.keyUsed(k) === null ? "muted" : undefined}>
+                      {ago(kms.keyUsed(k))}
+                    </TableCell>
+                    <TableCell>
                       <span className="kms-st" data-s={s.s}>
                         {s.t}
                       </span>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
@@ -699,27 +715,24 @@ function KeyDetail({ name, say }: { name: string; say: (n: string) => void }) {
       <div>
         <Crumbs trail={[["Keys", back], [k.name]]} />
         <Head title={k.name} sub={`${USE[k.use]} key, ${k.algo}. It is held inside Locksmith and never shown.`}>
-          <button
-            type="button"
-            className="btn primary"
-            disabled={!k.enabled || !!k.deleteAt}
-            onClick={() => kms.rotate(k)}
-          >
+          <Button type="button" disabled={!k.enabled || !!k.deleteAt} onClick={() => kms.rotate(k)}>
             <Icon name="rotate" />
             Rotate now
-          </button>
+          </Button>
         </Head>
         {k.deleteAt && (
-          <p className="alert" role="status">
-            This key is gone {inTime(k.deleteAt)}. Data it protects cannot be read after that.{" "}
-            <button type="button" className="btn sm" onClick={() => kms.cancelDelete(k)}>
-              Cancel deletion
-            </button>
-          </p>
+          <Alert role="status">
+            <AlertDescription>
+              This key is gone {inTime(k.deleteAt)}. Data it protects cannot be read after that.{" "}
+              <Button variant="outline" size="sm" type="button" onClick={() => kms.cancelDelete(k)}>
+                Cancel deletion
+              </Button>
+            </AlertDescription>
+          </Alert>
         )}
       </div>
 
-      <div className="panel">
+      <Card className="panel">
         <h2>Details</h2>
         <dl className="kms-facts">
           <div>
@@ -782,34 +795,41 @@ function KeyDetail({ name, say }: { name: string; say: (n: string) => void }) {
           }
         >
           {k.deleteAt ? (
-            <button type="button" className="btn sm" onClick={() => kms.cancelDelete(k)}>
+            <Button variant="outline" size="sm" type="button" onClick={() => kms.cancelDelete(k)}>
               Cancel deletion
-            </button>
+            </Button>
           ) : asking ? (
             <span className="kms-acts">
-              <button
+              <Button
+                variant="destructive"
+                size="sm"
                 type="button"
-                className="btn sm danger"
                 onClick={() => {
                   kms.scheduleDelete(k);
                   setAsking(false);
                 }}
               >
                 Schedule deletion
-              </button>
-              <button type="button" className="btn sm quiet" onClick={() => setAsking(false)}>
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setAsking(false)}>
                 Keep it
-              </button>
+              </Button>
             </span>
           ) : (
-            <button type="button" className="btn sm quiet danger-text" onClick={() => setAsking(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-(--destructive-text)"
+              type="button"
+              onClick={() => setAsking(true)}
+            >
               Schedule deletion
-            </button>
+            </Button>
           )}
         </Row>
-      </div>
+      </Card>
 
-      <div className="panel">
+      <Card className="panel">
         <h2>Versions</h2>
         <p className="muted">
           New data always uses the current version. Older versions are kept only to{" "}
@@ -828,9 +848,9 @@ function KeyDetail({ name, say }: { name: string; say: (n: string) => void }) {
             </li>
           ))}
         </ul>
-      </div>
+      </Card>
 
-      <div className="panel kms-detail">
+      <Card className="panel kms-detail">
         <h2>Clients that may use it</h2>
         <p className="muted">Tick what each client may do. This is the same setting as on the Clients page.</p>
         {kms.clients.length === 0 ? (
@@ -838,40 +858,39 @@ function KeyDetail({ name, say }: { name: string; say: (n: string) => void }) {
             No clients yet. <a href="#/app/keys/clients">Add a client</a> first.
           </Empty>
         ) : (
-          <table className="matrix">
+          <Table className="matrix">
             <caption className="sr-only">Clients and what each may do with {k.name}</caption>
-            <thead>
-              <tr>
-                <th>Client</th>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
                 {ops.map((o) => (
-                  <th key={o} className="c">
+                  <TableHead key={o} className="c">
                     {cap(o)}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {kms.clients.map((c) => (
-                <tr key={c.name}>
-                  <th scope="row">
-                    {kms.clientLink(c.name)} <span className="badge">{c.kind}</span>
-                  </th>
+                <TableRow key={c.name}>
+                  <TableHead scope="row">
+                    {kms.clientLink(c.name)} <Badge variant="secondary">{c.kind}</Badge>
+                  </TableHead>
                   {ops.map((o) => (
-                    <td key={o} className="c">
-                      <input
-                        type="checkbox"
+                    <TableCell key={o} className="c">
+                      <Checkbox
                         aria-label={`${c.name} may ${o} with ${k.name}`}
                         checked={!!c.perms[k.name]?.includes(o)}
-                        onChange={(x) => kms.setPerm(c.name, k.name, o, x.target.checked)}
+                        onCheckedChange={(on) => kms.setPerm(c.name, k.name, o, on === true)}
                       />
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Card>
     </section>
   );
 }
@@ -891,13 +910,13 @@ function ClientDetail({ name, say }: { name: string; say: (n: string) => void })
     if (!k || !x.op) return <span className="muted">Key no longer exists</span>;
     if (x.why === DISABLED)
       return k.deleteAt ? (
-        <button type="button" className="btn sm" onClick={() => kms.cancelDelete(k)}>
+        <Button variant="outline" size="sm" type="button" onClick={() => kms.cancelDelete(k)}>
           Cancel deletion of {k.name}
-        </button>
+        </Button>
       ) : !k.enabled ? (
-        <button type="button" className="btn sm" onClick={() => kms.setEnabled(k, true)}>
+        <Button variant="outline" size="sm" type="button" onClick={() => kms.setEnabled(k, true)}>
           Enable {k.name}
-        </button>
+        </Button>
       ) : (
         <span className="kms-st" data-s="on">
           Fixed: key is enabled
@@ -908,9 +927,9 @@ function ClientDetail({ name, say }: { name: string; say: (n: string) => void })
         Fixed: allowed
       </span>
     ) : (
-      <button type="button" className="btn sm" onClick={() => kms.setPerm(c.name, k.name, x.op!, true)}>
+      <Button variant="outline" size="sm" type="button" onClick={() => kms.setPerm(c.name, k.name, x.op!, true)}>
         Allow {x.op} on {k.name}
-      </button>
+      </Button>
     );
   };
   return (
@@ -919,7 +938,7 @@ function ClientDetail({ name, say }: { name: string; say: (n: string) => void })
         <Crumbs trail={[["Clients", back], [c.name]]} />
         <Head title={c.name} sub={c.about} />
       </div>
-      <div className="panel">
+      <Card className="panel">
         <h2>About</h2>
         <dl className="kms-facts">
           <div>
@@ -935,80 +954,89 @@ function ClientDetail({ name, say }: { name: string; say: (n: string) => void })
             <dd>{ago(kms.clientUsed(c))}</dd>
           </div>
         </dl>
-      </div>
-      <div className="panel kms-detail">
+      </Card>
+      <Card className="panel kms-detail">
         <h2>What it may do</h2>
         <p className="muted">Tick an operation to allow it. This is the same setting as on each key.</p>
         <Matrix client={c} kms={kms} />
-      </div>
+      </Card>
       <div>
         <h2 className="kms-h2">Refused requests</h2>
         {denied.length === 0 ? (
           <Empty icon="shield">No requests from {c.name} have been refused.</Empty>
         ) : (
           <div className="table-wrap">
-            <table className="grid">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Request</th>
-                  <th>Reason</th>
-                  <th>Fix</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Request</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Fix</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {denied.map((x, i) => (
-                  <tr key={`${x.at}-${i}`}>
-                    <td className="muted">{ago(x.at)}</td>
-                    <td>
+                  <TableRow key={`${x.at}-${i}`}>
+                    <TableCell className="muted">{ago(x.at)}</TableCell>
+                    <TableCell>
                       {x.op} {kms.keyLink(x.key)}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       <span className="outcome" data-o="denied">
                         <b>Denied</b>
                       </span>
                       <span className="kms-reason">{x.why}</span>
-                    </td>
-                    <td>{fix(x)}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>{fix(x)}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>
-      <div className="panel">
+      <Card className="panel">
         <h2>Remove client</h2>
         <div className="kms-acts">
           {removing ? (
             <>
-              <span className="alert" role="alert" style={{ margin: 0 }}>
-                {c.name} stops working on {plural(count, "key")} right away. Its requests will be denied.
-              </span>
-              <button
+              <Alert variant="destructive" style={{ margin: 0 }}>
+                <AlertDescription>
+                  {c.name} stops working on {plural(count, "key")} right away. Its requests will be denied.
+                </AlertDescription>
+              </Alert>
+              <Button
+                variant="destructive"
+                size="sm"
                 type="button"
-                className="btn sm danger"
                 onClick={() => {
                   kms.removeClient(c.name);
                   location.hash = back;
                 }}
               >
                 Remove {c.name}
-              </button>
-              <button type="button" className="btn sm quiet" onClick={() => setRemoving(false)}>
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(false)}>
                 Keep it
-              </button>
+              </Button>
             </>
           ) : (
             <>
-              <button type="button" className="btn sm quiet danger-text" onClick={() => setRemoving(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-(--destructive-text)"
+                type="button"
+                onClick={() => setRemoving(true)}
+              >
                 Remove client
-              </button>
+              </Button>
               <span className="muted">Its permissions are deleted. Past activity stays in the log.</span>
             </>
           )}
         </div>
-      </div>
+      </Card>
     </section>
   );
 }
@@ -1034,55 +1062,55 @@ function Clients({ say, sub }: PageProps) {
   return (
     <section>
       <Head title="Clients" sub="The apps, jobs and agents that may use keys, and what each one may do with them.">
-        <button type="button" className="btn primary" disabled={adding} onClick={() => setAdding(true)}>
+        <Button type="button" disabled={adding} onClick={() => setAdding(true)}>
           <Icon name="plus" />
           Add client
-        </button>
+        </Button>
       </Head>
       {adding && (
-        <form className="panel form" onSubmit={add} aria-label="Add client">
-          <h2>Add a client</h2>
-          <div className="add share">
-            <label className="field">
-              Name
-              <input
-                name="name"
-                required
-                autoFocus
-                placeholder="reports-worker"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
-            <label className="field">
-              Kind
-              <select name="kind">
-                <option>Service</option>
-                <option>CI job</option>
-                <option>AI agent</option>
-              </select>
-            </label>
-            <button type="submit" className="btn primary">
-              Add client
-            </button>
-            <button
-              type="button"
-              className="btn quiet"
-              onClick={() => {
-                setAdding(false);
-                setErr("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-          {err && (
-            <p className="kms-warn" role="alert">
-              {err}
-            </p>
-          )}
-          <p className="hint">A new client can use no keys. Tick the operations it needs on its page.</p>
-        </form>
+        <Card className="panel form">
+          <form className="contents" onSubmit={add} aria-label="Add client">
+            <h2>Add a client</h2>
+            <div className="add share">
+              <Label className="field">
+                Name
+                <Input
+                  name="name"
+                  required
+                  autoFocus
+                  placeholder="reports-worker"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Label>
+              <Label className="field">
+                Kind
+                <Dropdown name="kind">
+                  <Option>Service</Option>
+                  <Option>CI job</Option>
+                  <Option>AI agent</Option>
+                </Dropdown>
+              </Label>
+              <Button type="submit">Add client</Button>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setErr("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {err && (
+              <p className="kms-warn" role="alert">
+                {err}
+              </p>
+            )}
+            <p className="hint">A new client can use no keys. Tick the operations it needs on its page.</p>
+          </form>
+        </Card>
       )}
       {kms.clients.length === 0 ? (
         <Empty icon="s_terminal">No clients yet. Add one, then choose which keys it may use.</Empty>
@@ -1098,16 +1126,16 @@ function Clients({ say, sub }: PageProps) {
                   <a className="mono kms-name" href={clientHref(c.name)}>
                     {c.name}
                   </a>{" "}
-                  <span className="badge">{c.kind}</span>
+                  <Badge variant="secondary">{c.kind}</Badge>
                   <p>{c.about}</p>
                 </div>
                 <span className="meta">
                   <span>{count(c) ? plural(count(c), "key") : "No keys"}</span>
                   <span>{kms.clientUsed(c) === null ? "Never used" : `Used ${ago(kms.clientUsed(c))}`}</span>
                 </span>
-                <a className="btn sm" href={clientHref(c.name)}>
-                  Edit access
-                </a>
+                <Button asChild variant="outline" size="sm">
+                  <a href={clientHref(c.name)}>Edit access</a>
+                </Button>
               </div>
             </li>
           ))}
@@ -1147,22 +1175,23 @@ function Activity({ say }: PageProps) {
         <label className="search push">
           <span className="sr-only">Find by key or client</span>
           <Icon name="search" />
-          <input type="search" placeholder="Find a key or client" value={q} onChange={(x) => setQ(x.target.value)} />
+          <Input type="search" placeholder="Find a key or client" value={q} onChange={(x) => setQ(x.target.value)} />
         </label>
       </div>
       {rows.length === 0 ? (
         <Empty icon="doc">
           No activity matches.{" "}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
-            className="btn sm quiet"
             onClick={() => {
               setRes("any");
               setQ("");
             }}
           >
             Clear filters
-          </button>
+          </Button>
         </Empty>
       ) : (
         <LogTable rows={rows} kms={kms} />
@@ -1211,7 +1240,7 @@ function Settings({ say }: PageProps) {
           <p className="lede">Rules that apply to every key in this workspace.</p>
         </div>
       </div>
-      <section className="panel" aria-labelledby="kms-keys">
+      <Card className="panel" role="region" aria-labelledby="kms-keys">
         <h2 id="kms-keys">Keys</h2>
         <Row
           title="Default rotation"
@@ -1235,8 +1264,8 @@ function Settings({ say }: PageProps) {
             options={[7, 14, 30].map((n): [string, string] => [String(n), days(n)])}
           />
         </Row>
-      </section>
-      <section className="panel" aria-labelledby="kms-root">
+      </Card>
+      <Card className="panel" role="region" aria-labelledby="kms-root">
         <h2 id="kms-root">Root key</h2>
         <Row
           title="Where the root key lives"
@@ -1260,16 +1289,14 @@ function Settings({ say }: PageProps) {
             )}
           </Row>
         )}
-      </section>
+      </Card>
       {changed.length > 0 && (
         <div className="savebar" role="status">
           <span>You have unsaved changes.</span>
-          <button type="button" className="btn quiet" onClick={() => setDraft(null)}>
+          <Button variant="ghost" type="button" onClick={() => setDraft(null)}>
             Discard
-          </button>
-          <button type="submit" className="btn primary">
-            Save changes
-          </button>
+          </Button>
+          <Button type="submit">Save changes</Button>
         </div>
       )}
     </form>

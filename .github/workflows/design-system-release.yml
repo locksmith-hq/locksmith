@@ -1,0 +1,46 @@
+name: design-system-release
+
+# Versions and publishes the design system packages (@locksmith-hq/*) to GitHub Packages with Changesets.
+# A push to main that carries changesets opens or updates the "Version Packages" pull request. Merging that
+# pull request publishes every package whose version is not yet in the registry.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - design-system/packages/**
+      - .changeset/**
+      - .github/workflows/design-system-release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: design-system-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@locksmith-hq"
+      - run: npm ci
+      - uses: changesets/action@v1
+        with:
+          title: "design-system: version packages"
+          commit: "design-system: version packages"
+          version: npm run version:design-system
+          publish: npm run release:design-system
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

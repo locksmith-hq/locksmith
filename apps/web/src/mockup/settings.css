@@ -5,18 +5,18 @@
 .set-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 14px 0; border-top: 1px solid var(--border); }
 .set-row:first-of-type { border-top: 0; }
 .set-row b { font-weight: 600; }
-.set-row p { margin: 2px 0 0; max-width: 56ch; color: var(--muted); font-size: 13px; }
-.set-ctl input:not(.switch), .settings .inline-form input { height: 36px; width: 240px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface); font: 14px var(--sans); color: var(--text); }
+.set-row p { margin: 2px 0 0; max-width: 56ch; color: var(--muted-foreground); font-size: 13px; }
+.set-ctl input:not(.switch), .settings .inline-form input { height: 36px; width: 240px; padding: 0 10px; border: 1px solid var(--input); border-radius: 9px; background: var(--card); font: 14px var(--font-sans); color: var(--foreground); }
 .set-ctl select { height: 36px; min-width: 180px; font-size: 14px; }
-.affix { display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--raised); }
-.affix span { padding: 0 2px 0 10px; color: var(--muted); font-size: 13px; }
-.affix input { width: 140px !important; border: 0 !important; background: var(--surface) !important; border-radius: 0 8px 8px 0 !important; }
-.fixed { color: var(--muted); }
+.affix { display: inline-flex; align-items: center; border: 1px solid var(--input); border-radius: 9px; background: var(--popover); }
+.affix span { padding: 0 2px 0 10px; color: var(--muted-foreground); font-size: 13px; }
+.affix input { width: 140px !important; border: 0 !important; background: var(--card) !important; border-radius: 0 8px 8px 0 !important; }
+.fixed { color: var(--muted-foreground); }
 .settings .alert { margin: 12px 0 0; }
 
 
-.danger-zone { border-color: var(--danger-border); }
-.savebar { position: sticky; bottom: 16px; display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-md); font-weight: 600; }
+.danger-zone { border-color: var(--destructive-border); }
+.savebar { position: sticky; bottom: 16px; display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border: 1px solid var(--input); border-radius: 14px; background: var(--card); box-shadow: var(--shadow-md); font-weight: 600; }
 .savebar span { margin-right: auto; }
 
 @media (max-width: 860px) {
@@ -25,5 +25,5 @@
 }
 
 /* A command the person runs themselves. */
-.cmd { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); overflow-x: auto; }
-.cmd code { padding: 0; background: none; font-size: 13px; color: var(--text); white-space: pre; }
+.cmd { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); overflow-x: auto; }
+.cmd code { padding: 0; background: none; font-size: 13px; color: var(--foreground); white-space: pre; }

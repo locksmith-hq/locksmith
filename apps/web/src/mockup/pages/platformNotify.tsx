@@ -1,4 +1,14 @@
 // Notification center: inbox, channels and rules. Sample data; nothing is sent.
+import { Tabs as KitTabs, TabsList, TabsTrigger } from "@locksmith-hq/tabs";
+import { Checkbox } from "@locksmith-hq/checkbox";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Label } from "@locksmith-hq/label";
+import { Card } from "@locksmith-hq/card";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Button } from "@locksmith-hq/button";
+import { Input } from "@locksmith-hq/input";
+import { Dropdown, Option } from "../../Dropdown";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 import { useState } from "react";
 import { connections } from "../data";
 import { Crumbs, Empty, Head, Icon, NOW, ago, plural, type IconName, type PageProps } from "../kit";
@@ -58,14 +68,18 @@ const dayOf = (at: number) => {
 
 function Tabs({ at, unread }: { at: string; unread: number }) {
   return (
-    <nav className="tabs" aria-label="Notification center">
-      {TABS.map(([k, label]) => (
-        <a key={k} href={k ? `#/notifications/${k}` : "#/notifications"} aria-current={at === k ? "page" : undefined}>
-          {label}
-          {k === "" && unread > 0 && <span className="n">{unread} unread</span>}
-        </a>
-      ))}
-    </nav>
+    <KitTabs value={at || "index"} className="mb-5">
+      <TabsList variant="line" aria-label="Notification center">
+        {TABS.map(([k, label]) => (
+          <TabsTrigger key={k} value={k || "index"} asChild>
+            <a href={k ? `#/notifications/${k}` : "#/notifications"}>
+              {label}
+              {k === "" && unread > 0 && <span className="n">{unread} unread</span>}
+            </a>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </KitTabs>
   );
 }
 
@@ -128,13 +142,13 @@ function Inbox({ say, unread }: { say: PageProps["say"]; unread: number }) {
         </div>
         <span className="pf-acts">
           {x.href && (
-            <a className={needsAction(x) ? "btn sm primary" : "btn sm"} href={x.href}>
-              {meta.action}
-            </a>
+            <Button asChild size="sm" variant={needsAction(x) ? "default" : "outline"}>
+              <a href={x.href}>{meta.action}</a>
+            </Button>
           )}
-          <button type="button" className="btn sm quiet" onClick={() => setRead(x.id, !x.read)}>
+          <Button variant="ghost" size="sm" type="button" onClick={() => setRead(x.id, !x.read)}>
             {x.read ? "Mark unread" : "Mark read"}
-          </button>
+          </Button>
         </span>
       </li>
     );
@@ -146,9 +160,8 @@ function Inbox({ say, unread }: { say: PageProps["say"]; unread: number }) {
         title="Notifications"
         sub="What needs your attention across every product, newest first. Open one to see who else was told."
       >
-        <button
+        <Button
           type="button"
-          className="btn primary"
           disabled={unread === 0}
           onClick={() => {
             setNotices((ns) => ns.map((x) => ({ ...x, read: true })));
@@ -156,12 +169,11 @@ function Inbox({ say, unread }: { say: PageProps["say"]; unread: number }) {
           }}
         >
           Mark all read
-        </button>
+        </Button>
       </Head>
       <Tabs at="" unread={unread} />
       <div className="toolbar">
-        <fieldset className="seg inline">
-          <legend className="sr-only">Show</legend>
+        <ToggleGroup type="single" value={String(view)} aria-label="Show">
           {(
             [
               ["all", "All", notices.length],
@@ -169,13 +181,12 @@ function Inbox({ say, unread }: { say: PageProps["say"]; unread: number }) {
               ["action", "Needs action", notices.filter(needsAction).length],
             ] as const
           ).map(([k, label, count]) => (
-            <label key={k}>
-              <input type="radio" name="pf-view" checked={view === k} onChange={() => setView(k)} />
+            <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setView(k)}>
               {label}
               <span className="n">{count}</span>
-            </label>
+            </ToggleGroupItem>
           ))}
-        </fieldset>
+        </ToggleGroup>
       </div>
       {shown.length === 0 ? (
         <Empty icon="alert">
@@ -218,12 +229,12 @@ function Detail({ id }: { id: string }) {
       <Crumbs trail={[["Notifications", "#/notifications"], [x.title]]} />
       <Head title={x.title} sub={x.body}>
         {x.href && (
-          <a className="btn primary" href={x.href}>
-            {meta.action}
-          </a>
+          <Button asChild>
+            <a href={x.href}>{meta.action}</a>
+          </Button>
         )}
       </Head>
-      <div className="panel">
+      <Card className="panel">
         <h2>Who was told</h2>
         <p className="muted">
           {failed
@@ -231,33 +242,33 @@ function Detail({ id }: { id: string }) {
             : "Every delivery went through."}
         </p>
         <div className="table-wrap pf-scroll pf-gap">
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Channel</th>
-                <th>Sent to</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Channel</TableHead>
+                <TableHead>Sent to</TableHead>
+                <TableHead>Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {meta.sent.map((s) => (
-                <tr key={s.channel}>
-                  <td className="strong">{CHANNEL_NAME[s.channel]}</td>
-                  <td className="wrap">{s.to}</td>
-                  <td>
+                <TableRow key={s.channel}>
+                  <TableCell className="strong">{CHANNEL_NAME[s.channel]}</TableCell>
+                  <TableCell className="wrap">{s.to}</TableCell>
+                  <TableCell>
                     <span className="pf-res" data-ok={s.ok}>
                       {s.ok ? "Delivered" : `Failed: ${s.note}`}
                     </span>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
         <p className="hint">
           Who is told, and where, is set by <a href="#/notifications/rules">the rules</a>.
         </p>
-      </div>
+      </Card>
     </>
   );
 }
@@ -317,23 +328,23 @@ function Channels({ say, unread }: { say: PageProps["say"]; unread: number }) {
     <form className="pf-form" onSubmit={(e) => submit(e, c)} aria-label={`Connect ${CHANNEL_NAME[c.id]}`}>
       {c.id === "slack" &&
         (slackConns.length ? (
-          <label className="field">
+          <Label className="field">
             Slack connection from Integrations
-            <select value={pick} onChange={(e) => setPick(e.target.value)}>
+            <Dropdown value={pick} onChange={(e) => setPick(e)}>
               {slackConns.map((s) => (
-                <option key={s.id}>{s.name}</option>
+                <Option key={s.id}>{s.name}</Option>
               ))}
-            </select>
-          </label>
+            </Dropdown>
+          </Label>
         ) : (
           <p className="muted">
             There is no Slack connection yet. <a href="#/integrations">Add one in Integrations</a>, then come back.
           </p>
         ))}
       {c.id === "email" && (
-        <label className="field">
+        <Label className="field">
           Shared address
-          <input
+          <Input
             type="email"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -341,27 +352,27 @@ function Channels({ say, unread }: { say: PageProps["say"]; unread: number }) {
             autoComplete="off"
             required
           />
-        </label>
+        </Label>
       )}
       {c.id === "webhook" && (
-        <label className="field">
+        <Label className="field">
           Webhook address
-          <input
+          <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="https://hooks.acme.example/locksmith"
             autoComplete="off"
             required
           />
-        </label>
+        </Label>
       )}
       <div className="pf-btns">
-        <button type="submit" className="btn primary" disabled={c.id === "slack" && !pick}>
+        <Button type="submit" disabled={c.id === "slack" && !pick}>
           Connect {CHANNEL_NAME[c.id]}
-        </button>
-        <button type="button" className="btn quiet" onClick={() => setForm(null)}>
+        </Button>
+        <Button variant="ghost" type="button" onClick={() => setForm(null)}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -389,42 +400,46 @@ function Channels({ say, unread }: { say: PageProps["say"]; unread: number }) {
           </p>
           {form === c.id && formFor(c)}
           {removing === c.id && (
-            <p className="alert" role="alert">
-              {stops.length
-                ? `Disconnecting ${CHANNEL_NAME[c.id]} stops ${plural(stops.length, "rule")} from delivering here: ${stops.map((e) => e.label).join(", ")}.`
-                : `No rule uses ${CHANNEL_NAME[c.id]} yet, so nothing stops.`}{" "}
-              The inbox is not affected.
-              <button type="button" className="btn sm danger" onClick={() => disconnect(c.id)}>
-                Disconnect {CHANNEL_NAME[c.id]}
-              </button>
-              <button type="button" className="btn sm quiet" onClick={() => setRemoving(null)}>
-                Keep it
-              </button>
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>
+                {stops.length
+                  ? `Disconnecting ${CHANNEL_NAME[c.id]} stops ${plural(stops.length, "rule")} from delivering here: ${stops.map((e) => e.label).join(", ")}.`
+                  : `No rule uses ${CHANNEL_NAME[c.id]} yet, so nothing stops.`}{" "}
+                The inbox is not affected.
+                <Button variant="destructive" size="sm" type="button" onClick={() => disconnect(c.id)}>
+                  Disconnect {CHANNEL_NAME[c.id]}
+                </Button>
+                <Button variant="ghost" size="sm" type="button" onClick={() => setRemoving(null)}>
+                  Keep it
+                </Button>
+              </AlertDescription>
+            </Alert>
           )}
         </div>
         <span className="pf-acts">
           {c.status !== "off" && (
-            <button type="button" className="btn sm" onClick={() => test(c)}>
+            <Button variant="outline" size="sm" type="button" onClick={() => test(c)}>
               Send test
-            </button>
+            </Button>
           )}
           {c.id === "inapp" ? (
             <span className="muted small">Always on</span>
           ) : c.status === "off" ? (
-            <button type="button" className="btn sm" disabled={form === c.id} onClick={() => open(c.id)}>
+            <Button variant="outline" size="sm" type="button" disabled={form === c.id} onClick={() => open(c.id)}>
               Connect
-            </button>
+            </Button>
           ) : (
             <>
               {c.status === "attention" && (
-                <button type="button" className="btn sm" onClick={() => open(c.id)}>
+                <Button variant="outline" size="sm" type="button" onClick={() => open(c.id)}>
                   Fix connection
-                </button>
+                </Button>
               )}
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-(--destructive-text)"
                 type="button"
-                className="btn sm quiet danger-text"
                 aria-label={`Disconnect ${CHANNEL_NAME[c.id]}`}
                 onClick={() => {
                   setRemoving(c.id);
@@ -432,7 +447,7 @@ function Channels({ say, unread }: { say: PageProps["say"]; unread: number }) {
                 }}
               >
                 Disconnect
-              </button>
+              </Button>
             </>
           )}
         </span>
@@ -479,22 +494,22 @@ function Rules({ unread }: { unread: number }) {
       <Head title="Notifications" sub="Which events are sent where, and to whom. Changes apply as you make them." />
       <Tabs at="rules" unread={unread} />
       <div className="table-wrap pf-scroll">
-        <table className="grid pf-matrix">
-          <thead>
-            <tr>
-              <th>Event</th>
-              <th>Who is told</th>
+        <Table className="pf-matrix">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Event</TableHead>
+              <TableHead>Who is told</TableHead>
               {cols.map((c) => (
-                <th key={c.id} className="pf-c">
+                <TableHead key={c.id} className="pf-c">
                   {CHANNEL_NAME[c.id]}
                   <small>
                     {c.status === "attention" ? "Needs attention" : c.id === "inapp" ? "Always on" : "Connected"}
                   </small>
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {EVENTS.map((e, i) => (
               <RuleRows
                 key={e.id}
@@ -509,8 +524,8 @@ function Rules({ unread }: { unread: number }) {
                 setWho={setWho}
               />
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <p className="hint">
         The in-app inbox always receives everything. A column appears here once its channel is connected under{" "}
@@ -544,45 +559,44 @@ function RuleRows({
   return (
     <>
       {first && (
-        <tr className="area">
-          <th colSpan={cols.length + 2} scope="colgroup">
+        <TableRow className="area">
+          <TableHead colSpan={cols.length + 2} scope="colgroup">
             {product}
-          </th>
-        </tr>
+          </TableHead>
+        </TableRow>
       )}
-      <tr>
-        <td>
+      <TableRow>
+        <TableCell>
           <span className="strong">{label}</span>
           <br />
           <span className="muted">{about}</span>
-        </td>
-        <td>
-          <select
+        </TableCell>
+        <TableCell>
+          <Dropdown
             aria-label={`Who is told about ${label}`}
             value={rule?.who ?? "Owners and admins"}
-            onChange={(x) => setWho(id, x.target.value as Who)}
+            onChange={(x) => setWho(id, x as Who)}
           >
             {WHO.map((w) => (
-              <option key={w}>{w}</option>
+              <Option key={w}>{w}</Option>
             ))}
-          </select>
-        </td>
+          </Dropdown>
+        </TableCell>
         {cols.map((c) => {
           const locked = c.id === "inapp";
           return (
-            <td key={c.id} className="pf-c">
-              <input
-                type="checkbox"
+            <TableCell key={c.id} className="pf-c">
+              <Checkbox
                 checked={locked || (rule?.on.includes(c.id) ?? false)}
                 disabled={locked}
                 aria-label={`${label}: ${CHANNEL_NAME[c.id]}${locked ? " (always on)" : ""}`}
                 title={locked ? "Always on" : undefined}
-                onChange={() => toggle(id, c.id)}
+                onCheckedChange={() => toggle(id, c.id)}
               />
-            </td>
+            </TableCell>
           );
         })}
-      </tr>
+      </TableRow>
     </>
   );
 }

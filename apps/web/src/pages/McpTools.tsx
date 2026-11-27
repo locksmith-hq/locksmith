@@ -1,5 +1,8 @@
+import { Label } from "@locksmith-hq/label";
+import { Switch } from "@locksmith-hq/switch";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { PageHeader } from "@locksmith-hq/page-header";
 import { useEffect, useState } from "react";
-import { Head } from "@locksmith/ui";
 import type { Client, McpToolSetting } from "@locksmith/control-plane-client";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "request failed");
@@ -33,11 +36,11 @@ export function McpTools({ client }: { client: Client }) {
 
   return (
     <section aria-label="Tools">
-      <Head title="MCP tools" />
+      <PageHeader title="MCP tools" />
       {error && (
-        <p role="alert" className="state">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {!tools ? (
         error ? null : (
@@ -51,23 +54,20 @@ export function McpTools({ client }: { client: Client }) {
           if (rows.length === 0) return null;
           return (
             <div key={layer} aria-label={`${layerName(layer)} tools`}>
-              <h3>{layerName(layer)}</h3>
-              <ul className="list">
+              <h3 className="mt-4 mb-2 text-base font-semibold">{layerName(layer)}</h3>
+              <ul className="divide-y rounded-md border bg-card">
                 {rows.map((t) => (
-                  <li key={t.tool} className="row">
-                    <label>
-                      <input
-                        type="checkbox"
-                        className="switch"
-                        role="switch"
+                  <li key={t.tool} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                    <Label>
+                      <Switch
                         aria-label={`${t.tool} (${layer})`}
                         checked={t.enabled}
-                        onChange={(e) => void toggle(t, e.target.checked)}
-                      />{" "}
+                        onCheckedChange={(on) => void toggle(t, on)}
+                      />
                       <strong>{t.tool}</strong>
-                    </label>{" "}
+                    </Label>{" "}
                     {t.description}{" "}
-                    <em>
+                    <em className="text-muted-foreground">
                       {t.default_enabled ? "on by default" : "off by default"}
                       {t.overridden ? ", changed" : ""}
                     </em>

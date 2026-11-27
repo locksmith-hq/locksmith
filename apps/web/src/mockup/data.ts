@@ -1,5 +1,6 @@
 // Sample data for the console mockup. Nothing here is read from a control plane.
-import { NOW, type IconName } from "@locksmith/ui";
+import type { IconName } from "./kit";
+import { NOW } from "./time";
 
 const m = 60,
   h = 3600,

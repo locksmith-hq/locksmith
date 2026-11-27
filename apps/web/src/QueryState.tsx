@@ -1,6 +1,9 @@
-import { Loader } from "./Loader";
 import type { ReactNode } from "react";
-import { Empty } from "@locksmith/ui";
+import { FileText } from "lucide-react";
+import { Alert, AlertDescription } from "@locksmith-hq/alert";
+import { Button } from "@locksmith-hq/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from "@locksmith-hq/empty";
+import { Loader } from "@locksmith-hq/loader";
 
 /** The part of a TanStack Query result this component reads, so any `useQuery` result fits. */
 export interface QueryLike<T> {
@@ -30,14 +33,26 @@ export function QueryState<T>({
   if (query.isError || query.data === undefined) {
     const msg = query.error instanceof Error ? query.error.message : "request failed";
     return (
-      <div role="alert" className="state">
-        <p>{msg}</p>
-        <button className="btn sm" onClick={() => void query.refetch()}>
-          Retry
-        </button>
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>
+          <p>{msg}</p>
+          <Button variant="outline" size="sm" className="mt-2 w-fit" onClick={() => void query.refetch()}>
+            Retry
+          </Button>
+        </AlertDescription>
+      </Alert>
     );
   }
-  if (isEmpty(query.data)) return <Empty icon="doc">{empty}</Empty>;
+  if (isEmpty(query.data))
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <FileText />
+          </EmptyMedia>
+          <EmptyDescription>{empty}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
   return <>{children(query.data)}</>;
 }

@@ -16,6 +16,7 @@ import {
   WorkloadIdentityParams,
   WorkloadIdentitySchema,
 } from "../workload-identities/workload-identities.schemas.js";
+import { NewSecret, Secret, SecretParams, SecretVersionListSchema } from "../secrets/secrets.schemas.js";
 import { defineRoute, type RouteDef } from "./build.js";
 
 /**
@@ -157,5 +158,52 @@ export const auditRoutes: RouteDef[] = [
     method: "GET",
     path: "/v1/audit/status",
     responses: { 200: AuditStatusSchema, ...E(401, 403, 404, 503) },
+  }),
+];
+
+/**
+ * Secret metadata routes (task 6.5 slice): held to the frozen contract by `secrets.contract.test.ts`; not in `routes`
+ * until the flip. `POST .../versions` seals a value, so it stays on the Rust core and is not listed here.
+ */
+const secretsPath = `${envPath}/{environment_id}/secrets`;
+export const secretRoutes: RouteDef[] = [
+  defineRoute({
+    method: "GET",
+    path: secretsPath,
+    params: EnvironmentParams,
+    query: PageQuerySchema,
+    responses: { 200: Paged(Secret), ...E(400, 401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "POST",
+    path: secretsPath,
+    params: EnvironmentParams,
+    body: NewSecret,
+    responses: { 201: Secret, ...E(400, 401, 403, 404, 409, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: `${secretsPath}/{secret_id}`,
+    params: SecretParams,
+    responses: { 200: Secret, ...E(401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "PATCH",
+    path: `${secretsPath}/{secret_id}`,
+    params: SecretParams,
+    body: Patch,
+    responses: { 200: Secret, ...E(400, 401, 403, 404, 409, 503) },
+  }),
+  defineRoute({
+    method: "DELETE",
+    path: `${secretsPath}/{secret_id}`,
+    params: SecretParams,
+    responses: { 204: null, ...E(401, 403, 404, 409, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: `${secretsPath}/{secret_id}/versions`,
+    params: SecretParams,
+    responses: { 200: SecretVersionListSchema, ...E(401, 403, 404, 503) },
   }),
 ];

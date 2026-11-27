@@ -6,7 +6,7 @@ export const Secret = z.object({
   environment_id: z.string(),
   name: z.string(),
   description: z.string(),
-  version_count: z.number().int(),
+  version_count: z.number().int().min(0),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -18,8 +18,10 @@ export const NewSecret = z.strictObject({ name: z.string(), description: z.strin
 /** Metadata only; the Rust `SecretVersion` has no value, DEK, ciphertext or wrapped DEK field either. */
 const SecretVersion = z.object({
   secret_id: z.string(),
-  version: z.number().int(),
+  version: z.number().int().min(0),
   key_id: z.string(),
   created_at: z.string(),
 });
-export type SecretVersionList = { items: z.infer<typeof SecretVersion>[] };
+export const SecretVersionListSchema = z.object({ items: z.array(SecretVersion) });
+export type SecretVersionList = z.infer<typeof SecretVersionListSchema>;
+export const SecretParams = z.object({ project_id: z.string(), environment_id: z.string(), secret_id: z.string() });

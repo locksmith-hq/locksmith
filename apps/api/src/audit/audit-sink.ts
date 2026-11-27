@@ -40,10 +40,14 @@ export interface AdminAuditEvent {
     | "grant.created"
     | "grant.revoked"
     | "workload_identity.created"
-    | "workload_identity.deleted";
+    | "workload_identity.deleted"
+    | "workload_identity.exchanged"
+    | "workload_identity.denied";
   orgId: string;
+  /** Defaults to `ok`; a refused workload exchange is `denied`. */
+  outcome?: "ok" | "denied";
   /** Until the console session lands the actor is the dev-auth service, as in Rust. */
-  actor: { type: "service"; code: string } | { type: "user"; id: string };
+  actor: { type: "service"; code: string } | { type: "user"; id: string } | { type: "agent"; id: string };
   target: { type: "agent" | "grant" | "workload"; id: string };
   attrs: Record<string, string | number | boolean>;
 }

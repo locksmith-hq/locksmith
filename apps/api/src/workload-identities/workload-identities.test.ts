@@ -9,6 +9,7 @@ import request from "supertest";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AUDIT_SINK } from "../audit/audit-sink.js";
+import { CORE_CLIENT } from "../core/core.tokens.js";
 import { createKysely, KYSELY, type Database } from "../db/db.module.js";
 import { ProblemFilter } from "../platform/problem.js";
 import { TenantModule } from "../tenant/tenant.module.js";
@@ -38,6 +39,7 @@ let sinkDown = false;
 @Module({
   providers: [
     { provide: KYSELY, useFactory: () => db },
+    { provide: CORE_CLIENT, useValue: {} },
     {
       provide: AUDIT_SINK,
       useValue: {
@@ -49,7 +51,7 @@ let sinkDown = false;
       },
     },
   ],
-  exports: [KYSELY, AUDIT_SINK],
+  exports: [KYSELY, AUDIT_SINK, CORE_CLIENT],
 })
 class TestDbModule {}
 

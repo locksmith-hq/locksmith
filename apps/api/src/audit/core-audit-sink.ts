@@ -33,7 +33,7 @@ export class CoreAuditSink implements AuditSink {
       await this.core.appendAuditEvent({
         org_id: event.orgId,
         kind: event.kind,
-        outcome: "ok",
+        outcome: event.outcome ?? "ok",
         actor: event.actor,
         target: event.target,
         attrs: event.attrs,

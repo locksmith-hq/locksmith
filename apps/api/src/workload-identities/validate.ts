@@ -152,6 +152,21 @@ export function encodeHandle(orgId: string, policyId: string): string {
   return `${HANDLE_PREFIX}${raw.toString("base64url")}`;
 }
 
+/** Rust `parse_handle`: the org and policy ids of a well-formed `lsw_` handle, else null. */
+export function decodeHandle(text: string): { orgId: string; policyId: string } | null {
+  const t = text.trim();
+  if (!t.startsWith(HANDLE_PREFIX)) return null;
+  const body = t.slice(HANDLE_PREFIX.length);
+  if (!/^[A-Za-z0-9_-]+$/.test(body)) return null;
+  const raw = Buffer.from(body, "base64url");
+  if (raw.length !== 32) return null;
+  const uuid = (b: Buffer) => {
+    const h = b.toString("hex");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  };
+  return { orgId: uuid(raw.subarray(0, 16)), policyId: uuid(raw.subarray(16)) };
+}
+
 /**
  * Create-time issuer address check (Rust `check_issuer_host`, minus DNS). Makes no network call, so it refuses
  * only what the URL itself shows: a literal private, loopback, link-local, metadata or unspecified IP, `localhost`

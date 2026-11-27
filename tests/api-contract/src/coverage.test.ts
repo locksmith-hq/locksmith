@@ -4,7 +4,9 @@ import { coverageGaps, operations } from "./coverage.ts";
 import { EXCLUDED } from "./exclusions.ts";
 import { loadScenarios } from "./scenario.ts";
 
-const spec = JSON.parse(readFileSync(new URL("../../../services/control-plane/openapi.json", import.meta.url), "utf8"));
+const read = (rel: string) => JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8"));
+const spec = read("../../../services/control-plane/openapi.json");
+const nestSpec = read("../../../apps/api/openapi.nest.json");
 
 describe("coverage (logic)", () => {
   const ops = ["GET /a", "POST /a", "GET /b/{id}"];
@@ -20,10 +22,18 @@ describe("coverage (logic)", () => {
   });
 });
 
-describe("coverage (openapi.json)", () => {
+describe("coverage (Nest-only document)", () => {
+  const planted = { paths: { "/v1/planted": { get: {}, post: {} } } };
+  it("names a planted Nest-only path that has no scenario or exclusion", () => {
+    const g = coverageGaps(operations(planted), ["GET /v1/planted"], {});
+    expect(g.missing).toEqual(["POST /v1/planted"]);
+  });
+});
+
+describe("coverage (openapi.json and openapi.nest.json)", () => {
   it("every path and method has a scenario or a reasoned exclusion", async () => {
     const covered = (await loadScenarios()).flatMap((s) => s.covers);
-    const g = coverageGaps(operations(spec), covered, EXCLUDED);
+    const g = coverageGaps([...operations(spec), ...operations(nestSpec)].sort(), covered, EXCLUDED);
     expect(g.missing, `no scenario for: ${g.missing.join(", ")}`).toEqual([]);
     expect(g.staleExclusions, `stale exclusions: ${g.staleExclusions.join(", ")}`).toEqual([]);
     expect(g.unknownCovers, `unknown paths: ${g.unknownCovers.join(", ")}`).toEqual([]);

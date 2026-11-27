@@ -120,6 +120,13 @@ pub mod kind {
     /// A remote MCP tool call (allowed, refused or failed). Records the layer, the tool name and
     /// the outcome only, never the call's arguments or result.
     pub const MCP_CALL: Code = Code::new("mcp.call");
+    /// A call through the gateway's MCP upstream proxy (change m2-mcp-gateway), recorded before it
+    /// is forwarded (outcome `pending`), or alone with outcome `denied` when it is refused. Records
+    /// the upstream's configured name, the tool, the decision and a static reason; never arguments,
+    /// results or the upstream credential.
+    pub const MCP_UPSTREAM_CALL: Code = Code::new("mcp.upstream_call");
+    /// How a forwarded MCP upstream call ended (`ok` or `error`), linked by `attempt_id`.
+    pub const MCP_UPSTREAM_OUTCOME: Code = Code::new("mcp.upstream_outcome");
     /// The gateway issued a short-lived credential to an agent (MCP
     /// `issue_short_lived_credential`, decision H1-2). Records the credential's id, the secret it
     /// is scoped to and its expiry, never the credential.
@@ -128,6 +135,44 @@ pub mod kind {
     /// person's consent for it (m1-remote-mcp task 4.2). Outcome `ok`, or `error` when the issuer
     /// call failed (the database revoke still stands). Records the layer and a static reason only.
     pub const MCP_ISSUER_REVOKE: Code = Code::new("mcp.issuer_revoke");
+
+    /// Every code in this module: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[
+        RELAY_ATTEMPT,
+        RELAY_OUTCOME,
+        RELAY_DENIED,
+        GIT_FETCH,
+        GIT_PUSH,
+        GIT_DENIED,
+        AWS_CREDENTIALS_ISSUED,
+        AWS_CREDENTIALS_DENIED,
+        DB_SESSION_DENIED,
+        DB_SESSION_OPENED,
+        DB_SESSION_CLOSED,
+        AGENT_CREATED,
+        AGENT_ROTATED,
+        AGENT_DELETED,
+        GRANT_CREATED,
+        GRANT_REVOKED,
+        WORKLOAD_IDENTITY_CREATED,
+        WORKLOAD_IDENTITY_DELETED,
+        WORKLOAD_IDENTITY_EXCHANGED,
+        WORKLOAD_IDENTITY_DENIED,
+        AUTH_SIGN_IN,
+        AUTH_SIGN_OUT,
+        AUTH_VERIFY_FAILED,
+        ORG_PERSONAL_CREATED,
+        MCP_CALL,
+        MCP_UPSTREAM_CALL,
+        MCP_UPSTREAM_OUTCOME,
+        CREDENTIAL_ISSUED,
+        MCP_ISSUER_REVOKE,
+    ];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
 }
 
 /// Common outcomes.
@@ -137,6 +182,14 @@ pub mod outcome {
     pub const PENDING: Code = Code::new("pending");
     pub const DENIED: Code = Code::new("denied");
     pub const ERROR: Code = Code::new("error");
+
+    /// Every code in this module: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[OK, PENDING, DENIED, ERROR];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
 }
 
 /// Attribute keys in use. New keys are new constants.
@@ -171,13 +224,69 @@ pub mod attr {
     pub const BYTES_OUT: Code = Code::new("bytes_out");
     /// The MCP server layer (`hub` or `agent`).
     pub const LAYER: Code = Code::new("layer");
-    /// The MCP tool name, from the registry (`unknown` for a name the registry does not have).
+    /// The MCP tool name: from the registry for the agent layer, a [`Text`](super::Text) that passed
+    /// the MCP tool-name rule for an upstream call; `unknown` for any other name.
     pub const TOOL: Code = Code::new("tool");
+    /// The configured name of an MCP upstream (a [`Text`](super::Text) the control plane checks
+    /// against `[a-z0-9-]{1,32}`; a name has hyphens and may start with a digit, so it is not a
+    /// [`Code`]).
+    pub const UPSTREAM: Code = Code::new("upstream");
+    /// The tool decision applied to an MCP upstream call (`allow`, `hide`, `deny` or `hold`).
+    pub const DECISION: Code = Code::new("decision");
     /// The id of a short-lived credential (never the credential itself).
     pub const CREDENTIAL_ID: Code = Code::new("credential_id");
     /// The `name=value` pairs of the verified external-token claims a workload identity policy
     /// names (a [`Text`](super::Text)); nothing else from the token.
     pub const CLAIMS: Code = Code::new("claims");
+
+    /// Every code in this module: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[
+        AGENT_ID,
+        SECRET_ID,
+        VERSION,
+        MODE,
+        EXPIRES_AT,
+        GRANTS_REVOKED,
+        HOST,
+        PORT,
+        METHOD,
+        STATUS,
+        ATTEMPT_ID,
+        ISSUER,
+        REASON,
+        REGION,
+        DURATION_SECS,
+        DURATION_MS,
+        BYTES_IN,
+        BYTES_OUT,
+        LAYER,
+        TOOL,
+        CREDENTIAL_ID,
+        UPSTREAM,
+        DECISION,
+        CLAIMS,
+    ];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
+}
+
+/// Service names that may appear as `Actor::Service`.
+pub mod service {
+    use super::Code;
+    pub const GATEWAY: Code = Code::new("gateway");
+    pub const CONTROL_PLANE: Code = Code::new("control_plane");
+    pub const DEV_AUTH: Code = Code::new("dev_auth");
+
+    /// Every service code: the allow-list a request string is checked against.
+    pub const ALL: &[Code] = &[GATEWAY, CONTROL_PLANE, DEV_AUTH];
+
+    /// The code spelled `s`, if it is on the allow-list.
+    pub fn lookup(s: &str) -> Option<Code> {
+        ALL.iter().copied().find(|c| c.as_str() == s)
+    }
 }
 
 /// Who acted.
@@ -634,6 +743,57 @@ mod tests {
             let v: serde_json::Value = serde_json::from_str(bad).unwrap();
             assert_eq!(StoredAttrs::from_json(&v), None, "{bad}");
         }
+    }
+
+    /// Every constant in a registry module's source is on its `ALL` list (a new constant that
+    /// is not listed would be refused by the core service).
+    #[test]
+    fn registries_list_every_constant() {
+        let src = include_str!("event.rs");
+        for (name, all) in [
+            ("kind", kind::ALL),
+            ("outcome", outcome::ALL),
+            ("attr", attr::ALL),
+            ("service", service::ALL),
+        ] {
+            let start = src.find(&format!("pub mod {name} {{")).unwrap();
+            let body = &src[start..];
+            let body = &body[..body.find("\n}\n").unwrap()];
+            let mut declared: Vec<&str> = body
+                .lines()
+                .filter(|l| l.trim_start().starts_with("pub const ") && !l.contains("const ALL:"))
+                .map(|l| {
+                    l.split("Code::new(\"")
+                        .nth(1)
+                        .unwrap()
+                        .split('"')
+                        .next()
+                        .unwrap()
+                })
+                .collect();
+            let mut listed: Vec<&str> = all.iter().map(|c| c.as_str()).collect();
+            declared.sort_unstable();
+            listed.sort_unstable();
+            assert_eq!(declared, listed, "{name}::ALL out of date");
+        }
+    }
+
+    #[test]
+    fn lookup_accepts_only_listed_codes() {
+        assert_eq!(kind::lookup("agent.created"), Some(kind::AGENT_CREATED));
+        assert_eq!(outcome::lookup("ok"), Some(outcome::OK));
+        assert_eq!(attr::lookup("agent_id"), Some(attr::AGENT_ID));
+        assert_eq!(service::lookup("gateway"), Some(service::GATEWAY));
+        for bad in [
+            "",
+            "unknown.kind",
+            "AGENT.CREATED",
+            "agent.created ",
+            "ok;drop",
+        ] {
+            assert_eq!(kind::lookup(bad), None, "{bad:?}");
+        }
+        assert_eq!(service::lookup("agent.created"), None);
     }
 
     #[test]

@@ -22,7 +22,10 @@ pub mod mcp_clients;
 pub mod mcp_endpoint;
 pub mod mcp_settings;
 mod mcp_tools;
+pub mod mcp_upstream;
 pub mod pg;
 pub mod relay;
 pub mod short_lived;
+#[cfg(test)]
+mod test_capture;
 pub mod ttl;

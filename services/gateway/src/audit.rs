@@ -18,6 +18,9 @@
 //! or results. A ledger that cannot take it is logged and does not fail the call (the relay and
 //! credential events behind a tool already fail closed).
 //!
+//! Every call through the MCP upstream proxy appends `mcp.upstream_call` events the same way
+//! (m2-mcp-gateway task 4.2, [`McpUpstreamEvent`]): see `mcp_upstream::audit`.
+//!
 //! An agent MCP `issue_short_lived_credential` call (m1-remote-mcp task 3.3) appends one
 //! `credential.issued` event before the credential becomes usable: the agent, the secret, the
 //! credential's id and its expiry. Never the credential. Nothing here holds the value, a header, a
@@ -28,7 +31,10 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use ls_mcp_server::upstream::ToolDecision;
+
 use crate::decrypt::{BoxFuture, ControlPlane, Internal};
+use crate::mcp_upstream::hop::HopError;
 
 /// Largest append response read (`{"id": ..., "seq": ...}` or a problem body).
 const MAX_APPEND_RESPONSE: usize = 16 * 1024;
@@ -36,6 +42,7 @@ const MAX_APPEND_RESPONSE: usize = 16 * 1024;
 /// The append endpoint, relative to the control-plane base URL.
 const EVENTS_PATH: &str = "internal/v1/audit/events";
 const MCP_CALLS_PATH: &str = "internal/v1/mcp/agent-calls";
+const MCP_UPSTREAM_CALLS_PATH: &str = "internal/v1/mcp/upstream-calls";
 
 /// What happened to one relay attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -281,6 +288,110 @@ pub trait AuditSink: Send + Sync {
 
     /// Append the `mcp.call` event for one `/mcp` tool call (m1-remote-mcp task 3.4).
     fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+
+    /// Append an `mcp.upstream_call` or `mcp.upstream_outcome` event for one call through the MCP
+    /// upstream proxy (m2-mcp-gateway task 4.2). An outcome is idempotent on its `attempt_id`.
+    fn append_mcp_upstream(&self, ev: McpUpstreamEvent) -> BoxFuture<'_, Result<Uuid, AuditError>>;
+}
+
+/// Which of the two upstream-call events an [`McpUpstreamEvent`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpUpstreamPhase {
+    /// `mcp.upstream_call`: `pending` before forwarding, or `denied` alone for a refusal.
+    Call,
+    /// `mcp.upstream_outcome`: `ok` or `error`, linked to its call by `attempt_id`.
+    Outcome,
+}
+
+impl McpUpstreamPhase {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Call => "call",
+            Self::Outcome => "outcome",
+        }
+    }
+}
+
+/// How an upstream call stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpUpstreamOutcome {
+    Pending,
+    Ok,
+    Denied,
+    Error,
+}
+
+impl McpUpstreamOutcome {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Ok => "ok",
+            Self::Denied => "denied",
+            Self::Error => "error",
+        }
+    }
+}
+
+/// Why an upstream call was refused or failed: a closed set of static codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpUpstreamReason {
+    /// The policy decided `hide` for the tool, or did not name it.
+    Hide,
+    Deny,
+    Hold,
+    /// The tool is not in the upstream's catalogue.
+    UnknownTool,
+    /// The tool policy could not decide.
+    PolicyUnavailable,
+    /// The upstream's catalogue could not be fetched.
+    CatalogueUnavailable,
+    /// The hop failed after the call was forwarded (or while trying to).
+    Hop(HopError),
+}
+
+impl McpUpstreamReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Hide => "hide",
+            Self::Deny => "deny",
+            Self::Hold => "hold",
+            Self::UnknownTool => "unknown_tool",
+            Self::PolicyUnavailable => "policy_unavailable",
+            Self::CatalogueUnavailable => "catalogue_unavailable",
+            Self::Hop(e) => e.slug(),
+        }
+    }
+}
+
+/// One MCP upstream proxy call event: who, which upstream and tool, the decision and how it
+/// stands. No arguments, no result, no credential.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpUpstreamEvent {
+    pub phase: McpUpstreamPhase,
+    pub agent_id: Uuid,
+    /// The upstream's configured name.
+    pub upstream: String,
+    /// A catalogue tool name, else `unknown`.
+    pub tool: String,
+    pub decision: ToolDecision,
+    pub outcome: McpUpstreamOutcome,
+    pub reason: Option<McpUpstreamReason>,
+    /// The `pending` call event's id, on an outcome.
+    pub attempt_id: Option<Uuid>,
+}
+
+#[derive(Serialize)]
+struct WireMcpUpstream<'a> {
+    phase: &'static str,
+    agent_id: Uuid,
+    upstream: &'a str,
+    tool: &'a str,
+    decision: &'static str,
+    outcome: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attempt_id: Option<Uuid>,
 }
 
 /// What happened to one `POST /v1/aws/credentials` call (D2).
@@ -526,6 +637,23 @@ impl HttpAudit {
         .map_err(|_| AuditError::Rejected)?;
         self.append_to(MCP_CALLS_PATH, body, &[201]).await
     }
+
+    async fn post_mcp_upstream(&self, ev: McpUpstreamEvent) -> Result<Uuid, AuditError> {
+        let body = serde_json::to_vec(&WireMcpUpstream {
+            phase: ev.phase.as_str(),
+            agent_id: ev.agent_id,
+            upstream: &ev.upstream,
+            tool: &ev.tool,
+            decision: ev.decision.as_str(),
+            outcome: ev.outcome.as_str(),
+            reason: ev.reason.map(McpUpstreamReason::as_str),
+            attempt_id: ev.attempt_id,
+        })
+        .map_err(|_| AuditError::Rejected)?;
+        // 201 appended; 200 an outcome already stored for this attempt (a retry).
+        self.append_to(MCP_UPSTREAM_CALLS_PATH, body, &[200, 201])
+            .await
+    }
 }
 
 impl AuditSink for HttpAudit {
@@ -539,6 +667,10 @@ impl AuditSink for HttpAudit {
 
     fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         Box::pin(self.post_mcp_call(ev))
+    }
+
+    fn append_mcp_upstream(&self, ev: McpUpstreamEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        Box::pin(self.post_mcp_upstream(ev))
     }
 }
 
@@ -557,9 +689,34 @@ pub struct MemoryAudit {
     pub aws_events: Mutex<Vec<AwsEvent>>,
     /// The `mcp.call` events appended.
     pub mcp_calls: Mutex<Vec<McpCallEvent>>,
+    /// The upstream-call events appended, with the ids the sink gave them. `fail` fails these
+    /// too.
+    pub mcp_upstream: Mutex<Vec<(Uuid, McpUpstreamEvent)>>,
+    /// Fail every `mcp.upstream_call` append.
+    pub fail_upstream_calls: bool,
+    /// Fail the first that many `mcp.upstream_outcome` appends (`Unavailable`, so retried).
+    pub fail_upstream_outcomes_first: Mutex<usize>,
+    /// Every upstream-call append tried, failed ones included.
+    pub upstream_tries: Mutex<usize>,
 }
 
 impl MemoryAudit {
+    /// The upstream-call events with the ids the sink gave them, in order.
+    pub fn mcp_upstream(&self) -> Vec<(Uuid, McpUpstreamEvent)> {
+        self.mcp_upstream
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Every upstream-call append tried.
+    pub fn upstream_tries(&self) -> usize {
+        *self
+            .upstream_tries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     /// The `mcp.call` events in order.
     pub fn mcp_calls(&self) -> Vec<McpCallEvent> {
         self.mcp_calls
@@ -595,6 +752,46 @@ impl MemoryAudit {
 }
 
 impl AuditSink for MemoryAudit {
+    fn append_mcp_upstream(&self, ev: McpUpstreamEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
+        *self
+            .upstream_tries
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) += 1;
+        let result = {
+            let mut first = self
+                .fail_upstream_outcomes_first
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let outcome = ev.phase == McpUpstreamPhase::Outcome;
+            if self.fail || (self.fail_upstream_calls && !outcome) {
+                Err(AuditError::Unavailable)
+            } else if outcome && *first > 0 {
+                *first -= 1;
+                Err(AuditError::Unavailable)
+            } else {
+                let mut stored = self.mcp_upstream.lock().unwrap_or_else(|e| e.into_inner());
+                // Idempotent on the attempt, as the control plane is.
+                let existing = ev.attempt_id.and_then(|a| {
+                    stored
+                        .iter()
+                        .find(|(_, e)| {
+                            e.phase == McpUpstreamPhase::Outcome && e.attempt_id == Some(a)
+                        })
+                        .map(|(id, _)| *id)
+                });
+                match existing {
+                    Some(id) => Ok(id),
+                    None => {
+                        let id = Uuid::now_v7();
+                        stored.push((id, ev));
+                        Ok(id)
+                    }
+                }
+            }
+        };
+        Box::pin(async move { result })
+    }
+
     fn append_mcp_call(&self, ev: McpCallEvent) -> BoxFuture<'_, Result<Uuid, AuditError>> {
         let result = if self.fail {
             Err(AuditError::Unavailable)

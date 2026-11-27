@@ -854,6 +854,34 @@ test("bindings: lists non-secret fields, shows errors, empty and not-connected s
   expect(await screen.findByText(/Connect a control plane/)).toBeInTheDocument();
 });
 
+test("bindings: MCP rows show origin, header, default and each tool's decision, read-only, without a secret id", async () => {
+  const mcp = {
+    kind: "mcp",
+    name: "github",
+    origin: "https://api.githubcopilot.com/mcp/",
+    header: "Authorization",
+    default_decision: "hide",
+    tools: [
+      { name: "create_issue", decision: "hold" },
+      { name: "delete_repository", decision: "deny" },
+      { name: "list_issues", decision: "allow" },
+    ],
+    // A leaky payload must not leak: only the fields bindingDetails declares are rendered.
+    secret_id: "SECRET-ID-VALUE",
+    template: "Bearer {secret} TEMPLATE-VALUE",
+  };
+  m.agentsClient.mockReturnValue({ listBindings: vi.fn().mockResolvedValue([mcp]) } as never);
+  const { container } = render(<App />);
+  await nav("Bindings");
+  const row = (await screen.findByText("github")).closest("tr")!;
+  expect(row).toHaveTextContent("MCP");
+  expect(row).toHaveTextContent(
+    "Upstream: https://api.githubcopilot.com/mcp/ · Header: Authorization · Other tools: hide · Allow: list_issues · Hold: create_issue · Deny: delete_repository",
+  );
+  expect(row.querySelector("input, button, a")).toBeNull();
+  expect(container.textContent).not.toMatch(/SECRET-ID-VALUE|TEMPLATE-VALUE/);
+});
+
 test("bindings: AWS rows show role, region, vend, max duration and allowed actions; undeclared fields never render", async () => {
   const aws = {
     kind: "aws",

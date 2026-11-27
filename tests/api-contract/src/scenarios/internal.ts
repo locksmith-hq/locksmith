@@ -25,9 +25,11 @@ export const scenarios: Scenario[] = [
     covers: [
       "GET /internal/v1/agents/{agent_id}/grants",
       "POST /internal/v1/audit/events",
+      "POST /internal/v1/audit/human-events",
       "PUT /internal/v1/gateway/bindings",
       "POST /internal/v1/mcp/agent-calls",
       "POST /internal/v1/mcp/agent-clients",
+      "POST /internal/v1/mcp/upstream-calls",
       "GET /internal/v1/mcp/agent-tool-settings",
       "GET /internal/v1/mcp/revoked-agent-clients",
       "GET /internal/v1/secrets/{secret_id}/versions/{version}/material",
@@ -114,6 +116,15 @@ export const scenarios: Scenario[] = [
         body: {},
       });
 
+      const human = { kind: "auth.sign_in", user_id: "00000000-0000-7000-8000-0000000000b8", issuer: "idp.test" };
+      await both(ctx, "human audit event", 201, { method: "POST", path: "/internal/v1/audit/human-events" }, human);
+      await ctx.expect("human audit event invalid issuer", 400, {
+        method: "POST",
+        path: "/internal/v1/audit/human-events",
+        headers: internalAuth(org),
+        body: { ...human, issuer: "idp.test:8443" },
+      });
+
       const snapshot = {
         items: [
           { kind: "http", name: "https://upstream.test", origin: "https://upstream.test", header: "authorization" },
@@ -158,6 +169,27 @@ export const scenarios: Scenario[] = [
       await ctx.expect("agent call invalid", 400, {
         method: "POST",
         path: "/internal/v1/mcp/agent-calls",
+        headers: internalAuth(org),
+        body: {},
+      });
+
+      await both(
+        ctx,
+        "upstream call",
+        201,
+        { method: "POST", path: "/internal/v1/mcp/upstream-calls" },
+        {
+          phase: "call",
+          agent_id: agentId,
+          upstream: "github",
+          tool: "list_issues",
+          decision: "allow",
+          outcome: "pending",
+        },
+      );
+      await ctx.expect("upstream call invalid", 400, {
+        method: "POST",
+        path: "/internal/v1/mcp/upstream-calls",
         headers: internalAuth(org),
         body: {},
       });

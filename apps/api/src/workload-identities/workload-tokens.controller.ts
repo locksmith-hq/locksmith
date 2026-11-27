@@ -18,7 +18,7 @@ export class WorkloadTokensController {
   @HttpCode(200)
   async exchange(@Body() body: unknown, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const input = WorkloadTokenRequest.parse(body);
-    const out = await this.svc.exchange(input.policy, input.token, req.socket.remoteAddress);
+    const out = await this.svc.exchange(input.policy, input.token, req.socket.remoteAddress?.replace(/^::ffff:/i, ""));
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Pragma", "no-cache");
     return out;

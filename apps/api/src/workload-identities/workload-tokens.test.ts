@@ -15,6 +15,7 @@ import { ProblemFilter } from "../platform/problem.js";
 import { TenantModule } from "../tenant/tenant.module.js";
 import { FixedWindowLimiter } from "./fixed-window.js";
 import { encodeHandle, decodeHandle } from "./validate.js";
+import { WorkloadTokensService } from "./workload-tokens.service.js";
 import { WorkloadIdentitiesModule } from "./workload-identities.module.js";
 
 // Task 6.5 slice: `POST /v1/workload-tokens` on a real Postgres (RLS) with a stub core and a recording audit sink.
@@ -226,6 +227,82 @@ describe("POST /v1/workload-tokens", () => {
     await http.post("/v1/workload-tokens").send({ policy: s.handle, token: CANARY, extra: 1 }).expect(400);
     await http.post("/v1/workload-tokens").send({ policy: s.handle }).expect(400);
     expect(verifyCalls).toEqual([]);
+    await app.close();
+  });
+});
+
+describe("limits, throttle and best-effort denial", () => {
+  it("refuses over the per-source limit with a 401 and no core call or ledger write", async () => {
+    reset();
+    const s = await seed();
+    const app = await appUp();
+    const http = request(app.getHttpServer());
+    for (let i = 0; i < 30; i++) await http.post("/v1/workload-tokens").send({ policy: s.handle, token: CANARY });
+    expect(verifyCalls).toHaveLength(30);
+    const before = events.length;
+    await http.post("/v1/workload-tokens").send({ policy: s.handle, token: CANARY }).expect(401);
+    expect(verifyCalls).toHaveLength(30);
+    expect(events).toHaveLength(before);
+    await app.close();
+  });
+
+  it("refuses over the per-policy limit across sources", async () => {
+    reset();
+    const s = await seed();
+    const app = await appUp();
+    const svc = app.get(WorkloadTokensService);
+    for (let i = 0; i < 60; i++) await svc.exchange(s.handle, CANARY, `10.0.0.${i}`);
+    expect(verifyCalls).toHaveLength(60);
+    await expect(svc.exchange(s.handle, CANARY, "10.0.1.1")).rejects.toMatchObject({ status: 401 });
+    expect(verifyCalls).toHaveLength(60);
+    await app.close();
+  });
+
+  it("stamps last_used_at at most once per five minutes", async () => {
+    reset();
+    const s = await seed();
+    const app = await appUp();
+    const http = request(app.getHttpServer());
+    const read = async () => {
+      const a = new pg.Client({ connectionString: adminUrl });
+      await a.connect();
+      const r = (await a.query("select last_used_at from workload_identities where id=$1", [s.policy])).rows[0];
+      await a.end();
+      return r.last_used_at as Date | null;
+    };
+    await http.post("/v1/workload-tokens").send({ policy: s.handle, token: CANARY }).expect(200);
+    const first = await read();
+    await http.post("/v1/workload-tokens").send({ policy: s.handle, token: CANARY }).expect(200);
+    expect(await read()).toEqual(first);
+    const a = new pg.Client({ connectionString: adminUrl });
+    await a.connect();
+    await a.query("update workload_identities set last_used_at = now() - interval '10 minutes' where id=$1", [
+      s.policy,
+    ]);
+    await a.end();
+    const stale = await read();
+    await http.post("/v1/workload-tokens").send({ policy: s.handle, token: CANARY }).expect(200);
+    expect((await read())!.getTime()).toBeGreaterThan(stale!.getTime());
+    await app.close();
+  });
+
+  it("stays a 401 when the ledger is down on a denial, and a verdict without reason is not_trusted", async () => {
+    reset();
+    const s = await seed();
+    const app = await appUp();
+    verdict = { valid: false };
+    sinkDown = true;
+    await request(app.getHttpServer())
+      .post("/v1/workload-tokens")
+      .send({ policy: s.handle, token: CANARY })
+      .expect(401);
+    sinkDown = false;
+    await request(app.getHttpServer())
+      .post("/v1/workload-tokens")
+      .send({ policy: s.handle, token: CANARY })
+      .expect(401);
+    expect(events[0]).toMatchObject({ attrs: { reason: "not_trusted" } });
+    expect(mintCalls).toEqual([]);
     await app.close();
   });
 });

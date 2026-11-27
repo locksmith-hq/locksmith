@@ -27,7 +27,8 @@ export interface WorkloadToken {
  *
  * Differences from Rust, by design of the core boundary: the ledger event carries the agent and the issuer host but
  * not the policy's named claim values (the core's verdict does not return claims), and the per-source and
- * per-policy limits here run on top of the core's own per-policy limit.
+ * per-policy limits here run on top of the core's own per-policy limit; `last_used_at` is stamped in its own
+ * transaction after the ledger write (Rust does both in one), and a failed stamp is only logged.
  */
 @Injectable()
 export class WorkloadTokensService {

@@ -32,6 +32,7 @@ fmt:
 lint:
     cargo clippy --workspace --all-targets -- -D warnings
     npm run lint
+    bash scripts/old-ui-check.sh
 
 # a0-spikes' rls tests need `just up` (like ls-e2e); its header and lint tests run here.
 test-rust:

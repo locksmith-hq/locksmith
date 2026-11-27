@@ -460,10 +460,12 @@ test("org audit: outcome filter narrows to denied and redaction_failed events", 
   await nav("Org audit");
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
   const sel = screen.getByRole("combobox", { name: "Outcome filter" });
-  await userEvent.selectOptions(sel, "denied");
+  await userEvent.click(sel);
+  await userEvent.click(await screen.findByRole("option", { name: "Denied" }));
   expect(screen.getByText("relay.denied")).toBeInTheDocument();
   expect(screen.queryByText("agent.created")).toBeNull();
-  await userEvent.selectOptions(sel, "redaction_failed");
+  await userEvent.click(sel);
+  await userEvent.click(await screen.findByRole("option", { name: "Redaction failed" }));
   expect(screen.getByText("relay.outcome")).toBeInTheDocument();
   expect(screen.queryByText("relay.denied")).toBeNull();
 });

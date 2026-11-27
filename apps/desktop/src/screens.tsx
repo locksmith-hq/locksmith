@@ -59,6 +59,7 @@ import { Label } from "@locksmith-hq/label";
 import { LiveDot } from "@locksmith-hq/live-dot";
 import { Pill } from "@locksmith-hq/pill";
 import { ScopeChip } from "@locksmith-hq/scope-chip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@locksmith-hq/select";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 
 export interface ScreenProps {
@@ -1579,35 +1580,36 @@ export function OrgAudit(_: ScreenProps) {
       ) : (
         <>
           {status && (
-            <div className="card" role="region" aria-label="Chain status">
-              <p>
+            <Card role="region" aria-label="Chain status" className="gap-1 px-4 text-[13px]">
+              <p className="m-0">
                 Head seq {status.head_seq}. Latest checkpoint:{" "}
                 {status.latest_checkpoint
                   ? `seq ${status.latest_checkpoint.seq} at ${status.latest_checkpoint.at}`
                   : "none yet"}
                 .
               </p>
-              <p data-testid="verify-result">
+              <p className="m-0" data-testid="verify-result">
                 {!v
                   ? "Not verified yet."
                   : v.ok
                     ? `Verified OK at ${v.finished_at}.`
                     : `Verification FAILED at ${v.finished_at}${v.broken_seq != null ? `, first broken seq ${v.broken_seq}` : ""}.`}
               </p>
-            </div>
+            </Card>
           )}
-          <label>
-            Outcome{" "}
-            <select
-              aria-label="Outcome filter"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as AuditOutcomeFilter)}
-            >
-              <option value="all">All</option>
-              <option value="denied">Denied</option>
-              <option value="redaction_failed">Redaction failed</option>
-            </select>
-          </label>
+          <div className="flex items-center gap-2 text-[13px] font-semibold">
+            Outcome
+            <Select value={filter} onValueChange={(v) => setFilter(v as AuditOutcomeFilter)}>
+              <SelectTrigger aria-label="Outcome filter" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="denied">Denied</SelectItem>
+                <SelectItem value="redaction_failed">Redaction failed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {!events ? (
             <Loading what="the org ledger" />
           ) : events.length === 0 ? (
@@ -1615,40 +1617,49 @@ export function OrgAudit(_: ScreenProps) {
           ) : !events.some((e) => auditOutcomeMatches(e, filter)) ? (
             <Empty icon="doc">No matching events{next ? " loaded yet" : ""}.</Empty>
           ) : (
-            <div className="table-wrap">
-              <table className="grid">
-                <caption className="sr-only">Org audit events, newest first</caption>
-                <thead>
-                  <tr>
-                    <th className="num">Seq</th>
-                    <th>Time</th>
-                    <th>Kind</th>
-                    <th>Actor</th>
-                    <th>Target</th>
-                    <th>Outcome</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Card className="py-0">
+              <Table>
+                <TableCaption className="sr-only">Org audit events, newest first</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">Seq</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Kind</TableHead>
+                    <TableHead>Actor</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Outcome</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {events
                     .filter((e) => auditOutcomeMatches(e, filter))
                     .map((e) => (
-                      <tr key={e.id}>
-                        <td className="num mono muted">{e.seq}</td>
-                        <td className="mono nowrap">{e.at}</td>
-                        <td className="strong">{e.kind}</td>
-                        <td className="mono">{e.actor}</td>
-                        <td className="mono wrap">{breakable(e.target ?? "")}</td>
-                        <td>{e.outcome}</td>
-                      </tr>
+                      <TableRow key={e.id} className="align-top">
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground">{e.seq}</TableCell>
+                        <TableCell className="font-mono text-xs whitespace-nowrap">{e.at}</TableCell>
+                        <TableCell className="font-semibold">{e.kind}</TableCell>
+                        <TableCell className="font-mono text-xs">{e.actor}</TableCell>
+                        <TableCell className="min-w-[200px] font-mono text-xs break-all whitespace-normal">
+                          {breakable(e.target ?? "")}
+                        </TableCell>
+                        <TableCell>{e.outcome}</TableCell>
+                      </TableRow>
                     ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Card>
           )}
           {next && (
-            <button type="button" className="btn sm" disabled={loadingMore} onClick={more}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              disabled={loadingMore}
+              onClick={more}
+            >
               Load more
-            </button>
+            </Button>
           )}
         </>
       )}

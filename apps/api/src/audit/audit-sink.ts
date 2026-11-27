@@ -33,11 +33,18 @@ export interface AuditSink {
  * only (Rust `audit::agent_created` and friends). Never a name, description or secret.
  */
 export interface AdminAuditEvent {
-  kind: "agent.created" | "agent.rotated" | "agent.deleted" | "grant.created" | "grant.revoked";
+  kind:
+    | "agent.created"
+    | "agent.rotated"
+    | "agent.deleted"
+    | "grant.created"
+    | "grant.revoked"
+    | "workload_identity.created"
+    | "workload_identity.deleted";
   orgId: string;
   /** Until the console session lands the actor is the dev-auth service, as in Rust. */
   actor: { type: "service"; code: string } | { type: "user"; id: string };
-  target: { type: "agent" | "grant"; id: string };
+  target: { type: "agent" | "grant" | "workload"; id: string };
   attrs: Record<string, string | number | boolean>;
 }
 

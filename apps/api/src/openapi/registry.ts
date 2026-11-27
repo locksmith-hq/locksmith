@@ -10,6 +10,11 @@ import {
   Project,
   ProjectParams,
 } from "../projects/projects.schemas.js";
+import {
+  NewWorkloadIdentity,
+  WorkloadIdentityParams,
+  WorkloadIdentitySchema,
+} from "../workload-identities/workload-identities.schemas.js";
 import { defineRoute, type RouteDef } from "./build.js";
 
 /**
@@ -106,3 +111,35 @@ const projectRoutes: RouteDef[] = [
   }),
 ];
 routes.push(...projectRoutes);
+
+/**
+ * Workload identity routes (task 6.5 slice). NOT yet in `routes`: the route table still marks them `rust` until
+ * a contract diff against the Rust service has been run. Their shape is held to the frozen openapi.json by
+ * `workload-identities.contract.test.ts`. On the flip, push them onto `routes` and mark the four paths `nest`.
+ */
+export const workloadIdentityRoutes: RouteDef[] = [
+  defineRoute({
+    method: "GET",
+    path: "/v1/workload-identities",
+    query: PageQuerySchema,
+    responses: { 200: Paged(WorkloadIdentitySchema), ...E(400, 401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "POST",
+    path: "/v1/workload-identities",
+    body: NewWorkloadIdentity,
+    responses: { 201: WorkloadIdentitySchema, ...E(400, 401, 403, 409, 422, 503) },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/v1/workload-identities/{id}",
+    params: WorkloadIdentityParams,
+    responses: { 200: WorkloadIdentitySchema, ...E(401, 403, 404, 503) },
+  }),
+  defineRoute({
+    method: "DELETE",
+    path: "/v1/workload-identities/{id}",
+    params: WorkloadIdentityParams,
+    responses: { 204: null, ...E(401, 403, 404, 409, 503) },
+  }),
+];

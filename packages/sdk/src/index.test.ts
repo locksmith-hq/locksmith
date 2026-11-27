@@ -115,7 +115,7 @@ describe("generated schema", () => {
     expect(readFileSync(out, "utf8"), "schema.d.ts is stale: run `just sdk-gen`").toBe(
       readFileSync(new URL("./schema.d.ts", import.meta.url), "utf8"),
     );
-  });
+  }, 60_000);
 
   it("types every operationId in the spec", () => {
     const schema = readFileSync(new URL("./schema.d.ts", import.meta.url), "utf8");

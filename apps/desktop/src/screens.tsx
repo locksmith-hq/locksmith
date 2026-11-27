@@ -53,7 +53,13 @@ import { Button } from "@locksmith-hq/button";
 import { EmptyState } from "@locksmith-hq/empty-state";
 import { Loader } from "@locksmith-hq/loader";
 import { PageHeader } from "@locksmith-hq/page-header";
+import { Card } from "@locksmith-hq/card";
+import { Input } from "@locksmith-hq/input";
+import { Label } from "@locksmith-hq/label";
+import { LiveDot } from "@locksmith-hq/live-dot";
+import { Pill } from "@locksmith-hq/pill";
 import { ScopeChip } from "@locksmith-hq/scope-chip";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
 
 export interface ScreenProps {
   st: StatusView | null;
@@ -776,15 +782,27 @@ export function Keys({ st }: ScreenProps) {
         title="Keys"
         sub="Key names only. Values go in and out through a native Locksmith prompt, never this window."
       />
-      <div className="toolbar">
-        <label className="field">
+      <div className="flex flex-wrap items-end gap-4">
+        <Label className="flex-col items-start gap-1.5">
           Project
-          <input list="dl-projects" value={project} onChange={(e) => setProject(e.target.value)} spellCheck={false} />
-        </label>
-        <label className="field">
+          <Input
+            className="w-56"
+            list="dl-projects"
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+            spellCheck={false}
+          />
+        </Label>
+        <Label className="flex-col items-start gap-1.5">
           Environment
-          <input list="dl-envs" value={env} onChange={(e) => setEnv(e.target.value)} spellCheck={false} />
-        </label>
+          <Input
+            className="w-56"
+            list="dl-envs"
+            value={env}
+            onChange={(e) => setEnv(e.target.value)}
+            spellCheck={false}
+          />
+        </Label>
         <datalist id="dl-projects">
           {uniq(seen.map((x) => x.project)).map((v) => (
             <option key={v} value={v} />
@@ -796,17 +814,17 @@ export function Keys({ st }: ScreenProps) {
           ))}
         </datalist>
         {users.length > 0 && (
-          <p className="usable">
-            <span className="live-dot" aria-hidden="true" />
+          <p className="m-0 flex items-center gap-2.5 text-[13px]">
+            <LiveDot aria-hidden="true" />
             <span>
               Usable now by{" "}
               {users.map((l, i) => (
                 <Fragment key={l.id}>
                   {i > 0 && ", "}
-                  <span className="mono">{l.id}</span> ({agent(l.command)})
+                  <span className="font-mono">{l.id}</span> ({agent(l.command)})
                 </Fragment>
               ))}
-              <span className="muted">
+              <span className="text-muted-foreground">
                 {" "}
                 · sessions on {project} / {env} with <code>run</code> scope
               </span>
@@ -824,43 +842,50 @@ export function Keys({ st }: ScreenProps) {
         </Empty>
       ) : (
         names.data && (
-          <ul className="list keys" aria-label={`Key names in ${project} / ${env}`}>
-            {names.data.map((n) => (
-              <li key={n} className="row">
-                <span className="ic">
-                  <Icon name="key" />
-                </span>
-                <span className="mono strong">{n}</span>
-                <button type="button" className="btn sm" aria-label={`Rotate ${n}`} onClick={() => put(n)}>
-                  <Icon name="rotate" />
-                  Rotate
-                </button>
-              </li>
-            ))}
-          </ul>
+          <Card className="py-0">
+            <ul className="m-0 flex list-none flex-col p-0" aria-label={`Key names in ${project} / ${env}`}>
+              {names.data.map((n) => (
+                <li key={n} className="flex items-center gap-3.5 border-t px-4 py-2.5 first:border-t-0">
+                  <Icon name="key" className="size-4 text-muted-foreground" />
+                  <span className="mr-auto font-mono text-[13px] font-semibold">{n}</span>
+                  <Button type="button" variant="outline" size="sm" aria-label={`Rotate ${n}`} onClick={() => put(n)}>
+                    <Icon name="rotate" />
+                    Rotate
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </Card>
         )
       )}
 
-      <form className="panel add" onSubmit={submit} aria-labelledby="h-add">
-        <div>
-          <h2 id="h-add">Add or rotate a key</h2>
-          <p className="muted small">The value is typed into a native Locksmith prompt, never into this window.</p>
-        </div>
-        <label className="field">
-          Key name
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            spellCheck={false}
-            placeholder="e.g. NPM_TOKEN"
-          />
-        </label>
-        <button type="submit" className="btn primary" disabled={!name.trim()}>
-          <Icon name="plus" />
-          Add or rotate key
-        </button>
+      <form onSubmit={submit} aria-labelledby="h-add">
+        <Card className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-end gap-4 p-5">
+          <div>
+            <h2 id="h-add" className="m-0 text-base font-semibold">
+              Add or rotate a key
+            </h2>
+            <p className="m-0 mt-0.5 text-[13px] text-muted-foreground">
+              The value is typed into a native Locksmith prompt, never into this window.
+            </p>
+          </div>
+          <Label className="flex-col items-start gap-1.5">
+            Key name
+            <Input
+              className="w-64"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              spellCheck={false}
+              placeholder="e.g. NPM_TOKEN"
+            />
+          </Label>
+          <Button type="submit" disabled={!name.trim()}>
+            <Icon name="plus" />
+            Add or rotate key
+          </Button>
+        </Card>
       </form>
-      <p aria-live="polite" className="done">
+      <p aria-live="polite" className="m-0 min-h-5 font-semibold text-live">
         {note}
       </p>
     </section>
@@ -897,51 +922,58 @@ export function Tokens({ st }: ScreenProps) {
       ) : t.data?.length === 0 ? (
         <Empty icon="token">
           <b>No live tokens.</b> Inside a session, mint one with
-          <code className="block">smith token issue &lt;KEY&gt; --provider &lt;name&gt;</code>
+          <code className="mt-1.5 block font-mono text-[13px]">
+            smith token issue &lt;KEY&gt; --provider &lt;name&gt;
+          </code>
         </Empty>
       ) : (
         t.data && (
-          <div className="sessions">
+          <div className="flex flex-col gap-3">
             {t.data.map((x) => {
               const sc = scopes(x.lease);
               return (
-                <article key={x.prefix} className="card token" aria-label={`Token ${x.prefix}`}>
-                  <span className="av av2" aria-hidden="true">
-                    <Icon name="token" />
-                  </span>
-                  <div className="who">
-                    <b className="mono">{x.prefix}</b>
-                    <span className="mono" title={x.key}>
+                <Card
+                  key={x.prefix}
+                  role="article"
+                  aria-label={`Token ${x.prefix}`}
+                  className="grid grid-cols-[20px_minmax(160px,1fr)_minmax(160px,1fr)_minmax(180px,1.1fr)_auto] items-center gap-3.5 p-4"
+                >
+                  <Icon name="token" className="size-5 text-muted-foreground" />
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <b className="font-mono text-sm">{x.prefix}</b>
+                    <span className="truncate font-mono text-[13px] text-muted-foreground" title={x.key}>
                       {x.key}
                     </span>
                   </div>
-                  <div className="who">
-                    <b className="hosts">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <b className="flex flex-wrap gap-x-2.5 gap-y-1 font-mono text-[13px] font-medium">
                       {x.hosts.map((h) => (
-                        <span key={h} className="mono">
-                          {h}
-                        </span>
+                        <span key={h}>{h}</span>
                       ))}
                     </b>
-                    <span>
-                      <span className="mono">{x.placement}</span> · {stamp(x.created_at).slice(5, 16)}
+                    <span className="text-[13px] text-muted-foreground">
+                      <span className="font-mono">{x.placement}</span> · {stamp(x.created_at).slice(5, 16)}
                     </span>
                   </div>
-                  <div className="who">
-                    {sc ? <Scopes scopes={sc} /> : <b className="muted">Session ended</b>}
-                    <span title={`${x.project} / ${x.env} · ${x.lease}`}>
-                      {x.project} / {x.env} · <span className="mono">{x.lease}</span>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    {sc ? <Scopes scopes={sc} /> : <b className="text-muted-foreground">Session ended</b>}
+                    <span
+                      className="truncate text-[13px] text-muted-foreground"
+                      title={`${x.project} / ${x.env} · ${x.lease}`}
+                    >
+                      {x.project} / {x.env} · <span className="font-mono">{x.lease}</span>
                     </span>
                   </div>
-                  <button
+                  <Button
                     type="button"
-                    className="btn sm danger-text"
+                    variant="destructive"
+                    size="sm"
                     aria-label={`Revoke token ${x.prefix}`}
                     onClick={() => revokeToken(x)}
                   >
                     Revoke
-                  </button>
-                </article>
+                  </Button>
+                </Card>
               );
             })}
           </div>
@@ -984,52 +1016,56 @@ export function Relays(_: ScreenProps) {
       ) : (
         info && (
           <>
-            <div className="relays">
+            <div className="grid grid-cols-2 gap-3">
               {RELAYS.map((x) => {
                 const port = x.key && info[x.key];
                 const up = !x.key || port != null;
                 return (
-                  <article key={x.name} className="card relay" aria-labelledby={`relay-${x.icon}`}>
-                    <div className="relay-h">
-                      <span className="av av3" aria-hidden="true">
-                        <Icon name={x.icon} />
-                      </span>
-                      <h2 id={`relay-${x.icon}`}>{x.name}</h2>
-                      <span className="pill" data-up={up}>
+                  <Card
+                    key={x.name}
+                    role="article"
+                    aria-labelledby={`relay-${x.icon}`}
+                    className="flex flex-col gap-2.5 p-[18px]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon name={x.icon} className="size-5 text-muted-foreground" />
+                      <h2 id={`relay-${x.icon}`} className="m-0 mr-auto text-[15px] font-semibold">
+                        {x.name}
+                      </h2>
+                      <Pill tone={up ? "live" : undefined}>
                         {!x.key ? (
                           "Per target"
                         ) : port == null ? (
                           "Not running"
                         ) : (
                           <>
-                            Port <span className="mono">{port}</span>
+                            Port <span className="font-mono">{port}</span>
                           </>
                         )}
-                      </span>
+                      </Pill>
                     </div>
-                    <div className="cmds">
+                    <div className="flex flex-col gap-1.5">
                       {x.setup.map((c) => (
-                        <code key={c} className="block">
+                        <code key={c} className="block rounded-md bg-muted px-2.5 py-1.5 font-mono text-[13px]">
                           {c}
                         </code>
                       ))}
                     </div>
-                  </article>
+                  </Card>
                 );
               })}
             </div>
-            <div className="sec-h spaced">
-              <h2>Explicit-proxy CA hosts</h2>
-              <span className="n">{info.ca_hosts.length}</span>
+            <div className="mt-8 flex items-baseline gap-2.5">
+              <h2 className="m-0 text-base font-semibold">Explicit-proxy CA hosts</h2>
+              <span className="text-[13px] text-muted-foreground">{info.ca_hosts.length}</span>
             </div>
             {info.ca_hosts.length === 0 ? (
               <Empty icon="shield">No hosts use the Locksmith CA.</Empty>
             ) : (
-              <ul className="chips">
+              <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
                 {info.ca_hosts.map((h) => (
-                  <li key={h} className="scope">
-                    <Icon name="http" />
-                    {h}
+                  <li key={h}>
+                    <ScopeChip icon={<Icon name="http" />}>{h}</ScopeChip>
                   </li>
                 ))}
               </ul>
@@ -1059,34 +1095,35 @@ export function Audit(_: ScreenProps) {
   return (
     <section className="flex flex-col gap-4" aria-label="Audit">
       <Head title="Audit" sub="Every access, block and change, newest first, in a hash-chained ledger.">
-        <label className="search">
-          <Icon name="search" />
+        <label className="relative flex items-center">
+          <Icon name="search" className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
           <span className="sr-only">Filter</span>
-          <input
+          <Input
             type="search"
+            className="w-80 pl-9"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             spellCheck={false}
             placeholder="Filter by action, key, host or session"
           />
         </label>
-        <button type="button" className="btn" onClick={verify}>
+        <Button type="button" variant="outline" onClick={verify}>
           <Icon name="shield" />
           Verify ledger
-        </button>
+        </Button>
       </Head>
       <div aria-live="assertive">
         {ver &&
           (ver.broken_at === null ? (
-            <p className="verdict ok">
-              <Icon name="shield" />
+            <KitAlert>
+              <ShieldCheck />
               Ledger intact: {ver.events} events checked, hash chain unbroken.
-            </p>
+            </KitAlert>
           ) : (
-            <p className="verdict broken">
-              <Icon name="broken" />
+            <KitAlert variant="destructive" className="font-semibold">
+              <ShieldAlert />
               Ledger BROKEN at seq {ver.broken_at}. {ver.detail}
-            </p>
+            </KitAlert>
           ))}
       </div>
       {ev.alert}
@@ -1096,41 +1133,43 @@ export function Audit(_: ScreenProps) {
       ) : rows.length === 0 ? (
         <Empty icon="doc">{q ? "No events match this filter." : "Nothing in the ledger yet."}</Empty>
       ) : (
-        <div className="table-wrap">
-          <table className="grid">
-            <caption className="sr-only">Audit events, newest first</caption>
-            <thead>
-              <tr>
-                <th className="num">Seq</th>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Decision</th>
-                <th>Target</th>
-                <th>Rule</th>
-                <th>Session</th>
-                <th>Actor</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="py-0">
+          <Table>
+            <TableCaption className="sr-only">Audit events, newest first</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-right">Seq</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Decision</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Rule</TableHead>
+                <TableHead>Session</TableHead>
+                <TableHead>Actor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((e) => (
-                <tr key={e.seq} data-bad={isBad(e)}>
-                  <td className="num mono muted">{e.seq}</td>
-                  <td className="mono nowrap">{stamp(e.ts)}</td>
-                  <td className="strong">{e.action}</td>
-                  <td>
-                    <span className="dec">{e.decision}</span>
-                  </td>
-                  <td className="mono wrap">{breakable(e.target ?? "")}</td>
-                  <td className="mono">{e.policy_rule}</td>
-                  <td className="mono">{e.session_id ?? ""}</td>
-                  <td className="mono" title={e.actor_exe}>
+                <TableRow key={e.seq} data-bad={isBad(e)} className="align-top data-[bad=true]:bg-warning/10">
+                  <TableCell className="text-right font-mono text-xs text-muted-foreground">{e.seq}</TableCell>
+                  <TableCell className="font-mono text-xs whitespace-nowrap">{stamp(e.ts)}</TableCell>
+                  <TableCell className="font-semibold">{e.action}</TableCell>
+                  <TableCell className="text-xs font-semibold tracking-wide text-muted-foreground">
+                    {e.decision}
+                  </TableCell>
+                  <TableCell className="min-w-[200px] font-mono text-xs break-all whitespace-normal">
+                    {breakable(e.target ?? "")}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{e.policy_rule}</TableCell>
+                  <TableCell className="font-mono text-xs">{e.session_id ?? ""}</TableCell>
+                  <TableCell className="font-mono text-xs" title={e.actor_exe}>
                     {e.actor_exe.split("/").pop()}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </section>
   );

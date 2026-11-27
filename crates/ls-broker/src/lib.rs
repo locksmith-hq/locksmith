@@ -1,5 +1,4 @@
-//! Caller classification and session leases (design: openspec/changes/m3-daemon-sessions/design.md
-//! D2, D3).
+//! Caller classification and session leases.
 //!
 //! A request is authorized only when (1) the caller is an attested Locksmith binary
 //! ([`Manifest::classify`]), (2) the calling process descends, by a live kernel parent walk

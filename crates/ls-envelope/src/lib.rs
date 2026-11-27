@@ -1,5 +1,6 @@
-//! Per-version envelope encryption (design: openspec/changes/s2-envelope-crypto/design.md
-//! decisions 1 and 2; binding decisions A0-6, A0-7).
+//! Per-version envelope encryption: a fresh AES-256-GCM data key per secret version, in a crate
+//! apart from `ls-crypto` so the desktop build stays dependency-light; ciphertext uses the A0-7
+//! versioned header.
 //!
 //! - [`header`]: the A0-7 ciphertext header codec and AAD encoding.
 //! - [`seal_version`] / [`open_version`]: AES-256-GCM (via `ls-crypto`) under a fresh random

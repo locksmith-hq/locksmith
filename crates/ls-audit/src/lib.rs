@@ -1,5 +1,6 @@
 //! Hash-chain core shared by the vault audit ledger (`ls-vault`) and the server audit ledger
-//! (design: openspec/changes/s5-audit-ledger/design.md decision 3).
+//! (extracted from `ls-vault` so the server ledger reuses one encoder and verify walk, without
+//! pulling SQLCipher into services).
 //!
 //! Pure: no IO, no clock, no keys. It provides
 //! - [`Encoder`]: a deterministic encoding, a domain tag followed by every field as a big-endian

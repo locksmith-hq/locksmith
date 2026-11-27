@@ -5,7 +5,7 @@ description: Set up, run and use the Locksmith design system MCP server, which a
 
 # Locksmith design system MCP
 
-The server lives in `design-system/mcp/` and runs over stdio. It reads the design system's source in this checkout (`design-system/packages`, the docs site's demos, `tokens.css`, the README), so its answers always match the tree you are on. It only reads; it changes nothing.
+This is an internal tool for building Locksmith. It is not published and is not for users of the product. The server lives in `design-system/mcp/` and runs over stdio. It reads the design system's source in this checkout (`design-system/packages`, the docs site's demos, `tokens.css`, the README), so its answers always match the tree you are on. It only reads; it changes nothing.
 
 ## Configure
 
@@ -20,7 +20,7 @@ Two things must be true before it starts:
 1. Dependencies are installed. Run `npm ci` at the repo root once per checkout or worktree.
 2. The client has approved the project's MCP servers. Claude Code asks the first time; answer yes, or run `claude mcp list` to see its state.
 
-**From another project or client** (Claude Desktop, Cursor, Codex, a different repo), point at the file by absolute path:
+**From another client on your machine** (Claude Desktop, Cursor, Codex), point at the file in your checkout by absolute path:
 
 ```json
 {

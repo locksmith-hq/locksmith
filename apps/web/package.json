@@ -40,7 +40,7 @@
     "@locksmith-hq/toggle-group": "*",
     "@locksmith-hq/wordmark": "*",
     "@locksmith/control-plane-client": "*",
-    "@tanstack/react-query": "5.108.1",
+    "@tanstack/react-query": "5.108.4",
     "cn": "^0.5.2",
     "lucide-react": "^1.82.0",
     "oidc-client-ts": "3.5.0",

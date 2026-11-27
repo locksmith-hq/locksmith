@@ -136,6 +136,28 @@ describe("secrets metadata", () => {
     await app.close();
   });
 
+  it("lists version metadata oldest first, with no key material", async () => {
+    const { app, http, a, b, base } = await setup();
+    const c = (await http.post(base).set(DEV_ORG, a).send({ name: "db" }).expect(201)).body;
+    expect((await http.get(`${base}/${c.id}/versions`).set(DEV_ORG, a).expect(200)).body).toEqual({ items: [] });
+    const admin = new pg.Client({ connectionString: adminUrl });
+    await admin.connect();
+    for (const v of [2, 1])
+      await admin.query(
+        "INSERT INTO secret_versions (org_id, secret_id, version, ciphertext, wrapped_dek, key_id) VALUES ((SELECT org_id FROM secrets WHERE id = $1), $1, $2, decode(repeat('00', 48), 'hex'), decode(repeat('00', 80), 'hex'), 'gateway:v1')",
+        [c.id, v],
+      );
+    await admin.end();
+    const r = await http.get(`${base}/${c.id}/versions`).set(DEV_ORG, a).expect(200);
+    expect(r.body.items.map((x: { version: number }) => x.version)).toEqual([1, 2]);
+    expect(Object.keys(r.body.items[0]).sort()).toEqual(["created_at", "key_id", "secret_id", "version"]);
+    expect(r.body.items[0]).toMatchObject({ secret_id: c.id, key_id: "gateway:v1" });
+    await http.get(`${base}/${c.id}/versions`).set(DEV_ORG, b).expect(404);
+    await http.get(`${base}/${MISSING}/versions`).set(DEV_ORG, a).expect(404);
+    await http.get(`${base}/${c.id}/versions`).expect(401);
+    await app.close();
+  });
+
   it("answers 401 first, 404 across orgs and for bad ids, 409 on a duplicate name", async () => {
     const { app, http, a, b, p, e, base } = await setup();
     await http.post(base).send({ name: "x" }).expect(401);

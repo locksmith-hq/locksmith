@@ -16,7 +16,7 @@ import type { Response } from "express";
 import { OrgBindingGuard } from "../auth/org-binding.guard.js";
 import { pathId, resolvePage } from "../platform/paging.js";
 import { Patch as PatchBody } from "../projects/projects.schemas.js";
-import { NewSecret, type Secret } from "./secrets.schemas.js";
+import { NewSecret, type Secret, type SecretVersionList } from "./secrets.schemas.js";
 import { SecretsService } from "./secrets.service.js";
 
 /** Rust `api/secrets.rs`. Check order as axum: org binding, path ids, query, body, then the handler. */
@@ -53,6 +53,16 @@ export class SecretsController {
     @Param("secretId") secretId: string,
   ): Promise<Secret> {
     return this.svc.get(pathId(projectId), pathId(environmentId), pathId(secretId));
+  }
+
+  /** Version writes (`POST .../versions`) seal the value, so they stay on the Rust core. */
+  @Get(":secretId/versions")
+  versions(
+    @Param("projectId") projectId: string,
+    @Param("environmentId") environmentId: string,
+    @Param("secretId") secretId: string,
+  ): Promise<SecretVersionList> {
+    return this.svc.listVersions(pathId(projectId), pathId(environmentId), pathId(secretId));
   }
 
   @Patch(":secretId")

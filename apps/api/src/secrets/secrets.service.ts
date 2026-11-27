@@ -6,7 +6,7 @@ import { ProblemException } from "../platform/problem.js";
 import type { Patch } from "../projects/projects.schemas.js";
 import { validateDescription, validatePatch } from "../projects/validate.js";
 import { TenantService, type Tx } from "../tenant/tenant.service.js";
-import type { Secret } from "./secrets.schemas.js";
+import type { Secret, SecretVersionList } from "./secrets.schemas.js";
 
 const iso = (d: Date) => new Date(d).toISOString();
 type Row = {
@@ -127,5 +127,24 @@ export class SecretsService {
       .where("environment_id", "=", environmentId)
       .executeTakeFirst();
     if (res.numDeletedRows === 0n) throw new ProblemException("not-found");
+  }
+
+  /** Version metadata, oldest first. Selects only `version`, `key_id` and `created_at`: ciphertext and wrapped keys are never read. */
+  async listVersions(projectId: string, environmentId: string, secretId: string): Promise<SecretVersionList> {
+    await this.get(projectId, environmentId, secretId);
+    const rows = await this.tx
+      .selectFrom("secret_versions")
+      .select(["version", "key_id", "created_at"])
+      .where("secret_id", "=", secretId)
+      .orderBy("version")
+      .execute();
+    return {
+      items: rows.map((r) => ({
+        secret_id: secretId,
+        version: r.version,
+        key_id: r.key_id,
+        created_at: iso(r.created_at),
+      })),
+    };
   }
 }

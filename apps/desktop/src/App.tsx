@@ -1,7 +1,43 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { StatusView } from "@locksmith/api-types";
 import * as api from "./api";
-import { Icon, Logo, Wordmark, type IconName } from "@locksmith/ui";
+import {
+  CircleAlert,
+  FileText,
+  KeyRound,
+  LayoutGrid,
+  Lock,
+  LockOpen,
+  Monitor,
+  Moon,
+  Network,
+  Power,
+  Sun,
+  Terminal,
+  Ticket,
+  type LucideIcon,
+} from "lucide-react";
+import { Alert } from "@locksmith-hq/alert";
+import { Button } from "@locksmith-hq/button";
+import { LiveDot } from "@locksmith-hq/live-dot";
+import { Mark } from "@locksmith-hq/mark";
+import { PageHeader } from "@locksmith-hq/page-header";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@locksmith-hq/sidebar";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
+import { Wordmark } from "@locksmith-hq/wordmark";
 import {
   Agents,
   Audit,
@@ -41,29 +77,29 @@ const TABS = {
   "MCP clients": McpClients,
 } as const;
 export type Tab = keyof typeof TABS;
-const TAB_ICON: Record<Tab, IconName> = {
-  Overview: "grid",
-  Sessions: "sessions",
-  Keys: "key",
-  Tokens: "token",
-  Agents: "sessions",
-  "Workload identities": "key",
-  Bindings: "relay",
-  Projects: "grid",
-  Secrets: "key",
-  Relays: "relay",
-  Audit: "doc",
-  "Org audit": "doc",
-  "MCP tools": "key",
-  "MCP clients": "sessions",
+const TAB_ICON: Record<Tab, LucideIcon> = {
+  Overview: LayoutGrid,
+  Sessions: Terminal,
+  Keys: KeyRound,
+  Tokens: Ticket,
+  Agents: Terminal,
+  "Workload identities": KeyRound,
+  Bindings: Network,
+  Projects: LayoutGrid,
+  Secrets: KeyRound,
+  Relays: Network,
+  Audit: FileText,
+  "Org audit": FileText,
+  "MCP tools": KeyRound,
+  "MCP clients": Terminal,
 };
 const POLL_MS = 5000;
 
 type Appearance = "system" | "light" | "dark";
-const APPEARANCE: { v: Appearance; label: string; icon: IconName }[] = [
-  { v: "system", label: "System", icon: "monitor" },
-  { v: "light", label: "Light", icon: "sun" },
-  { v: "dark", label: "Dark", icon: "moon" },
+const APPEARANCE: { v: Appearance; label: string; icon: LucideIcon }[] = [
+  { v: "system", label: "System", icon: Monitor },
+  { v: "light", label: "Light", icon: Sun },
+  { v: "dark", label: "Dark", icon: Moon },
 ];
 const PREF = "locksmith.appearance";
 const readPref = (): Appearance => {
@@ -182,84 +218,132 @@ export function App() {
   const since = counts.since?.[open ? "UNLOCK" : "LOCK"];
 
   return (
-    <div className="app">
-      <aside className="side">
-        <div className="brand">
-          <Logo open={open} />
-          <Wordmark />
-        </div>
-        <nav className="nav" aria-label="Main">
-          {(Object.keys(TABS) as Tab[]).map((t) => (
-            <button key={t} type="button" aria-current={t === tab ? "page" : undefined} onClick={() => setTab(t)}>
-              <Icon name={TAB_ICON[t]} />
-              {t}
-              {count[t] !== undefined && <span className="count">{count[t]}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="side-foot">
-          <fieldset className="seg">
-            <legend className="sr-only">Appearance</legend>
+    <SidebarProvider>
+      <Sidebar collapsible="none" className="sticky top-0 h-svh border-r">
+        <SidebarHeader>
+          <div className="flex items-center gap-2.5 px-2 py-1.5">
+            <Mark small size={26} open={open} />
+            <Wordmark />
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <nav aria-label="Main">
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {(Object.keys(TABS) as Tab[]).map((t) => {
+                    const TabIcon = TAB_ICON[t];
+                    return (
+                      <SidebarMenuItem key={t}>
+                        <SidebarMenuButton
+                          isActive={t === tab}
+                          aria-current={t === tab ? "page" : undefined}
+                          onClick={() => setTab(t)}
+                        >
+                          <TabIcon />
+                          {t}
+                          {count[t] !== undefined && <SidebarMenuBadge>{count[t]}</SidebarMenuBadge>}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </nav>
+        </SidebarContent>
+        <SidebarFooter className="gap-3">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            aria-label="Appearance"
+            className="w-full"
+            value={appearance}
+            onValueChange={(v) => v && setAppearance(v as Appearance)}
+          >
             {APPEARANCE.map((a) => (
-              <label key={a.v} title={`Appearance: ${a.label}`}>
-                <input
-                  type="radio"
-                  name="appearance"
-                  value={a.v}
-                  checked={appearance === a.v}
-                  onChange={() => setAppearance(a.v)}
-                />
-                <Icon name={a.icon} />
+              <ToggleGroupItem
+                key={a.v}
+                value={a.v}
+                aria-label={a.label}
+                title={`Appearance: ${a.label}`}
+                className="flex-1"
+              >
+                <a.icon />
                 {a.label}
-              </label>
+              </ToggleGroupItem>
             ))}
-          </fieldset>
-          <p className="daemon" data-up={!down && !!st}>
-            <span className="dot" aria-hidden="true" />
+          </ToggleGroup>
+          <p
+            className="flex items-center gap-2 border-t px-1.5 pt-3 text-xs text-muted-foreground"
+            data-up={!down && !!st}
+          >
+            {!down && !!st ? (
+              <LiveDot pulse={false} />
+            ) : (
+              <span className="size-2 rounded-full bg-destructive" aria-hidden="true" />
+            )}
             <span>
-              <b>locksmithd</b> · {down ? "not running" : st ? "running" : "connecting"}
+              <b className="font-semibold text-foreground">locksmithd</b> ·{" "}
+              {down ? "not running" : st ? "running" : "connecting"}
             </span>
           </p>
-        </div>
-      </aside>
+        </SidebarFooter>
+      </Sidebar>
 
-      <div className="work">
+      <SidebarInset className="min-w-0 overflow-auto">
         {down ? (
-          <main className="down" aria-labelledby="h-down">
-            <span className="down-ic">
-              <Icon name="power" />
+          <section className="max-w-2xl px-7 pt-18" aria-labelledby="h-down">
+            <span className="mb-5 grid size-12 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+              <Power className="size-5" />
             </span>
-            <h1 id="h-down">The Locksmith daemon is not running</h1>
-            <p>
+            <PageHeader title="The Locksmith daemon is not running" id="h-down" />
+            <p className="mb-4 max-w-[64ch] text-muted-foreground">
               This window reads everything from <code>locksmithd</code>. Start it in a terminal; this window reconnects
               on its own within a few seconds.
             </p>
-            <pre>
+            <pre className="mb-4 rounded-lg border bg-card px-4 py-3">
               <code>locksmithd</code>
             </pre>
             <p className="muted small">Detail: {down}</p>
-          </main>
+          </section>
         ) : (
           <>
-            <header className="vault" aria-label="Vault" data-open={open}>
-              <div className="vault-line" aria-live="polite" aria-atomic="true">
-                <span className="vault-k">Vault</span>
+            <header
+              className="sticky top-0 z-10 flex min-h-15 items-center gap-4 border-b bg-background/90 px-7 py-2.5 backdrop-blur"
+              aria-label="Vault"
+              data-open={open}
+            >
+              <div
+                className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <span className="text-[15px] font-bold tracking-tight">Vault</span>
                 {st ? (
                   <>
-                    <b className="vault-state">
-                      <span className="dot" aria-hidden="true" />
+                    <b
+                      className={`inline-flex items-center gap-1.5 font-semibold ${open ? "text-success" : "text-muted-foreground"}`}
+                    >
+                      {open ? (
+                        <LiveDot pulse={false} />
+                      ) : (
+                        <span className="size-2 rounded-full border-[1.5px] border-current" aria-hidden="true" />
+                      )}
                       {open ? "Unlocked" : "Locked"}
                     </b>
-                    <span className="vault-meta">
+                    <span className="text-[13px] text-muted-foreground">
                       {open ? (
                         <span>{plural(live.length, "session")}</span>
                       ) : (
                         <span>Agents cannot start sessions or use keys</span>
                       )}
                       {since !== undefined && (
-                        <span>
+                        <span className="before:mx-1.5 before:content-['·']">
                           since{" "}
-                          <time className="mono" dateTime={new Date(since * 1000).toISOString()}>
+                          <time className="mono text-foreground" dateTime={new Date(since * 1000).toISOString()}>
                             {clock(since)}
                           </time>
                         </span>
@@ -267,52 +351,52 @@ export function App() {
                     </span>
                   </>
                 ) : (
-                  <span className="vault-meta">Reading the vault…</span>
+                  <span className="text-[13px] text-muted-foreground">Reading the vault…</span>
                 )}
-                {note && <span className="vault-note">{note}</span>}
+                {note && <span className="text-[13px] font-semibold text-primary">{note}</span>}
               </div>
               {st && (
-                <div className="acts">
-                  <button
+                <div className="flex flex-none gap-1.5">
+                  <Button
                     type="button"
-                    className="btn quiet danger-text"
+                    variant="ghost"
+                    className="text-destructive"
                     aria-label="Revoke all sessions"
                     disabled={!live.length}
                     onClick={revokeAll}
                   >
                     Revoke all
-                  </button>
+                  </Button>
                   {open ? (
-                    <button type="button" className="btn primary" onClick={lock}>
-                      <Icon name="lock" />
+                    <Button type="button" onClick={lock}>
+                      <Lock />
                       Lock vault
-                    </button>
+                    </Button>
                   ) : (
-                    <button
+                    <Button
                       type="button"
-                      className="btn primary"
                       title="Opens a native Locksmith prompt; the passphrase never enters this window"
                       onClick={unlock}
                     >
-                      <Icon name="unlock" />
+                      <LockOpen />
                       Unlock vault
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
             </header>
-            <main>
+            <div className="max-w-[1240px] px-7 pt-7 pb-10">
               {err && (
-                <p role="alert" className="alert">
-                  <Icon name="alert" />
+                <Alert variant="destructive" className="mb-4">
+                  <CircleAlert />
                   {err}
-                </p>
+                </Alert>
               )}
               <Screen st={st} act={act} go={setTab} />
-            </main>
+            </div>
           </>
         )}
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

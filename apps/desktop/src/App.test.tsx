@@ -249,7 +249,7 @@ test("vault header states the vault, offers one primary action and turns the sid
   const { container } = render(<App />);
   const vault = await screen.findByRole("banner", { name: "Vault" });
   await waitFor(() => expect(vault).toHaveTextContent("Unlocked"));
-  const dial = () => container.querySelector(".logo .vault-mark")!;
+  const dial = () => container.querySelector("[data-slot=mark]")!;
   expect(dial()).toHaveAttribute("data-open", "true");
   expect(screen.queryByRole("switch")).toBeNull();
   await go("Lock vault");

@@ -7,7 +7,11 @@ const old = "@locksmith/ui";
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? sources(join(dir, e.name)) : /\.(tsx?|css)$/.test(e.name) && !e.name.startsWith("design-system.test") ? [join(dir, e.name)] : [],
+    e.isDirectory()
+      ? sources(join(dir, e.name))
+      : /\.(tsx?|css)$/.test(e.name) && !e.name.startsWith("design-system.test")
+        ? [join(dir, e.name)]
+        : [],
   );
 }
 

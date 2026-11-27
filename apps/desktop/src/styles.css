@@ -1,60 +1,9 @@
 
 /* Shell */
-.app { display: grid; grid-template-columns: 220px minmax(0, 1fr); height: 100vh; }
-.side { display: flex; flex-direction: column; gap: 20px; padding: 14px 12px; background: var(--side); border-right: 1px solid var(--border); overflow: auto; }
-.brand { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 6px; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
-.logo { display: inline-flex; color: var(--text); }
-.logo .vm-bolt { stroke: var(--accent); }
-.wordmark { font-family: "Unbounded", var(--sans); font-weight: 500; font-size: 15px; letter-spacing: -0.01em; color: var(--text); }
 /* The mark's motion: unlocking turns the outer ring a sixth of a turn and withdraws the bolts. */
-.vault-mark .vm-ring { transform-box: view-box; transform-origin: 60px 60px; transition: transform 900ms var(--ease); }
-.vault-mark .vm-bolt { transform-box: view-box; transition: transform 600ms var(--ease) 150ms; }
-.vault-mark[data-open="true"] .vm-ring { transform: rotate(30deg); }
-.vault-mark[data-open="true"] .vm-bolt { transform: scaleX(0.3); }
-.nav { display: flex; flex-direction: column; gap: 2px; }
-.nav button {
-  display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border: 0; border-radius: 9px;
-  background: none; font: 500 14px var(--sans); color: var(--muted); text-align: left; cursor: pointer;
-  transition: background-color 120ms var(--ease), color 120ms var(--ease);
-}
-.nav button:hover { background: var(--hover); color: var(--text); }
-.nav button[aria-current="page"] { background: var(--selected); color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border), var(--shadow-xs); }
-.nav button[aria-current="page"] svg { color: var(--accent-text); }
-.nav .count { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
-.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
-.seg { display: flex; margin: 0; padding: 2px; min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); }
-.seg label { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; height: 26px; border-radius: 7px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; }
-.seg label svg { width: 13px; height: 13px; }
-.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.seg label:hover { color: var(--text); }
-.seg label:has(input:checked) { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border), var(--shadow-xs); }
-.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
-.daemon { display: flex; align-items: center; gap: 9px; margin: 0; padding: 12px 6px 2px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-.daemon b { color: var(--text); font-weight: 600; }
-.daemon .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 3px var(--danger-weak); }
-.daemon[data-up="true"] .dot { background: var(--live); box-shadow: 0 0 0 3px var(--live-weak); }
 
-.work { min-width: 0; overflow: auto; }
-main { padding: 28px 28px 40px; max-width: 1240px; }
 
 /* Page header: the vault's state as one quiet line, with the stop actions beside it. */
-.vault {
-  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 10px 28px;
-  background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
-}
-.vault-line { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0; }
-.vault-k { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.vault-state { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: var(--muted); }
-.vault-state .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; transform: translateY(-0.5px); }
-.vault[data-open="true"] .vault-state { color: var(--live-text); }
-.vault[data-open="true"] .vault-state .dot { background: var(--live); border-color: var(--live); }
-.vault-meta { color: var(--muted); font-size: 13px; }
-.vault-meta > span + span::before { content: "·"; margin: 0 7px; }
-.vault-meta .mono { font-size: 12.5px; color: var(--text); }
-.vault-note { color: var(--accent-text); font-weight: 600; font-size: 13px; }
-.acts { display: flex; gap: 6px; flex: none; }
-.vault .btn { height: 34px; padding: 0 14px; font-size: 13px; border-radius: 9px; }
-.vault .btn svg { width: 15px; height: 15px; }
 
 /* Controls */
 .btn {
@@ -254,13 +203,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .dec { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); }
 
 /* Daemon down */
-.down { max-width: 640px; padding-top: 72px; }
-.down-ic { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: var(--danger-weak); color: var(--danger-text); }
-.down-ic svg { width: 22px; height: 22px; }
-.down h1 { margin: 20px 0 8px; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -0.015em; }
-.down p { margin: 0 0 16px; max-width: 64ch; color: var(--muted); }
-.down pre { margin: 0 0 16px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-xs); }
-.down pre code { background: none; padding: 0; font-size: 14px; color: var(--text); }
 
 @media (max-width: 1100px) {
   .tl-list { --tl-cols: minmax(160px, 200px) 152px minmax(120px, 1fr) 64px 70px; }

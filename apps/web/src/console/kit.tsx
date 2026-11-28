@@ -143,17 +143,28 @@ export const Empty = ({ icon, children }: { icon: IconName; children: ReactNode 
   );
 };
 
+/** The kit's switch has a keyhole on its bolt. Only a switch about a secret or a password keeps it (`keyed`). */
 export const Switch = ({
   label,
   checked,
   disabled,
+  keyed = false,
   onChange,
 }: {
   label: string;
   checked: boolean;
   disabled?: boolean;
+  keyed?: boolean;
   onChange: (on: boolean) => void;
-}) => <KitSwitch aria-label={label} checked={checked} disabled={disabled} onCheckedChange={onChange} />;
+}) => (
+  <KitSwitch
+    aria-label={label}
+    checked={checked}
+    disabled={disabled}
+    data-plain={keyed ? undefined : ""}
+    onCheckedChange={onChange}
+  />
+);
 
 /**
  * Data shared by several pages. Lives outside React, so it survives moving between pages (each page

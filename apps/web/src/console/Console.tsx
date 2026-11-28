@@ -2607,29 +2607,29 @@ function Agents({ db }: { db: Db }) {
           </Button>
         </Card>
       )}
-      <ul className="sess-list">
+      <ul className="m-0 list-none rounded-[14px] border border-border bg-card p-0 shadow-xs">
         {db.agents.map((a) => {
           const gs = grantsOf(a.name);
           const live = db.sessions.some((s) => s.agent === a.name && s.state === "active");
           return (
-            <li key={a.name} className="sess">
-              <div className="sess-main">
+            <li key={a.name} className="[&+&]:border-t [&+&]:border-border">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 py-2.5 pr-4 pl-2 min-[761px]:grid-cols-[minmax(0,1fr)_auto_72px_76px]">
                 <Button
                   variant="ghost"
                   type="button"
-                  className="sess-toggle"
+                  className="flex h-auto min-w-0 items-center justify-start gap-3 rounded-[10px] px-2 py-1 text-left text-[length:inherit] leading-[inherit] font-[inherit] font-normal hover:bg-accent"
                   aria-expanded={open === a.name}
                   onClick={() => setOpen(open === a.name ? null : a.name)}
                 >
-                  <span className="av">
+                  <span className="av size-8 flex-none rounded-[9px] bg-muted text-(--chip-text)">
                     <AgentIcon a={a} />
                   </span>
-                  <span className="who">
-                    <span className="who-1">
+                  <span className="who grid gap-0.5">
+                    <span className="who-1 truncate">
                       <span className="who-name">{a.name}</span>
                       {live && <span className="live-dot" title="Has a live session" />}
                     </span>
-                    <span className="who-2">
+                    <span className="who-2 truncate">
                       {a.description} · {a.machine}
                     </span>
                   </span>
@@ -2639,7 +2639,7 @@ function Agents({ db }: { db: Db }) {
                 <span />
               </div>
               {open === a.name && (
-                <dl className="sess-det">
+                <dl className="m-0 grid grid-cols-[110px_minmax(0,1fr)] gap-x-3.5 gap-y-1 pt-1 pr-4 pb-3.5 pl-15 text-[13px] [&>dd]:m-0 [&>dd]:wrap-anywhere [&>dt]:text-muted-foreground">
                   <dt>Enrolled</dt>
                   <dd>
                     {ago(a.enrolled)} on {a.machine}

@@ -138,22 +138,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
   * { transition: none !important; animation: none !important; }
 }
 
-/* Sessions tab */
-.sess-list { margin: 0; padding: 0; list-style: none; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-xs); }
-.sess + .sess { border-top: 1px solid var(--border); }
-.sess-main { display: grid; grid-template-columns: minmax(0, 1fr) auto 72px 76px; align-items: center; gap: 14px; padding: 10px 16px 10px 8px; }
-.sess-toggle { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.sess-toggle:hover { background: var(--accent); }
-.sess .av { width: 32px; height: 32px; flex: none; border-radius: 9px; display: grid; place-items: center; background: var(--muted); color: var(--chip-text); }
-.sess .av svg { width: 16px; height: 16px; }
-.sess .who { display: grid; gap: 2px; min-width: 0; }
-.sess .who-1, .sess .who-2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sess[data-state]:not([data-state="active"]) .who-name { color: var(--muted-foreground); font-weight: 500; }
-.sess-det { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 14px; margin: 0; padding: 4px 16px 14px 60px; font-size: 13px; }
-.sess-det dt { color: var(--muted-foreground); }
-.sess-det dd { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 760px) { .sess-main { grid-template-columns: minmax(0, 1fr) auto; } .sess-main .scopes { display: none; } }
-
 /* Source marks and the reported-model chip (Overview rows and Sessions tab). */
 .src-claude { display: inline-flex; color: #D97757; align-self: center; }
 .av .src-claude svg, .who-1 .src-claude svg { stroke-width: 1.8; }

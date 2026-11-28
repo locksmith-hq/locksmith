@@ -598,12 +598,12 @@ export function Console() {
             <div className="side-foot">
               <Selector
                 className="user"
-                title="Your account"
+                title={`${me.name}, your account`}
                 summary={
                   <>
                     <span className="av">{me.name[0]}</span>
                     <span>
-                      {me.name} <Badge className="tier">{planOf[at]}</Badge>
+                      {me.name.split(" ")[0]} <Badge className="tier">{planOf[at]}</Badge>
                       <small>{me.email}</small>
                     </span>
                     <Chevrons />

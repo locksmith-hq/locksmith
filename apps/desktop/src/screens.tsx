@@ -63,6 +63,8 @@ import { SettingRow } from "@locksmith-hq/ui/setting-row";
 import { Switch } from "@locksmith-hq/ui/switch";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 
+import { InlineCode, LogFoot, Quiet, ROWS, SecCount, SecH, WHO } from "./ui";
+
 export interface ScreenProps {
   st: StatusView | null;
   /** Runs an action, shows its rejection under the vault banner and refreshes status. */
@@ -206,19 +208,19 @@ export function Overview({ st, act, go }: ScreenProps) {
     setStriking(null);
   };
   return (
-    <section className="overview" aria-labelledby="h-overview">
+    <section className="max-w-[1120px]" aria-labelledby="h-overview">
       <h1 id="h-overview" className="sr-only">
         Overview
       </h1>
 
-      <div className="sec-h">
+      <SecH tight>
         <h2>Sessions</h2>
         {st && (
-          <span className="n">
+          <SecCount>
             {live.length} active{ended.length > 0 && ` · ${ended.length} ended`}
-          </span>
+          </SecCount>
         )}
-      </div>
+      </SecH>
       {!st ? (
         <Loading what="sessions" />
       ) : (
@@ -235,44 +237,51 @@ export function Overview({ st, act, go }: ScreenProps) {
 
       {cp && (
         <section aria-label="Control plane counts">
-          <div className="sec-h spaced">
+          <SecH tight spaced>
             <h2>Control plane</h2>
-          </div>
-          <p className="quiet" data-testid="cp-counts">
+          </SecH>
+          <Quiet data-testid="cp-counts">
             Projects: <b data-testid="count-projects">{cp.projects ?? "n/a"}</b> · Agents:{" "}
             <b data-testid="count-agents">{cp.agents ?? "n/a"}</b>
-          </p>
+          </Quiet>
         </section>
       )}
 
-      <div className="sec-h spaced">
+      <SecH tight spaced>
         <h2 id="h-events">Activity</h2>
         <Button type="button" variant="link" className="h-auto p-0" onClick={() => go("Audit")}>
           Open audit
         </Button>
-      </div>
+      </SecH>
       {ev.alert}
       {!ev.data && !ev.err ? (
         <Loading what="the ledger" />
       ) : events.length === 0 ? (
-        <p className="quiet">Nothing in the ledger yet.</p>
+        <Quiet>Nothing in the ledger yet.</Quiet>
       ) : (
-        <ol className="log" aria-labelledby="h-events">
+        <ol className="m-0 list-none p-0" aria-labelledby="h-events">
           {events.map((e) => {
             const k = kind(e);
             const who = leaseOf(e.session_id);
             const target = e.target ?? "";
             return (
-              <li key={e.seq} data-kind={k}>
-                <time className="font-mono text-xs" dateTime={new Date(e.ts * 1000).toISOString()} title={stamp(e.ts)}>
+              <li key={e.seq} data-kind={k} className={LOG_ROW}>
+                <time
+                  className="font-mono text-xs text-muted-foreground"
+                  dateTime={new Date(e.ts * 1000).toISOString()}
+                  title={stamp(e.ts)}
+                >
                   {clockS(e.ts)}
                 </time>
-                <span className="mk" aria-hidden="true" />
-                <span className="what">{label(e.action)}</span>
-                <span className="font-mono text-xs tgt" title={target}>
+                <span className={LOG_MARK} aria-hidden="true" />
+                <span className={LOG_WHAT}>{label(e.action)}</span>
+                <span data-slot="tgt" className={LOG_TGT} title={target}>
                   {target}
                 </span>
-                <span className="who-s" title={e.session_id ?? e.actor_exe}>
+                <span
+                  className="min-w-0 truncate text-right text-[12.5px] text-muted-foreground"
+                  title={e.session_id ?? e.actor_exe}
+                >
                   {who ? (
                     <>
                       {agent(who.command)} <span className="font-mono text-xs">{e.session_id}</span>
@@ -290,19 +299,36 @@ export function Overview({ st, act, go }: ScreenProps) {
       )}
       {ver.data &&
         (ver.data.broken_at === null ? (
-          <p className="log-foot">
+          <LogFoot>
             <ShieldCheck />
             Ledger chain verified · {ver.data.events.toLocaleString("en-US")} entries
-          </p>
+          </LogFoot>
         ) : (
-          <p className="log-foot bad">
+          <LogFoot bad>
             <ShieldAlert />
             Ledger BROKEN at seq {ver.data.broken_at}
-          </p>
+          </LogFoot>
         ))}
     </section>
   );
 }
+
+const LOG_ROW =
+  "group grid min-h-[34px] grid-cols-[64px_8px_160px_minmax(0,1fr)_minmax(0,190px)] items-center gap-x-3 border-t px-2.5 text-[length:var(--font-size-sm)] last:border-b hover:bg-(--state-hover) max-[1100px]:grid-cols-[64px_8px_150px_minmax(0,1fr)_minmax(0,150px)]";
+const LOG_MARK =
+  "size-[7px] rounded-full bg-(--live) opacity-80 group-data-[kind=blocked]:size-2 group-data-[kind=blocked]:rotate-45 group-data-[kind=blocked]:rounded-[1px] group-data-[kind=blocked]:border-[1.5px] group-data-[kind=blocked]:border-(--warning) group-data-[kind=blocked]:bg-transparent group-data-[kind=blocked]:opacity-100 group-data-[kind=revoked]:h-0.5 group-data-[kind=revoked]:w-2 group-data-[kind=revoked]:rounded-[1px] group-data-[kind=revoked]:bg-(--destructive) group-data-[kind=revoked]:opacity-100";
+const LOG_WHAT =
+  "truncate font-medium group-data-[kind=blocked]:font-semibold group-data-[kind=blocked]:text-(--warning-text) group-data-[kind=revoked]:text-(--destructive-text)";
+const LOG_TGT =
+  "min-w-0 truncate font-mono text-xs text-muted-foreground group-data-[kind=blocked]:text-(--warning-text)";
+/** The lease axis: every live lease on one shared axis from "now" to the latest expiry. */
+const TL_LIST =
+  "[--tl-cols:minmax(200px,260px)_156px_minmax(140px,1fr)_72px_76px] max-[1100px]:[--tl-cols:minmax(160px,200px)_152px_minmax(120px,1fr)_64px_70px]";
+const TL_ROW = "grid min-h-[52px] grid-cols-(--tl-cols) items-center gap-x-4 border-t py-0 pr-1 pl-2.5";
+/** The "now" rule is the left edge every lease starts from. */
+const TL =
+  "relative min-w-0 self-stretch before:absolute before:-bottom-px before:left-0 before:w-[1.5px] before:bg-(--brand) before:opacity-70 group-data-[state]:before:hidden";
+const TICK_L = "absolute top-[5px] text-[11.5px] font-medium whitespace-nowrap";
 
 /** Round clock steps for the lease axis, in seconds. */
 const STEPS = [300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
@@ -327,7 +353,8 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
   for (let t = Math.ceil((now + 1) / step) * step; t < now + span; t += step)
     if ((t - now) / span > 0.12 && (t - now) / span < 0.95) ticks.push(t);
   const x = (t: number) => `${(Math.max(0, t - now) / span) * 100}%`;
-  const grid = ticks.map((t) => <i key={t} className="tick" style={{ left: x(t) }} />);
+  const grid = (top: string) =>
+    ticks.map((t) => <i key={t} className={`absolute -bottom-px w-px bg-border ${top}`} style={{ left: x(t) }} />);
   const revokedAt = (id: string) => events.find((e) => e.action === "REVOKE" && e.target === id)?.ts;
   const endedLabel = (l: LeaseInfo) => {
     if (l.state === "expired") return `expired ${clock(l.expires_at)}`;
@@ -335,18 +362,21 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
     return t ? `revoked ${clock(t)}` : l.state;
   };
   return (
-    <div className="tl-list" role="list" aria-label="Sessions">
+    <div className={TL_LIST} role="list" aria-label="Sessions">
       {live.length > 0 && (
-        <div className="tl-row tl-axis" aria-hidden="true">
+        <div
+          className={`${TL_ROW} min-h-[30px] border-t-0 text-[length:var(--font-size-xs)] text-muted-foreground`}
+          aria-hidden="true"
+        >
           <span>Agent</span>
           <span>Scopes</span>
-          <span className="tl">
-            <b className="tick-l now" style={{ left: 0 }}>
+          <span className={`${TL} h-[30px] before:top-[18px]`}>
+            <b className={`${TICK_L} pl-1.5 font-semibold text-(--brand-text)`} style={{ left: 0 }}>
               now
             </b>
-            {grid}
+            {grid("top-[22px]")}
             {ticks.map((t) => (
-              <b key={t} className="tick-l font-mono text-xs" style={{ left: x(t) }}>
+              <b key={t} className={`${TICK_L} -translate-x-1/2 font-mono`} style={{ left: x(t) }}>
                 {clock(t)}
               </b>
             ))}
@@ -356,13 +386,16 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
         </div>
       )}
       {live.length === 0 && (
-        <div className="tl-row tl-empty" role="listitem">
+        <div
+          className="block min-h-[52px] border-t px-2.5 py-3.5 text-muted-foreground last:border-b [&_b]:font-semibold [&_b]:text-foreground"
+          role="listitem"
+        >
           {locked ? (
             <p>No sessions. The vault is locked, so no agent can start one until you unlock it.</p>
           ) : (
             <p>
               <b>No active sessions.</b> Agents get access only inside a session you start from a terminal:{" "}
-              <code>smith session start -- &lt;agent&gt;</code>
+              <InlineCode>smith session start -- &lt;agent&gt;</InlineCode>
             </p>
           )}
         </div>
@@ -375,18 +408,24 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
           <div
             key={l.id}
             role="listitem"
-            className="tl-row"
+            className={`${TL_ROW} group transition-[background-color,opacity] duration-[120ms] last:border-b hover:bg-(--state-hover) focus-within:bg-(--state-hover) data-[striking]:opacity-50`}
             data-soon={soon || undefined}
             data-striking={striking === l.id || undefined}
             aria-label={`${name} session ${l.id}`}
           >
             <Who l={l} />
             <ScopeText scopes={l.scopes} />
-            <span className="tl" aria-hidden="true">
-              {grid}
-              <span className="bar" style={{ width: x(l.expires_at) }} />
+            <span className={`${TL} before:top-0`} aria-hidden="true">
+              {grid("top-0")}
+              <span
+                className="absolute top-1/2 left-0 -mt-[3px] h-1.5 rounded-r-[3px] bg-(--brand) opacity-85 group-data-[soon]:bg-(--warning) group-data-[soon]:opacity-100 group-data-[striking]:bg-(--destructive) after:absolute after:-top-1 after:-right-px after:h-3.5 after:w-0.5 after:rounded-[1px] after:bg-inherit"
+                style={{ width: x(l.expires_at) }}
+              />
             </span>
-            <span className="text-right font-mono text-xs left" title={`Expires ${clock(l.expires_at)}`}>
+            <span
+              className="text-right font-mono text-[12.5px] font-medium whitespace-nowrap group-data-[soon]:text-(--warning-text)"
+              title={`Expires ${clock(l.expires_at)}`}
+            >
               {left(rest)}
               <span className="sr-only"> left, expires {clock(l.expires_at)}</span>
             </span>
@@ -394,7 +433,7 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
               type="button"
               variant="ghost"
               size="sm"
-              className="reveal text-(--destructive-text)"
+              className="justify-self-end text-(--destructive-text) opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
               aria-label={`Revoke ${name} session ${l.id}`}
               disabled={striking !== null}
               onClick={() => onRevoke(l.id)}
@@ -405,7 +444,10 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
         );
       })}
       {ended.length > 0 && (
-        <div className="tl-div" role="presentation">
+        <div
+          className="flex items-center gap-2.5 border-t border-input px-2.5 pt-3.5 pb-1 text-[length:var(--font-size-xs)] text-muted-foreground"
+          role="presentation"
+        >
           <span>Recently ended</span>
         </div>
       )}
@@ -413,13 +455,18 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
         <div
           key={l.id}
           role="listitem"
-          className="tl-row ended"
+          className={`${TL_ROW} group min-h-11 text-muted-foreground last:border-b`}
           data-state={l.state}
           aria-label={`${agent(l.command)} session ${l.id}, ${endedLabel(l)}`}
         >
           <Who l={l} struck />
           <ScopeText scopes={l.scopes} />
-          <span className="tl font-mono text-xs end">{endedLabel(l)}</span>
+          <span
+            data-slot="end"
+            className="min-w-0 self-center font-mono text-xs group-data-[state=revoked]:text-(--destructive-text)"
+          >
+            {endedLabel(l)}
+          </span>
           <span />
           <span />
         </div>
@@ -431,27 +478,44 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
 const Who = ({ l, struck }: { l: LeaseInfo; struck?: boolean }) => {
   const name = agent(l.command);
   return (
-    <span className="who" title={l.command}>
-      <span className="who-1">
+    <span className="flex min-w-0 flex-col gap-px" title={l.command}>
+      <span className="flex min-w-0 items-baseline gap-2 text-foreground">
         <SourceMark kind={l.source.kind} />
-        {struck ? <s className="who-name">{name}</s> : <b className="who-name">{name}</b>}
-        <span className="font-mono text-xs id">{l.id}</span>
+        {struck ? (
+          <s data-slot="who-name" className="font-medium text-muted-foreground decoration-[1.5px]">
+            {name}
+          </s>
+        ) : (
+          <b
+            data-slot="who-name"
+            className="bg-[linear-gradient(var(--destructive),var(--destructive))] bg-[position:0_55%] bg-no-repeat bg-[size:0_1.5px] font-semibold transition-[background-size] duration-500 ease-(--ease-out) group-data-[striking]:bg-[size:100%_1.5px]"
+          >
+            {name}
+          </b>
+        )}
+        <span className="truncate font-mono text-[11px] text-muted-foreground">{l.id}</span>
       </span>
-      <span className="who-2">
-        {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
+      <span className={WHO_LINE}>
+        {l.project} / <Env env={l.env} />
       </span>
       {(l.report?.model ?? l.report?.agent) || l.started_by === "agent" ? (
-        <span className="who-2 who-3">
-          <span className="src-lbl">{l.source.label} ·</span> <ReportedModel l={l} />
+        <span className={`${WHO_LINE} flex gap-1`}>
+          <span className="flex-none">{l.source.label} ·</span> <ReportedModel l={l} wide />
         </span>
       ) : null}
     </span>
   );
 };
 
+const WHO_LINE = "truncate text-[12.5px] leading-[17px] text-muted-foreground";
+/** The environment name; production is called out. */
+const Env = ({ env }: { env: string }) => (
+  <span className={env === "production" ? "text-(--warning-text)" : undefined}>{env}</span>
+);
+
 const ScopeText = ({ scopes }: { scopes: readonly string[] }) => (
   <ul
-    className="scopes-t font-mono text-xs"
+    className="m-0 flex list-none flex-nowrap overflow-hidden p-0 font-mono text-xs whitespace-nowrap text-(--chip-text) group-data-[state]:text-muted-foreground [&>li+li]:before:mx-[5px] [&>li+li]:before:text-muted-foreground [&>li+li]:before:content-['·']"
     aria-label={scopes.length ? `Scopes granted: ${scopes.join(", ")}` : "No scopes granted"}
   >
     {scopes.map((s) => (
@@ -481,7 +545,12 @@ const isClaude = (k: SourceKind) => k === "claude_code_cli" || k === "claude_des
 const SourceMark = ({ kind }: { kind: SourceKind }) => {
   const Glyph = SOURCE_GLYPH[kind] ?? CircleHelp;
   return isClaude(kind) ? (
-    <span className="src-claude" role="img" aria-label="Claude" title="Claude">
+    <span
+      className="inline-flex self-center text-[#d97757] [&>svg]:size-3.5"
+      role="img"
+      aria-label="Claude"
+      title="Claude"
+    >
       <ClaudeRays />
     </span>
   ) : (
@@ -489,12 +558,15 @@ const SourceMark = ({ kind }: { kind: SourceKind }) => {
   );
 };
 /** The agent's own model claim with its 'unverified' tooltip; nothing for a human-started session that reported none. */
-const ReportedModel = ({ l }: { l: LeaseInfo }) => {
+const ReportedModel = ({ l, wide }: { l: LeaseInfo; wide?: boolean }) => {
   const claim = l.report?.model ?? l.report?.agent;
   const text = claim ? `${claim} (reported by agent)` : l.started_by === "agent" ? "model not reported" : null;
   return (
     text && (
-      <span className={claim ? "reported" : "text-muted-foreground"} title={`${text}. ${SELF_REPORTED}`}>
+      <span
+        className={`${claim ? "cursor-help border-b border-dotted border-muted-foreground" : "text-muted-foreground"} ${wide ? "min-w-0 flex-1 basis-0 truncate" : "inline-block max-w-[22ch] truncate align-bottom"}`}
+        title={`${text}. ${SELF_REPORTED}`}
+      >
         {text}
       </span>
     )
@@ -522,8 +594,8 @@ export function Sessions({ st, act }: ScreenProps) {
     const rest = l.expires_at - now;
     const name = l.source.label;
     return (
-      <li key={l.id} className="sess" data-state={l.state} data-open={open === l.id || undefined}>
-        <div className="sess-main">
+      <li key={l.id} data-state={l.state} data-open={open === l.id || undefined}>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_72px_76px] items-center gap-3.5 py-2.5 pr-4 pl-2 max-[760px]:grid-cols-[minmax(0,1fr)_auto] max-[760px]:[&>ul]:hidden">
           <Button
             type="button"
             variant="ghost"
@@ -535,16 +607,18 @@ export function Sessions({ st, act }: ScreenProps) {
             <span className="grid size-8 flex-none place-items-center rounded-md bg-muted" data-kind={l.source.kind}>
               <SourceMark kind={l.source.kind} />
             </span>
-            <span className="who">
-              <span className="who-1">
-                <b className="who-name">{name}</b>
+            <span className="grid min-w-0 gap-0.5">
+              <span className="flex min-w-0 items-baseline gap-2 truncate text-foreground">
+                <b data-slot="who-name" className={active ? "font-semibold" : "font-medium text-muted-foreground"}>
+                  {name}
+                </b>
                 {l.host && <span className="text-muted-foreground"> in {l.host}</span>}
                 <Badge variant={l.started_by === "agent" ? "default" : "secondary"} className="ml-2">
                   {l.started_by === "agent" ? "Agent started" : "Human started"}
                 </Badge>
               </span>
-              <span className="who-2">
-                {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
+              <span className={WHO_LINE}>
+                {l.project} / <Env env={l.env} />
                 {(l.report?.model ?? l.report?.agent) || l.started_by === "agent" ? (
                   <>
                     {" "}
@@ -555,7 +629,7 @@ export function Sessions({ st, act }: ScreenProps) {
             </span>
           </Button>
           <Scopes scopes={l.scopes} />
-          <span className="text-right font-mono text-xs left">
+          <span data-slot="left" className="text-right font-mono text-[12.5px] font-medium whitespace-nowrap">
             {active ? (
               <>
                 {left(rest)}
@@ -634,30 +708,31 @@ export function Sessions({ st, act }: ScreenProps) {
             "The vault is locked, so no agent can start one until you unlock it."
           ) : (
             <>
-              Agents get access only inside a session: start one with <code>smith session start -- &lt;agent&gt;</code>
+              Agents get access only inside a session: start one with{" "}
+              <InlineCode>smith session start -- &lt;agent&gt;</InlineCode>
             </>
           )}
         </Empty>
       ) : (
         <>
           {live.length > 0 && (
-            <ul className="rows" aria-label="Active sessions">
+            <ul className={ROWS} aria-label="Active sessions">
               {live.map(row)}
             </ul>
           )}
           {ended.length > 0 && (
             <>
-              <div className="sec-h spaced">
+              <SecH spaced>
                 <h2>Recently ended</h2>
-              </div>
-              <ul className="rows" aria-label="Ended sessions">
+              </SecH>
+              <ul className={ROWS} aria-label="Ended sessions">
                 {ended.map(row)}
               </ul>
             </>
           )}
-          <p className="log-foot">
+          <LogFoot>
             Source and host are hints read from process names and paths. Any process running as you can imitate them.
-          </p>
+          </LogFoot>
         </>
       )}
     </section>
@@ -741,7 +816,7 @@ export function Keys({ st }: ScreenProps) {
               ))}
               <span className="text-muted-foreground">
                 {" "}
-                · sessions on {project} / {env} with <code>run</code> scope
+                · sessions on {project} / {env} with <InlineCode>run</InlineCode> scope
               </span>
             </span>
           </p>
@@ -755,7 +830,7 @@ export function Keys({ st }: ScreenProps) {
         <Empty title={`No keys in ${project} / ${env} yet.`}>Add the first one below.</Empty>
       ) : (
         names.data && (
-          <ul className="rows mb-5" aria-label={`Key names in ${project} / ${env}`}>
+          <ul className={`${ROWS} mb-5`} aria-label={`Key names in ${project} / ${env}`}>
             {names.data.map((n) => (
               <li key={n} className="flex items-center gap-3.5 px-4 py-2.5">
                 <KeyRound className="size-4 flex-none text-muted-foreground" />
@@ -824,7 +899,7 @@ export function Tokens({ st }: ScreenProps) {
         title="Tokens"
         lede={
           <>
-            Opaque <code>lsk_</code> tokens stand in for a key on one host. Only the prefix is shown.
+            Opaque <InlineCode>lsk_</InlineCode> tokens stand in for a key on one host. Only the prefix is shown.
           </>
         }
       />
@@ -834,7 +909,7 @@ export function Tokens({ st }: ScreenProps) {
         <Loading what="tokens" />
       ) : t.data?.length === 0 ? (
         <Empty title="No live tokens.">
-          Inside a session, mint one with <code>smith token issue &lt;KEY&gt; --provider &lt;name&gt;</code>
+          Inside a session, mint one with <InlineCode>smith token issue &lt;KEY&gt; --provider &lt;name&gt;</InlineCode>
         </Empty>
       ) : (
         t.data && (
@@ -845,13 +920,13 @@ export function Tokens({ st }: ScreenProps) {
                 <Card key={x.prefix} role="article" aria-label={`Token ${x.prefix}`}>
                   <CardContent className="grid grid-cols-[16px_minmax(160px,1fr)_minmax(160px,1fr)_minmax(180px,1.1fr)_auto] items-center gap-3.5">
                     <Ticket className="size-4 text-muted-foreground" aria-hidden="true" />
-                    <div className="who">
+                    <div className={WHO}>
                       <b className="font-mono text-xs">{x.prefix}</b>
                       <span className="font-mono text-xs" title={x.key}>
                         {x.key}
                       </span>
                     </div>
-                    <div className="who">
+                    <div className={WHO}>
                       <b className="flex-wrap">
                         {x.hosts.map((h) => (
                           <span key={h} className="font-mono text-xs">
@@ -863,7 +938,7 @@ export function Tokens({ st }: ScreenProps) {
                         <span className="font-mono text-xs">{x.placement}</span> · {stamp(x.created_at).slice(5, 16)}
                       </span>
                     </div>
-                    <div className="who">
+                    <div className={WHO}>
                       {sc ? <Scopes scopes={sc} /> : <b className="text-muted-foreground">Session ended</b>}
                       <span title={`${x.project} / ${x.env} · ${x.lease}`}>
                         {x.project} / {x.env} · <span className="font-mono text-xs">{x.lease}</span>
@@ -957,9 +1032,9 @@ export function Relays(_: ScreenProps) {
                       </div>
                       <div className="flex flex-col items-start gap-1.5">
                         {x.setup.map((c) => (
-                          <code key={c} className="cmd">
+                          <InlineCode cmd key={c}>
                             {c}
-                          </code>
+                          </InlineCode>
                         ))}
                       </div>
                     </CardContent>
@@ -967,10 +1042,10 @@ export function Relays(_: ScreenProps) {
                 );
               })}
             </div>
-            <div className="sec-h spaced">
+            <SecH spaced>
               <h2>Explicit-proxy CA hosts</h2>
-              <span className="n">{info.ca_hosts.length}</span>
-            </div>
+              <SecCount>{info.ca_hosts.length}</SecCount>
+            </SecH>
             {info.ca_hosts.length === 0 ? (
               <Empty title="No hosts use the Locksmith CA." />
             ) : (
@@ -1165,9 +1240,9 @@ export function Agents(_: ScreenProps) {
             <Card className="mb-4" role="region" aria-label="Enrollment secret">
               <CardContent className="flex flex-col items-start gap-2">
                 <p>Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.</p>
-                <code className="cmd" data-testid="enrollment-secret">
+                <InlineCode cmd data-testid="enrollment-secret">
                   {secret.value}
-                </code>
+                </InlineCode>
                 <Button type="button" variant="outline" size="sm" onClick={() => setSecret(null)}>
                   Dismiss
                 </Button>
@@ -1206,7 +1281,7 @@ export function Agents(_: ScreenProps) {
               {agents.map((a) => (
                 <Card key={a.id} role="article" aria-label={`Agent ${a.name}`}>
                   <CardContent className="flex flex-col items-start gap-2.5">
-                    <div className="who">
+                    <div className={WHO}>
                       <b>{a.name}</b>
                       <span className="font-mono text-xs">{a.id}</span>
                     </div>
@@ -1425,14 +1500,14 @@ export function WorkloadIdentities(_: ScreenProps) {
               {items.map((w) => (
                 <Card key={w.id} role="article" aria-label={`Workload identity ${w.name}`}>
                   <CardContent className="flex flex-col items-start gap-2.5">
-                    <div className="who">
+                    <div className={WHO}>
                       <b>{w.name}</b>
                       <span className="font-mono text-xs">
                         {w.issuer_kind} {w.issuer}
                       </span>
                     </div>
                     <p>
-                      Handle: <code className="font-mono text-xs">{w.handle}</code> (not a secret) · audience{" "}
+                      Handle: <InlineCode className="font-mono">{w.handle}</InlineCode> (not a secret) · audience{" "}
                       {w.audience} · agent <span className="font-mono text-xs">{w.agent_id}</span> · last used{" "}
                       {w.last_used_at ?? "never"}
                     </p>
@@ -1819,7 +1894,7 @@ function ProjectsView({ client }: { client: Client }) {
       ) : ps.items.length === 0 ? (
         <Empty title="No projects yet." />
       ) : (
-        <ul className="rows">
+        <ul className={ROWS}>
           {ps.items.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-2 px-4 py-2 *:first:mr-auto">
               <Button
@@ -1847,9 +1922,9 @@ function ProjectsView({ client }: { client: Client }) {
       )}
       {sel && (
         <section aria-label={`Environments of ${sel.name}`}>
-          <div className="sec-h spaced">
+          <SecH spaced>
             <h2>Environments of {sel.name}</h2>
-          </div>
+          </SecH>
           {es.err && <Alert>{es.err}</Alert>}
           <CreateForm
             label="environment"
@@ -1860,7 +1935,7 @@ function ProjectsView({ client }: { client: Client }) {
           ) : es.items.length === 0 ? (
             <Empty title="No environments yet." />
           ) : (
-            <ul className="rows">
+            <ul className={ROWS}>
               {es.items.map((e) => (
                 <li key={e.id} className="flex flex-wrap items-center gap-2 px-4 py-2 *:first:mr-auto">
                   <span>{e.name}</span>
@@ -1972,7 +2047,7 @@ function SecretsView({ client }: { client: Client }) {
             ) : ss.items.length === 0 ? (
               <Empty title="No secrets in this environment." />
             ) : (
-              <ul className="rows">
+              <ul className={ROWS}>
                 {ss.items.map((s) => (
                   <li key={s.id} className="px-4 py-2">
                     <Button type="button" variant="link" className="h-auto p-0" onClick={() => setOpen(s)}>
@@ -2008,7 +2083,7 @@ function SecretDetail({ client, secret, onClose }: { client: Client; secret: Sec
         ) : (
           v.data &&
           (v.data.length === 0 ? (
-            <p className="quiet">No versions yet.</p>
+            <Quiet>No versions yet.</Quiet>
           ) : (
             <Table>
               <TableCaption className="sr-only">Versions of {secret.name}</TableCaption>

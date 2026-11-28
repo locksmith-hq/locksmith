@@ -1,0 +1,12 @@
+/* Tailwind plus the Locksmith kit: controls, tokens and fonts come from @locksmith-hq/ui.
+   App layout is Tailwind utilities in the components; this file only wires the stylesheets together. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@locksmith-hq/ui/styles";
+@import "@locksmith-hq/ui/styles/fonts.css";
+/* Tailwind must see the classes written inside the kit's components. */
+@source "../../../design-system/ui/src";
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

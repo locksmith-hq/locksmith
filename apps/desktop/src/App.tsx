@@ -41,6 +41,7 @@ import {
 } from "@locksmith-hq/ui/sidebar";
 import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/ui/toggle-group";
 import { Wordmark } from "@locksmith-hq/ui/wordmark";
+import { InlineCode } from "./ui";
 import {
   Agents,
   Audit,
@@ -224,7 +225,7 @@ export function App() {
     <SidebarProvider className="h-svh">
       <Sidebar collapsible="none" className="h-svh border-r">
         <SidebarHeader>
-          <div className="logo flex items-center gap-2.5 px-2 py-1.5">
+          <div data-slot="logo" className="flex items-center gap-2.5 px-2 py-1.5">
             <Mark small size={26} open={open} />
             <Wordmark />
           </div>
@@ -293,11 +294,11 @@ export function App() {
               The Locksmith daemon is not running
             </h1>
             <p className="mb-4 text-muted-foreground">
-              This window reads everything from <code>locksmithd</code>. Start it in a terminal; this window reconnects
-              on its own within a few seconds.
+              This window reads everything from <InlineCode>locksmithd</InlineCode>. Start it in a terminal; this window
+              reconnects on its own within a few seconds.
             </p>
             <pre className="mb-4 rounded-lg border bg-card px-4 py-3">
-              <code>locksmithd</code>
+              <InlineCode>locksmithd</InlineCode>
             </pre>
             <p className="text-[13px] text-muted-foreground">Detail: {down}</p>
           </main>
@@ -317,7 +318,7 @@ export function App() {
                 {st ? (
                   <>
                     <Pill tone={open ? "live" : undefined}>{open ? "Unlocked" : "Locked"}</Pill>
-                    <span className="vault-meta text-[13px] text-muted-foreground">
+                    <span className="text-[13px] text-muted-foreground [&>span+span]:before:mx-[7px] [&>span+span]:before:content-['·']">
                       {open ? (
                         <span>{plural(live.length, "session")}</span>
                       ) : (

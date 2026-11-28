@@ -395,7 +395,9 @@ export function Console() {
   // shortcut: the console has no data to wait for, so every page change waits a fixed second to show the loading state (?load=5000 tries a slow one).
   const where = route.join("/");
   // On a page with tabs of its own, a change of tab reloads only what is under the tabs (TabLoader), not the page.
-  const whole = TABBED.has(route[0] ?? "") ? route[0]! : where;
+  // Beyond the page itself (the toggle of environments, a filter), a change of route is not a new page either:
+  // a project page is secrets/<project>/<tab>, an Agent Gateway page access/<tab>.
+  const whole = TABBED.has(route[0] ?? "") ? route[0]! : route.slice(0, route[0] === "access" ? 2 : 3).join("/");
   const [loaded, setLoaded] = useState({ whole: "", where: "" });
   useEffect(() => {
     const t = setTimeout(

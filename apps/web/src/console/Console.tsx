@@ -323,15 +323,7 @@ function WorkspaceLimit({ limit }: { limit: { best: PlanId; cap: number } }) {
   );
 }
 
-function Workspace({
-  at,
-  pick,
-  limit,
-}: {
-  at: number;
-  pick: (i: number) => void;
-  limit: { best: PlanId; cap: number } | null;
-}) {
+function Workspace({ at, limit }: { at: number; limit: { best: PlanId; cap: number } | null }) {
   const w = seed.workspaces[at]!;
   return (
     <Selector
@@ -356,7 +348,8 @@ function Workspace({
               type="button"
               aria-current={i === at || undefined}
               onClick={() => {
-                pick(i);
+                // Each workspace is its own account: switching to another one asks to sign in to it.
+                if (i !== at) location.hash = `#/switch/${i}`;
                 shut();
               }}
             >
@@ -750,7 +743,7 @@ export function Console() {
                 </Button>
               )}
               <NoticeMenu />
-              <Workspace at={at} pick={setAt} limit={wsLimit} />
+              <Workspace at={at} limit={wsLimit} />
             </div>
           </header>
           <TabBusy value={loaded.where !== where}>
@@ -822,6 +815,15 @@ export function Console() {
                 <Account appearance={appearance} setAppearance={setAppearance} />
               ) : page === "app" ? (
                 <Soon id={route[1]} tab={product ? tab : undefined} sub={route[3]} say={say} />
+              ) : page === "switch" ? (
+                <SignInTo
+                  at={Number(route[1])}
+                  from={ws.name}
+                  signIn={(i) => {
+                    setAt(i);
+                    location.hash = "#/home";
+                  }}
+                />
               ) : page === "welcome" ? (
                 wsLimit ? (
                   <section>
@@ -1617,7 +1619,34 @@ function ProjectMembers({ acl, id }: { acl: Acl; id: string }) {
   );
 }
 
-const WHO = ["Just me", "My team or organization"];
+/** Moving to another workspace: it is a different account, so it asks to sign in (sample: one button). */
+function SignInTo({ at, from, signIn }: { at: number; from: string; signIn: (i: number) => void }) {
+  const w = seed.workspaces[at];
+  if (!w)
+    return (
+      <p className="state">
+        There is no such workspace. <a href="#/home">Back to {from}</a>
+      </p>
+    );
+  return (
+    <section>
+      <Head
+        title={`Sign in to ${w.name}`}
+        sub={`${w.name} is ${w.org ? "an organization" : "a personal workspace"} with its own account. You are signed out of ${from} and sign in again to continue.`}
+      />
+      <div className="inline-form">
+        <Button type="button" onClick={() => signIn(at)}>
+          Sign in to {w.name}
+        </Button>
+        <Button asChild variant="ghost">
+          <a href="#/home">Stay in {from}</a>
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+const WHO = ["Personal", "Organization"];
 function Welcome({ create }: { create: (w: (typeof seed.workspaces)[number]) => void }) {
   const [name, setName] = useState("");
   const [who, setWho] = useState(0);

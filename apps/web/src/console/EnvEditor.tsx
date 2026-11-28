@@ -11,23 +11,18 @@ export function EnvEditor({
   setEnvs,
   about,
   scope,
-  readOnly = false,
   href,
-  children,
 }: {
   envs: string[];
   setEnvs: (next: (x: string[]) => string[]) => void;
   about: string;
   /** What removing an environment does, after its name. */
   scope: string;
-  /** The list is shown but cannot be changed (a project that inherits it). */
-  readOnly?: boolean;
   /** Makes each environment a link to its own page. */
   href?: (env: string) => string;
-  /** Shown under the heading, before the list. */
-  children?: React.ReactNode;
 }) {
   const [gone, setGone] = useState<string | null>(null);
+  // The add row is not a <form>: the page this can sit in may be one, and forms cannot nest.
   const [draft, setDraft] = useState("");
   const add = () => {
     const v = draft
@@ -41,7 +36,6 @@ export function EnvEditor({
     <Card className="panel form">
       <h2>Environments</h2>
       <p className="muted">{about}</p>
-      {children}
       <ul className="plain" style={{ margin: "12px 0" }}>
         {envs.map((e, i) => (
           <li key={e}>
@@ -53,8 +47,7 @@ export function EnvEditor({
               <span className="mono">{e}</span>
             )}
             {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
-            {readOnly && <Badge variant="outline">Inherited</Badge>}
-            {!readOnly && envs.length > 1 && (
+            {envs.length > 1 && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -91,28 +84,25 @@ export function EnvEditor({
           </AlertDescription>
         </Alert>
       )}
-      {!readOnly && (
-        // Not a <form>: the Settings page this sits in is one, and forms cannot nest.
-        <div className="inline-form">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                add();
-              }
-            }}
-            aria-label="New environment name"
-            placeholder="preview"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <Button variant="outline" size="sm" type="button" onClick={add}>
-            Add environment
-          </Button>
-        </div>
-      )}
+      <div className="inline-form">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          aria-label="New environment name"
+          placeholder="preview"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <Button variant="outline" size="sm" type="button" onClick={add}>
+          Add environment
+        </Button>
+      </div>
     </Card>
   );
 }

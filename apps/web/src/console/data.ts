@@ -9,27 +9,35 @@ const m = 60,
 export interface Project {
   id: string;
   description: string;
-  /** What the project has: the organization's environments while it inherits them, else its own list. */
-  envs: string[];
-  /** Follows the organization's environments (`defaults`); editing `envs` makes the list its own. */
-  inherit: boolean;
+  /** The environments the project has: the organization's (`defaults`) except those removed, plus its own. */
+  readonly envs: string[];
+  /** The environments the project owns: its own, and organization ones it stopped inheriting. */
+  own: string[];
+  /** Organization environments the project stopped inheriting and then removed. */
+  removed: string[];
 }
 
-/** The organization's environments: new projects start with them, and projects that inherit follow them. */
+/** The organization's environments: every project has them, each inherited until the project says otherwise. */
 export const defaults = { envs: ["development", "staging", "production"] };
 
-function project(id: string, description: string, own: string[] | null): Project {
-  let mine = own ?? [];
+export type EnvStatus = "inherited" | "detached" | "removed" | "own";
+
+/** How a project holds an environment: inherited from the organization, stopped inheriting (and so its own to change), removed, or its own from the start. */
+export function envStatus(p: Project, e: string): EnvStatus {
+  if (!defaults.envs.includes(e)) return "own";
+  return p.own.includes(e) ? "detached" : p.removed.includes(e) ? "removed" : "inherited";
+}
+
+function project(id: string, description: string, removed: string[] = [], own: string[] = []): Project {
   return {
     id,
     description,
-    inherit: own === null,
+    own,
+    removed,
     get envs() {
-      return this.inherit ? defaults.envs : mine;
-    },
-    set envs(v) {
-      mine = v;
-      this.inherit = false;
+      const kept = defaults.envs.filter((e) => !this.removed.includes(e));
+      const extra = this.own.filter((e) => !defaults.envs.includes(e));
+      return kept.length ? [...kept.slice(0, -1), ...extra, kept.at(-1)!] : extra;
     },
   };
 }
@@ -77,13 +85,13 @@ export interface Event {
   digest: string;
 }
 
-/** A project that has just been created: it inherits the organization's environments. */
-export const newProject = (id: string) => project(id, "", null);
+/** A project that has just been created: it inherits every environment of the organization. */
+export const newProject = (id: string) => project(id, "");
 
 export const projects: Project[] = [
-  project("acme-api", "Public REST API and background workers", null),
-  project("acme-web", "Customer web app", ["development", "production"]),
-  project("billing", "Invoices, payouts and the Stripe integration", ["staging", "production"]),
+  project("acme-api", "Public REST API and background workers"),
+  project("acme-web", "Customer web app", ["staging"]),
+  project("billing", "Invoices, payouts and the Stripe integration", ["development"]),
 ];
 
 export const agents: Agent[] = [

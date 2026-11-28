@@ -19,11 +19,11 @@ import { Dropdown, Option } from "../Dropdown";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { Fragment, useContext, useEffect, useLayoutEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { Icon, Logo, Switch, TabBusy, TabLoader, type IconName } from "./kit";
+import { Icon, Logo, TabBusy, TabLoader, type IconName } from "./kit";
 import { Loader as KitLoader } from "@locksmith-hq/ui/loader";
 import * as seed from "./data";
 import { paid } from "./paid";
-import { EnvEditor } from "./EnvEditor";
+import { ProjectEnvironments } from "./ProjectEnvironments";
 import { Environments } from "./Environments";
 import { Settings } from "./Settings";
 import { pageFor } from "./pages";
@@ -1923,50 +1923,6 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
           </Table>
         </div>
       )}
-    </section>
-  );
-}
-
-/** The environments of one project: the organization's, while it inherits them, else its own list. */
-function ProjectEnvironments({ p }: { p: seed.Project }) {
-  const [inherit, setInherit] = useState(p.inherit);
-  const [envs, setEnvsNow] = useState(p.envs);
-  // Editing the list makes it this project's own (the setter on Project turns inheriting off).
-  const setEnvs = (change: (x: string[]) => string[]) => {
-    const next = change(envs);
-    p.envs = next;
-    setInherit(false);
-    setEnvsNow(next);
-  };
-  const inheritNow = (on: boolean) => {
-    if (on) p.inherit = true;
-    else p.envs = [...seed.defaults.envs];
-    setInherit(on);
-    setEnvsNow(p.envs);
-  };
-  return (
-    <section>
-      <Head
-        title="Environments"
-        sub={`What ${p.id} can keep secrets in. It follows the organization's environments, or has a list of its own.`}
-      />
-      <EnvEditor
-        envs={envs}
-        setEnvs={setEnvs}
-        readOnly={inherit}
-        href={(e) => `#/secrets/${p.id}/secrets/${encodeURIComponent(e)}`}
-        about="Each environment holds its own set of secrets. The last one is treated as production: access to it can be made to need a second person."
-        scope="deletes every secret in it and the access agents have to them."
-      >
-        <label className="inline-form">
-          <Switch label="Inherit the organization's environments" checked={inherit} onChange={inheritNow} />
-          <span>
-            {inherit
-              ? "Follows the organization's list: a change there applies here."
-              : "Has its own list. Turn this on to follow the organization's again."}
-          </span>
-        </label>
-      </EnvEditor>
     </section>
   );
 }

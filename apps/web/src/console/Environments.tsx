@@ -1,4 +1,4 @@
-// The organization's environments. New projects start with this list, and projects that inherit it follow it.
+// The organization's environments. New projects start with this list, and each project inherits them until it says otherwise.
 // Each environment has a page of its own, where more settings per environment can go later.
 import { Badge } from "@locksmith-hq/ui/badge";
 import { Card } from "@locksmith-hq/ui/card";
@@ -13,7 +13,6 @@ export function Environments({ env, secrets }: { env?: string; secrets: seed.Sec
 
 function EnvironmentList() {
   const [envs, setEnvsNow] = useState(seed.defaults.envs);
-  const inheriting = seed.projects.filter((p) => p.inherit).length;
   return (
     <section>
       <Head
@@ -27,8 +26,8 @@ function EnvironmentList() {
           setEnvsNow(seed.defaults.envs);
         }}
         href={(e) => `#/environments/${encodeURIComponent(e)}`}
-        about={`${inheriting === 0 ? "No project inherits them now." : `${inheriting} ${inheriting === 1 ? "project inherits" : "projects inherit"} them, so a change here applies to ${inheriting === 1 ? "it" : "them"} at once.`} The last one is treated as production.`}
-        scope="deletes every secret in it, in every project that inherits these."
+        about="Every project has these environments, each inherited until the project stops inheriting it. A project can also add environments of its own. The last one is treated as production."
+        scope="deletes every secret in it, in every project that still inherits it."
       />
     </section>
   );
@@ -63,7 +62,12 @@ function EnvironmentPage({ env, secrets }: { env: string; secrets: seed.Secret[]
               </a>
               <span className="muted">
                 {plural(secrets.filter((s) => s.project === p.id && s.env === env).length, "secret")}
-                {p.inherit ? " · inherits the organization's list" : ""}
+                {" · "}
+                {
+                  { inherited: "inherited", detached: "stopped inheriting", own: "its own", removed: "" }[
+                    seed.envStatus(p, env)
+                  ]
+                }
               </span>
             </li>
           ))}

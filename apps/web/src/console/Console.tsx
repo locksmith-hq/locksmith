@@ -954,7 +954,7 @@ function Soon({
     <section>
       <Head title={item ? item[1] : p.name} sub={seed.about[`${key}/${tab}`] ?? p.blurb} />
       <div className="state empty">
-        <span className="state-ic">
+        <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
           <Icon name={item ? item[2] : p.icon} />
         </span>
         <div>
@@ -1064,7 +1064,7 @@ function Integrations({ say }: { say: (note: string) => void }) {
       </div>
       {shown.length === 0 ? (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="relay" />
           </span>
           <div>
@@ -1234,7 +1234,7 @@ function Sharing({ say }: { say: (note: string) => void }) {
       )}
       {rows.length === 0 ? (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="arrow" />
           </span>
           <div>
@@ -2203,7 +2203,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
       )}
       {mine.length === 0 && (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="key" />
           </span>
           <div>
@@ -2354,7 +2354,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
 
       {rows.length === 0 ? (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="key" />
           </span>
           <div>

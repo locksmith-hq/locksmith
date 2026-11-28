@@ -25,7 +25,9 @@ import * as seed from "./data";
 import { paid } from "./paid";
 import { EnvEditor } from "./EnvEditor";
 import { Environments } from "./Environments";
+import { PlanAndBilling } from "./PlanAndBilling";
 import { Settings } from "./Settings";
+import { Upgrade } from "./Upgrade";
 import { pageFor } from "./pages";
 import { useSecrets } from "./pages/gateway-data";
 import { useNotices } from "./pages/platform-store";
@@ -440,7 +442,7 @@ export function Console() {
   const HubPage = pageFor(`hub/${page}`);
   const [planOf, setPlanOf] = useState<PlanId[]>(["Free", "Team"]); // one subscription per workspace
   const gate = gateOf(route); // the feature this address needs, when it is not in every plan
-  const Billing = paid.billing; // only a build with the billing module has the page
+  const Billing = paid.billing ?? PlanAndBilling; // the billing module replaces the open page when a build has it
   const [viewerAt, preview] = useState(0);
   const [pm, setPm] = useState(seed.projectMembers);
   const viewer = seed.members[viewerAt]!;
@@ -583,7 +585,7 @@ export function Console() {
                           <li className="nav-h">Administration</li>
                         </SidebarGroupLabel>
                         {ws.org && link("members", "User Management", "sessions", seed.members.length)}
-                        {Billing && link("billing", "Usage and billing", "clock")}
+                        {link("billing", "Plan and billing", "clock")}
                         {link("projects", "Projects", "s_folder")}
                         {link("environments", "Environments", "s_layers")}
                         {link("settings", "Settings", "s_window")}
@@ -601,7 +603,7 @@ export function Console() {
                   <>
                     <span className="av">{me.name[0]}</span>
                     <span>
-                      {me.name}
+                      {me.name} <Badge className="tier">{planOf[at]}</Badge>
                       <small>{me.email}</small>
                     </span>
                     <Chevrons />
@@ -615,6 +617,12 @@ export function Console() {
                         <Icon name="sessions" />
                       </span>
                       User settings
+                    </a>
+                    <a href="#/billing" onClick={shut}>
+                      <span className="av">
+                        <Icon name="clock" />
+                      </span>
+                      Plan and billing
                     </a>
                     <AppearanceSeg value={appearance} set={setAppearance} />
                     <Button variant="ghost" type="button">
@@ -735,7 +743,16 @@ export function Console() {
                 )
               ) : HubPage ? (
                 <HubPage sub={route[1]} say={say} />
-              ) : page === "billing" && Billing ? (
+              ) : page === "upgrade" ? (
+                <Upgrade
+                  name={ws.name}
+                  plan={planOf[at]!}
+                  setPlan={(p) => {
+                    setPlanOf((x) => x.map((v, i) => (i === at ? p : v)));
+                    say(`${ws.name} is now on ${p}`);
+                  }}
+                />
+              ) : page === "billing" ? (
                 <Billing
                   ws={at}
                   name={ws.name}
@@ -1295,7 +1312,7 @@ function Members({ acl, tab }: { acl: Acl; tab?: string }) {
         <Alert>
           <AlertDescription>
             This workspace has {users.length} of the {cap} users in the {plan} plan. Nobody is removed; to invite more,{" "}
-            <a className="ls-link" href="#/billing">
+            <a className="ls-link" href="#/upgrade">
               see the plans
             </a>
             .
@@ -2058,7 +2075,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
         <Alert>
           <AlertDescription>
             This workspace has {seed.projects.length} of the {projectCap} projects in the {plan} plan. To add another,{" "}
-            <a className="ls-link" href="#/billing">
+            <a className="ls-link" href="#/upgrade">
               see the plans
             </a>
             .

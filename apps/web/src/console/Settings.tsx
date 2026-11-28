@@ -22,7 +22,7 @@ function Paid({ feature, action }: { feature: Feature; action: string }) {
       {f.plan === "Enterprise" ? (
         <a href="mailto:sales@locksmith.example">Talk to us</a>
       ) : (
-        <a href="#/billing">See plans</a>
+        <a href="#/upgrade">Upgrade</a>
       )}
     </Button>
   ) : (

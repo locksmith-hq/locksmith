@@ -106,19 +106,21 @@ export function GateBadge({ feature }: { feature: Feature }) {
 /** The notice that stands in place of a locked page or section. */
 export function Locked({ feature, size }: { feature: Feature; size?: "default" | "compact" }) {
   const f = FEATURES[feature];
+  // The plan may have the feature while this build lacks its page: then there is nothing to upgrade to.
+  const upgrade = useLocked(feature) && f.plan !== "Enterprise";
   return (
     <UpgradeNotice
       size={size}
       plan={f.plan}
       title={f.title}
       action={
-        f.plan === "Enterprise" || !paid.billing ? (
+        !upgrade ? (
           <Button asChild variant="outline">
             <a href="mailto:sales@locksmith.example">Talk to us</a>
           </Button>
         ) : (
           <Button asChild>
-            <a href="#/billing">See plans</a>
+            <a href="#/upgrade">Upgrade</a>
           </Button>
         )
       }

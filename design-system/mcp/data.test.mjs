@@ -5,11 +5,11 @@ import { getComponent, getGuide, getTokens, listComponents } from "./data.mjs";
 test("components: every package is listed with a description, and one reads back in full", () => {
   const all = listComponents();
   assert.ok(all.length > 60);
-  assert.ok(all.every((c) => c.package.startsWith("@locksmith-hq/") && c.about));
+  assert.ok(all.every((c) => c.package.startsWith("@locksmith-hq/ui/") && c.about));
 
   const button = getComponent("Button");
-  assert.equal(button.package, "@locksmith-hq/button");
-  assert.match(button.import, /import \{ Button.* \} from "@locksmith-hq\/button";/);
+  assert.equal(button.package, "@locksmith-hq/ui/button");
+  assert.match(button.import, /import \{ Button.* \} from "@locksmith-hq\/ui\/button";/);
   assert.ok(button.variants.variant.includes("destructive"));
   assert.match(button.example, /<Button/);
 

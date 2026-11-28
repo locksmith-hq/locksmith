@@ -1,0 +1,9 @@
+/* The two families the tokens name, self-hosted from Fontsource: Chakra Petch 400 to 700 and Azeret Mono 400
+   and 500, Latin. Not part of index.css, so an app that loads its fonts another way pays nothing. To use it:
+     @import "@locksmith-hq/ui/styles/fonts.css"; */
+@import "@fontsource/chakra-petch/latin-400.css";
+@import "@fontsource/chakra-petch/latin-500.css";
+@import "@fontsource/chakra-petch/latin-600.css";
+@import "@fontsource/chakra-petch/latin-700.css";
+@import "@fontsource/azeret-mono/latin-400.css";
+@import "@fontsource/azeret-mono/latin-500.css";

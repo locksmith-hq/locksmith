@@ -1,8 +1,8 @@
 // Foundation pages that are not components: every colour token, and every icon the kit can draw.
 import { useEffect, useMemo, useState } from "react";
 import { icons } from "lucide-react";
-import { Button } from "@locksmith-hq/button";
-import { Input } from "@locksmith-hq/input";
+import { Button } from "@locksmith-hq/ui/button";
+import { Input } from "@locksmith-hq/ui/input";
 
 const COLORS: [string, string, string[]][] = [
   [
@@ -234,7 +234,7 @@ export function IconsPage() {
           Show {Math.min(PAGE, found.length - shown)} more
         </Button>
       ) : null}
-      {found.length === 0 ? <p className="muted">No icon has that name.</p> : null}
+      {found.length === 0 ? <p className="ls-muted">No icon has that name.</p> : null}
     </div>
   );
 }

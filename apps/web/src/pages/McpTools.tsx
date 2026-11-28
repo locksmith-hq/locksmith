@@ -1,7 +1,7 @@
-import { Label } from "@locksmith-hq/label";
-import { Switch } from "@locksmith-hq/switch";
-import { Alert, AlertDescription } from "@locksmith-hq/alert";
-import { PageHeader } from "@locksmith-hq/page-header";
+import { Label } from "@locksmith-hq/ui/label";
+import { Switch } from "@locksmith-hq/ui/switch";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
 import { useEffect, useState } from "react";
 import type { Client, McpToolSetting } from "@locksmith/control-plane-client";
 

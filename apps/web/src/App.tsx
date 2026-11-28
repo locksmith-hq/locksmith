@@ -3,12 +3,12 @@ import { BrowserRouter, MemoryRouter } from "react-router";
 import { Shell } from "./Shell";
 import { createClient, type Client } from "@locksmith/control-plane-client";
 import { withUnauthorizedHandler } from "./api/client";
-import { Alert, AlertDescription } from "@locksmith-hq/alert";
-import { Button } from "@locksmith-hq/button";
-import { Card } from "@locksmith-hq/card";
-import { Loader } from "@locksmith-hq/loader";
-import { Mark } from "@locksmith-hq/mark";
-import { Wordmark } from "@locksmith-hq/wordmark";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Button } from "@locksmith-hq/ui/button";
+import { Card } from "@locksmith-hq/ui/card";
+import { Loader } from "@locksmith-hq/ui/loader";
+import { Mark } from "@locksmith-hq/ui/mark";
+import { Wordmark } from "@locksmith-hq/ui/wordmark";
 import { createAuth, defaultConfig, type AuthService, type AuthState, type Provider } from "./auth";
 
 let defaultAuth: AuthService | undefined;
@@ -78,6 +78,12 @@ const GoogleG = () => (
     />
   </svg>
 );
+// GitHub's mark (the Octicons "mark-github" path). It takes the button's text colour, as GitHub's logo rules ask.
+const GitHubMark = () => (
+  <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+  </svg>
+);
 const MailIcon = () => (
   <svg
     width="18"
@@ -94,7 +100,7 @@ const MailIcon = () => (
     <path d="M2.5 5l5.5 4 5.5-4" />
   </svg>
 );
-const ICONS: Partial<Record<Provider, React.ReactNode>> = { google: <GoogleG />, email: <MailIcon /> };
+const ICONS: Record<Provider, React.ReactNode> = { github: <GitHubMark />, google: <GoogleG />, email: <MailIcon /> };
 
 function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
   const providers = auth.providers ?? ["github", "google", "email"];
@@ -128,7 +134,7 @@ function SignIn({ auth, notice }: { auth: AuthService; notice?: string }) {
           ))}
         </section>
         <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Mark small size={14} /> Access is invite-only.
+          <Mark small mono size={14} /> Access is invite-only.
         </p>
       </Card>
     </main>

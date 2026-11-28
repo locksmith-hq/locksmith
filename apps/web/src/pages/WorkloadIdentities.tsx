@@ -1,8 +1,8 @@
-import { Alert, AlertDescription } from "@locksmith-hq/alert";
-import { Label } from "@locksmith-hq/label";
-import { PageHeader } from "@locksmith-hq/page-header";
-import { Button } from "@locksmith-hq/button";
-import { Input } from "@locksmith-hq/input";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Label } from "@locksmith-hq/ui/label";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
+import { Button } from "@locksmith-hq/ui/button";
+import { Input } from "@locksmith-hq/ui/input";
 import { Dropdown, Option } from "../Dropdown";
 import { useCallback, useEffect, useState } from "react";
 import {

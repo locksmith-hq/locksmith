@@ -1,14 +1,14 @@
 name: design-system-release
 
-# Versions and publishes the design system packages (@locksmith-hq/*) to GitHub Packages, the private npm
+# Versions and publishes the design system (@locksmith-hq/ui) to GitHub Packages, the private npm
 # registry of the locksmith-hq organization.
 #
-# The bump comes from Conventional Commits. On each push to main that touches a package,
+# The bump comes from Conventional Commits. On each push to main that touches design-system/ui/,
 # scripts/design-system-changeset.mjs reads the commits since the last release and writes a changeset: `feat`
-# is a minor bump, `fix` and `perf` are patch, and `!` or a "BREAKING CHANGE:" footer is major, for the
-# packages each commit touched. Changesets then opens or updates the "design-system: version packages" pull
-# request (new versions, dependents and changelogs). Merging it publishes every package whose version is not
-# in the registry yet. A hand-written changeset in .changeset/ still works and is added to the same request.
+# is a minor bump, `fix` and `perf` are patch, and `!` or a "BREAKING CHANGE:" footer is major. Changesets
+# then opens or updates the "design-system: version packages" pull request (the new version and the
+# changelog). Merging it publishes the version if the registry does not have it yet. A hand-written changeset
+# in .changeset/ still works and is added to the same request.
 #
 # Pull requests are squash-merged, so it is the pull request title that must be a Conventional Commit.
 
@@ -16,7 +16,7 @@ on:
   push:
     branches: [main]
     paths:
-      - design-system/packages/**
+      - design-system/ui/**
       - .changeset/**
       - .github/workflows/design-system-release.yml
   workflow_dispatch:

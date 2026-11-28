@@ -1,9 +1,9 @@
 import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
-// The packages are read from source, so the site never waits for a package build.
-const packages = resolve(import.meta.dirname, "../packages");
+// The kit is read from source, so the site never waits for its build.
+const ui = resolve(import.meta.dirname, "../ui");
 
 export default defineConfig({
   plugins: [tailwindcss()],
@@ -15,12 +15,13 @@ export default defineConfig({
       },
     },
   },
+  test: { environment: "jsdom", setupFiles: ["./src/setup.ts"] },
   resolve: {
     dedupe: ["react", "react-dom"],
     alias: [
-      { find: /^@locksmith-hq\/styles$/, replacement: `${packages}/styles/index.css` },
-      { find: /^@locksmith-hq\/styles\/(.+)$/, replacement: `${packages}/styles/$1` },
-      { find: /^@locksmith-hq\/([^/]+)$/, replacement: `${packages}/$1/src/index.tsx` },
+      { find: /^@locksmith-hq\/ui\/styles$/, replacement: `${ui}/styles/index.css` },
+      { find: /^@locksmith-hq\/ui\/styles\/(.+)$/, replacement: `${ui}/styles/$1` },
+      { find: /^@locksmith-hq\/ui\/([^/]+)$/, replacement: `${ui}/src/$1/index.tsx` },
     ],
   },
 });

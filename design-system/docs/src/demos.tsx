@@ -17,9 +17,9 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@locksmith-hq/accordion";
-import { ActionBar } from "@locksmith-hq/action-bar";
-import { Alert, AlertDescription, AlertTitle } from "@locksmith-hq/alert";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@locksmith-hq/ui/accordion";
+import { ActionBar } from "@locksmith-hq/ui/action-bar";
+import { Alert, AlertDescription, AlertTitle } from "@locksmith-hq/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,9 +30,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@locksmith-hq/alert-dialog";
-import { Avatar, AvatarFallback } from "@locksmith-hq/avatar";
-import { Badge } from "@locksmith-hq/badge";
+} from "@locksmith-hq/ui/alert-dialog";
+import { Avatar, AvatarFallback } from "@locksmith-hq/ui/avatar";
+import { Badge } from "@locksmith-hq/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -40,15 +40,15 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@locksmith-hq/breadcrumb";
-import { Button } from "@locksmith-hq/button";
-import { ButtonGroup } from "@locksmith-hq/button-group";
-import { Calendar } from "@locksmith-hq/calendar";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@locksmith-hq/card";
-import { Checkbox } from "@locksmith-hq/checkbox";
-import { Chip } from "@locksmith-hq/chip";
-import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton } from "@locksmith-hq/code-block";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@locksmith-hq/collapsible";
+} from "@locksmith-hq/ui/breadcrumb";
+import { Button } from "@locksmith-hq/ui/button";
+import { ButtonGroup } from "@locksmith-hq/ui/button-group";
+import { Calendar } from "@locksmith-hq/ui/calendar";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@locksmith-hq/ui/card";
+import { Checkbox } from "@locksmith-hq/ui/checkbox";
+import { Chip } from "@locksmith-hq/ui/chip";
+import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton } from "@locksmith-hq/ui/code-block";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@locksmith-hq/ui/collapsible";
 import {
   Combobox,
   ComboboxContent,
@@ -56,7 +56,7 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
-} from "@locksmith-hq/combobox";
+} from "@locksmith-hq/ui/combobox";
 import {
   Command,
   CommandEmpty,
@@ -65,13 +65,13 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
-} from "@locksmith-hq/command";
-import { ConfirmDialog } from "@locksmith-hq/confirm-dialog";
-import { CopyButton } from "@locksmith-hq/copy-button";
-import { CopyableId } from "@locksmith-hq/copyable-id";
-import { DataTable } from "@locksmith-hq/data-table";
-import { DatePicker } from "@locksmith-hq/date-picker";
-import { DateRangePicker } from "@locksmith-hq/date-range-picker";
+} from "@locksmith-hq/ui/command";
+import { ConfirmDialog } from "@locksmith-hq/ui/confirm-dialog";
+import { CopyButton } from "@locksmith-hq/ui/copy-button";
+import { CopyableId } from "@locksmith-hq/ui/copyable-id";
+import { DataTable } from "@locksmith-hq/ui/data-table";
+import { DatePicker } from "@locksmith-hq/ui/date-picker";
+import { DateRangePicker } from "@locksmith-hq/ui/date-range-picker";
 import {
   Dialog,
   DialogClose,
@@ -81,7 +81,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@locksmith-hq/dialog";
+} from "@locksmith-hq/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -90,32 +90,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
-} from "@locksmith-hq/dropdown-menu";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@locksmith-hq/empty";
-import { EmptyState } from "@locksmith-hq/empty-state";
+} from "@locksmith-hq/ui/dropdown-menu";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@locksmith-hq/ui/empty";
+import { EmptyState } from "@locksmith-hq/ui/empty-state";
+import { PlanBadge } from "@locksmith-hq/ui/plan-badge";
+import { UpgradeNotice } from "@locksmith-hq/ui/upgrade-notice";
 import { ColorsPage, IconsPage } from "./foundations";
 import { ChartsDemo } from "./charts";
-import { KebabButton } from "@locksmith-hq/kebab-button";
-import { Combination } from "@locksmith-hq/combination";
-import { HoldToConfirm } from "@locksmith-hq/hold-to-confirm";
-import { SlideToUnlock } from "@locksmith-hq/slide-to-unlock";
-import { LeaseTimer } from "@locksmith-hq/lease-timer";
-import { RelayPath } from "@locksmith-hq/relay-path";
-import { Facts } from "@locksmith-hq/facts";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@locksmith-hq/field";
-import { FileUpload } from "@locksmith-hq/file-upload";
-import { FilterBar, type FilterValue } from "@locksmith-hq/filter-bar";
-import { Input } from "@locksmith-hq/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@locksmith-hq/input-group";
-import { Kbd, KbdGroup } from "@locksmith-hq/kbd";
-import { Label } from "@locksmith-hq/label";
-import { Link } from "@locksmith-hq/link";
-import { LiveDot } from "@locksmith-hq/live-dot";
-import { Loader } from "@locksmith-hq/loader";
-import { Mark } from "@locksmith-hq/mark";
-import { Meter } from "@locksmith-hq/meter";
-import { NumberField } from "@locksmith-hq/number-field";
-import { PageHeader } from "@locksmith-hq/page-header";
+import { KebabButton } from "@locksmith-hq/ui/kebab-button";
+import { Combination } from "@locksmith-hq/ui/combination";
+import { HoldToConfirm } from "@locksmith-hq/ui/hold-to-confirm";
+import { SlideToUnlock } from "@locksmith-hq/ui/slide-to-unlock";
+import { LeaseTimer } from "@locksmith-hq/ui/lease-timer";
+import { RelayPath } from "@locksmith-hq/ui/relay-path";
+import { Facts } from "@locksmith-hq/ui/facts";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@locksmith-hq/ui/field";
+import { FileUpload } from "@locksmith-hq/ui/file-upload";
+import { FilterBar, type FilterValue } from "@locksmith-hq/ui/filter-bar";
+import { Input } from "@locksmith-hq/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@locksmith-hq/ui/input-group";
+import { Kbd, KbdGroup } from "@locksmith-hq/ui/kbd";
+import { Label } from "@locksmith-hq/ui/label";
+import { LabelsProvider } from "@locksmith-hq/ui/labels";
+import { Link } from "@locksmith-hq/ui/link";
+import { LiveDot } from "@locksmith-hq/ui/live-dot";
+import { Loader } from "@locksmith-hq/ui/loader";
+import { Mark } from "@locksmith-hq/ui/mark";
+import { Meter } from "@locksmith-hq/ui/meter";
+import { NumberField } from "@locksmith-hq/ui/number-field";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
 import {
   Pagination,
   PaginationContent,
@@ -124,18 +127,18 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@locksmith-hq/pagination";
-import { PasswordField } from "@locksmith-hq/password-field";
-import { Pill } from "@locksmith-hq/pill";
-import { Popover, PopoverContent, PopoverTrigger } from "@locksmith-hq/popover";
-import { Progress, ProgressRing, ProgressRow } from "@locksmith-hq/progress";
-import { RadioGroup, RadioGroupItem } from "@locksmith-hq/radio-group";
-import { ScopeChip } from "@locksmith-hq/scope-chip";
-import { Secret } from "@locksmith-hq/secret";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@locksmith-hq/select";
-import { Separator } from "@locksmith-hq/separator";
-import { SettingRow } from "@locksmith-hq/setting-row";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@locksmith-hq/sheet";
+} from "@locksmith-hq/ui/pagination";
+import { PasswordField } from "@locksmith-hq/ui/password-field";
+import { Pill } from "@locksmith-hq/ui/pill";
+import { Popover, PopoverContent, PopoverTrigger } from "@locksmith-hq/ui/popover";
+import { Progress, ProgressRing, ProgressRow } from "@locksmith-hq/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@locksmith-hq/ui/radio-group";
+import { ScopeChip } from "@locksmith-hq/ui/scope-chip";
+import { Secret } from "@locksmith-hq/ui/secret";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@locksmith-hq/ui/select";
+import { Separator } from "@locksmith-hq/ui/separator";
+import { SettingRow } from "@locksmith-hq/ui/setting-row";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@locksmith-hq/ui/sheet";
 import {
   Sidebar,
   SidebarContent,
@@ -147,22 +150,22 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-} from "@locksmith-hq/sidebar";
-import { Skeleton } from "@locksmith-hq/skeleton";
-import { Spinner } from "@locksmith-hq/spinner";
-import { Stat } from "@locksmith-hq/stat";
-import { Stepper } from "@locksmith-hq/stepper";
-import { Switch } from "@locksmith-hq/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@locksmith-hq/tabs";
-import { TagsInput } from "@locksmith-hq/tags-input";
-import { Textarea } from "@locksmith-hq/textarea";
-import { Timeline } from "@locksmith-hq/timeline";
-import { Toggle } from "@locksmith-hq/toggle";
-import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@locksmith-hq/tooltip";
-import { Tumblers } from "@locksmith-hq/tumblers";
-import { Wordmark } from "@locksmith-hq/wordmark";
+} from "@locksmith-hq/ui/sidebar";
+import { Skeleton } from "@locksmith-hq/ui/skeleton";
+import { Spinner } from "@locksmith-hq/ui/spinner";
+import { Stat } from "@locksmith-hq/ui/stat";
+import { Stepper } from "@locksmith-hq/ui/stepper";
+import { Switch } from "@locksmith-hq/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@locksmith-hq/ui/tabs";
+import { TagsInput } from "@locksmith-hq/ui/tags-input";
+import { Textarea } from "@locksmith-hq/ui/textarea";
+import { Timeline } from "@locksmith-hq/ui/timeline";
+import { Toggle } from "@locksmith-hq/ui/toggle";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@locksmith-hq/ui/tooltip";
+import { Tumblers } from "@locksmith-hq/ui/tumblers";
+import { Wordmark } from "@locksmith-hq/ui/wordmark";
 
 const Row = (p: { children: ReactNode }) => <div className="demo-row">{p.children}</div>;
 const Col = (p: { children: ReactNode }) => <div className="demo-col">{p.children}</div>;
@@ -174,6 +177,7 @@ function MarkDemo() {
     <Row>
       <Mark size={56} open={open} />
       <Mark small size={28} open={open} />
+      <Mark small mono size={28} open={open} />
       <Button size="sm" variant="outline" onClick={() => set(!open)}>
         {open ? <Lock /> : <KeyRound />} {open ? "Lock" : "Unlock"}
       </Button>
@@ -574,7 +578,7 @@ function ToggleDemo() {
 
 export const DEMOS: Record<string, [string, ReactNode]> = {
   mark: [
-    "The vault dial: a ring of six bolts round a keyhole. Unlocking turns the ring a sixth of a turn and draws the bolts in.",
+    "The vault dial: a ring of six bolts round a keyhole. The bolts are the brand colour; `mono` draws them in the text colour, for a mark inline in text or one whose colour carries a state. Unlocking turns the ring a sixth of a turn and draws the bolts in.",
     <MarkDemo />,
   ],
   colors: [
@@ -694,7 +698,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     "A recessed well: what you fill is cut in.",
     <Row>
       <Input className="w-64" placeholder="api.example.com" />
-      <Input className="w-64 font-mono" defaultValue="STRIPE_SECRET_KEY" />
+      <Input className="w-64 font-mono" aria-label="Key name" defaultValue="STRIPE_SECRET_KEY" />
       <Input className="w-64" disabled placeholder="Disabled" />
     </Row>,
   ],
@@ -846,7 +850,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     <HoldDemo />,
   ],
   "slide-to-unlock": [
-    "A deadbolt you throw by hand. Drag the bolt to the end of the track, or focus it and press Enter.",
+    "A deadbolt you throw by hand. Drag the bolt to the end of the track, or focus it and press the right arrow four times; the left arrow draws it back.",
     <SlideDemo />,
   ],
   "lease-timer": [
@@ -941,7 +945,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
         { key: "by", label: "Changed by", options: ["People", "Agents"] },
       ]}
     >
-      <Input className="h-8 w-60" aria-label="Filter secrets" placeholder="Filter by key" />
+      <Input className="w-60" aria-label="Filter secrets" placeholder="Filter by key" />
     </FilterBar>,
   ],
   "action-bar": [
@@ -1058,7 +1062,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     <Secret value="example-secret-value-51NqT8xKf2" />,
   ],
   badge: [
-    "A key tag on a person or an action. Violet means an agent did it.",
+    "A key tag on a person or an action. Violet means an agent did it. Use it for a label that is a fact, not a state: for a state use Pill, for a permission ScopeChip, for a value someone picked Chip.",
     <Row>
       <Badge>charges:read</Badge>
       <Badge variant="secondary">Owner</Badge>
@@ -1067,7 +1071,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Row>,
   ],
   chip: [
-    "One picked value. The small cross removes it.",
+    "One picked value. The small cross removes it. Only for what a person chose and can take back; a label nobody chose is a Badge.",
     <Row>
       <Chip>production</Chip>
       <Chip onRemove={() => {}}>charges:read</Chip>
@@ -1075,7 +1079,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Row>,
   ],
   pill: [
-    "An indicator lamp: live, due, revoked, idle.",
+    "An indicator lamp: live, due, revoked, idle. Only for a state that can change; a fixed label is a Badge.",
     <Row>
       <Pill tone="live">Gateway live</Pill>
       <Pill tone="warning">Rotation due</Pill>
@@ -1084,7 +1088,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Row>,
   ],
   "scope-chip": [
-    "A key tag for one permission an agent holds.",
+    "A key tag for one permission an agent holds. Only for scopes; any other tag is a Badge.",
     <Row>
       <ScopeChip>repo:read</ScopeChip>
       <ScopeChip>issues:write</ScopeChip>
@@ -1101,7 +1105,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Row>,
   ],
   loader: [
-    "The vault dial turning and throwing its bolts, for a page or a panel.",
+    "The vault dial turning and throwing its bolts, for a page or a panel that has nothing to show yet. One line or a button uses Spinner; a known amount of work uses Progress; content whose shape is known uses Skeleton.",
     <Row>
       <div className="loader-box">
         <Loader />
@@ -1147,7 +1151,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Col>,
   ],
   tumblers: [
-    "Five pins rising to the shear line: a wait that is about access.",
+    "Five pins rising to the shear line: a wait that is about access, such as a grant being checked or a vault unlocking. Any other wait uses Loader or Spinner.",
     <Row>
       <Tumblers label="Signing in" />
       <Muted>Signing in</Muted>
@@ -1270,7 +1274,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Row>,
   ],
   empty: [
-    "An empty slot says what to do next.",
+    "An empty slot says what to do next. This is the bare part, for a layout of your own; the four usual cases are ready-made in EmptyState.",
     <Empty>
       <EmptyHeader>
         <EmptyMedia variant="icon">
@@ -1285,7 +1289,7 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Empty>,
   ],
   "empty-state": [
-    "The four reasons a slot is empty, each with its own picture of the mark and one next step. Compact fits a table or a card.",
+    "The four reasons a slot is empty, each with its own picture of the mark and one next step. Compact fits a table or a card. Start here; drop to Empty only when none of the four fits.",
     <Col>
       <Row>
         <EmptyState title="No agents yet" action={<Button>Register an agent</Button>}>
@@ -1564,6 +1568,44 @@ export const DEMOS: Record<string, [string, ReactNode]> = {
     </Pagination>,
   ],
   stepper: ["A short, ordered job. Each step is a pin: set, current, or waiting.", <StepperDemo />],
+  "plan-badge": [
+    "A lock and a plan's name, on something the current plan does not include: a navigation item, a tab, a setting row. Show it only where the feature is missing; a feature the plan has carries no badge.",
+    <Row>
+      <span className="inline-flex items-center gap-2">
+        Rotation <PlanBadge plan="Team" />
+      </span>
+      <span className="inline-flex items-center gap-2">
+        Audit streaming <PlanBadge plan="Enterprise" />
+      </span>
+    </Row>,
+  ],
+  "upgrade-notice": [
+    "Stands where a page or a section would be when the plan does not include it. It says what the feature does and which plan has it, with one next step. Never hide a paid feature: show this instead. Unlock, export, read and write are never behind it.",
+    <Col>
+      <UpgradeNotice plan="Team" title="Secret rotation" action={<Button>See plans</Button>}>
+        Replace a secret on a schedule, and everywhere it is used, without anyone handling the new value.
+      </UpgradeNotice>
+      <UpgradeNotice
+        size="compact"
+        plan="Enterprise"
+        title="Audit streaming"
+        action={<Button variant="outline">Talk to us</Button>}
+      >
+        Send every audit event to your own SIEM as it happens.
+      </UpgradeNotice>
+    </Col>,
+  ],
+  labels: [
+    "The kit says a few words of its own: button names for screen readers and a handful of visible defaults. They are English. An app in another language wraps its root in LabelsProvider and passes the ones it translates.",
+    <LabelsProvider
+      labels={{ copy: (what) => `Copiar ${what}`, copied: "Copiado", remove: (what) => `Quitar ${what}` }}
+    >
+      <Row>
+        <CopyableId value="agt_01JD8Q9X4M7T2K5N8B3V6C0Z1Y" />
+        <Chip onRemove={() => {}}>api.stripe.com</Chip>
+      </Row>
+    </LabelsProvider>,
+  ],
   link: [
     "Text that goes somewhere. An arrow marks links that leave the product.",
     <Row>

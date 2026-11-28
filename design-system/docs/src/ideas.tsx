@@ -4,8 +4,8 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { Bot, ChevronRight, Key, Link2, Siren, Unlink } from "lucide-react";
-import { Button } from "@locksmith-hq/button";
-import { Mark } from "@locksmith-hq/mark";
+import { Button } from "@locksmith-hq/ui/button";
+import { Mark } from "@locksmith-hq/ui/mark";
 import "./ideas.css";
 
 const spring = { type: "spring", stiffness: 320, damping: 24 } as const;
@@ -50,7 +50,7 @@ function KeyRing() {
 function VaultDoor() {
   const [open, setOpen] = useState(false);
   return (
-    <div className="vault">
+    <div className="ls-vault">
       <div className="vault-inside">
         <b>DATABASE_URL</b>
         <span>postgres://app:example@db.internal/prod</span>
@@ -154,7 +154,7 @@ function RelayPath() {
       <motion.circle
         r="4"
         cy="40"
-        className="relay-key"
+        className="ls-relay-key"
         animate={{ cx: [180, 180, 268, 180, 180], opacity: [0, 1, 1, 0, 0] }}
         transition={{ ...loop, times: [0, 0.32, 0.6, 0.85, 1] }}
       />
@@ -425,7 +425,7 @@ function SealStamp() {
             animate={{ scale: 1, opacity: 1, rotate: -12 }}
             transition={{ type: "spring", stiffness: 500, damping: 18 }}
           >
-            <Mark small size={22} /> Approved
+            <Mark small mono size={22} /> Approved
           </motion.span>
         ) : null}
       </div>

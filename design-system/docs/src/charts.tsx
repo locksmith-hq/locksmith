@@ -7,7 +7,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
-} from "@locksmith-hq/chart";
+} from "@locksmith-hq/ui/chart";
 
 const DAYS = [
   "Nov 14",

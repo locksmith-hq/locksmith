@@ -1,8 +1,8 @@
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList } from "@locksmith-hq/breadcrumb";
-import { Label } from "@locksmith-hq/label";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList } from "@locksmith-hq/ui/breadcrumb";
+import { Label } from "@locksmith-hq/ui/label";
 import { Dropdown, Option } from "../Dropdown";
-import { PageHeader } from "@locksmith-hq/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Route, Routes, useParams } from "react-router";

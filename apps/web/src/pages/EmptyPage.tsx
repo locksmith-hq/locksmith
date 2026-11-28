@@ -1,4 +1,4 @@
-import { PageHeader } from "@locksmith-hq/page-header";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
 import { Link } from "react-router";
 
 /** Placeholder routed page until its content lands. */

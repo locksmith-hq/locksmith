@@ -1,7 +1,7 @@
-import { Alert, AlertDescription } from "@locksmith-hq/alert";
-import { Button } from "@locksmith-hq/button";
-import { PageHeader } from "@locksmith-hq/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Button } from "@locksmith-hq/ui/button";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { useEffect, useState } from "react";
 import type { Client, McpClient } from "@locksmith/control-plane-client";
 

@@ -23,7 +23,45 @@ import {
   type Secret,
   type SecretVersion,
 } from "@locksmith/control-plane-client";
-import { Icon, type IconName } from "@locksmith/ui";
+import {
+  AppWindow,
+  CircleHelp,
+  Cloud,
+  Code,
+  Database,
+  GitBranch,
+  Globe,
+  KeyRound,
+  Loader as ClaudeRays,
+  Play,
+  Plus,
+  RotateCw,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Ticket,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+import { Alert as KitAlert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Badge } from "@locksmith-hq/ui/badge";
+import { Button } from "@locksmith-hq/ui/button";
+import { Card, CardContent } from "@locksmith-hq/ui/card";
+import { ConfirmDialog } from "@locksmith-hq/ui/confirm-dialog";
+import { EmptyState } from "@locksmith-hq/ui/empty-state";
+import { Facts } from "@locksmith-hq/ui/facts";
+import { Field, FieldLabel } from "@locksmith-hq/ui/field";
+import { Input } from "@locksmith-hq/ui/input";
+import { LiveDot } from "@locksmith-hq/ui/live-dot";
+import { Loader } from "@locksmith-hq/ui/loader";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
+import { Pill } from "@locksmith-hq/ui/pill";
+import { ScopeChip } from "@locksmith-hq/ui/scope-chip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@locksmith-hq/ui/select";
+import { SettingRow } from "@locksmith-hq/ui/setting-row";
+import { Switch } from "@locksmith-hq/ui/switch";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 
 export interface ScreenProps {
   st: StatusView | null;
@@ -115,56 +153,34 @@ function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { data, err, load, alert: err ? <Alert>{err}</Alert> : null };
 }
 
-const Alert = ({ children }: { children: React.ReactNode }) => (
-  <p role="alert" className="alert">
-    <Icon name="alert" />
-    {children}
-  </p>
+/** An error line. `role` can be cleared for a warning that is part of the page, not an announcement. */
+const Alert = ({ children, ...props }: React.ComponentProps<typeof KitAlert>) => (
+  <KitAlert variant="destructive" className="mb-4" {...props}>
+    <TriangleAlert />
+    <AlertDescription>{children}</AlertDescription>
+  </KitAlert>
 );
-const Loading = ({ what }: { what: string }) => (
-  <p className="state" aria-busy="true">
-    Reading {what}…
-  </p>
-);
-const Empty = ({ icon, children }: { icon: IconName; children: React.ReactNode }) => (
-  <div className="state empty">
-    <span className="state-ic">
-      <Icon name={icon} />
-    </span>
-    <div>{children}</div>
-  </div>
-);
+const Loading = ({ what }: { what: string }) => <Loader aria-busy="true">Reading {what}…</Loader>;
+const Empty = EmptyState;
+/** A one-line form: its fields and the button that submits it. */
+const ROW = "mb-4 flex flex-wrap items-center gap-2 *:data-[slot=input]:w-56";
+const STACK = "flex flex-col gap-3";
 
-const SCOPE_ICONS = ["run", "git", "http", "db", "aws"];
+const SCOPE_ICONS: Record<string, LucideIcon> = { run: Play, git: GitBranch, http: Globe, db: Database, aws: Cloud };
 const Scopes = ({ scopes }: { scopes: readonly string[] }) => (
-  <ul className="scopes" aria-label={scopes.length ? `Scopes granted: ${scopes.join(", ")}` : "No scopes granted"}>
-    {scopes.map((s) => (
-      <li key={s} className="scope">
-        {SCOPE_ICONS.includes(s) && <Icon name={s as IconName} />}
-        {s}
-      </li>
-    ))}
+  <ul
+    className="m-0 flex list-none flex-wrap gap-1 p-0"
+    aria-label={scopes.length ? `Scopes granted: ${scopes.join(", ")}` : "No scopes granted"}
+  >
+    {scopes.map((s) => {
+      const ScopeIcon = SCOPE_ICONS[s] ?? KeyRound;
+      return (
+        <li key={s}>
+          <ScopeChip icon={<ScopeIcon />}>{s}</ScopeChip>
+        </li>
+      );
+    })}
   </ul>
-);
-
-const Head = ({
-  id,
-  title,
-  sub,
-  children,
-}: {
-  id: string;
-  title: string;
-  sub?: React.ReactNode;
-  children?: React.ReactNode;
-}) => (
-  <div className="screen-head">
-    <div>
-      <h1 id={id}>{title}</h1>
-      {sub && <p className="lede">{sub}</p>}
-    </div>
-    {children}
-  </div>
 );
 
 export function Overview({ st, act, go }: ScreenProps) {
@@ -222,7 +238,7 @@ export function Overview({ st, act, go }: ScreenProps) {
           <div className="sec-h spaced">
             <h2>Control plane</h2>
           </div>
-          <p className="quiet-state" data-testid="cp-counts">
+          <p className="quiet" data-testid="cp-counts">
             Projects: <b data-testid="count-projects">{cp.projects ?? "n/a"}</b> · Agents:{" "}
             <b data-testid="count-agents">{cp.agents ?? "n/a"}</b>
           </p>
@@ -231,15 +247,15 @@ export function Overview({ st, act, go }: ScreenProps) {
 
       <div className="sec-h spaced">
         <h2 id="h-events">Activity</h2>
-        <button type="button" className="link" onClick={() => go("Audit")}>
+        <Button type="button" variant="link" className="h-auto p-0" onClick={() => go("Audit")}>
           Open audit
-        </button>
+        </Button>
       </div>
       {ev.alert}
       {!ev.data && !ev.err ? (
         <Loading what="the ledger" />
       ) : events.length === 0 ? (
-        <p className="quiet-state">Nothing in the ledger yet.</p>
+        <p className="quiet">Nothing in the ledger yet.</p>
       ) : (
         <ol className="log" aria-labelledby="h-events">
           {events.map((e) => {
@@ -248,21 +264,21 @@ export function Overview({ st, act, go }: ScreenProps) {
             const target = e.target ?? "";
             return (
               <li key={e.seq} data-kind={k}>
-                <time className="mono" dateTime={new Date(e.ts * 1000).toISOString()} title={stamp(e.ts)}>
+                <time className="font-mono text-xs" dateTime={new Date(e.ts * 1000).toISOString()} title={stamp(e.ts)}>
                   {clockS(e.ts)}
                 </time>
                 <span className="mk" aria-hidden="true" />
                 <span className="what">{label(e.action)}</span>
-                <span className="mono tgt" title={target}>
+                <span className="font-mono text-xs tgt" title={target}>
                   {target}
                 </span>
                 <span className="who-s" title={e.session_id ?? e.actor_exe}>
                   {who ? (
                     <>
-                      {agent(who.command)} <span className="mono">{e.session_id}</span>
+                      {agent(who.command)} <span className="font-mono text-xs">{e.session_id}</span>
                     </>
                   ) : e.session_id ? (
-                    <span className="mono">{e.session_id}</span>
+                    <span className="font-mono text-xs">{e.session_id}</span>
                   ) : (
                     e.actor_exe.split("/").pop()
                   )}
@@ -275,12 +291,12 @@ export function Overview({ st, act, go }: ScreenProps) {
       {ver.data &&
         (ver.data.broken_at === null ? (
           <p className="log-foot">
-            <Icon name="shield" />
+            <ShieldCheck />
             Ledger chain verified · {ver.data.events.toLocaleString("en-US")} entries
           </p>
         ) : (
           <p className="log-foot bad">
-            <Icon name="broken" />
+            <ShieldAlert />
             Ledger BROKEN at seq {ver.data.broken_at}
           </p>
         ))}
@@ -330,12 +346,12 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
             </b>
             {grid}
             {ticks.map((t) => (
-              <b key={t} className="tick-l mono" style={{ left: x(t) }}>
+              <b key={t} className="tick-l font-mono text-xs" style={{ left: x(t) }}>
                 {clock(t)}
               </b>
             ))}
           </span>
-          <span className="r">Left</span>
+          <span className="text-right">Left</span>
           <span />
         </div>
       )}
@@ -370,19 +386,21 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
               {grid}
               <span className="bar" style={{ width: x(l.expires_at) }} />
             </span>
-            <span className="r mono left" title={`Expires ${clock(l.expires_at)}`}>
+            <span className="text-right font-mono text-xs left" title={`Expires ${clock(l.expires_at)}`}>
               {left(rest)}
               <span className="sr-only"> left, expires {clock(l.expires_at)}</span>
             </span>
-            <button
+            <Button
               type="button"
-              className="btn sm quiet danger-text reveal"
+              variant="ghost"
+              size="sm"
+              className="reveal text-(--destructive-text)"
               aria-label={`Revoke ${name} session ${l.id}`}
               disabled={striking !== null}
               onClick={() => onRevoke(l.id)}
             >
               Revoke
-            </button>
+            </Button>
           </div>
         );
       })}
@@ -401,7 +419,7 @@ function Timeline({ live, ended, events, now, locked, striking, onRevoke }: Time
         >
           <Who l={l} struck />
           <ScopeText scopes={l.scopes} />
-          <span className="tl mono end">{endedLabel(l)}</span>
+          <span className="tl font-mono text-xs end">{endedLabel(l)}</span>
           <span />
           <span />
         </div>
@@ -417,7 +435,7 @@ const Who = ({ l, struck }: { l: LeaseInfo; struck?: boolean }) => {
       <span className="who-1">
         <SourceMark kind={l.source.kind} />
         {struck ? <s className="who-name">{name}</s> : <b className="who-name">{name}</b>}
-        <span className="mono id">{l.id}</span>
+        <span className="font-mono text-xs id">{l.id}</span>
       </span>
       <span className="who-2">
         {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
@@ -433,7 +451,7 @@ const Who = ({ l, struck }: { l: LeaseInfo; struck?: boolean }) => {
 
 const ScopeText = ({ scopes }: { scopes: readonly string[] }) => (
   <ul
-    className="scopes-t mono"
+    className="scopes-t font-mono text-xs"
     aria-label={scopes.length ? `Scopes granted: ${scopes.join(", ")}` : "No scopes granted"}
   >
     {scopes.map((s) => (
@@ -442,39 +460,41 @@ const ScopeText = ({ scopes }: { scopes: readonly string[] }) => (
   </ul>
 );
 
-const SOURCE_GLYPH: Record<SourceKind, IconName> = {
-  claude_code_cli: "s_terminal",
-  codex: "s_terminal",
-  gemini_cli: "s_terminal",
-  aider: "s_terminal",
-  opencode: "s_terminal",
-  grok: "s_terminal",
-  claude_desktop_app: "s_window",
-  cursor: "s_code",
-  windsurf: "s_code",
-  vscode: "s_code",
-  jetbrains: "s_code",
-  copilot: "s_code",
-  other: "s_spark",
-  unknown: "s_unknown",
+const SOURCE_GLYPH: Record<SourceKind, LucideIcon> = {
+  claude_code_cli: Terminal,
+  codex: Terminal,
+  gemini_cli: Terminal,
+  aider: Terminal,
+  opencode: Terminal,
+  grok: Terminal,
+  claude_desktop_app: AppWindow,
+  cursor: Code,
+  windsurf: Code,
+  vscode: Code,
+  jetbrains: Code,
+  copilot: Code,
+  other: Sparkles,
+  unknown: CircleHelp,
 };
 const isClaude = (k: SourceKind) => k === "claude_code_cli" || k === "claude_desktop_app";
 /** Source glyph; the two Claude kinds get the Claude mark, labelled so it is findable and announced. */
-const SourceMark = ({ kind }: { kind: SourceKind }) =>
-  isClaude(kind) ? (
+const SourceMark = ({ kind }: { kind: SourceKind }) => {
+  const Glyph = SOURCE_GLYPH[kind] ?? CircleHelp;
+  return isClaude(kind) ? (
     <span className="src-claude" role="img" aria-label="Claude" title="Claude">
-      <Icon name="s_claude" />
+      <ClaudeRays />
     </span>
   ) : (
-    <Icon name={SOURCE_GLYPH[kind] ?? "s_unknown"} />
+    <Glyph className="size-3.5 flex-none self-center" />
   );
+};
 /** The agent's own model claim with its 'unverified' tooltip; nothing for a human-started session that reported none. */
 const ReportedModel = ({ l }: { l: LeaseInfo }) => {
   const claim = l.report?.model ?? l.report?.agent;
   const text = claim ? `${claim} (reported by agent)` : l.started_by === "agent" ? "model not reported" : null;
   return (
     text && (
-      <span className={claim ? "reported" : "muted"} title={`${text}. ${SELF_REPORTED}`}>
+      <span className={claim ? "reported" : "text-muted-foreground"} title={`${text}. ${SELF_REPORTED}`}>
         {text}
       </span>
     )
@@ -504,23 +524,24 @@ export function Sessions({ st, act }: ScreenProps) {
     return (
       <li key={l.id} className="sess" data-state={l.state} data-open={open === l.id || undefined}>
         <div className="sess-main">
-          <button
+          <Button
             type="button"
-            className="sess-toggle"
+            variant="ghost"
+            className="h-auto min-w-0 justify-start gap-3 px-2 py-1 text-left font-normal"
             aria-expanded={open === l.id}
             aria-label={`${name} session ${l.id}`}
             onClick={() => setOpen(open === l.id ? null : l.id)}
           >
-            <span className="av" data-kind={l.source.kind}>
+            <span className="grid size-8 flex-none place-items-center rounded-md bg-muted" data-kind={l.source.kind}>
               <SourceMark kind={l.source.kind} />
             </span>
             <span className="who">
               <span className="who-1">
                 <b className="who-name">{name}</b>
-                {l.host && <span className="muted"> in {l.host}</span>}
-                <span className="badge" data-by={l.started_by}>
+                {l.host && <span className="text-muted-foreground"> in {l.host}</span>}
+                <Badge variant={l.started_by === "agent" ? "default" : "secondary"} className="ml-2">
                   {l.started_by === "agent" ? "Agent started" : "Human started"}
-                </span>
+                </Badge>
               </span>
               <span className="who-2">
                 {l.project} / <span className={l.env === "production" ? "prod" : undefined}>{l.env}</span>
@@ -532,9 +553,9 @@ export function Sessions({ st, act }: ScreenProps) {
                 ) : null}
               </span>
             </span>
-          </button>
+          </Button>
           <Scopes scopes={l.scopes} />
-          <span className="r mono left">
+          <span className="text-right font-mono text-xs left">
             {active ? (
               <>
                 {left(rest)}
@@ -545,9 +566,11 @@ export function Sessions({ st, act }: ScreenProps) {
             )}
           </span>
           {active ? (
-            <button
+            <Button
               type="button"
-              className="btn sm quiet danger-text"
+              variant="ghost"
+              size="sm"
+              className="text-(--destructive-text)"
               aria-label={`Revoke ${name} session ${l.id}`}
               onClick={() =>
                 act(
@@ -557,73 +580,68 @@ export function Sessions({ st, act }: ScreenProps) {
               }
             >
               Revoke
-            </button>
+            </Button>
           ) : (
             <span />
           )}
         </div>
         {open === l.id && (
-          <dl className="sess-det">
-            <dt>Session</dt>
-            <dd className="mono">{l.id}</dd>
-            <dt>Command</dt>
-            <dd className="mono">{l.command}</dd>
-            <dt>Root</dt>
-            <dd className="mono">
-              {l.root_exe || "unknown"} · pid {l.root_pid}
-            </dd>
-            <dt>Created</dt>
-            <dd className="mono">{stamp(l.created_at)}</dd>
-            <dt>{active ? "Expires" : "Expired or ended"}</dt>
-            <dd className="mono">{stamp(l.expires_at)}</dd>
-            {l.inject && (
-              <>
-                <dt>Keys</dt>
-                <dd>
-                  {l.inject.length ? `${l.inject.join(", ")} (${l.inject.length} injectable)` : "none injectable"};
-                  every other key is relay-only
-                </dd>
-              </>
-            )}
-            {r && (r.agent || r.model) && (
-              <>
-                <dt>Reported</dt>
-                <dd title={SELF_REPORTED}>
-                  {[r.agent, r.model].filter(Boolean).join(" · ")} (reported by agent, unverified)
-                </dd>
-              </>
-            )}
-          </dl>
+          <Facts
+            className="px-4 pt-1 pb-3.5 pl-15"
+            items={[
+              { label: "Session", value: mono(l.id) },
+              { label: "Command", value: mono(l.command) },
+              { label: "Root", value: mono(`${l.root_exe || "unknown"} · pid ${l.root_pid}`) },
+              { label: "Created", value: mono(stamp(l.created_at)) },
+              { label: active ? "Expires" : "Expired or ended", value: mono(stamp(l.expires_at)) },
+              ...(l.inject
+                ? [
+                    {
+                      label: "Keys",
+                      value: `${l.inject.length ? `${l.inject.join(", ")} (${l.inject.length} injectable)` : "none injectable"}; every other key is relay-only`,
+                    },
+                  ]
+                : []),
+              ...(r && (r.agent || r.model)
+                ? [
+                    {
+                      label: "Reported",
+                      value: (
+                        <span title={SELF_REPORTED}>
+                          {[r.agent, r.model].filter(Boolean).join(" · ")} (reported by agent, unverified)
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
         )}
       </li>
     );
   };
   return (
-    <section className="screen" aria-labelledby="h-sessions">
-      <Head
-        id="h-sessions"
+    <section aria-label="Sessions">
+      <PageHeader
         title="Sessions"
-        sub="Every agent that has been given access, who started it and when it runs out."
+        lede="Every agent that has been given access, who started it and when it runs out."
       />
       {!st ? (
         <Loading what="sessions" />
       ) : all.length === 0 ? (
-        <Empty icon="sessions">
+        <Empty title={st.locked ? "No sessions." : "No sessions yet."}>
           {st.locked ? (
-            <>
-              <b>No sessions.</b> The vault is locked, so no agent can start one until you unlock it.
-            </>
+            "The vault is locked, so no agent can start one until you unlock it."
           ) : (
             <>
-              <b>No sessions yet.</b> Agents get access only inside a session: start one with{" "}
-              <code>smith session start -- &lt;agent&gt;</code>
+              Agents get access only inside a session: start one with <code>smith session start -- &lt;agent&gt;</code>
             </>
           )}
         </Empty>
       ) : (
         <>
           {live.length > 0 && (
-            <ul className="sess-list" aria-label="Active sessions">
+            <ul className="rows" aria-label="Active sessions">
               {live.map(row)}
             </ul>
           )}
@@ -632,7 +650,7 @@ export function Sessions({ st, act }: ScreenProps) {
               <div className="sec-h spaced">
                 <h2>Recently ended</h2>
               </div>
-              <ul className="sess-list" aria-label="Ended sessions">
+              <ul className="rows" aria-label="Ended sessions">
                 {ended.map(row)}
               </ul>
             </>
@@ -646,6 +664,7 @@ export function Sessions({ st, act }: ScreenProps) {
   );
 }
 
+const mono = (v: string) => <span className="font-mono text-xs break-all">{v}</span>;
 const uniq = (xs: string[]) => [...new Set(xs)];
 
 export function Keys({ st }: ScreenProps) {
@@ -679,21 +698,26 @@ export function Keys({ st }: ScreenProps) {
     void put(name.trim());
   };
   return (
-    <section className="screen" aria-labelledby="h-keys">
-      <Head
-        id="h-keys"
+    <section aria-label="Keys">
+      <PageHeader
         title="Keys"
-        sub="Key names only. Values go in and out through a native Locksmith prompt, never this window."
+        lede="Key names only. Values go in and out through a native Locksmith prompt, never this window."
       />
-      <div className="toolbar">
-        <label className="field">
-          Project
-          <input list="dl-projects" value={project} onChange={(e) => setProject(e.target.value)} spellCheck={false} />
-        </label>
-        <label className="field">
-          Environment
-          <input list="dl-envs" value={env} onChange={(e) => setEnv(e.target.value)} spellCheck={false} />
-        </label>
+      <div className="mb-4 flex flex-wrap items-end gap-4">
+        <Field className="w-56">
+          <FieldLabel htmlFor="k-project">Project</FieldLabel>
+          <Input
+            id="k-project"
+            list="dl-projects"
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+            spellCheck={false}
+          />
+        </Field>
+        <Field className="w-56">
+          <FieldLabel htmlFor="k-env">Environment</FieldLabel>
+          <Input id="k-env" list="dl-envs" value={env} onChange={(e) => setEnv(e.target.value)} spellCheck={false} />
+        </Field>
         <datalist id="dl-projects">
           {uniq(seen.map((x) => x.project)).map((v) => (
             <option key={v} value={v} />
@@ -705,17 +729,17 @@ export function Keys({ st }: ScreenProps) {
           ))}
         </datalist>
         {users.length > 0 && (
-          <p className="usable">
-            <span className="live-dot" aria-hidden="true" />
+          <p className="mb-2 flex items-center gap-2.5 text-[13px]">
+            <LiveDot aria-hidden="true" />
             <span>
               Usable now by{" "}
               {users.map((l, i) => (
                 <Fragment key={l.id}>
                   {i > 0 && ", "}
-                  <span className="mono">{l.id}</span> ({agent(l.command)})
+                  <span className="font-mono text-xs">{l.id}</span> ({agent(l.command)})
                 </Fragment>
               ))}
-              <span className="muted">
+              <span className="text-muted-foreground">
                 {" "}
                 · sessions on {project} / {env} with <code>run</code> scope
               </span>
@@ -728,48 +752,53 @@ export function Keys({ st }: ScreenProps) {
       {!names.data && !names.err ? (
         <Loading what="key names" />
       ) : names.data?.length === 0 ? (
-        <Empty icon="key">
-          No keys in {project} / {env} yet. Add the first one below.
-        </Empty>
+        <Empty title={`No keys in ${project} / ${env} yet.`}>Add the first one below.</Empty>
       ) : (
         names.data && (
-          <ul className="list keys" aria-label={`Key names in ${project} / ${env}`}>
+          <ul className="rows mb-5" aria-label={`Key names in ${project} / ${env}`}>
             {names.data.map((n) => (
-              <li key={n} className="row">
-                <span className="ic">
-                  <Icon name="key" />
-                </span>
-                <span className="mono strong">{n}</span>
-                <button type="button" className="btn sm" aria-label={`Rotate ${n}`} onClick={() => put(n)}>
-                  <Icon name="rotate" />
+              <li key={n} className="flex items-center gap-3.5 px-4 py-2.5">
+                <KeyRound className="size-4 flex-none text-muted-foreground" />
+                <span className="mr-auto font-mono text-[13px] font-semibold">{n}</span>
+                <Button type="button" variant="outline" size="sm" aria-label={`Rotate ${n}`} onClick={() => put(n)}>
+                  <RotateCw />
                   Rotate
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
         )
       )}
 
-      <form className="panel add" onSubmit={submit} aria-labelledby="h-add">
-        <div>
-          <h2 id="h-add">Add or rotate a key</h2>
-          <p className="muted small">The value is typed into a native Locksmith prompt, never into this window.</p>
-        </div>
-        <label className="field">
-          Key name
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            spellCheck={false}
-            placeholder="e.g. NPM_TOKEN"
-          />
-        </label>
-        <button type="submit" className="btn primary" disabled={!name.trim()}>
-          <Icon name="plus" />
-          Add or rotate key
-        </button>
-      </form>
-      <p aria-live="polite" className="done">
+      <Card>
+        <CardContent>
+          <form className="flex flex-wrap items-end gap-4" onSubmit={submit} aria-labelledby="h-add">
+            <div className="mr-auto">
+              <h2 id="h-add" className="text-base font-semibold">
+                Add or rotate a key
+              </h2>
+              <p className="text-[13px] text-muted-foreground">
+                The value is typed into a native Locksmith prompt, never into this window.
+              </p>
+            </div>
+            <Field className="w-64">
+              <FieldLabel htmlFor="k-name">Key name</FieldLabel>
+              <Input
+                id="k-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                spellCheck={false}
+                placeholder="e.g. NPM_TOKEN"
+              />
+            </Field>
+            <Button type="submit" disabled={!name.trim()}>
+              <Plus />
+              Add or rotate key
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+      <p aria-live="polite" className="mt-3 min-h-5 font-semibold text-(--live-text)">
         {note}
       </p>
     </section>
@@ -790,11 +819,10 @@ export function Tokens({ st }: ScreenProps) {
     await t.load();
   };
   return (
-    <section className="screen" aria-labelledby="h-tokens">
-      <Head
-        id="h-tokens"
+    <section aria-label="Tokens">
+      <PageHeader
         title="Tokens"
-        sub={
+        lede={
           <>
             Opaque <code>lsk_</code> tokens stand in for a key on one host. Only the prefix is shown.
           </>
@@ -805,53 +833,54 @@ export function Tokens({ st }: ScreenProps) {
       {!t.data && !t.err ? (
         <Loading what="tokens" />
       ) : t.data?.length === 0 ? (
-        <Empty icon="token">
-          <b>No live tokens.</b> Inside a session, mint one with
-          <code className="block">smith token issue &lt;KEY&gt; --provider &lt;name&gt;</code>
+        <Empty title="No live tokens.">
+          Inside a session, mint one with <code>smith token issue &lt;KEY&gt; --provider &lt;name&gt;</code>
         </Empty>
       ) : (
         t.data && (
-          <div className="sessions">
+          <div className={STACK}>
             {t.data.map((x) => {
               const sc = scopes(x.lease);
               return (
-                <article key={x.prefix} className="card token" aria-label={`Token ${x.prefix}`}>
-                  <span className="av av2" aria-hidden="true">
-                    <Icon name="token" />
-                  </span>
-                  <div className="who">
-                    <b className="mono">{x.prefix}</b>
-                    <span className="mono" title={x.key}>
-                      {x.key}
-                    </span>
-                  </div>
-                  <div className="who">
-                    <b className="hosts">
-                      {x.hosts.map((h) => (
-                        <span key={h} className="mono">
-                          {h}
-                        </span>
-                      ))}
-                    </b>
-                    <span>
-                      <span className="mono">{x.placement}</span> · {stamp(x.created_at).slice(5, 16)}
-                    </span>
-                  </div>
-                  <div className="who">
-                    {sc ? <Scopes scopes={sc} /> : <b className="muted">Session ended</b>}
-                    <span title={`${x.project} / ${x.env} · ${x.lease}`}>
-                      {x.project} / {x.env} · <span className="mono">{x.lease}</span>
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn sm danger-text"
-                    aria-label={`Revoke token ${x.prefix}`}
-                    onClick={() => revokeToken(x)}
-                  >
-                    Revoke
-                  </button>
-                </article>
+                <Card key={x.prefix} role="article" aria-label={`Token ${x.prefix}`}>
+                  <CardContent className="grid grid-cols-[16px_minmax(160px,1fr)_minmax(160px,1fr)_minmax(180px,1.1fr)_auto] items-center gap-3.5">
+                    <Ticket className="size-4 text-muted-foreground" aria-hidden="true" />
+                    <div className="who">
+                      <b className="font-mono text-xs">{x.prefix}</b>
+                      <span className="font-mono text-xs" title={x.key}>
+                        {x.key}
+                      </span>
+                    </div>
+                    <div className="who">
+                      <b className="flex-wrap">
+                        {x.hosts.map((h) => (
+                          <span key={h} className="font-mono text-xs">
+                            {h}
+                          </span>
+                        ))}
+                      </b>
+                      <span>
+                        <span className="font-mono text-xs">{x.placement}</span> · {stamp(x.created_at).slice(5, 16)}
+                      </span>
+                    </div>
+                    <div className="who">
+                      {sc ? <Scopes scopes={sc} /> : <b className="text-muted-foreground">Session ended</b>}
+                      <span title={`${x.project} / ${x.env} · ${x.lease}`}>
+                        {x.project} / {x.env} · <span className="font-mono text-xs">{x.lease}</span>
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
+                      aria-label={`Revoke token ${x.prefix}`}
+                      onClick={() => revokeToken(x)}
+                    >
+                      Revoke
+                    </Button>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
@@ -865,29 +894,36 @@ export function Tokens({ st }: ScreenProps) {
 const RELAYS: {
   key: keyof Pick<RelayInfo, "git_port" | "http_port" | "aws_port"> | null;
   name: string;
-  icon: IconName;
+  icon: string;
+  Glyph: LucideIcon;
   setup: string[];
 }[] = [
-  { key: "git_port", name: "Git forwarder", icon: "git", setup: ["smith git setup"] },
+  { key: "git_port", name: "Git forwarder", icon: "git", Glyph: GitBranch, setup: ["smith git setup"] },
   {
     key: "http_port",
     name: "HTTP relay",
     icon: "http",
+    Glyph: Globe,
     setup: ["smith token issue <KEY> --provider <name>", "smith http status"],
   },
-  { key: "aws_port", name: "AWS SigV4 relay", icon: "aws", setup: ["smith run --aws <profile> -- <command>"] },
-  { key: null, name: "Database relay", icon: "db", setup: ["smith db connect <name> -- <command>"] },
+  {
+    key: "aws_port",
+    name: "AWS SigV4 relay",
+    icon: "aws",
+    Glyph: Cloud,
+    setup: ["smith run --aws <profile> -- <command>"],
+  },
+  { key: null, name: "Database relay", icon: "db", Glyph: Database, setup: ["smith db connect <name> -- <command>"] },
 ];
 
 export function Relays(_: ScreenProps) {
   const r = useLoad(api.relayInfo, []);
   const info = r.data;
   return (
-    <section className="screen" aria-labelledby="h-relays">
-      <Head
-        id="h-relays"
+    <section aria-label="Relays">
+      <PageHeader
         title="Relays"
-        sub="Each relay signs or forwards requests on an agent's behalf; the key stays in Locksmith."
+        lede="Each relay signs or forwards requests on an agent's behalf; the key stays in Locksmith."
       />
       {r.alert}
       {!info && !r.err ? (
@@ -895,37 +931,39 @@ export function Relays(_: ScreenProps) {
       ) : (
         info && (
           <>
-            <div className="relays">
+            <div className="grid grid-cols-2 gap-3">
               {RELAYS.map((x) => {
                 const port = x.key && info[x.key];
                 const up = !x.key || port != null;
                 return (
-                  <article key={x.name} className="card relay" aria-labelledby={`relay-${x.icon}`}>
-                    <div className="relay-h">
-                      <span className="av av3" aria-hidden="true">
-                        <Icon name={x.icon} />
-                      </span>
-                      <h2 id={`relay-${x.icon}`}>{x.name}</h2>
-                      <span className="pill" data-up={up}>
-                        {!x.key ? (
-                          "Per target"
-                        ) : port == null ? (
-                          "Not running"
-                        ) : (
-                          <>
-                            Port <span className="mono">{port}</span>
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    <div className="cmds">
-                      {x.setup.map((c) => (
-                        <code key={c} className="block">
-                          {c}
-                        </code>
-                      ))}
-                    </div>
-                  </article>
+                  <Card key={x.name} role="article" aria-labelledby={`relay-${x.icon}`}>
+                    <CardContent className="flex flex-col gap-2.5">
+                      <div className="flex items-center gap-3">
+                        <x.Glyph className="size-4 text-muted-foreground" aria-hidden="true" />
+                        <h2 id={`relay-${x.icon}`} className="mr-auto text-[15px] font-semibold">
+                          {x.name}
+                        </h2>
+                        <Pill tone={up ? "live" : undefined}>
+                          {!x.key ? (
+                            "Per target"
+                          ) : port == null ? (
+                            "Not running"
+                          ) : (
+                            <>
+                              Port <span className="font-mono text-xs">{port}</span>
+                            </>
+                          )}
+                        </Pill>
+                      </div>
+                      <div className="flex flex-col items-start gap-1.5">
+                        {x.setup.map((c) => (
+                          <code key={c} className="cmd">
+                            {c}
+                          </code>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>
@@ -934,13 +972,12 @@ export function Relays(_: ScreenProps) {
               <span className="n">{info.ca_hosts.length}</span>
             </div>
             {info.ca_hosts.length === 0 ? (
-              <Empty icon="shield">No hosts use the Locksmith CA.</Empty>
+              <Empty title="No hosts use the Locksmith CA." />
             ) : (
-              <ul className="chips">
+              <ul className="m-0 flex list-none flex-wrap gap-1 p-0">
                 {info.ca_hosts.map((h) => (
-                  <li key={h} className="scope">
-                    <Icon name="http" />
-                    {h}
+                  <li key={h}>
+                    <ScopeChip icon={<Globe />}>{h}</ScopeChip>
                   </li>
                 ))}
               </ul>
@@ -968,36 +1005,36 @@ export function Audit(_: ScreenProps) {
     }
   };
   return (
-    <section className="screen" aria-labelledby="h-audit">
-      <Head id="h-audit" title="Audit" sub="Every access, block and change, newest first, in a hash-chained ledger.">
-        <label className="search">
-          <Icon name="search" />
-          <span className="sr-only">Filter</span>
-          <input
-            type="search"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            spellCheck={false}
-            placeholder="Filter by action, key, host or session"
-          />
-        </label>
-        <button type="button" className="btn" onClick={verify}>
-          <Icon name="shield" />
+    <section aria-label="Audit">
+      <PageHeader title="Audit" lede="Every access, block and change, newest first, in a hash-chained ledger.">
+        <Input
+          type="search"
+          aria-label="Filter"
+          className="w-80"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          spellCheck={false}
+          placeholder="Filter by action, key, host or session"
+        />
+        <Button type="button" variant="outline" onClick={verify}>
+          <ShieldCheck />
           Verify ledger
-        </button>
-      </Head>
+        </Button>
+      </PageHeader>
       <div aria-live="assertive">
         {ver &&
           (ver.broken_at === null ? (
-            <p className="verdict ok">
-              <Icon name="shield" />
-              Ledger intact: {ver.events} events checked, hash chain unbroken.
-            </p>
+            <KitAlert role={undefined} className="mb-4">
+              <ShieldCheck />
+              <AlertDescription>Ledger intact: {ver.events} events checked, hash chain unbroken.</AlertDescription>
+            </KitAlert>
           ) : (
-            <p className="verdict broken">
-              <Icon name="broken" />
-              Ledger BROKEN at seq {ver.broken_at}. {ver.detail}
-            </p>
+            <KitAlert role={undefined} variant="destructive" className="mb-4">
+              <ShieldAlert />
+              <AlertDescription>
+                Ledger BROKEN at seq {ver.broken_at}. {ver.detail}
+              </AlertDescription>
+            </KitAlert>
           ))}
       </div>
       {ev.alert}
@@ -1005,43 +1042,46 @@ export function Audit(_: ScreenProps) {
       {!ev.data && !ev.err ? (
         <Loading what="the ledger" />
       ) : rows.length === 0 ? (
-        <Empty icon="doc">{q ? "No events match this filter." : "Nothing in the ledger yet."}</Empty>
+        <Empty
+          kind={q ? "no-results" : "first-use"}
+          title={q ? "No events match this filter." : "Nothing in the ledger yet."}
+        />
       ) : (
-        <div className="table-wrap">
-          <table className="grid">
-            <caption className="sr-only">Audit events, newest first</caption>
-            <thead>
-              <tr>
-                <th className="num">Seq</th>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Decision</th>
-                <th>Target</th>
-                <th>Rule</th>
-                <th>Session</th>
-                <th>Actor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((e) => (
-                <tr key={e.seq} data-bad={isBad(e)}>
-                  <td className="num mono muted">{e.seq}</td>
-                  <td className="mono nowrap">{stamp(e.ts)}</td>
-                  <td className="strong">{e.action}</td>
-                  <td>
-                    <span className="dec">{e.decision}</span>
-                  </td>
-                  <td className="mono wrap">{breakable(e.target ?? "")}</td>
-                  <td className="mono">{e.policy_rule}</td>
-                  <td className="mono">{e.session_id ?? ""}</td>
-                  <td className="mono" title={e.actor_exe}>
-                    {e.actor_exe.split("/").pop()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableCaption className="sr-only">Audit events, newest first</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-right">Seq</TableHead>
+              <TableHead>Time</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead>Decision</TableHead>
+              <TableHead>Target</TableHead>
+              <TableHead>Rule</TableHead>
+              <TableHead>Session</TableHead>
+              <TableHead>Actor</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((e) => (
+              <TableRow key={e.seq} data-bad={isBad(e)}>
+                <TableCell className="text-right font-mono text-xs text-muted-foreground">{e.seq}</TableCell>
+                <TableCell className="font-mono text-xs whitespace-nowrap">{stamp(e.ts)}</TableCell>
+                <TableCell className="font-semibold">{e.action}</TableCell>
+                <TableCell>
+                  <span className="text-xs font-semibold tracking-wide text-muted-foreground">{e.decision}</span>
+                </TableCell>
+                <TableCell className="font-mono text-xs min-w-[200px] break-words">
+                  {breakable(e.target ?? "")}
+                </TableCell>
+                <TableCell className="font-mono text-xs">{e.policy_rule}</TableCell>
+                <TableCell className="font-mono text-xs">{e.session_id ?? ""}</TableCell>
+                <TableCell className="font-mono text-xs" title={e.actor_exe}>
+                  {e.actor_exe.split("/").pop()}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </section>
   );
@@ -1085,14 +1125,13 @@ export function Agents(_: ScreenProps) {
   };
 
   return (
-    <section className="screen" aria-labelledby="h-agents">
-      <Head
-        id="h-agents"
+    <section aria-label="Agents">
+      <PageHeader
         title="Agents"
-        sub="Agents use secrets through the gateway without ever holding them. Grants say which secrets an agent may relay."
+        lede="Agents use secrets through the gateway without ever holding them. Grants say which secrets an agent may relay."
       />
       <form
-        className="card"
+        className={ROW}
         aria-label="Control plane"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1101,34 +1140,42 @@ export function Agents(_: ScreenProps) {
           setClient(api.agentsClient());
         }}
       >
-        <input
+        <Input
           aria-label="Control plane URL"
+          placeholder="Control plane URL"
           value={cfg.url}
           onChange={(e) => setCfg({ ...cfg, url: e.target.value.trim() })}
         />
-        <input aria-label="Org id" value={cfg.org} onChange={(e) => setCfg({ ...cfg, org: e.target.value.trim() })} />
-        <button type="submit" className="btn sm">
+        <Input
+          aria-label="Org id"
+          placeholder="Org id"
+          value={cfg.org}
+          onChange={(e) => setCfg({ ...cfg, org: e.target.value.trim() })}
+        />
+        <Button type="submit" variant="outline" size="sm">
           Connect
-        </button>
+        </Button>
       </form>
       {err && <Alert>{err}</Alert>}
       {!client ? (
-        <Empty icon="key">Enter an org id to list agents.</Empty>
+        <Empty title="Enter an org id to list agents." />
       ) : (
         <>
           {secret && (
-            <div className="card" role="region" aria-label="Enrollment secret">
-              <p>Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.</p>
-              <code className="block" data-testid="enrollment-secret">
-                {secret.value}
-              </code>
-              <button type="button" className="btn sm" onClick={() => setSecret(null)}>
-                Dismiss
-              </button>
-            </div>
+            <Card className="mb-4" role="region" aria-label="Enrollment secret">
+              <CardContent className="flex flex-col items-start gap-2">
+                <p>Enrollment secret for {secret.agent}. It is shown once and cannot be retrieved again.</p>
+                <code className="cmd" data-testid="enrollment-secret">
+                  {secret.value}
+                </code>
+                <Button type="button" variant="outline" size="sm" onClick={() => setSecret(null)}>
+                  Dismiss
+                </Button>
+              </CardContent>
+            </Card>
           )}
           <form
-            className="card"
+            className={ROW}
             aria-label="Create agent"
             onSubmit={(e) => {
               e.preventDefault();
@@ -1139,73 +1186,85 @@ export function Agents(_: ScreenProps) {
               });
             }}
           >
-            <input aria-label="Agent name" required value={name} onChange={(e) => setName(e.target.value)} />
-            <button type="submit" className="btn primary sm">
+            <Input
+              aria-label="Agent name"
+              placeholder="Agent name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button type="submit" size="sm">
               Create agent
-            </button>
+            </Button>
           </form>
           {!agents ? (
             <Loading what="agents" />
           ) : agents.length === 0 ? (
-            <Empty icon="key">
-              <b>No agents yet.</b>
-            </Empty>
+            <Empty title="No agents yet." />
           ) : (
-            <div className="sessions">
+            <div className={STACK}>
               {agents.map((a) => (
-                <article key={a.id} className="card" aria-label={`Agent ${a.name}`}>
-                  <div className="who">
-                    <b>{a.name}</b>
-                    <span className="mono">{a.id}</span>
-                  </div>
-                  <ul>
-                    {(grants[a.id] ?? []).map((g) => (
-                      <li key={g.id}>
-                        <span className="mono">{g.secret_name}</span> ({g.mode}){" "}
-                        {g.expires_at ? `expires ${g.expires_at}` : "no expiry"}
-                        <button
-                          type="button"
-                          className="btn sm danger-text"
-                          aria-label={`Revoke ${g.secret_name} for ${a.name}`}
-                          onClick={() => void run(() => client.revokeGrant(a.id, g.id))}
-                        >
-                          Revoke
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void run(async () => {
-                        await client.createGrant(a.id, {
-                          secret_id: secretId[a.id] ?? "",
-                          mode: "relay",
-                          expires_at: null,
+                <Card key={a.id} role="article" aria-label={`Agent ${a.name}`}>
+                  <CardContent className="flex flex-col items-start gap-2.5">
+                    <div className="who">
+                      <b>{a.name}</b>
+                      <span className="font-mono text-xs">{a.id}</span>
+                    </div>
+                    <ul>
+                      {(grants[a.id] ?? []).map((g) => (
+                        <li key={g.id}>
+                          <span className="font-mono text-xs">{g.secret_name}</span> ({g.mode}){" "}
+                          {g.expires_at ? `expires ${g.expires_at}` : "no expiry"}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-(--destructive-text)"
+                            aria-label={`Revoke ${g.secret_name} for ${a.name}`}
+                            onClick={() => void run(() => client.revokeGrant(a.id, g.id))}
+                          >
+                            Revoke
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                    <form
+                      className="flex flex-wrap items-center gap-2 *:data-[slot=input]:w-56"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void run(async () => {
+                          await client.createGrant(a.id, {
+                            secret_id: secretId[a.id] ?? "",
+                            mode: "relay",
+                            expires_at: null,
+                          });
+                          setSecretId({ ...secretId, [a.id]: "" });
                         });
-                        setSecretId({ ...secretId, [a.id]: "" });
-                      });
-                    }}
-                  >
-                    <input
-                      aria-label={`Secret id for ${a.name}`}
-                      required
-                      value={secretId[a.id] ?? ""}
-                      onChange={(e) => setSecretId({ ...secretId, [a.id]: e.target.value.trim() })}
-                    />
-                    <button type="submit" className="btn sm">
-                      Grant
-                    </button>
-                  </form>
-                  <button
-                    type="button"
-                    className="btn sm danger-text"
-                    aria-label={`Delete ${a.name}`}
-                    onClick={() => void run(() => client.deleteAgent(a.id))}
-                  >
-                    Delete agent
-                  </button>
-                </article>
+                      }}
+                    >
+                      <Input
+                        aria-label={`Secret id for ${a.name}`}
+                        placeholder="Secret id"
+                        required
+                        value={secretId[a.id] ?? ""}
+                        onChange={(e) => setSecretId({ ...secretId, [a.id]: e.target.value.trim() })}
+                      />
+                      <Button type="submit" variant="outline" size="sm">
+                        Grant
+                      </Button>
+                    </form>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
+                      aria-label={`Delete ${a.name}`}
+                      onClick={() => void run(() => client.deleteAgent(a.id))}
+                    >
+                      Delete agent
+                    </Button>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
@@ -1260,19 +1319,18 @@ export function WorkloadIdentities(_: ScreenProps) {
   };
 
   return (
-    <section className="screen" aria-labelledby="h-wl">
-      <Head
-        id="h-wl"
+    <section aria-label="Workload identities">
+      <PageHeader
         title="Workload identities"
-        sub="A CI job or cluster workload exchanges its own OIDC token for a short-lived agent token. Nothing secret is entered or shown here."
+        lede="A CI job or cluster workload exchanges its own OIDC token for a short-lived agent token. Nothing secret is entered or shown here."
       />
       {err && <Alert>{err}</Alert>}
       {!client ? (
-        <Empty icon="key">Connect a control plane and org id on the Agents screen first.</Empty>
+        <Empty title="Connect a control plane and org id on the Agents screen first." />
       ) : (
         <>
           <form
-            className="card"
+            className={ROW}
             aria-label="Create workload identity"
             onSubmit={(e) => {
               e.preventDefault();
@@ -1282,39 +1340,67 @@ export function WorkloadIdentities(_: ScreenProps) {
               });
             }}
           >
-            <select
-              aria-label="Issuer preset"
-              value={preset}
-              onChange={(e) => setPreset(e.target.value as api.WorkloadPreset)}
-            >
-              <option value="github">GitHub Actions</option>
-              <option value="kubernetes">Kubernetes</option>
-            </select>
-            <input aria-label="Policy name" required value={f.name} onChange={set("name")} />
-            <input
+            <Select value={preset} onValueChange={(v) => setPreset(v as api.WorkloadPreset)}>
+              <SelectTrigger aria-label="Issuer preset">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="github">GitHub Actions</SelectItem>
+                <SelectItem value="kubernetes">Kubernetes</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input aria-label="Policy name" placeholder="Policy name" required value={f.name} onChange={set("name")} />
+            <Input
               aria-label="Agent id"
+              placeholder="Agent id"
               required
               value={f.agentId}
               onChange={(e) => setF({ ...f, agentId: e.target.value.trim() })}
             />
-            <input aria-label="Audience" required value={f.audience} onChange={set("audience")} />
+            <Input
+              aria-label="Audience"
+              placeholder="Audience"
+              required
+              value={f.audience}
+              onChange={set("audience")}
+            />
             {preset === "github" ? (
               <>
-                <input
+                <Input
                   aria-label="Repository (owner/repo)"
+                  placeholder="Repository (owner/repo)"
                   required
                   value={f.repository}
                   onChange={set("repository")}
                 />
-                <input aria-label="Ref (optional)" value={f.ref} onChange={set("ref")} />
-                <input aria-label="Environment (optional)" value={f.environment} onChange={set("environment")} />
+                <Input aria-label="Ref (optional)" placeholder="Ref (optional)" value={f.ref} onChange={set("ref")} />
+                <Input
+                  aria-label="Environment (optional)"
+                  placeholder="Environment (optional)"
+                  value={f.environment}
+                  onChange={set("environment")}
+                />
               </>
             ) : (
               <>
-                <input aria-label="Issuer URL" type="url" required value={f.issuer} onChange={set("issuer")} />
-                <input aria-label="Namespace" required value={f.namespace} onChange={set("namespace")} />
-                <input
+                <Input
+                  aria-label="Issuer URL"
+                  placeholder="Issuer URL"
+                  type="url"
+                  required
+                  value={f.issuer}
+                  onChange={set("issuer")}
+                />
+                <Input
+                  aria-label="Namespace"
+                  placeholder="Namespace"
+                  required
+                  value={f.namespace}
+                  onChange={set("namespace")}
+                />
+                <Input
                   aria-label="Service account"
+                  placeholder="Service account"
                   required
                   value={f.serviceaccount}
                   onChange={set("serviceaccount")}
@@ -1322,73 +1408,68 @@ export function WorkloadIdentities(_: ScreenProps) {
               </>
             )}
             {hasPrefixCondition(body.conditions) && (
-              <p role="alert" className="alert" data-testid="prefix-warning">
-                <Icon name="alert" />A condition ends in * and matches every value with that prefix. Prefer exact
-                values.
-              </p>
+              <Alert className="mb-0 basis-full" data-testid="prefix-warning">
+                A condition ends in * and matches every value with that prefix. Prefer exact values.
+              </Alert>
             )}
-            <button type="submit" className="btn primary sm">
+            <Button type="submit" size="sm">
               Create workload identity
-            </button>
+            </Button>
           </form>
           {!items ? (
             <Loading what="workload identities" />
           ) : items.length === 0 ? (
-            <Empty icon="key">
-              <b>No workload identities yet.</b>
-            </Empty>
+            <Empty title="No workload identities yet." />
           ) : (
-            <div className="sessions">
+            <div className={STACK}>
               {items.map((w) => (
-                <article key={w.id} className="card" aria-label={`Workload identity ${w.name}`}>
-                  <div className="who">
-                    <b>{w.name}</b>
-                    <span className="mono">
-                      {w.issuer_kind} {w.issuer}
-                    </span>
-                  </div>
-                  <p>
-                    Handle: <code className="mono">{w.handle}</code> (not a secret) · audience {w.audience} · agent{" "}
-                    <span className="mono">{w.agent_id}</span> · last used {w.last_used_at ?? "never"}
-                  </p>
-                  <ul>
-                    {w.conditions.map((c) => (
-                      <li key={`${c.claim}=${c.pattern}`}>
-                        <span className="mono">
-                          {c.claim} = {c.pattern}
-                        </span>
-                        {isPrefixPattern(c) ? " (prefix match)" : ""}
-                      </li>
-                    ))}
-                  </ul>
-                  {hasPrefixCondition(w.conditions) && (
-                    <p className="alert">
-                      <Icon name="alert" />
-                      This policy uses a prefix (*) condition.
+                <Card key={w.id} role="article" aria-label={`Workload identity ${w.name}`}>
+                  <CardContent className="flex flex-col items-start gap-2.5">
+                    <div className="who">
+                      <b>{w.name}</b>
+                      <span className="font-mono text-xs">
+                        {w.issuer_kind} {w.issuer}
+                      </span>
+                    </div>
+                    <p>
+                      Handle: <code className="font-mono text-xs">{w.handle}</code> (not a secret) · audience{" "}
+                      {w.audience} · agent <span className="font-mono text-xs">{w.agent_id}</span> · last used{" "}
+                      {w.last_used_at ?? "never"}
                     </p>
-                  )}
-                  {confirming === w.id ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn sm danger-text"
-                        onClick={() => {
-                          setConfirming(null);
-                          void run(() => client.deleteWorkloadIdentity(w.id));
-                        }}
-                      >
-                        Confirm delete {w.name}
-                      </button>
-                      <button type="button" className="btn sm" onClick={() => setConfirming(null)}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="btn sm danger-text" onClick={() => setConfirming(w.id)}>
+                    <ul>
+                      {w.conditions.map((c) => (
+                        <li key={`${c.claim}=${c.pattern}`}>
+                          <span className="font-mono text-xs">
+                            {c.claim} = {c.pattern}
+                          </span>
+                          {isPrefixPattern(c) ? " (prefix match)" : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    {hasPrefixCondition(w.conditions) && (
+                      <Alert role={undefined} className="mb-0">
+                        This policy uses a prefix (*) condition.
+                      </Alert>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-(--destructive-text)"
+                      onClick={() => setConfirming(w.id)}
+                    >
                       Delete {w.name}
-                    </button>
-                  )}
-                </article>
+                    </Button>
+                    <ConfirmDialog
+                      open={confirming === w.id}
+                      danger
+                      title={`Delete ${w.name}?`}
+                      confirmLabel={`Confirm delete ${w.name}`}
+                      onClose={() => setConfirming(null)}
+                      onConfirm={() => void run(() => client.deleteWorkloadIdentity(w.id))}
+                    />
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
@@ -1445,88 +1526,90 @@ export function OrgAudit(_: ScreenProps) {
   const v = status?.latest_verify;
 
   return (
-    <section className="screen" aria-labelledby="h-org-audit">
-      <Head
-        id="h-org-audit"
+    <section aria-label="Org audit">
+      <PageHeader
         title="Org audit"
-        sub="The control plane's hash-chained ledger of relays and changes, newest first."
+        lede="The control plane's hash-chained ledger of relays and changes, newest first."
       />
       {err && <Alert>{err}</Alert>}
       {!client ? (
-        <Empty icon="doc">Connect a control plane on the Agents screen to see its audit ledger.</Empty>
+        <Empty title="Connect a control plane on the Agents screen to see its audit ledger." />
       ) : (
         <>
           {status && (
-            <div className="card" role="region" aria-label="Chain status">
-              <p>
-                Head seq {status.head_seq}. Latest checkpoint:{" "}
-                {status.latest_checkpoint
-                  ? `seq ${status.latest_checkpoint.seq} at ${status.latest_checkpoint.at}`
-                  : "none yet"}
-                .
-              </p>
-              <p data-testid="verify-result">
-                {!v
-                  ? "Not verified yet."
-                  : v.ok
-                    ? `Verified OK at ${v.finished_at}.`
-                    : `Verification FAILED at ${v.finished_at}${v.broken_seq != null ? `, first broken seq ${v.broken_seq}` : ""}.`}
-              </p>
-            </div>
+            <Card className="mb-4" role="region" aria-label="Chain status">
+              <CardContent>
+                <p>
+                  Head seq {status.head_seq}. Latest checkpoint:{" "}
+                  {status.latest_checkpoint
+                    ? `seq ${status.latest_checkpoint.seq} at ${status.latest_checkpoint.at}`
+                    : "none yet"}
+                  .
+                </p>
+                <p data-testid="verify-result">
+                  {!v
+                    ? "Not verified yet."
+                    : v.ok
+                      ? `Verified OK at ${v.finished_at}.`
+                      : `Verification FAILED at ${v.finished_at}${v.broken_seq != null ? `, first broken seq ${v.broken_seq}` : ""}.`}
+                </p>
+              </CardContent>
+            </Card>
           )}
-          <label>
-            Outcome{" "}
-            <select
-              aria-label="Outcome filter"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as AuditOutcomeFilter)}
-            >
-              <option value="all">All</option>
-              <option value="denied">Denied</option>
-              <option value="redaction_failed">Redaction failed</option>
-            </select>
-          </label>
+          <Field orientation="horizontal" className="mb-4 w-fit">
+            <FieldLabel>Outcome</FieldLabel>
+            <Select value={filter} onValueChange={(v) => setFilter(v as AuditOutcomeFilter)}>
+              <SelectTrigger aria-label="Outcome filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="denied">Denied</SelectItem>
+                <SelectItem value="redaction_failed">Redaction failed</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
           {!events ? (
             <Loading what="the org ledger" />
           ) : events.length === 0 ? (
-            <Empty icon="doc">Nothing in the ledger yet.</Empty>
+            <Empty title="Nothing in the ledger yet." />
           ) : !events.some((e) => auditOutcomeMatches(e, filter)) ? (
-            <Empty icon="doc">No matching events{next ? " loaded yet" : ""}.</Empty>
+            <Empty kind="no-results" title={`No matching events${next ? " loaded yet" : ""}.`} />
           ) : (
-            <div className="table-wrap">
-              <table className="grid">
-                <caption className="sr-only">Org audit events, newest first</caption>
-                <thead>
-                  <tr>
-                    <th className="num">Seq</th>
-                    <th>Time</th>
-                    <th>Kind</th>
-                    <th>Actor</th>
-                    <th>Target</th>
-                    <th>Outcome</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events
-                    .filter((e) => auditOutcomeMatches(e, filter))
-                    .map((e) => (
-                      <tr key={e.id}>
-                        <td className="num mono muted">{e.seq}</td>
-                        <td className="mono nowrap">{e.at}</td>
-                        <td className="strong">{e.kind}</td>
-                        <td className="mono">{e.actor}</td>
-                        <td className="mono wrap">{breakable(e.target ?? "")}</td>
-                        <td>{e.outcome}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableCaption className="sr-only">Org audit events, newest first</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">Seq</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Kind</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Outcome</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {events
+                  .filter((e) => auditOutcomeMatches(e, filter))
+                  .map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="text-right font-mono text-xs text-muted-foreground">{e.seq}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{e.at}</TableCell>
+                      <TableCell className="font-semibold">{e.kind}</TableCell>
+                      <TableCell className="font-mono text-xs">{e.actor}</TableCell>
+                      <TableCell className="font-mono text-xs min-w-[200px] break-words">
+                        {breakable(e.target ?? "")}
+                      </TableCell>
+                      <TableCell>{e.outcome}</TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
           )}
           {next && (
-            <button type="button" className="btn sm" disabled={loadingMore} onClick={more}>
+            <Button type="button" variant="outline" size="sm" disabled={loadingMore} onClick={more}>
               Load more
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -1567,7 +1650,7 @@ const cpErr = (e: unknown) =>
       : msg(e);
 
 const NoClient = ({ what }: { what: string }) => (
-  <Empty icon="key">Connect a control plane on the Agents screen to see {what}.</Empty>
+  <Empty title={`Connect a control plane on the Agents screen to see ${what}.`} />
 );
 
 /** Row actions shared by projects and environments: rename, and delete with a confirm step. */
@@ -1585,6 +1668,7 @@ function RowActions({
   if (mode === "edit") {
     return (
       <form
+        className="inline-flex items-center gap-2 *:data-[slot=input]:w-56"
         onSubmit={(e) => {
           e.preventDefault();
           void onRename(value).then(
@@ -1593,46 +1677,39 @@ function RowActions({
           );
         }}
       >
-        <input aria-label={`New name for ${name}`} required value={value} onChange={(e) => setValue(e.target.value)} />
-        <button type="submit" className="btn sm">
+        <Input aria-label={`New name for ${name}`} required value={value} onChange={(e) => setValue(e.target.value)} />
+        <Button type="submit" variant="outline" size="sm">
           Save
-        </button>
-        <button type="button" className="btn sm quiet" onClick={() => setMode("")}>
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setMode("")}>
           Cancel
-        </button>
+        </Button>
       </form>
-    );
-  }
-  if (mode === "confirm") {
-    return (
-      <span role="alertdialog" aria-label={`Delete ${name}?`}>
-        Delete {name}?{" "}
-        <button
-          type="button"
-          className="btn sm danger-text"
-          onClick={() =>
-            void onDelete().then(
-              () => setMode(""),
-              () => setMode(""),
-            )
-          }
-        >
-          Confirm delete
-        </button>
-        <button type="button" className="btn sm quiet" onClick={() => setMode("")}>
-          Cancel
-        </button>
-      </span>
     );
   }
   return (
     <>
-      <button type="button" className="btn sm" onClick={() => setMode("edit")}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setMode("edit")}>
         Rename {name}
-      </button>
-      <button type="button" className="btn sm danger-text" onClick={() => setMode("confirm")}>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="text-(--destructive-text)"
+        onClick={() => setMode("confirm")}
+      >
         Delete {name}
-      </button>
+      </Button>
+      <ConfirmDialog
+        open={mode === "confirm"}
+        danger
+        title={`Delete ${name}?`}
+        confirmLabel="Confirm delete"
+        onClose={() => setMode("")}
+        // A rejection is already shown by the list; the dialog closes either way.
+        onConfirm={() => void onDelete().catch(() => {})}
+      />
     </>
   );
 }
@@ -1641,7 +1718,7 @@ function CreateForm({ label, onCreate }: { label: string; onCreate: (name: strin
   const [name, setName] = useState("");
   return (
     <form
-      className="card"
+      className={ROW}
       aria-label={`Create ${label}`}
       onSubmit={(e) => {
         e.preventDefault();
@@ -1651,10 +1728,16 @@ function CreateForm({ label, onCreate }: { label: string; onCreate: (name: strin
         );
       }}
     >
-      <input aria-label={`${label} name`} required value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="submit" className="btn primary sm">
+      <Input
+        aria-label={`${label} name`}
+        placeholder={`${label} name`}
+        required
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <Button type="submit" size="sm">
         Create {label}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -1698,9 +1781,9 @@ function useCpList<T>(fn: () => Promise<T[]>, deps: unknown[]) {
 
 function ListWait({ what, l }: { what: string; l: { failed: boolean; retry: () => void } }) {
   return l.failed ? (
-    <button type="button" className="btn sm" onClick={l.retry}>
+    <Button type="button" variant="outline" size="sm" onClick={l.retry}>
       Retry
-    </button>
+    </Button>
   ) : (
     <Loading what={what} />
   );
@@ -1711,8 +1794,8 @@ export function Projects(_: ScreenProps) {
   const client = api.agentsClient();
   if (!client)
     return (
-      <section className="screen" aria-labelledby="h-projects">
-        <Head id="h-projects" title="Projects" />
+      <section aria-label="Projects">
+        <PageHeader title="Projects" />
         <NoClient what="projects" />
       </section>
     );
@@ -1727,23 +1810,27 @@ function ProjectsView({ client }: { client: Client }) {
     [client, sel?.id],
   );
   return (
-    <section className="screen" aria-labelledby="h-projects">
-      <Head id="h-projects" title="Projects" sub="Projects hold environments, and environments hold secrets." />
+    <section aria-label="Projects">
+      <PageHeader title="Projects" lede="Projects hold environments, and environments hold secrets." />
       {ps.err && <Alert>{ps.err}</Alert>}
       <CreateForm label="project" onCreate={(n) => ps.run(() => client.createProject({ name: n }))} />
       {!ps.items ? (
         <ListWait what="projects" l={ps} />
       ) : ps.items.length === 0 ? (
-        <Empty icon="key">
-          <b>No projects yet.</b>
-        </Empty>
+        <Empty title="No projects yet." />
       ) : (
-        <ul>
+        <ul className="rows">
           {ps.items.map((p) => (
-            <li key={p.id}>
-              <button type="button" className="link" aria-pressed={sel?.id === p.id} onClick={() => setSel(p)}>
+            <li key={p.id} className="flex flex-wrap items-center gap-2 px-4 py-2 *:first:mr-auto">
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0"
+                aria-pressed={sel?.id === p.id}
+                onClick={() => setSel(p)}
+              >
                 {p.name}
-              </button>
+              </Button>
               <RowActions
                 name={p.name}
                 onRename={(name) => ps.run(() => client.updateProject(p.id, { name }))}
@@ -1771,14 +1858,12 @@ function ProjectsView({ client }: { client: Client }) {
           {!es.items ? (
             <ListWait what="environments" l={es} />
           ) : es.items.length === 0 ? (
-            <Empty icon="key">
-              <b>No environments yet.</b>
-            </Empty>
+            <Empty title="No environments yet." />
           ) : (
-            <ul>
+            <ul className="rows">
               {es.items.map((e) => (
-                <li key={e.id}>
-                  {e.name}
+                <li key={e.id} className="flex flex-wrap items-center gap-2 px-4 py-2 *:first:mr-auto">
+                  <span>{e.name}</span>
                   <RowActions
                     name={e.name}
                     onRename={(name) => es.run(() => client.updateEnvironment(sel.id, e.id, { name }))}
@@ -1799,8 +1884,8 @@ export function Secrets(_: ScreenProps) {
   const client = api.agentsClient();
   if (!client)
     return (
-      <section className="screen" aria-labelledby="h-secrets">
-        <Head id="h-secrets" title="Secrets" />
+      <section aria-label="Secrets">
+        <PageHeader title="Secrets" />
         <NoClient what="secret metadata" />
       </section>
     );
@@ -1823,74 +1908,76 @@ function SecretsView({ client }: { client: Client }) {
     [client, project, env],
   );
   return (
-    <section className="screen" aria-labelledby="h-secrets">
-      <Head
-        id="h-secrets"
-        title="Secrets"
-        sub="Metadata only. Secret values never leave the vault and are not shown here."
-      />
+    <section aria-label="Secrets">
+      <PageHeader title="Secrets" lede="Metadata only. Secret values never leave the vault and are not shown here." />
       {(ps.err || es.err || ss.err) && <Alert>{ps.err || es.err || ss.err}</Alert>}
       {!ps.items ? (
         <ListWait what="projects" l={ps} />
       ) : ps.items.length === 0 ? (
-        <Empty icon="key">
-          <b>No projects yet, so no secrets.</b>
-        </Empty>
+        <Empty title="No projects yet, so no secrets." />
       ) : (
         <>
-          <label>
-            Project{" "}
-            <select
-              aria-label="Project"
+          <Field orientation="horizontal" className="mb-3 w-fit">
+            <FieldLabel>Project</FieldLabel>
+            <Select
               value={project}
-              onChange={(e) => {
-                setPid(e.target.value);
+              onValueChange={(v) => {
+                setPid(v);
                 setEid("");
                 setOpen(null);
               }}
             >
-              {ps.items.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <SelectTrigger aria-label="Project">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ps.items.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
           {es.items && es.items.length === 0 ? (
-            <Empty icon="key">No environments in this project.</Empty>
+            <Empty title="No environments in this project." />
           ) : (
             es.items && (
-              <label>
-                Environment{" "}
-                <select
-                  aria-label="Environment"
+              <Field orientation="horizontal" className="mb-3 w-fit">
+                <FieldLabel>Environment</FieldLabel>
+                <Select
                   value={env}
-                  onChange={(e) => {
-                    setEid(e.target.value);
+                  onValueChange={(v) => {
+                    setEid(v);
                     setOpen(null);
                   }}
                 >
-                  {es.items.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <SelectTrigger aria-label="Environment">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {es.items.map((x) => (
+                      <SelectItem key={x.id} value={x.id}>
+                        {x.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
             )
           )}
           {env &&
             (!ss.items ? (
               <ListWait what="secrets" l={ss} />
             ) : ss.items.length === 0 ? (
-              <Empty icon="key">No secrets in this environment.</Empty>
+              <Empty title="No secrets in this environment." />
             ) : (
-              <ul>
+              <ul className="rows">
                 {ss.items.map((s) => (
-                  <li key={s.id}>
-                    <button type="button" className="link" onClick={() => setOpen(s)}>
+                  <li key={s.id} className="px-4 py-2">
+                    <Button type="button" variant="link" className="h-auto p-0" onClick={() => setOpen(s)}>
                       {s.name}
-                    </button>{" "}
+                    </Button>{" "}
                     ({plural(s.version_count, "version")})
                   </li>
                 ))}
@@ -1909,44 +1996,46 @@ function SecretDetail({ client, secret, onClose }: { client: Client; secret: Sec
   const v = useLoad<SecretVersion[]>(() => client.listSecretVersions(p, e, id), [p, e, id]);
   const d = s.data ?? secret;
   return (
-    <div className="card" role="region" aria-label={`Secret ${secret.name}`}>
-      <b>{d.name}</b>
-      {d.description && <p>{d.description}</p>}
-      <p className="muted small">Updated {d.updated_at}</p>
-      {s.alert}
-      {v.alert}
-      {!v.data && !v.err ? (
-        <Loading what="versions" />
-      ) : (
-        v.data &&
-        (v.data.length === 0 ? (
-          <p className="quiet-state">No versions yet.</p>
+    <Card className="mt-4" role="region" aria-label={`Secret ${secret.name}`}>
+      <CardContent className="flex flex-col items-start gap-2">
+        <b>{d.name}</b>
+        {d.description && <p>{d.description}</p>}
+        <p className="text-muted-foreground text-[13px]">Updated {d.updated_at}</p>
+        {s.alert}
+        {v.alert}
+        {!v.data && !v.err ? (
+          <Loading what="versions" />
         ) : (
-          <table className="grid">
-            <caption className="sr-only">Versions of {secret.name}</caption>
-            <thead>
-              <tr>
-                <th className="num">Version</th>
-                <th>Key</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {v.data.map((x) => (
-                <tr key={x.version}>
-                  <td className="num mono">{x.version}</td>
-                  <td className="mono">{x.key_id}</td>
-                  <td className="mono nowrap">{x.created_at}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ))
-      )}
-      <button type="button" className="btn sm quiet" onClick={onClose}>
-        Close
-      </button>
-    </div>
+          v.data &&
+          (v.data.length === 0 ? (
+            <p className="quiet">No versions yet.</p>
+          ) : (
+            <Table>
+              <TableCaption className="sr-only">Versions of {secret.name}</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">Version</TableHead>
+                  <TableHead>Key</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {v.data.map((x) => (
+                  <TableRow key={x.version}>
+                    <TableCell className="text-right font-mono text-xs">{x.version}</TableCell>
+                    <TableCell className="font-mono text-xs">{x.key_id}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">{x.created_at}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ))
+        )}
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1980,45 +2069,40 @@ export function McpTools(_: ScreenProps) {
     }
   };
   return (
-    <section className="screen" aria-labelledby="h-mcp-tools">
-      <Head id="h-mcp-tools" title="MCP tools" sub="Which tools the Hub and the Gateway offer to MCP clients." />
+    <section aria-label="MCP tools">
+      <PageHeader title="MCP tools" lede="Which tools the Hub and the Gateway offer to MCP clients." />
       {err && <Alert>{err}</Alert>}
       {!client ? (
-        <Empty icon="key">Connect a control plane on the Agents screen to manage MCP tools.</Empty>
+        <Empty title="Connect a control plane on the Agents screen to manage MCP tools." />
       ) : !tools ? (
         err ? null : (
           <Loading what="MCP tools" />
         )
       ) : tools.length === 0 ? (
-        <Empty icon="key">No MCP tools.</Empty>
+        <Empty title="No MCP tools." />
       ) : (
         (["hub", "agent"] as const).map((layer) => {
           const rows = tools.filter((t) => t.layer === layer);
           if (rows.length === 0) return null;
           return (
-            <div key={layer} className="card" role="group" aria-label={`${layerName(layer)} tools`}>
-              <h2>{layerName(layer)}</h2>
-              <ul>
+            <Card key={layer} className="mb-4" role="group" aria-label={`${layerName(layer)} tools`}>
+              <CardContent>
+                <h2 className="mb-3 text-base font-semibold">{layerName(layer)}</h2>
                 {rows.map((t) => (
-                  <li key={t.tool}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label={`${t.tool} (${layer})`}
-                        checked={t.enabled}
-                        onChange={(e) => void toggle(t, e.target.checked)}
-                      />{" "}
-                      <strong>{t.tool}</strong>
-                    </label>{" "}
-                    <span className="muted">
-                      {t.description} {t.default_enabled ? "On by default" : "Off by default"}
-                      {t.overridden ? ", changed" : ""}
-                    </span>
-                  </li>
+                  <SettingRow
+                    key={t.tool}
+                    title={t.tool}
+                    about={`${t.description} ${t.default_enabled ? "On by default" : "Off by default"}${t.overridden ? ", changed" : ""}`}
+                  >
+                    <Switch
+                      aria-label={`${t.tool} (${layer})`}
+                      checked={t.enabled}
+                      onCheckedChange={(on) => void toggle(t, on)}
+                    />
+                  </SettingRow>
                 ))}
-              </ul>
-            </div>
+              </CardContent>
+            </Card>
           );
         })
       )}
@@ -2055,55 +2139,49 @@ export function McpClients(_: ScreenProps) {
   };
   const label = (c: api.McpClient) => c.client_name || c.client_id;
   return (
-    <section className="screen" aria-labelledby="h-mcp-clients">
-      <Head
-        id="h-mcp-clients"
-        title="MCP clients"
-        sub="Apps that signed in over MCP. Revoking one refuses its next call."
-      />
+    <section aria-label="MCP clients">
+      <PageHeader title="MCP clients" lede="Apps that signed in over MCP. Revoking one refuses its next call." />
       {err && <Alert>{err}</Alert>}
       {!client ? (
-        <Empty icon="sessions">Connect a control plane on the Agents screen to see MCP clients.</Empty>
+        <Empty title="Connect a control plane on the Agents screen to see MCP clients." />
       ) : !clients ? (
         err ? null : (
           <Loading what="MCP clients" />
         )
       ) : clients.length === 0 ? (
-        <Empty icon="sessions">No MCP clients have signed in yet.</Empty>
+        <Empty title="No MCP clients have signed in yet." />
       ) : (
-        <div className="table-wrap">
-          <table className="grid">
-            <caption className="sr-only">MCP clients</caption>
-            <thead>
-              <tr>
-                <th>Client</th>
-                <th>Layer</th>
-                <th>Principal</th>
-                <th>Last seen</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((c) => (
-                <tr key={c.id}>
-                  <td className="strong">{label(c)}</td>
-                  <td>{layerName(c.layer)}</td>
-                  <td className="mono">{c.principal}</td>
-                  <td className="mono nowrap">{c.last_seen_at}</td>
-                  <td>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</td>
-                  <td>
-                    {!c.revoked_at && (
-                      <button type="button" className="btn sm" onClick={() => void revoke(c)}>
-                        Revoke {label(c)}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableCaption className="sr-only">MCP clients</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Layer</TableHead>
+              <TableHead>Principal</TableHead>
+              <TableHead>Last seen</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {clients.map((c) => (
+              <TableRow key={c.id}>
+                <TableCell className="font-semibold">{label(c)}</TableCell>
+                <TableCell>{layerName(c.layer)}</TableCell>
+                <TableCell className="font-mono text-xs">{c.principal}</TableCell>
+                <TableCell className="font-mono text-xs whitespace-nowrap">{c.last_seen_at}</TableCell>
+                <TableCell>{c.revoked_at ? `Revoked ${c.revoked_at}` : "Active"}</TableCell>
+                <TableCell>
+                  {!c.revoked_at && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => void revoke(c)}>
+                      Revoke {label(c)}
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </section>
   );
@@ -2129,47 +2207,44 @@ export function Bindings(_: ScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <section className="screen" aria-labelledby="h-bindings">
-      <Head
-        id="h-bindings"
+    <section aria-label="Bindings">
+      <PageHeader
         title="Bindings"
-        sub="What the gateway can reach for agents. Secrets and passwords are never shown."
+        lede="What the gateway can reach for agents. Secrets and passwords are never shown."
       />
       {err && <Alert>{err}</Alert>}
       {!client ? (
-        <Empty icon="key">Connect a control plane on the Agents screen to see bindings.</Empty>
+        <Empty title="Connect a control plane on the Agents screen to see bindings." />
       ) : !items ? (
         err ? null : (
           <Loading what="bindings" />
         )
       ) : items.length === 0 ? (
-        <Empty icon="key">The gateway has not published any bindings yet.</Empty>
+        <Empty title="The gateway has not published any bindings yet." />
       ) : (
-        <div className="table-wrap">
-          <table className="grid">
-            <caption className="sr-only">Bindings</caption>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Kind</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((b) => (
-                <tr key={`${b.kind}:${b.name}`}>
-                  <td className="strong">{b.name}</td>
-                  <td>{BINDING_KIND[b.kind] ?? b.kind}</td>
-                  <td className="mono">
-                    {bindingDetails(b)
-                      .map(([l, v]) => `${l}: ${v}`)
-                      .join(" · ")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableCaption className="sr-only">Bindings</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Kind</TableHead>
+              <TableHead>Details</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((b) => (
+              <TableRow key={`${b.kind}:${b.name}`}>
+                <TableCell className="font-semibold">{b.name}</TableCell>
+                <TableCell>{BINDING_KIND[b.kind] ?? b.kind}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {bindingDetails(b)
+                    .map(([l, v]) => `${l}: ${v}`)
+                    .join(" · ")}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </section>
   );

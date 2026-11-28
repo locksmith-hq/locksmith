@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { FileText } from "lucide-react";
-import { Alert, AlertDescription } from "@locksmith-hq/alert";
-import { Button } from "@locksmith-hq/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from "@locksmith-hq/empty";
-import { Loader } from "@locksmith-hq/loader";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Button } from "@locksmith-hq/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from "@locksmith-hq/ui/empty";
+import { Loader } from "@locksmith-hq/ui/loader";
 
 /** The part of a TanStack Query result this component reads, so any `useQuery` result fits. */
 export interface QueryLike<T> {

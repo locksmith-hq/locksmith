@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, type DynamicModule, type Type } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { TerminusModule } from "@nestjs/terminus";
 import { LoggerModule } from "nestjs-pino";
@@ -27,4 +27,9 @@ import { REDACT_PATHS, loggerFormatters, loggerSerializers } from "./logging.js"
   ],
   controllers: [HealthController],
 })
-export class AppModule {}
+export class AppModule {
+  /** The app with extra modules added to it: how a build adds its paid modules (see paid.ts). */
+  static with(extra: Type[]): DynamicModule {
+    return { module: AppModule, imports: extra };
+  }
+}

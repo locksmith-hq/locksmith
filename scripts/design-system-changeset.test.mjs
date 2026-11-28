@@ -13,17 +13,16 @@ test("bump: feat is minor, fix and perf are patch, a bang or a BREAKING CHANGE f
   assert.equal(bump("Merge pull request #1 from x"), null);
 });
 
-test("plan: only design system packages are bumped, and each keeps its largest bump", () => {
-  assert.deepEqual(
+test("plan: only commits that touch the kit count, and the largest bump wins", () => {
+  const kit = "design-system/ui/src/button/index.tsx";
+  assert.equal(
     plan([
-      { message: "fix(button): a", files: ["design-system/packages/button/src/index.tsx", "apps/web/src/App.tsx"] },
-      {
-        message: "feat: b",
-        files: ["design-system/packages/button/src/index.tsx", "design-system/packages/styles/theme.css"],
-      },
-      { message: "fix: c", files: ["design-system/packages/styles/theme.css", "design-system/docs/src/app.tsx"] },
-      { message: "chore: d", files: ["design-system/packages/input/package.json"] },
+      { message: "fix(button): a", files: [kit, "apps/web/src/App.tsx"] },
+      { message: "feat: b", files: [kit, "design-system/ui/styles/theme.css"] },
+      { message: "feat!: c", files: ["design-system/docs/src/app.tsx"] },
+      { message: "chore: d", files: ["design-system/ui/package.json"] },
     ]),
-    { button: "minor", styles: "minor" },
+    "minor",
   );
+  assert.equal(plan([{ message: "fix: docs only", files: ["design-system/docs/src/app.tsx"] }]), null);
 });

@@ -1,10 +1,10 @@
-import { Card } from "@locksmith-hq/card";
-import { Alert, AlertDescription } from "@locksmith-hq/alert";
-import { Label } from "@locksmith-hq/label";
-import { Button } from "@locksmith-hq/button";
+import { Card } from "@locksmith-hq/ui/card";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Label } from "@locksmith-hq/ui/label";
+import { Button } from "@locksmith-hq/ui/button";
 import { Dropdown, Option } from "../Dropdown";
-import { PageHeader } from "@locksmith-hq/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { useEffect, useRef, useState } from "react";
 import {
   auditOutcomeMatches as auditMatches,

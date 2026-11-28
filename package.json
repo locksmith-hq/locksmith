@@ -6,7 +6,7 @@
     "packages/*",
     "integrations/*",
     "tests/api-contract",
-    "design-system/packages/*",
+    "design-system/ui",
     "design-system/docs",
     "design-system/mcp"
   ],
@@ -16,7 +16,7 @@
     "lint": "turbo run lint format:check knip typecheck",
     "knip": "knip",
     "changeset": "changeset",
-    "release:design-system": "turbo run build --filter=./design-system/packages/* && changeset publish",
+    "release:design-system": "turbo run build --filter=@locksmith-hq/ui && changeset publish",
     "version:design-system": "changeset version && npm install --package-lock-only"
   },
   "license": "Apache-2.0",

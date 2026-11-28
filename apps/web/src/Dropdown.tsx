@@ -1,6 +1,6 @@
 import { Children, Fragment, isValidElement } from "react";
 import type { ReactNode } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@locksmith-hq/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@locksmith-hq/ui/select";
 
 type OptionProps = { value?: string | number; disabled?: boolean; children: ReactNode };
 

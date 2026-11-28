@@ -5,7 +5,7 @@ description: Set up, run and use the Locksmith design system MCP server, which a
 
 # Locksmith design system MCP
 
-This is an internal tool for building Locksmith. It is not published and is not for users of the product. The server lives in `design-system/mcp/` and runs over stdio. It reads the design system's source in this checkout (`design-system/packages`, the docs site's demos, `tokens.css`, the README), so its answers always match the tree you are on. It only reads; it changes nothing.
+This is an internal tool for building Locksmith. It is not published and is not for users of the product. The server lives in `design-system/mcp/` and runs over stdio. It reads the design system's source in this checkout (`design-system/ui`, the docs site's demos, `tokens.css`, the README), so its answers always match the tree you are on. It only reads; it changes nothing.
 
 ## Configure
 

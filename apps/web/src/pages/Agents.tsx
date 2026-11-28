@@ -1,8 +1,8 @@
-import { Card } from "@locksmith-hq/card";
-import { Alert, AlertDescription } from "@locksmith-hq/alert";
-import { Button } from "@locksmith-hq/button";
-import { Input } from "@locksmith-hq/input";
-import { PageHeader } from "@locksmith-hq/page-header";
+import { Card } from "@locksmith-hq/ui/card";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Button } from "@locksmith-hq/ui/button";
+import { Input } from "@locksmith-hq/ui/input";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Agent, Client } from "@locksmith/control-plane-client";

@@ -44,3 +44,7 @@ override.tf
 *_override.tf
 crash.log
 .turbo/
+
+# Paid console pages: they live in the private locksmith-cloud repository and are copied here only for its build.
+apps/web/src/console/paid/
+apps/api/src/paid/

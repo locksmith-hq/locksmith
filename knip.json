@@ -7,16 +7,24 @@
     },
     "apps/web": {
       "entry": [
-        "src/mockup/main.tsx",
+        "src/console/main.tsx",
         "src/**/*.test.{ts,tsx}"
       ],
       "project": [
         "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss",
+        "tw-animate-css"
       ]
     },
     "apps/desktop": {
       "project": [
         "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss",
+        "tw-animate-css"
       ]
     },
     "packages/ui": {
@@ -59,6 +67,68 @@
         "kysely-codegen",
         "@types/express"
       ]
+    },
+    "design-system/ui": {
+      "entry": [
+        "src/*/index.tsx",
+        "src/**/*.test.ts",
+        "*.test.mjs"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "*.mjs"
+      ],
+      "ignoreDependencies": [
+        "@fontsource/azeret-mono",
+        "@fontsource/chakra-petch",
+        "tailwindcss",
+        "tw-animate-css"
+      ]
+    },
+    "design-system/docs": {
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "*.mjs"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss",
+        "tw-animate-css"
+      ],
+      "entry": [
+        "src/**/*.test.tsx",
+        "src/setup.ts"
+      ]
+    },
+    "design-system/mcp": {
+      "entry": [
+        "server.mjs",
+        "*.test.mjs"
+      ],
+      "project": [
+        "*.mjs"
+      ]
     }
+  },
+  "ignoreIssues": {
+    "apps/web/src/console/paid.ts": [
+      "exports",
+      "types"
+    ],
+    "apps/web/src/console/data.ts": [
+      "exports",
+      "types"
+    ],
+    "apps/web/src/console/pages/access-store.ts": [
+      "exports",
+      "types"
+    ],
+    "apps/web/src/console/pages/lifecycleStore.ts": [
+      "exports",
+      "types"
+    ],
+    "apps/web/src/console/pages/platformNotify.tsx": [
+      "exports",
+      "types"
+    ]
   }
 }

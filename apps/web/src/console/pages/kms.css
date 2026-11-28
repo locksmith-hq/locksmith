@@ -1,0 +1,39 @@
+/* KMS pages: status words, the permission matrix and a few small helpers. */
+.kms-st { font-weight: 600; white-space: nowrap; }
+.kms-st[data-s="on"] { color: var(--live-text); }
+.kms-st[data-s="off"] { color: var(--muted-foreground); }
+.kms-st[data-s="del"] { color: var(--destructive-text); }
+.kms-note { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--popover); color: var(--muted-foreground); font-size: 13px; }
+.kms-note svg { width: 16px; height: 16px; flex: none; }
+.kms-note b { color: var(--foreground); font-weight: 600; }
+.kms-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.kms-cur { margin-left: auto; color: var(--live-text); font-weight: 600; }
+.kms-detail .matrix { border-collapse: collapse; width: 100%; max-width: 560px; }
+.kms-detail .matrix th, .kms-detail .matrix td { padding: 7px 10px; border-top: 1px solid var(--border); text-align: left; font-size: 13px; }
+.kms-detail .matrix thead th { border-top: 0; color: var(--muted-foreground); font-weight: 500; }
+.kms-detail .matrix td.c, .kms-detail .matrix th.c { text-align: center; width: 78px; }
+.kms-detail .matrix input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand); cursor: pointer; }
+.kms-detail .matrix input:disabled { cursor: not-allowed; opacity: 0.4; }
+.kms-detail .matrix .na { color: var(--muted-foreground); }
+/* Two classes, to beat `.list .row` which would lay the whole item out as a 32px-first grid. */
+.list .row.kms-client { display: block; padding: 0; }
+.kms-client .row-head .pic { grid-row: auto; }
+.kms-client .row-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 12px 16px; }
+.kms-client .row-head .pic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--muted); color: var(--muted-foreground); }
+.kms-reason { display: block; margin-top: 2px; color: var(--muted-foreground); font-size: 12px; }
+.kms-log td { vertical-align: top; }
+@media (max-width: 700px) {
+  .kms-client .row-head { grid-template-columns: 32px minmax(0, 1fr); }
+  .kms-client .row-head .meta, .kms-client .row-head > .btn { grid-column: 1 / -1; }
+}
+
+.kms-name { font-weight: 600; }
+.kms-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 980px; }
+.kms-stack .panel > .muted { margin: 4px 0 12px; font-size: 13px; }
+.kms-h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; }
+.kms-warn { margin: 0; color: var(--warning-text); font-weight: 600; font-size: 13px; }
+.kms-late { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.kms-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 24px; margin: 12px 0 8px; }
+.kms-facts dt { color: var(--muted-foreground); font-size: 12px; }
+.kms-facts dd { margin: 2px 0 0; font-weight: 500; }
+.kms-old { margin-left: auto; }

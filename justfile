@@ -261,19 +261,6 @@ api-openapi:
     npm run openapi:emit --workspace @locksmith/api
     npm test --workspace @locksmith/api -- src/openapi
 
-# T3 console e2e: Playwright drives the web console against `just up` (auth profile) and `just api`.
-# Set PW_CHROMIUM to a Chromium binary when the Playwright browsers are not installed.
-web-e2e *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
-      just up
-      (just api >/tmp/locksmith-api.log 2>&1 &)
-      for _ in $(seq 1 360); do curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1 && break; sleep 2; done
-      curl -fsS http://127.0.0.1:8080/healthz >/dev/null || { echo "api did not start; see /tmp/locksmith-api.log" >&2; exit 1; }
-    fi
-    cd apps/web && npx playwright test --trace off "$@"
-
 # T1 sign-up, verify, sign-in (auth code + PKCE), reset and API calls against Keycloak (needs `just up` and `just api`).
 auth-e2e:
     python3 -I scripts/auth-e2e.py

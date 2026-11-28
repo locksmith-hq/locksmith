@@ -1,0 +1,58 @@
+name: design-system-release
+
+# Versions and publishes the design system (@locksmith-hq/ui) to GitHub Packages, the private npm
+# registry of the locksmith-hq organization.
+#
+# The bump comes from Conventional Commits. On each push to main that touches design-system/ui/,
+# scripts/design-system-changeset.mjs reads the commits since the last release and writes a changeset: `feat`
+# is a minor bump, `fix` and `perf` are patch, and `!` or a "BREAKING CHANGE:" footer is major. Changesets
+# then opens or updates the "design-system: version packages" pull request (the new version and the
+# changelog). Merging it publishes the version if the registry does not have it yet. A hand-written changeset
+# in .changeset/ still works and is added to the same request.
+#
+# Pull requests are squash-merged, so it is the pull request title that must be a Conventional Commit.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - design-system/ui/**
+      - .changeset/**
+      - .github/workflows/design-system-release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: design-system-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the changeset step reads the commits since the last release
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@locksmith-hq"
+      - run: npm ci
+      - name: Write a changeset from the Conventional Commits since the last release
+        run: node --test scripts/design-system-changeset.test.mjs && node scripts/design-system-changeset.mjs
+      - uses: changesets/action@v1
+        with:
+          title: "design-system: version packages"
+          commit: "design-system: version packages"
+          version: npm run version:design-system
+          publish: npm run release:design-system
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

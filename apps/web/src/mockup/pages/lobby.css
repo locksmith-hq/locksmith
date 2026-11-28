@@ -1,5 +1,0 @@
-/* Secret Management lobby pages. Class names start with lb- so nothing leaks. */
-.lb-row { align-items: start; }
-.lb-row .meta { flex-wrap: wrap; justify-content: flex-end; }
-.lb-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--danger-text) !important; font-weight: 500; }
-@media (max-width: 860px) { .lb-row .meta { justify-content: flex-start; } }

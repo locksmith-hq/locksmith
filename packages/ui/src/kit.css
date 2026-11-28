@@ -1,4 +1,4 @@
-/* Shared kit rules used by both the live console and its mockup. */
+/* Shared kit rules for the web console. */
 .crumbs { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 13px; color: var(--muted); }
 .crumbs a { text-decoration: none; }
 .crumbs a:hover { color: var(--text); }

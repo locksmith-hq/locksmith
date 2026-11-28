@@ -71,6 +71,11 @@ const nav = (tab: string) =>
   userEvent.click(
     within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: new RegExp(`^${tab}\\b`) }),
   );
+/** Opens a kit Select by its label and picks the option with this text. */
+const choose = async (label: string, option: string) => {
+  await userEvent.click(screen.getByRole("combobox", { name: label }));
+  await userEvent.click(await screen.findByRole("option", { name: option }));
+};
 
 test("overview lists sessions, revoke and revoke all", async () => {
   const { container } = render(<App />);
@@ -249,7 +254,7 @@ test("vault header states the vault, offers one primary action and turns the sid
   const { container } = render(<App />);
   const vault = await screen.findByRole("banner", { name: "Vault" });
   await waitFor(() => expect(vault).toHaveTextContent("Unlocked"));
-  const dial = () => container.querySelector(".logo .vault-mark")!;
+  const dial = () => container.querySelector('.logo [data-slot="mark"]')!;
   expect(dial()).toHaveAttribute("data-open", "true");
   expect(screen.queryByRole("switch")).toBeNull();
   await go("Lock vault");
@@ -457,11 +462,10 @@ test("org audit: outcome filter narrows to denied and redaction_failed events", 
   render(<App />);
   await nav("Org audit");
   expect(await screen.findByText("agent.created")).toBeInTheDocument();
-  const sel = screen.getByRole("combobox", { name: "Outcome filter" });
-  await userEvent.selectOptions(sel, "denied");
+  await choose("Outcome filter", "Denied");
   expect(screen.getByText("relay.denied")).toBeInTheDocument();
   expect(screen.queryByText("agent.created")).toBeNull();
-  await userEvent.selectOptions(sel, "redaction_failed");
+  await choose("Outcome filter", "Redaction failed");
   expect(screen.getByText("relay.outcome")).toBeInTheDocument();
   expect(screen.queryByText("relay.denied")).toBeNull();
 });
@@ -699,7 +703,7 @@ test("workload identities: list, prefix warning, create, delete with confirm, no
   });
   expect(JSON.stringify(sent)).not.toMatch(/token|secret|password/i);
 
-  await userEvent.selectOptions(screen.getByLabelText("Issuer preset"), "kubernetes");
+  await choose("Issuer preset", "Kubernetes");
   await userEvent.type(screen.getByLabelText("Policy name"), "k1");
   await userEvent.type(screen.getByLabelText("Agent id"), "a1");
   await userEvent.type(screen.getByLabelText("Audience"), "https://cp.example");

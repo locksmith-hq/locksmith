@@ -13,8 +13,12 @@
 /.github/workflows/aws-*.yml @tomer555
 /infra/ @tomer555
 
-# Pricing and licensing: the source-available layer, the licensing statement, and the license and entitlement crates.
-/ee/ @tomer555
 /LICENSING.md @tomer555
 /crates/ls-license/ @tomer555
 /crates/ls-entitlements/ @tomer555
+
+# Design system: the published component kit (@locksmith-hq/ui), its docs site and its release.
+# Every change waits for the owner; agents may propose changes here but never merge them.
+/design-system/ @tomer555
+/.changeset/ @tomer555
+/.github/workflows/design-system-release.yml @tomer555

@@ -193,7 +193,7 @@ a.brand { text-decoration: none; border-radius: 8px; }
 @media (max-width: 860px) { .fold { display: none; } .app[data-folded] { grid-template-columns: minmax(0, 1fr); } .app[data-folded] .nav a { font-size: 14px; padding: 0 10px; gap: 10px; } }
 
 /* Bigger mark in the sidebar, and the loading state built from the same mark. */
-a.brand { height: 36px; gap: 10px; }
+a.brand { height: 44px; gap: 10px; }
 .ls-wordmark { font-size: 16px; }
 .work { position: relative; }
 /* The kit Loader, centred in the content area: right of the sidebar, below the top bar. */
@@ -204,7 +204,7 @@ a.brand { height: 36px; gap: 10px; }
 .nav a { height: 32px; }
 .side-foot { position: sticky; bottom: -14px; padding-bottom: 14px; background: var(--sidebar); }
 
-a.brand { font-size: 16px; }
+a.brand { font-size: 20px; }
 a.brand .ls-wordmark { font-size: 1em; }
 
 /* Access control: tabs with counts, and the role-by-permission matrix. */

@@ -375,6 +375,7 @@ export function Console() {
   const live = sessions.filter((s) => s.state === "active");
   const page = route[0] ?? "home";
   // Folded sidebar: an icon-only rail. Remembered per browser; the page works the same if storage is blocked.
+  const [brandHover, setBrandHover] = useState(false);
   const [folded, setFolded] = useState(() => {
     try {
       return localStorage.getItem("locksmith.console.folded") === "1";
@@ -499,8 +500,14 @@ export function Console() {
       <div className="app" data-folded={folded || undefined}>
         <aside className="side">
           <SidebarProvider className="contents">
-            <a className="brand" href="#/home" aria-label="Locksmith home">
-              <Logo size={34} />
+            <a
+              className="brand"
+              href="#/home"
+              aria-label="Locksmith home"
+              onMouseEnter={() => setBrandHover(true)}
+              onMouseLeave={() => setBrandHover(false)}
+            >
+              <Logo size={40} open={brandHover} />
               <Word />
             </a>
             {product ? (

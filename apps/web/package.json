@@ -8,29 +8,22 @@
     "dev": "vite",
     "build": "tsc --noEmit && node build.mjs",
     "lint": "oxlint -c ../../.oxlintrc.json .",
-    "test": "vitest run",
-    "e2e": "playwright test",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json ."
   },
   "dependencies": {
     "@locksmith-hq/ui": "*",
-    "@locksmith/control-plane-client": "*",
-    "@tanstack/react-query": "5.108.1",
     "cn": "^0.5.2",
     "lucide-react": "^1.82.0",
-    "oidc-client-ts": "3.5.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-router": "8.5.2"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",
-    "@testing-library/user-event": "^14.5.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",

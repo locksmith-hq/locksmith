@@ -1,6 +1,7 @@
 //! The gateway router: health probes, `POST /v1/relay` ([`crate::relay`]) and `GET /v1/grants`
-//! ([`crate::grants`]), `/git/{host}/...` ([`crate::git`]), `/mcp` ([`crate::mcp_endpoint`]) and
-//! `/mcp/upstream/{name}` ([`crate::mcp_upstream`]).
+//! ([`crate::grants`]), `/git/{host}/...` ([`crate::git`]), `/mcp` ([`crate::mcp_endpoint`]),
+//! `/mcp/upstream/{name}` ([`crate::mcp_upstream`]) and the OAuth connect start, callback and
+//! confirm ([`crate::oauth`]).
 
 use std::sync::Arc;
 
@@ -15,6 +16,7 @@ use crate::git;
 use crate::grants;
 use crate::mcp_endpoint::{self, McpEndpoint};
 use crate::mcp_upstream;
+use crate::oauth::{self, OAuth};
 use crate::relay::{self, Relay};
 use ls_mcp_server::upstream::ToolPolicy;
 
@@ -24,6 +26,7 @@ pub struct AppState {
     readiness: Arc<dyn Readiness>,
     relay: Option<Arc<Relay>>,
     mcp: Option<Arc<McpEndpoint>>,
+    oauth: Option<Arc<OAuth>>,
     tool_policy: Option<Arc<dyn ToolPolicy>>,
 }
 
@@ -33,6 +36,7 @@ impl AppState {
             readiness,
             relay: None,
             mcp: None,
+            oauth: None,
             tool_policy: None,
         }
     }
@@ -47,6 +51,17 @@ impl AppState {
     pub fn with_mcp(mut self, mcp: McpEndpoint) -> Self {
         self.mcp = Some(Arc::new(mcp));
         self
+    }
+
+    /// Serve `/v1/oauth/connect`, `/v1/oauth/flows/{id}/confirm` and `/oauth/callback` (without
+    /// it they answer `503`).
+    pub fn with_oauth(mut self, oauth: Arc<OAuth>) -> Self {
+        self.oauth = Some(oauth);
+        self
+    }
+
+    pub fn oauth(&self) -> Option<Arc<OAuth>> {
+        self.oauth.clone()
     }
 
     /// Decide the tools of the `/mcp/upstream/{name}` servers (without it every tool is hidden
@@ -76,6 +91,25 @@ pub fn build(state: AppState) -> Router {
         .as_ref()
         .map_or(64 * 1024, |r| r.options().max_request_body * 2 + 64 * 1024);
     let mcp = mcp_endpoint::router(&state);
+    // OAuth connections (C1): the console calls `/v1/oauth/*` cross-origin, so CORS for the
+    // configured console origins applies there only. The callback is a top-level navigation.
+    let oauth_routes = Router::new()
+        .route(
+            "/v1/oauth/connect",
+            post(oauth::connect).layer(DefaultBodyLimit::max(8 * 1024)),
+        )
+        .route(
+            "/v1/oauth/flows/{id}/confirm",
+            post(oauth::confirm).layer(DefaultBodyLimit::max(1024)),
+        )
+        .route(
+            "/v1/oauth/connections/{id}/disconnect",
+            post(oauth::disconnect).layer(DefaultBodyLimit::max(1024)),
+        );
+    let oauth_routes = match &state.oauth {
+        Some(o) => oauth_routes.layer(o.cors()),
+        None => oauth_routes,
+    };
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
@@ -96,6 +130,8 @@ pub fn build(state: AppState) -> Router {
                 .post(git::route)
                 .layer(DefaultBodyLimit::disable()),
         )
+        .route("/oauth/callback", get(oauth::callback))
+        .merge(oauth_routes)
         // Upstream MCP servers (m2-mcp-gateway): the same agent token, `Host` allowlist and rmcp
         // log cap as `/mcp`; an unknown name and one without a relay grant are the same `404`.
         .route(mcp_upstream::PATH, mcp_upstream::route(&state))

@@ -228,7 +228,8 @@ with open(out, "w") as fh:
 }
 
 # gw_start_gateway: start the built gateway for GW_BINDINGS on a free loopback port, logging to
-# ARTIFACT_DIR/gateway.log; wait for /readyz. Sets GW_GATEWAY_URL and GW_GATEWAY_PID.
+# ARTIFACT_DIR/gateway.log; wait for /readyz. Sets GW_GATEWAY_URL and GW_GATEWAY_PID. When
+# GW_GATEWAY_ENV_FN names a function, it runs in the gateway's environment just before the start.
 gw_start_gateway() {
   local port i
   port="$(python3 -I -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
@@ -240,6 +241,10 @@ gw_start_gateway() {
     set +a
     export LOCKSMITH_GATEWAY_BIND="127.0.0.1:$port" LOCKSMITH_GATEWAY_BINDINGS="$GW_BINDINGS"
     export LOCKSMITH_CONTROL_PLANE_URL="$GW_API" OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+    # A case may export more settings (GW_GATEWAY_URL is known here), e.g. oauth_lib.sh.
+    if [[ -n "${GW_GATEWAY_ENV_FN:-}" ]]; then
+      "$GW_GATEWAY_ENV_FN"
+    fi
     exec "$GW_GATEWAY_BIN"
   ) >>"$ARTIFACT_DIR/gateway.log" 2>&1 &
   GW_GATEWAY_PID=$!

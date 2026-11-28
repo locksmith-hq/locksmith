@@ -59,6 +59,8 @@ use crate::config::{Binding, Bindings};
 use crate::decrypt::{DecryptError, Decryptor, MaterialError};
 use crate::egress::{self, EgressError, Resolver};
 use crate::grants::{GrantSource, allows_relay};
+use crate::oauth::{AccessError, RelayAccessError};
+use secrecy::ExposeSecret as _;
 
 /// Label in redaction markers: `[REDACTED:SECRET]`.
 pub const REDACTION_LABEL: &str = "SECRET";
@@ -137,6 +139,9 @@ pub struct Relay {
     /// The agent-layer MCP client registry (task 4.2), read before a short-lived credential is
     /// honoured so a revoke takes effect here without waiting for `/mcp` traffic.
     revoked_agents: Option<Arc<dyn crate::mcp_clients::AgentClients>>,
+    /// Relays through a person's OAuth connection (c1 task 5.1); without it `connection_id`
+    /// requests are refused.
+    oauth: Option<Arc<crate::oauth::OAuth>>,
 }
 
 impl Relay {
@@ -162,7 +167,25 @@ impl Relay {
             aws: crate::aws::AwsOptions::default(),
             short_lived: crate::short_lived::ShortLivedStore::default(),
             revoked_agents: None,
+            oauth: None,
         }
+    }
+
+    /// The agent's connection grants for `GET /v1/grants`; empty without OAuth.
+    pub(crate) async fn connection_grants(
+        &self,
+        agent: Uuid,
+    ) -> Result<Vec<ls_oauth::ConnectionGrantListing>, RelayAccessError> {
+        match &self.oauth {
+            Some(o) => o.agent_connection_grants(agent).await,
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Serve `connection_id` relays through `oauth` (c1 task 5.1).
+    pub fn with_oauth(mut self, oauth: Arc<crate::oauth::OAuth>) -> Self {
+        self.oauth = Some(oauth);
+        self
     }
 
     /// Check short-lived credentials against the agent MCP client registry (task 4.2): a
@@ -255,8 +278,11 @@ impl Relay {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelayRequest {
-    pub secret_id: Uuid,
-    pub version: u32,
+    /// With `version`; exclusive with `connection_id`.
+    pub secret_id: Option<Uuid>,
+    pub version: Option<u32>,
+    /// A person's OAuth connection (c1 task 5.1); exclusive with `secret_id`.
+    pub connection_id: Option<Uuid>,
     pub method: String,
     pub url: String,
     #[serde(default)]
@@ -298,10 +324,16 @@ pub(crate) fn error(status: StatusCode, slug: &'static str, request_id: &str) ->
     r
 }
 
+/// What a call relays with: a bound secret, or a person's OAuth connection.
+#[derive(Clone, Copy)]
+enum Target {
+    Secret { id: Uuid, version: u32 },
+    Connection(Uuid),
+}
+
 /// A validated caller request.
 struct Parsed {
-    secret_id: Uuid,
-    version: u32,
+    target: Target,
     method: reqwest::Method,
     url: Url,
     headers: reqwest::header::HeaderMap,
@@ -310,9 +342,11 @@ struct Parsed {
 
 fn parse(body: &[u8], max_body: usize) -> Option<Parsed> {
     let req: RelayRequest = serde_json::from_slice(body).ok()?;
-    if req.version == 0 {
-        return None;
-    }
+    let target = match (req.secret_id, req.version, req.connection_id) {
+        (Some(id), Some(version), None) if version != 0 => Target::Secret { id, version },
+        (None, None, Some(id)) => Target::Connection(id),
+        _ => return None,
+    };
     let method = reqwest::Method::from_bytes(req.method.as_bytes()).ok()?;
     if method == reqwest::Method::CONNECT {
         return None;
@@ -341,8 +375,7 @@ fn parse(body: &[u8], max_body: usize) -> Option<Parsed> {
         return None;
     }
     Some(Parsed {
-        secret_id: req.secret_id,
-        version: req.version,
+        target,
         method,
         url,
         headers,
@@ -402,9 +435,18 @@ struct CallAudit {
     method: Option<Method>,
     host: Option<String>,
     port: Option<u16>,
+    /// A connection relay: the connection, and the person once it is looked up.
+    connection: Option<(Uuid, std::sync::OnceLock<Uuid>)>,
 }
 
 impl CallAudit {
+    /// Whether the ledger can take this call's events: a connection event must name the person.
+    fn auditable(&self) -> bool {
+        self.connection
+            .as_ref()
+            .is_none_or(|(_, p)| p.get().is_some())
+    }
+
     fn event(&self, kind: EventKind, status: Option<u16>, attempt_id: Option<Uuid>) -> RelayEvent {
         let host_ok = match kind {
             EventKind::Attempt => true,
@@ -428,6 +470,12 @@ impl CallAudit {
             status,
             attempt_id,
             issued: None,
+            connection: self.connection.as_ref().and_then(|(id, person)| {
+                person.get().map(|p| crate::audit::ConnectionRef {
+                    connection_id: *id,
+                    person: *p,
+                })
+            }),
         }
     }
 }
@@ -548,8 +596,9 @@ async fn handle_scoped(
         "relay",
         request_id = %request_id,
         agent.id = %agent.agent_id,
-        secret.id = %req.secret_id,
-        secret.version = req.version,
+        secret.id = tracing::field::Empty,
+        secret.version = tracing::field::Empty,
+        connection.id = tracing::field::Empty,
         upstream.host = %host,
         http.request.method = %req.method,
         outcome = tracing::field::Empty,
@@ -559,10 +608,22 @@ async fn handle_scoped(
     if let Some(o) = only {
         span.record("credential.id", tracing::field::display(o.credential_id));
     }
+    let (secret_id, version, connection) = match req.target {
+        Target::Secret { id, version } => {
+            span.record("secret.id", tracing::field::display(id));
+            span.record("secret.version", version);
+            (id, version, None)
+        }
+        Target::Connection(id) => {
+            span.record("connection.id", tracing::field::display(id));
+            (Uuid::nil(), 0, Some((id, std::sync::OnceLock::new())))
+        }
+    };
     let call = CallAudit {
         agent_id: agent.agent_id,
-        secret_id: req.secret_id,
-        version: req.version,
+        secret_id,
+        version,
+        connection,
         method: Method::from_http(&req.method),
         host: req.url.host_str().map(str::to_owned),
         port: req.url.port(),
@@ -592,6 +653,8 @@ async fn handle_scoped(
                 tracing::error!("relay attempt event not appended; refused before unwrap");
                 true
             }
+            // A connection the gateway never found has no person to name: nothing to record.
+            None if !call.auditable() => true,
             None if outcome.is_denial() => {
                 // One try: the call is refused whether or not the event lands.
                 if relay
@@ -651,6 +714,37 @@ async fn handle_scoped(
     .await
 }
 
+/// How a refused connection relay is answered and recorded.
+fn access_failure(e: RelayAccessError, unavailable: &dyn Fn() -> Failure) -> Failure {
+    match e {
+        RelayAccessError::NoGrant
+        | RelayAccessError::NotConnected
+        | RelayAccessError::UnknownConnection
+        | RelayAccessError::Token(AccessError::NotFound) => {
+            Failure::new(Outcome::NoGrant, StatusCode::FORBIDDEN, "no_grant")
+        }
+        RelayAccessError::HostNotAllowed => {
+            Failure::new(Outcome::Denied, StatusCode::FORBIDDEN, "host_not_allowed")
+        }
+        RelayAccessError::Unavailable => unavailable(),
+        RelayAccessError::Token(AccessError::NeedsReconnect) => Failure::new(
+            Outcome::MaterialError,
+            StatusCode::CONFLICT,
+            "connection_needs_reconnect",
+        ),
+        RelayAccessError::Token(AccessError::Provider) => Failure::new(
+            Outcome::MaterialError,
+            StatusCode::BAD_GATEWAY,
+            "provider_unavailable",
+        ),
+        RelayAccessError::Token(AccessError::Unavailable) => Failure::new(
+            Outcome::MaterialError,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "secret_unavailable",
+        ),
+    }
+}
+
 async fn run(
     relay: &Relay,
     call: &CallAudit,
@@ -660,35 +754,70 @@ async fn run(
 ) -> Result<RelayResponse, Failure> {
     let agent_id = call.agent_id;
     // A short-lived credential relays its one secret and nothing else (before any lookup).
-    if only.is_some_and(|o| o.secret_id != req.secret_id) {
-        return Err(denied());
+    if let Some(o) = only {
+        match req.target {
+            Target::Secret { id, .. } if id == o.secret_id => {}
+            _ => return Err(denied()),
+        }
     }
-    // 3. Grant and its expiry: refused before the binding lookup, DNS, fetch or unwrap. The
-    // expiry is re-checked here because the set may come from the cache.
-    let grants = relay.grants.grants(agent_id).await.map_err(|e| {
-        tracing::warn!(reason = e.as_str(), "agent grants could not be read");
-        Failure::new(
-            Outcome::GrantsUnavailable,
-            StatusCode::BAD_GATEWAY,
-            "grants_unavailable",
-        )
-    })?;
-    if !allows_relay(&grants, req.secret_id, time::OffsetDateTime::now_utc()) {
-        return Err(Failure::new(
-            Outcome::NoGrant,
-            StatusCode::FORBIDDEN,
-            "no_grant",
-        ));
-    }
-    drop(grants);
-
-    // 4. Binding and origin: refused before any fetch or unwrap.
-    let binding: &Binding = relay
-        .bindings
-        .for_secret(req.secret_id)
-        .ok_or_else(denied)?;
-    // 5. Address guard (resolves once; the client is pinned to the result).
-    let target = egress::check(binding, &req.url, relay.resolver.as_ref())
+    // 3-5. Grant, binding, origin and address guard: refused before any fetch or unwrap.
+    let mut conn_dev: Option<(Uuid, bool)> = None;
+    let binding: Binding = match req.target {
+        Target::Secret { id, .. } => {
+            // The expiry is re-checked because the set may come from the cache.
+            let grants = relay.grants.grants(agent_id).await.map_err(|e| {
+                tracing::warn!(reason = e.as_str(), "agent grants could not be read");
+                Failure::new(
+                    Outcome::GrantsUnavailable,
+                    StatusCode::BAD_GATEWAY,
+                    "grants_unavailable",
+                )
+            })?;
+            if !allows_relay(&grants, id, time::OffsetDateTime::now_utc()) {
+                return Err(Failure::new(
+                    Outcome::NoGrant,
+                    StatusCode::FORBIDDEN,
+                    "no_grant",
+                ));
+            }
+            drop(grants);
+            relay.bindings.for_secret(id).ok_or_else(denied)?.clone()
+        }
+        Target::Connection(id) => {
+            let oauth = relay.oauth.as_ref().ok_or_else(denied)?;
+            let unavailable = || {
+                Failure::new(
+                    Outcome::GrantsUnavailable,
+                    StatusCode::BAD_GATEWAY,
+                    "grants_unavailable",
+                )
+            };
+            // The person is looked up first so a refusal below can name them in the ledger.
+            let info = oauth
+                .connection_info(id)
+                .await
+                .map_err(|_| unavailable())?
+                .ok_or_else(|| Failure::new(Outcome::NoGrant, StatusCode::FORBIDDEN, "no_grant"))?;
+            if let Some((_, person)) = &call.connection {
+                let _ = person.set(info.person);
+            }
+            let host = span_host(&req.url);
+            let dev = oauth
+                .authorize_relay(agent_id, id, &info, req.url.scheme(), &host)
+                .await
+                .map_err(|e| access_failure(e, &unavailable))?;
+            let b = Binding {
+                secret_id: Uuid::nil(),
+                origin: req.url.origin().ascii_serialization(),
+                header: "authorization".to_owned(),
+                template: "Bearer {secret}".to_owned(),
+                allow_private_hosts: dev,
+            };
+            conn_dev = Some((id, dev));
+            b
+        }
+    };
+    let target = egress::check(&binding, &req.url, relay.resolver.as_ref())
         .await
         .map_err(|e| match e {
             EgressError::HostNotAllowed => denied(),
@@ -727,54 +856,92 @@ async fn run(
         })?;
     *attempt = Some(id);
 
-    // 7. Decrypt.
-    let value = relay
-        .decryptor
-        .decrypt(req.secret_id, req.version)
-        .await
-        .map_err(|e| match e {
-            DecryptError::Material(MaterialError::NotFound) => {
-                Failure::new(Outcome::MaterialError, StatusCode::NOT_FOUND, "not_found")
-            }
-            DecryptError::Material(_) => Failure::new(
-                Outcome::MaterialError,
-                StatusCode::BAD_GATEWAY,
-                "secret_unavailable",
-            ),
-            DecryptError::Unwrap(_) | DecryptError::Open => Failure::new(
-                Outcome::DecryptFailed,
-                StatusCode::BAD_GATEWAY,
-                "secret_unavailable",
-            ),
-        })?;
-
-    // Encoded forms of values shorter than this are not matched by ls-redact, so an echo could
-    // not be caught: refuse rather than relay unscannable (fail closed).
-    if value.expose().len() < MIN_ENCODED_LEN {
-        return Err(Failure::new(
+    // 7. Decrypt (a connection's token was opened in step 3-5 and is all there is to unwrap).
+    let unusable = || {
+        Failure::new(
             Outcome::RedactionFailed,
             StatusCode::BAD_GATEWAY,
             "secret_unusable",
-        ));
-    }
-
-    // 8. Inject: the redactor and the header value are built, then the value is dropped.
-    let redactor = Redactor::new(&[Secret::new(REDACTION_LABEL, value.expose())]);
-    let header_name = HeaderName::from_bytes(binding.header.as_bytes()).map_err(|_| {
+        )
+    };
+    let inject_failed = || {
         Failure::new(
             Outcome::InjectFailed,
             StatusCode::BAD_GATEWAY,
             "secret_unusable",
         )
-    })?;
-    let header_value = render(&binding.template, value.expose()).ok_or_else(|| {
-        Failure::new(
-            Outcome::InjectFailed,
-            StatusCode::BAD_GATEWAY,
-            "secret_unusable",
-        )
-    })?;
-    drop(value);
+    };
+    let header_name =
+        HeaderName::from_bytes(binding.header.as_bytes()).map_err(|_| inject_failed())?;
+    let access = match conn_dev {
+        Some((cid, dev)) => {
+            let unavailable = || {
+                Failure::new(
+                    Outcome::GrantsUnavailable,
+                    StatusCode::BAD_GATEWAY,
+                    "grants_unavailable",
+                )
+            };
+            let oauth = relay.oauth.as_ref().ok_or_else(denied)?;
+            Some(
+                oauth
+                    .relay_token(agent_id, cid, dev)
+                    .await
+                    .map_err(|e| access_failure(e, &unavailable))?,
+            )
+        }
+        None => None,
+    };
+    let (redactor, header_value) = match (req.target, access) {
+        (Target::Secret { id, version }, _) => {
+            let value = relay
+                .decryptor
+                .decrypt(id, version)
+                .await
+                .map_err(|e| match e {
+                    DecryptError::Material(MaterialError::NotFound) => {
+                        Failure::new(Outcome::MaterialError, StatusCode::NOT_FOUND, "not_found")
+                    }
+                    DecryptError::Material(_) => Failure::new(
+                        Outcome::MaterialError,
+                        StatusCode::BAD_GATEWAY,
+                        "secret_unavailable",
+                    ),
+                    DecryptError::Unwrap(_) | DecryptError::Open => Failure::new(
+                        Outcome::DecryptFailed,
+                        StatusCode::BAD_GATEWAY,
+                        "secret_unavailable",
+                    ),
+                })?;
+            // Encoded forms of values shorter than this are not matched by ls-redact, so an
+            // echo could not be caught: refuse rather than relay unscannable (fail closed).
+            if value.expose().len() < MIN_ENCODED_LEN {
+                return Err(unusable());
+            }
+            // 8. Inject: the redactor and the header value are built, then the value is dropped.
+            let redactor = Redactor::new(&[Secret::new(REDACTION_LABEL, value.expose())]);
+            let hv = render(&binding.template, value.expose()).ok_or_else(inject_failed)?;
+            (redactor, hv)
+        }
+        (Target::Connection(_), Some(a)) => {
+            // Both tokens are redaction secrets; a provider that echoes either is caught.
+            let access_bytes = a.access.expose_secret().as_bytes();
+            if access_bytes.len() < MIN_ENCODED_LEN {
+                return Err(unusable());
+            }
+            let mut secrets = vec![Secret::new(REDACTION_LABEL, access_bytes)];
+            if let Some(r) = a.refresh.as_ref() {
+                let rb = r.expose_secret().as_bytes();
+                if rb.len() >= MIN_ENCODED_LEN {
+                    secrets.push(Secret::new(REDACTION_LABEL, rb));
+                }
+            }
+            let redactor = Redactor::new(&secrets);
+            let hv = render(&binding.template, access_bytes).ok_or_else(inject_failed)?;
+            (redactor, hv)
+        }
+        (Target::Connection(_), None) => return Err(inject_failed()),
+    };
 
     let mut headers = req.headers;
     headers.remove(&header_name);
@@ -1470,6 +1637,7 @@ mod tests {
                 status: None,
                 attempt_id: None,
                 issued: None,
+                connection: None,
             }
         );
         assert_eq!(
@@ -2718,6 +2886,7 @@ mod tests {
             status: None,
             attempt_id: None,
             issued: None,
+            connection: None,
         };
         let attempt = sink.append(base.clone()).await.unwrap();
         let outcome = RelayEvent {

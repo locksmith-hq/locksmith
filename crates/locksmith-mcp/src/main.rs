@@ -52,8 +52,9 @@ fn tools() -> Value {
          "inputSchema": {"type": "object", "properties": {}}},
         {"name": "relay_request",
          "description": "Remote mode: send an HTTP request through the Locksmith gateway, which adds the granted credential and returns the upstream response with secrets redacted. Never pass a credential yourself: Authorization, Proxy-Authorization and Cookie headers are refused.",
-         "inputSchema": {"type": "object", "required": ["secret_id", "url"], "properties": {
-             "secret_id": {"type": "string", "description": "Secret id (UUID) from list_grants."},
+         "inputSchema": {"type": "object", "required": ["url"], "properties": {
+             "secret_id": {"type": "string", "description": "Secret id (UUID) from list_grants. Give this or connection_id."},
+             "connection_id": {"type": "string", "description": "A person's OAuth connection (UUID) from list_grants' connection_grants, instead of secret_id."},
              "version": {"type": "integer", "minimum": 1, "description": "Secret version, default 1."},
              "method": {"type": "string", "description": "HTTP method, default GET."},
              "url": {"type": "string", "description": "Upstream URL on the grant's allowed host."},
@@ -244,10 +245,15 @@ fn usage(msg: &str) -> ls_connector::Error {
 
 /// Validate `relay_request` arguments. No network or state access.
 fn relay_args(args: &Value) -> Result<RelayRequest, ls_connector::Error> {
-    let (Some(secret_id), Some(url)) = (args["secret_id"].as_str(), args["url"].as_str()) else {
-        return Err(usage("`secret_id` and `url` are required"));
+    let Some(url) = args["url"].as_str() else {
+        return Err(usage("`url` is required"));
     };
-    let secret_id = ls_connector::uuid_like(secret_id)?;
+    let (secret_id, connection_id) =
+        match (args["secret_id"].as_str(), args["connection_id"].as_str()) {
+            (Some(s), None) => (Some(ls_connector::uuid_like(s)?), None),
+            (None, Some(c)) => (None, Some(ls_connector::uuid_like(c)?)),
+            _ => return Err(usage("give exactly one of `secret_id` and `connection_id`")),
+        };
     let version = match &args["version"] {
         Value::Null => 1,
         v => v
@@ -282,6 +288,7 @@ fn relay_args(args: &Value) -> Result<RelayRequest, ls_connector::Error> {
     };
     Ok(RelayRequest {
         secret_id,
+        connection_id,
         version,
         method,
         url: url.to_owned(),
@@ -496,6 +503,8 @@ mod tests {
             json!({"secret_id": ID, "url": "https://a.example/", "body": {"k": 1}}),
             json!({"secret_id": ID, "url": "https://a.example/", "headers": {"Authorization": "Bearer x"}}),
             json!({"secret_id": ID, "url": "https://a.example/", "headers": {"cookie": "s=1"}}),
+            json!({"secret_id": ID, "connection_id": ID, "url": "https://a.example/"}),
+            json!({"connection_id": "nope", "url": "https://a.example/"}),
         ] {
             let e = relay_args(&args).err().unwrap_or_else(|| panic!("{args}"));
             assert_eq!(e.kind, ls_connector::ErrorKind::Usage, "{args}");
@@ -505,5 +514,7 @@ mod tests {
         .unwrap();
         assert_eq!((r.version, r.method.as_str()), (1, "POST"));
         assert_eq!(r.headers, [("x-a".to_owned(), "b".to_owned())]);
+        let c = relay_args(&json!({"connection_id": ID, "url": "https://a.example/"})).unwrap();
+        assert_eq!((c.secret_id, c.connection_id.as_deref()), (None, Some(ID)));
     }
 }

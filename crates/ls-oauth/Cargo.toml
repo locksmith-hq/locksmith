@@ -1,0 +1,33 @@
+[package]
+name = "ls-oauth"
+description = "Locksmith OAuth connections: provider registry and the wire types of the gateway's OAuth endpoints. No type carries a token."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Per-provider wiremock fakes for tests (C1 task 1.3). Not part of any shipped build.
+testing = ["dep:wiremock"]
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1"
+wiremock = { workspace = true, optional = true }
+toml = "1.2.1"
+# Pinned exactly: the provider client is the only code that parses a provider's token response.
+# No HTTP feature: the client runs over the caller's reqwest client (ls-http policy, no redirects).
+oauth2 = { version = "=5.0.0", default-features = false }
+secrecy = "0.10"
+ls-http = { path = "../ls-http" }
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "form"] }
+uuid = { version = "1.29", features = ["serde"] }
+
+[dev-dependencies]
+ls-oauth = { path = ".", features = ["testing"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "form"] }
+tokio = { version = "1.54", features = ["rt", "macros"] }
+insta = { workspace = true }

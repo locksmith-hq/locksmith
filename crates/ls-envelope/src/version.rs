@@ -173,6 +173,7 @@ mod kat {
                 purpose: match self.purpose.as_str() {
                     "secret-payload" => Purpose::SecretPayload,
                     "dek-wrap" => Purpose::DekWrap,
+                    "oauth-token" => Purpose::OAuthToken,
                     p => panic!("unknown purpose {p}"),
                 },
             }
@@ -184,7 +185,7 @@ mod kat {
     /// with PyCryptodome.
     fn vectors() -> Vec<Vector> {
         let f: File = serde_json::from_str(include_str!("../vectors/v1.json")).unwrap();
-        assert!(f.vectors.len() >= 4, "vector file lost entries");
+        assert!(f.vectors.len() >= 5, "vector file lost entries");
         f.vectors
     }
 

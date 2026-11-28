@@ -26,6 +26,7 @@ pub const BOOTSTRAP_PASSWORD: &str = "bootstrap-test-only";
 // infra/compose/.env.example).
 pub const OWNER_PASSWORD: &str = "locksmith-owner-dev-only";
 pub const APP_PASSWORD: &str = "locksmith-app-dev-only";
+pub const GATEWAY_PASSWORD: &str = "locksmith-gateway-dev-only";
 pub const VERIFIER_PASSWORD: &str = "locksmith-audit-verifier-dev-only";
 
 /// The control plane's migration directory (the schema every service shares).
@@ -128,6 +129,11 @@ impl Pg {
     /// `locksmith_app`: the request role (RLS applies).
     pub fn app(&self) -> PgConnectOptions {
         self.options("locksmith_app", APP_PASSWORD)
+    }
+
+    /// `locksmith_gateway`: the gateway's own role (OAuth token material, C1).
+    pub fn gateway(&self) -> PgConnectOptions {
+        self.options("locksmith_gateway", GATEWAY_PASSWORD)
     }
 
     /// `audit_verifier`: SELECT plus BYPASSRLS, used only by the audit CLI.

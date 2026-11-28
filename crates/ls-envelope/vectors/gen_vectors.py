@@ -14,7 +14,8 @@ import struct
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 LABEL = b"locksmith-ct"
-PURPOSES = {"secret-payload": b"secret-payload", "dek-wrap": b"dek-wrap"}
+PURPOSES = {"secret-payload": b"secret-payload", "dek-wrap": b"dek-wrap",
+            "oauth-token": b"oauth-token"}
 
 
 def field(b: bytes) -> bytes:
@@ -48,6 +49,15 @@ CASES = [
          secret_id=bytes((17 * i + 9) % 256 for i in range(16)),
          version=0x01020304, purpose="secret-payload",
          plaintext=b"known-answer test vector spanning several AES blocks; not a secret." * 2),
+    # The connection token set (c1-oauth-connections): secret_id is the connection id and
+    # version the generation.
+    dict(name="oauth-token-generation-3", key=bytes((7 * i + 3) % 256 for i in range(32)),
+         key_id=bytes((11 * i + 5) % 256 for i in range(16)),
+         nonce=bytes((3 * i + 0x40) % 256 for i in range(12)),
+         org_id=bytes((19 * i + 4) % 256 for i in range(16)),
+         secret_id=bytes((23 * i + 6) % 256 for i in range(16)),
+         version=3, purpose="oauth-token",
+         plaintext=b'{"access":"kat-not-a-token","refresh":"kat-not-a-token-either","exp":1}'),
 ]
 
 out = []

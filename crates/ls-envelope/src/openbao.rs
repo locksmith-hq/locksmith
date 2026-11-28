@@ -61,6 +61,9 @@ pub struct OpenBaoTransit {
     addr: String,
     mount: String,
     key: WrapKeyId,
+    /// The transit key name in the URL when it differs from `key`'s name (a name longer than
+    /// [`WrapKeyId::MAX_NAME_LEN`]).
+    transit_key: Option<String>,
     token: BaoToken,
 }
 
@@ -86,8 +89,25 @@ impl OpenBaoTransit {
             addr: validate_addr(addr)?,
             mount: "transit".to_owned(),
             key,
+            transit_key: None,
             token,
         })
+    }
+
+    /// Call the transit key `name` while the wrapped DEK header still records `key`'s (at most
+    /// 12 byte) name and version. For a transit key whose name does not fit the 16-byte header
+    /// `key_id`, such as `oauth-connections`. `name` is 1 to 64 bytes of `[A-Za-z0-9_-]`.
+    pub fn with_transit_key(mut self, name: &str) -> Result<Self, WrapError> {
+        let ok = !name.is_empty()
+            && name.len() <= 64
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+        if !ok {
+            return Err(WrapError::InvalidConfig);
+        }
+        self.transit_key = Some(name.to_owned());
+        Ok(self)
     }
 
     /// Use a transit engine mounted somewhere other than `transit` (e.g. `kms/transit`).
@@ -105,7 +125,8 @@ impl OpenBaoTransit {
     }
 
     fn url(&self, op: &str) -> String {
-        format!("{}/v1/{}/{op}/{}", self.addr, self.mount, self.key.name())
+        let key = self.transit_key.as_deref().unwrap_or(self.key.name());
+        format!("{}/v1/{}/{op}/{key}", self.addr, self.mount)
     }
 
     /// POST a JSON body; return the response body in a zeroizing buffer.

@@ -13,9 +13,11 @@
 //!
 //! `POST /internal/v1/audit/events` appends a relay event (`relay.attempt`, `relay.outcome`,
 //! `relay.denied`, for Git `git.fetch`, `git.push`, `git.denied`, `credential.issued` for a
-//! short-lived credential the agent MCP issued, and for AWS credential vending
-//! `aws.credentials.issued`, `aws.credentials.denied`) to the org's audit ledger (S5 design decision 5). The body is typed end to
-//! end: kinds, outcomes and methods are closed enums mapped to static codes, ids are UUIDs, the
+//! short-lived credential the agent MCP issued, for AWS credential vending
+//! `aws.credentials.issued`, `aws.credentials.denied`, and for OAuth connections
+//! `oauth.connected`, `oauth.connect_failed`, `oauth.refresh_failed`, `oauth.disconnected`
+//! with ids, a provider id and an outcome only) to the org's audit ledger (S5 design decision
+//! 5). The body is typed end to end: kinds, outcomes and methods are closed enums mapped to static codes, ids are UUIDs, the
 //! host is validated as a bare host name or IP, and unknown fields are refused. There is no field
 //! for a URL, path, query, header or body, so none of them can reach the ledger.
 
@@ -248,6 +250,22 @@ pub enum RelayEventKind {
     /// credential is usable, so a failed append means nothing was issued.
     #[serde(rename = "credential.issued")]
     CredentialIssued,
+    /// A person confirmed an OAuth connect flow (c1-oauth-connections task 3.4); outcome `ok`,
+    /// with `person`, `provider` and `connection_id` only.
+    #[serde(rename = "oauth.connected")]
+    OauthConnected,
+    /// An OAuth connect flow failed; outcome `wrong_person`, `flow_expired`, `provider_error` or
+    /// `exchange_failed`, with `person` and `provider` (and `connection_id` when one exists).
+    #[serde(rename = "oauth.connect_failed")]
+    OauthConnectFailed,
+    /// The provider refused a refresh; outcome `invalid_grant` or `provider_error`, with
+    /// `person`, `provider`, `connection_id` and, when an agent's relay hit it, `agent_id`.
+    #[serde(rename = "oauth.refresh_failed")]
+    OauthRefreshFailed,
+    /// A person disconnected a connection; outcome `ok` (revoked at the provider),
+    /// `revoke_failed` or `revoke_unsupported`, with `person`, `provider` and `connection_id`.
+    #[serde(rename = "oauth.disconnected")]
+    OauthDisconnected,
 }
 
 impl RelayEventKind {
@@ -265,7 +283,21 @@ impl RelayEventKind {
             Self::DbSessionOpened => kind::DB_SESSION_OPENED,
             Self::DbSessionClosed => kind::DB_SESSION_CLOSED,
             Self::CredentialIssued => kind::CREDENTIAL_ISSUED,
+            Self::OauthConnected => kind::OAUTH_CONNECTED,
+            Self::OauthConnectFailed => kind::OAUTH_CONNECT_FAILED,
+            Self::OauthRefreshFailed => kind::OAUTH_REFRESH_FAILED,
+            Self::OauthDisconnected => kind::OAUTH_DISCONNECTED,
         }
+    }
+
+    fn is_oauth(self) -> bool {
+        matches!(
+            self,
+            Self::OauthConnected
+                | Self::OauthConnectFailed
+                | Self::OauthRefreshFailed
+                | Self::OauthDisconnected
+        )
     }
 
     fn is_aws(self) -> bool {
@@ -290,6 +322,20 @@ pub enum RelayOutcome {
     UpstreamTimeout,
     UpstreamError,
     RedactionFailed,
+    /// OAuth only: the flow was confirmed by someone other than the person who started it.
+    WrongPerson,
+    /// OAuth only: the flow was not confirmed in time.
+    FlowExpired,
+    /// OAuth only: the provider answered with an error.
+    ProviderError,
+    /// OAuth only: the code exchange failed.
+    ExchangeFailed,
+    /// OAuth only: the provider refused the refresh token.
+    InvalidGrant,
+    /// OAuth only: the provider's revocation call failed (the material is deleted anyway).
+    RevokeFailed,
+    /// OAuth only: the provider has no revocation endpoint (the material is deleted anyway).
+    RevokeUnsupported,
 }
 
 impl RelayOutcome {
@@ -308,7 +354,27 @@ impl RelayOutcome {
             Self::UpstreamTimeout => Code::new("upstream_timeout"),
             Self::UpstreamError => Code::new("upstream_error"),
             Self::RedactionFailed => Code::new("redaction_failed"),
+            Self::WrongPerson => Code::new("wrong_person"),
+            Self::FlowExpired => Code::new("flow_expired"),
+            Self::ProviderError => Code::new("provider_error"),
+            Self::ExchangeFailed => Code::new("exchange_failed"),
+            Self::InvalidGrant => Code::new("invalid_grant"),
+            Self::RevokeFailed => Code::new("revoke_failed"),
+            Self::RevokeUnsupported => Code::new("revoke_unsupported"),
         }
+    }
+
+    fn is_oauth_only(self) -> bool {
+        matches!(
+            self,
+            Self::WrongPerson
+                | Self::FlowExpired
+                | Self::ProviderError
+                | Self::ExchangeFailed
+                | Self::InvalidGrant
+                | Self::RevokeFailed
+                | Self::RevokeUnsupported
+        )
     }
 
     fn is_denial(self) -> bool {
@@ -375,16 +441,26 @@ impl RelayMethod {
 }
 
 /// One relay event from the gateway. Ids, codes, a host and numbers only: there is no field
-/// for a URL, path, query string, header, body or value.
+/// for a URL, path, query string, header, body, value or token.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NewRelayEvent {
     pub kind: RelayEventKind,
     pub outcome: RelayOutcome,
-    /// The agent whose verified token made the call (the event's actor).
-    pub agent_id: Uuid,
-    /// The secret the call used (the event's target).
-    pub secret_id: Uuid,
+    /// The agent whose verified token made the call (the event's actor). Required for every
+    /// kind but `oauth.*`; optional for `oauth.refresh_failed` and refused for the other
+    /// `oauth.*` kinds.
+    pub agent_id: Option<Uuid>,
+    /// The secret the call used (the event's target). Required for every kind but `oauth.*`,
+    /// refused there.
+    pub secret_id: Option<Uuid>,
+    /// The user id of the connection's person (`oauth.*` only, required there; the actor of
+    /// `oauth.connected`, `oauth.connect_failed` and `oauth.disconnected`).
+    pub person: Option<Uuid>,
+    /// The OAuth provider id, `[a-z0-9-]{1,32}` (`oauth.*` only, required there).
+    pub provider: Option<String>,
+    /// The OAuth connection (`oauth.*` only; required there except for `oauth.connect_failed`).
+    pub connection_id: Option<Uuid>,
     #[schema(minimum = 1)]
     pub version: Option<u32>,
     pub method: Option<RelayMethod>,
@@ -433,6 +509,49 @@ fn valid_region(r: &str) -> bool {
 impl NewRelayEvent {
     /// The ledger event, or a `400` naming the field that is not allowed.
     fn into_event(self) -> Result<Event, ApiError> {
+        if self.kind.is_oauth() {
+            return self.into_oauth_event();
+        }
+        if self.outcome.is_oauth_only() {
+            return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        // A relay through a person's OAuth connection (c1 task 5.1) names the connection as its
+        // target and the person as an attribute, in place of a secret.
+        let mut attrs0 = Attrs::new();
+        let via_connection = self.connection_id.is_some()
+            && matches!(
+                self.kind,
+                RelayEventKind::Attempt | RelayEventKind::Outcome | RelayEventKind::Denied
+            );
+        if self.provider.is_some()
+            || (!via_connection && (self.person.is_some() || self.connection_id.is_some()))
+        {
+            return Err(ApiError::validation(
+                "`person`, `provider` and `connection_id` are for `oauth.*` only",
+            ));
+        }
+        let (target, agent_id) = if via_connection {
+            let (Some(agent_id), Some(connection_id), Some(person), None, None) = (
+                self.agent_id,
+                self.connection_id,
+                self.person,
+                self.secret_id,
+                self.version,
+            ) else {
+                return Err(ApiError::validation(
+                    "a connection relay needs `agent_id`, `connection_id` and `person`, and takes no `secret_id` or `version`",
+                ));
+            };
+            attrs0 = attrs0.id(attr::PERSON, person);
+            (Target::Connection(connection_id), agent_id)
+        } else {
+            let (Some(agent_id), Some(secret_id)) = (self.agent_id, self.secret_id) else {
+                return Err(ApiError::validation(
+                    "`agent_id` and `secret_id` are required",
+                ));
+            };
+            (Target::Secret(secret_id), agent_id)
+        };
         let ok = match self.kind {
             RelayEventKind::Attempt => self.outcome == RelayOutcome::Pending,
             RelayEventKind::Outcome => self.outcome != RelayOutcome::Pending,
@@ -457,6 +576,10 @@ impl NewRelayEvent {
                 self.outcome == RelayOutcome::Ok
             }
             RelayEventKind::CredentialIssued => self.outcome == RelayOutcome::Ok,
+            RelayEventKind::OauthConnected
+            | RelayEventKind::OauthConnectFailed
+            | RelayEventKind::OauthRefreshFailed
+            | RelayEventKind::OauthDisconnected => false,
         };
         if !ok {
             return Err(ApiError::validation("`outcome` does not fit `kind`"));
@@ -497,7 +620,7 @@ impl NewRelayEvent {
                 "`credential_id` and `expires_at` are for `credential.issued` only",
             ));
         }
-        let mut attrs = Attrs::new();
+        let mut attrs = attrs0;
         if self.kind.is_aws() {
             // Binding, region, duration and outcome only.
             if self.version.is_some()
@@ -534,8 +657,8 @@ impl NewRelayEvent {
             }
             return Ok(Event {
                 kind: self.kind.code(),
-                actor: Actor::Agent(self.agent_id),
-                target: Some(Target::Secret(self.secret_id)),
+                actor: Actor::Agent(agent_id),
+                target: Some(target),
                 outcome: self.outcome.code(),
                 attrs,
             });
@@ -597,8 +720,98 @@ impl NewRelayEvent {
         }
         Ok(Event {
             kind: self.kind.code(),
-            actor: Actor::Agent(self.agent_id),
-            target: Some(Target::Secret(self.secret_id)),
+            actor: Actor::Agent(agent_id),
+            target: Some(target),
+            outcome: self.outcome.code(),
+            attrs,
+        })
+    }
+
+    /// An `oauth.*` event: `person`, `provider`, `connection_id` and, for a refused refresh, the
+    /// agent; every other field is refused. There is no field that could carry a token, code,
+    /// verifier or provider response.
+    fn into_oauth_event(self) -> Result<Event, ApiError> {
+        let ok = match self.kind {
+            RelayEventKind::OauthConnected => self.outcome == RelayOutcome::Ok,
+            RelayEventKind::OauthConnectFailed => matches!(
+                self.outcome,
+                RelayOutcome::WrongPerson
+                    | RelayOutcome::FlowExpired
+                    | RelayOutcome::ProviderError
+                    | RelayOutcome::ExchangeFailed
+            ),
+            RelayEventKind::OauthRefreshFailed => matches!(
+                self.outcome,
+                RelayOutcome::InvalidGrant | RelayOutcome::ProviderError
+            ),
+            RelayEventKind::OauthDisconnected => matches!(
+                self.outcome,
+                RelayOutcome::Ok | RelayOutcome::RevokeFailed | RelayOutcome::RevokeUnsupported
+            ),
+            _ => false,
+        };
+        if !ok {
+            return Err(ApiError::validation("`outcome` does not fit `kind`"));
+        }
+        if self.secret_id.is_some()
+            || self.version.is_some()
+            || self.method.is_some()
+            || self.host.is_some()
+            || self.port.is_some()
+            || self.status.is_some()
+            || self.attempt_id.is_some()
+            || self.reason.is_some()
+            || self.duration_ms.is_some()
+            || self.bytes_in.is_some()
+            || self.bytes_out.is_some()
+            || self.credential_id.is_some()
+            || self.expires_at.is_some()
+            || self.region.is_some()
+            || self.duration_secs.is_some()
+        {
+            return Err(ApiError::validation(
+                "`oauth.*` takes only `person`, `provider`, `connection_id` and `agent_id`",
+            ));
+        }
+        let refresh = self.kind == RelayEventKind::OauthRefreshFailed;
+        if self.agent_id.is_some() && !refresh {
+            return Err(ApiError::validation(
+                "`agent_id` is for `oauth.refresh_failed` only among `oauth.*`",
+            ));
+        }
+        let person = self
+            .person
+            .ok_or_else(|| ApiError::validation("`oauth.*` needs `person`"))?;
+        // The error never echoes the value.
+        let provider = self
+            .provider
+            .as_deref()
+            .filter(|p| valid_upstream_name(p))
+            .and_then(|p| Text::parse(p).ok())
+            .ok_or_else(|| ApiError::validation("`provider` must match [a-z0-9-]{1,32}"))?;
+        if self.connection_id.is_none() && self.kind != RelayEventKind::OauthConnectFailed {
+            return Err(ApiError::validation(
+                "`connection_id` is required except for `oauth.connect_failed`",
+            ));
+        }
+        let mut attrs = Attrs::new()
+            .id(attr::PERSON, person)
+            .text(attr::PROVIDER, provider);
+        if let Some(c) = self.connection_id {
+            attrs = attrs.id(attr::CONNECTION_ID, c);
+        }
+        // Design decision 10: an agent-driven event names the agent as actor and the person as
+        // an attribute; a refresh outside any relay is the gateway's own; the rest are the
+        // person's.
+        let actor = match (refresh, self.agent_id) {
+            (true, Some(a)) => Actor::Agent(a),
+            (true, None) => Actor::Service(Code::new("gateway")),
+            (false, _) => Actor::User(person),
+        };
+        Ok(Event {
+            kind: self.kind.code(),
+            actor,
+            target: None,
             outcome: self.outcome.code(),
             attrs,
         })
@@ -619,7 +832,7 @@ pub struct AppendedEvent {
     operation_id = "append_audit_event",
     tag = "internal",
     summary = "Append a relay event to the org's audit ledger (gateway only)",
-    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, and `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable. Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
+    description = "The gateway appends `relay.attempt` before any key unwrap and refuses the call when this fails, `relay.outcome` after the upstream call, `relay.denied` for a refused call, `credential.issued` (with `credential_id` and `expires_at`, no upstream fields) before a short-lived credential becomes usable, and `oauth.connected`, `oauth.connect_failed`, `oauth.refresh_failed` and `oauth.disconnected` (with `person`, `provider` and `connection_id` only, and `agent_id` for a refresh an agent's relay hit). Unknown fields, kinds, outcomes and methods are a `400`; so is a host with a port, path or query. `relay.outcome` needs `attempt_id` and is idempotent on it: resending the same outcome returns the stored event with `200`, and a different outcome for the same attempt is a `409`.",
     params(
         ("X-Locksmith-Org" = Uuid, Header, description = "The org the event belongs to (the agent token's `org`)"),
     ),
@@ -1334,4 +1547,240 @@ pub async fn revoked_agent_clients(
         })
         .await?;
     Ok(Json(RevokedAgentClientSet { items }))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    const PERSON: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c1);
+    const CONN: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000c2);
+    const AGENT: Uuid = Uuid::from_u128(0x0197c1f0_0000_7000_8000_0000000000a1);
+
+    fn parse(v: Value) -> Result<Event, ApiError> {
+        serde_json::from_value::<NewRelayEvent>(v)
+            .map_err(|_| ApiError::validation("unparsable"))?
+            .into_event()
+    }
+
+    fn oauth(kind: &str, outcome: &str) -> Value {
+        json!({
+            "kind": kind, "outcome": outcome, "person": PERSON,
+            "provider": "github", "connection_id": CONN,
+        })
+    }
+
+    fn with(mut v: Value, key: &str, val: Value) -> Value {
+        v[key] = val;
+        v
+    }
+
+    fn without(mut v: Value, key: &str) -> Value {
+        v.as_object_mut().unwrap().remove(key);
+        v
+    }
+
+    fn attrs_json(e: &Event) -> Value {
+        e.attrs.stored().to_json()
+    }
+
+    fn relay_via_connection(kind: &str, outcome: &str) -> Value {
+        json!({
+            "kind": kind, "outcome": outcome, "agent_id": AGENT,
+            "connection_id": CONN, "person": PERSON, "method": "GET",
+            "host": "api.github.com",
+        })
+    }
+
+    /// c1 task 5.1: a relay through a connection targets the connection and carries the person.
+    #[test]
+    fn connection_relay_events_target_the_connection_and_name_the_person() {
+        let mut v = relay_via_connection("relay.attempt", "pending");
+        let e = parse(v.clone()).unwrap();
+        assert_eq!(e.target, Some(Target::Connection(CONN)));
+        assert_eq!(e.actor, Actor::Agent(AGENT));
+        assert_eq!(attrs_json(&e)["person"], json!({"id": PERSON}));
+        v["attempt_id"] = json!(CONN);
+        assert!(
+            parse(with(
+                relay_via_connection("relay.outcome", "ok"),
+                "attempt_id",
+                json!(CONN)
+            ))
+            .is_ok()
+        );
+        assert!(parse(relay_via_connection("relay.denied", "no_grant")).is_ok());
+    }
+
+    #[test]
+    fn connection_relay_events_refuse_a_secret_a_missing_person_or_a_version() {
+        let ok = relay_via_connection("relay.attempt", "pending");
+        for bad in [
+            with(ok.clone(), "secret_id", json!(CONN)),
+            without(ok.clone(), "person"),
+            without(ok.clone(), "agent_id"),
+            with(ok.clone(), "version", json!(1)),
+            with(ok.clone(), "provider", json!("github")),
+        ] {
+            assert!(parse(bad).is_err());
+        }
+        // Not a relay kind: a connection stays refused outside `oauth.*`.
+        assert!(parse(relay_via_connection("git.fetch", "ok")).is_err());
+        // A secret relay still refuses a stray person.
+        let secret = json!({"kind": "relay.attempt", "outcome": "pending", "agent_id": AGENT,
+            "secret_id": CONN, "version": 1, "person": PERSON});
+        assert!(parse(secret).is_err());
+    }
+
+    #[test]
+    fn oauth_kinds_map_to_closed_events() {
+        let expected = json!({
+            "connection_id": {"id": CONN},
+            "person": {"id": PERSON},
+            "provider": {"text": "github"},
+        });
+        for (k, o, code, oc) in [
+            ("oauth.connected", "ok", kind::OAUTH_CONNECTED, "ok"),
+            (
+                "oauth.connect_failed",
+                "wrong_person",
+                kind::OAUTH_CONNECT_FAILED,
+                "wrong_person",
+            ),
+            (
+                "oauth.disconnected",
+                "revoke_unsupported",
+                kind::OAUTH_DISCONNECTED,
+                "revoke_unsupported",
+            ),
+        ] {
+            let e = parse(oauth(k, o)).unwrap();
+            assert_eq!(e.kind, code);
+            assert_eq!(e.outcome.as_str(), oc);
+            assert_eq!(e.actor, Actor::User(PERSON), "{k}");
+            assert_eq!(e.target, None);
+            assert_eq!(attrs_json(&e), expected, "{k}");
+        }
+        // A refused refresh during an agent's relay names the agent as actor; outside a relay it
+        // is the gateway's.
+        let e = parse(with(
+            oauth("oauth.refresh_failed", "invalid_grant"),
+            "agent_id",
+            json!(AGENT),
+        ))
+        .unwrap();
+        assert_eq!(e.kind, kind::OAUTH_REFRESH_FAILED);
+        assert_eq!(e.actor, Actor::Agent(AGENT));
+        assert_eq!(e.outcome.as_str(), "invalid_grant");
+        assert_eq!(attrs_json(&e), expected);
+        let e = parse(oauth("oauth.refresh_failed", "provider_error")).unwrap();
+        assert_eq!(e.actor, Actor::Service(Code::new("gateway")));
+        // A connect can fail before any connection exists.
+        let e = parse(without(
+            oauth("oauth.connect_failed", "flow_expired"),
+            "connection_id",
+        ))
+        .unwrap();
+        assert_eq!(
+            attrs_json(&e),
+            json!({"person": {"id": PERSON}, "provider": {"text": "github"}})
+        );
+    }
+
+    #[test]
+    fn oauth_events_refuse_other_fields_outcomes_and_values() {
+        let canary = "ya29.canary-access-token";
+        let c = || oauth("oauth.connected", "ok");
+        let r = || oauth("oauth.refresh_failed", "invalid_grant");
+        let bad = [
+            // Outcomes that do not fit the kind.
+            oauth("oauth.connected", "denied"),
+            oauth("oauth.connected", "pending"),
+            oauth("oauth.connect_failed", "ok"),
+            oauth("oauth.refresh_failed", "ok"),
+            oauth("oauth.refresh_failed", "wrong_person"),
+            oauth("oauth.disconnected", "invalid_grant"),
+            // Missing required fields.
+            without(c(), "person"),
+            without(c(), "provider"),
+            without(c(), "connection_id"),
+            without(oauth("oauth.disconnected", "ok"), "connection_id"),
+            without(r(), "connection_id"),
+            // Not a UUID, not a provider slug.
+            with(c(), "person", json!("alice@example.com")),
+            with(c(), "connection_id", json!(canary)),
+            with(c(), "provider", json!(canary)),
+            with(c(), "provider", json!("GitHub")),
+            with(c(), "provider", json!("a".repeat(33))),
+            // Relay fields and the agent (outside a refresh) are refused.
+            with(c(), "agent_id", json!(AGENT)),
+            with(c(), "secret_id", json!(AGENT)),
+            with(c(), "host", json!("github.com")),
+            with(c(), "status", json!(200)),
+            with(c(), "credential_id", json!(AGENT)),
+            with(c(), "expires_at", json!(1)),
+            with(
+                oauth("oauth.disconnected", "ok"),
+                "reason",
+                json!("revoked"),
+            ),
+            // No field can carry a token, code, verifier or provider response.
+            with(c(), "access_token", json!(canary)),
+            with(c(), "refresh_token", json!(canary)),
+            with(c(), "token", json!(canary)),
+            with(c(), "code", json!(canary)),
+            with(c(), "code_verifier", json!(canary)),
+            with(r(), "error", json!(canary)),
+            // Unknown kinds stay unknown.
+            oauth("oauth.refreshed", "ok"),
+            oauth("oauth.token", "ok"),
+        ];
+        for v in bad {
+            let r = parse(v.clone());
+            assert!(r.is_err(), "accepted {v}");
+            assert_eq!(r.unwrap_err().kind, Kind::Validation, "{v}");
+        }
+    }
+
+    #[test]
+    fn relay_kinds_refuse_oauth_fields_and_outcomes() {
+        let relay = json!({
+            "kind": "relay.denied", "outcome": "denied", "agent_id": AGENT, "secret_id": CONN,
+        });
+        let e = parse(relay.clone()).unwrap();
+        assert_eq!(e.actor, Actor::Agent(AGENT));
+        assert_eq!(e.target, Some(Target::Secret(CONN)));
+        for v in [
+            with(relay.clone(), "person", json!(PERSON)),
+            with(relay.clone(), "provider", json!("github")),
+            with(relay.clone(), "connection_id", json!(CONN)),
+            without(relay.clone(), "agent_id"),
+            without(relay.clone(), "secret_id"),
+            json!({"kind": "relay.outcome", "outcome": "invalid_grant", "agent_id": AGENT,
+                   "secret_id": CONN, "attempt_id": CONN}),
+            json!({"kind": "aws.credentials.denied", "outcome": "wrong_person", "agent_id": AGENT,
+                   "secret_id": CONN, "region": "us-east-1"}),
+        ] {
+            assert!(parse(v.clone()).is_err(), "accepted {v}");
+        }
+    }
+
+    /// The request schema has no field that could hold a token or provider response.
+    #[test]
+    fn no_token_like_field_in_the_schema() {
+        let schema =
+            serde_json::to_value(<NewRelayEvent as utoipa::PartialSchema>::schema()).unwrap();
+        let props = schema["properties"].as_object().unwrap();
+        for key in props.keys() {
+            for word in ["token", "code", "verifier", "value", "body", "error"] {
+                assert!(!key.contains(word), "token-like field `{key}`");
+            }
+            assert_ne!(key, "credential");
+        }
+        assert!(props.contains_key("person"));
+        assert!(props.contains_key("provider"));
+        assert!(props.contains_key("connection_id"));
+    }
 }

@@ -274,6 +274,10 @@ impl GrantSource for GrantCache {
 pub struct GrantList {
     pub agent_id: Uuid,
     pub grants: Vec<GrantView>,
+    /// Person connections the agent may relay through (c1 task 5.1): ids, provider, the
+    /// person's display name and expiry. Never a token.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub connection_grants: Vec<ls_oauth::ConnectionGrantListing>,
 }
 
 /// One grant as the agent sees it. No value, ever.
@@ -336,12 +340,24 @@ async fn list(relay: &Relay, headers: &HeaderMap, request_id: &str) -> Response 
         }
     };
     let grants = grant_views(relay, grants);
-    tracing::info!(grants = grants.len(), "agent grants listed");
+    let connection_grants = match relay.connection_grants(agent.agent_id).await {
+        Ok(g) => g,
+        Err(_) => {
+            tracing::warn!("agent connection grants could not be read");
+            return error(StatusCode::BAD_GATEWAY, "grants_unavailable", request_id);
+        }
+    };
+    tracing::info!(
+        grants = grants.len(),
+        connection_grants = connection_grants.len(),
+        "agent grants listed"
+    );
     let mut r = (
         StatusCode::OK,
         Json(GrantList {
             agent_id: agent.agent_id,
             grants,
+            connection_grants,
         }),
     )
         .into_response();

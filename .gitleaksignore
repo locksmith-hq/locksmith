@@ -61,5 +61,10 @@ e009ecf947a1cbde65c3dae35023062e15315809:packages/control-plane-client/src/index
 # t7 HPKE known-answer vectors: public test keys, not secrets (worker alfie, 2026-11-22).
 016ae34ad2889d9e63e161849c3ed2fa41bf37ea:crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
 crates/ls-envelope/vectors/hpke-v1.json:generic-api-key:54
+# c1 OAuthToken known-answer vectors: public test keys and ids, not secrets (worker-c, 2026-11-24).
+61aa114de18b696ba75f4e4939b6553e10fa1083:crates/ls-envelope/vectors/v1.json:generic-api-key:59
+61aa114de18b696ba75f4e4939b6553e10fa1083:crates/ls-envelope/vectors/v1.json:generic-api-key:63
+crates/ls-envelope/vectors/v1.json:generic-api-key:59
+crates/ls-envelope/vectors/v1.json:generic-api-key:63
 # b2 dev-only compose agent signing seed (public placeholder, not a secret) (worker captain-america, 2026-11-24).
 9b326952d700a3331c31da7abe3de60420ffa1be:infra/compose/.env.example:generic-api-key:31

@@ -3,7 +3,8 @@
 # plants gateway cases and a register in a temporary directory (ADVERSARIAL_GATEWAY_DIR) and
 # checks that an unlisted leak fails, a listed form reports RESIDUAL, a stale entry fails, an
 # entry with `artifacts` is judged per listed file, a register entry for a missing case fails, a bad register fails, case filters work, skips follow
-# ADVERSARIAL_REQUIRE_ALL, lib.sh skips with `skip: stack not running`, ADVERSARIAL_KEEP=1 keeps
+# ADVERSARIAL_REQUIRE_ALL, lib.sh skips with `skip: stack not running`, the OAuth provider stub
+# (fixtures/oauth_provider.py) enforces what G13 and G14 rely on, ADVERSARIAL_KEEP=1 keeps
 # the work directory, and run.sh never prints a canary. Usage: tests/adversarial/run_test.sh
 set -euo pipefail
 
@@ -199,6 +200,90 @@ printf '%s\n' '{"jsonrpc":"2.0","id":"a","result":{"structuredContent":{"items":
 if python3 -I "$chk" scan-keys "$t/mcp-keys.json" >/dev/null 2>&1; then bad "mcp_check scan-keys missed a value-like result key"; else ok "mcp_check scan-keys flags a value-like result key"; fi
 printf '%s\n' '{"jsonrpc":"2.0","id":"a","result":{"structuredContent":{"items":[{"secret_id":"x","token_expires_at":"y"}]}}}' >"$t/mcp-keys.json"
 if python3 -I "$chk" scan-keys "$t/mcp-keys.json" >/dev/null 2>&1; then ok "mcp_check scan-keys accepts metadata keys"; else bad "mcp_check scan-keys rejected metadata keys"; fi
+
+# The OAuth provider stub of G13 and G14 (fixtures/oauth_provider.py) must really enforce what the
+# cases rely on: PKCE S256 at authorize and at the token endpoint, single-use codes, client
+# credentials, the canary refresh token, the redirect modes, and a request log without values.
+if command -v openssl >/dev/null 2>&1; then
+  oap="$here/fixtures/oauth_provider.py"
+  o="$t/oauth"
+  mkdir -p "$o"
+  python3 -I "$here/../kit/oracle.py" gen >"$o/canary"
+  cp "$o/canary" "$t/spy/oauth.canary"
+  echo normal >"$o/mode"
+  printf 'acme-client-secret' >"$o/secret"
+  python3 -I "$oap" keygen "$o/idp"
+  python3 -I "$oap" serve "$o/port" "$o/hits.log" "$o/mode" "$o/canary" "$o/idp" acme-client "$o/secret" 2>"$o/err" &
+  oap_pid=$!
+  for _ in $(seq 1 100); do [[ -s "$o/port" ]] && break; sleep 0.05; done
+  python3 -I - "http://127.0.0.1:$(cat "$o/port")" "$o" >"$t/oauth-stub.out" 2>&1 <<'PY' && ok "oauth_provider.py enforces PKCE S256, single-use codes, client and refresh checks" || bad "oauth_provider.py: $(tail -n 1 "$t/oauth-stub.out")"
+import base64, hashlib, json, secrets, sys, urllib.error, urllib.parse, urllib.request
+base, o = sys.argv[1:3]
+realm = base + "/realms/provider/protocol/openid-connect"
+canary = open(o + "/canary").read().strip()
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a):
+        return None
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect)
+def call(url, form=None, headers=None):
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(form).encode() if form else None,
+                                 headers=headers or {})
+    try:
+        r = op.open(req, timeout=10)
+        return r.status, r.headers, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers, e.read()
+def check(cond, what):
+    if not cond:
+        sys.exit("FAILED: " + what)
+redirect = "http://127.0.0.1:9/oauth/callback"
+v = secrets.token_urlsafe(48)
+ch = base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).rstrip(b"=").decode()
+def authorize(method="S256"):
+    q = {"response_type": "code", "client_id": "acme-client", "redirect_uri": redirect, "state": "s1",
+         "code_challenge": ch, "code_challenge_method": method}
+    st, h, _ = call(realm + "/auth?" + urllib.parse.urlencode(q))
+    check(st == 302, "authorize answers 302")
+    return urllib.parse.parse_qs(urllib.parse.urlsplit(h.get("Location", "")).query)
+check(json.loads(call(base + "/idp/jwks")[2])["keys"][0]["kid"] == "adv-1", "jwks served")
+check("error" in authorize("plain") and "code" not in authorize("plain"), "plain PKCE refused")
+code = authorize()["code"][0]
+tok = {"grant_type": "authorization_code", "code": code, "redirect_uri": redirect, "client_id": "acme-client",
+       "client_secret": "acme-client-secret"}
+check(call(realm + "/token", tok)[0] == 400, "a code without the verifier is refused")
+check(call(realm + "/token", dict(tok, code_verifier="wrong" * 10))[0] == 400, "a wrong verifier is refused")
+check(call(realm + "/token", dict(tok, code_verifier=v, client_secret="nope"))[0] == 401, "a wrong client secret is refused")
+check(call(realm + "/token", dict(tok, code_verifier=v, redirect_uri=redirect + "x"))[0] == 400, "another redirect_uri is refused")
+st, _, body = call(realm + "/token", dict(tok, code_verifier=v))
+check(st == 200 and json.loads(body)["access_token"] == canary, "the right verifier gets the canary token")
+check(call(realm + "/token", dict(tok, code_verifier=v))[0] == 400, "a code is single use")
+ref = {"grant_type": "refresh_token", "client_id": "acme-client", "client_secret": "acme-client-secret"}
+check(call(realm + "/token", dict(ref, refresh_token="other"))[0] == 400, "another refresh token is refused")
+check(call(realm + "/token", dict(ref, refresh_token=canary))[0] == 200, "the canary refresh token refreshes")
+check(call(base + "/api/me")[0] == 401, "the API wants the bearer")
+check(call(base + "/api/me", headers={"Authorization": "Bearer " + canary})[0] == 200, "the API takes the canary bearer")
+open(o + "/mode", "w").write("redirect-307\nhttp://127.0.0.1:9/steal\n")
+st, h, _ = call(realm + "/token", dict(tok, code_verifier=v))
+check(st == 307 and h.get("Location") == "http://127.0.0.1:9/steal", "redirect mode answers 307 to the target")
+hits = open(o + "/hits.log").read()
+check(canary not in hits and v not in hits and code not in hits and "acme-client-secret" not in hits,
+      "the request log holds no value")
+print("ok")
+PY
+  kill "$oap_pid" 2>/dev/null || true
+  wait "$oap_pid" 2>/dev/null || true
+  python3 -I "$here/fixtures/oauth_provider.py" mint "$o/idp" http://idp.example acme-api alice "$o/alice.hdr"
+  if grep -q '^Authorization: Bearer [A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$' "$o/alice.hdr"; then
+    ok "oauth_provider.py mints an RS256 token header"
+  else
+    bad "oauth_provider.py mint wrote no bearer header"
+  fi
+else
+  echo "SKIP  oauth_provider.py checks (openssl is not installed)"
+fi
+for f in "$here"/gateway/*.sh; do
+  bash -n "$f" || bad "syntax: $f"
+done
 
 # Nothing run.sh printed holds a canary in any encoding the oracle knows.
 cat "$t/spy"/*.canary >"$t/all.canaries"

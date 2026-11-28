@@ -1,0 +1,1 @@
+{"id":"0194a3c0-1111-7000-8000-000000000002","provider":"slack","account_login":"alice","account_id":"U123","scopes":["chat:write"],"status":"refresh_failed","connected_at":"2026-11-20T09:00:00Z","last_error_code":"invalid_grant"}

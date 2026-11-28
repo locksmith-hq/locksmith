@@ -501,9 +501,11 @@ pub fn agent_tools() -> Vec<ToolDef> {
             ),
             page_input(&[], json!({})),
             page_of(obj(
-                &["secret_id", "name", "mode"],
+                &["mode"],
                 json!({"secret_id": id(), "name": {"type": "string"},
                        "mode": {"type": "string"},
+                       "connection_id": id(), "provider": {"type": "string"},
+                       "person_name": {"type": "string"},
                        "allowed_origin": {"type": ["string", "null"]},
                        "grant_expires_at": {"type": ["string", "null"], "format": "date-time"}}),
             )),
@@ -512,12 +514,14 @@ pub fn agent_tools() -> Vec<ToolDef> {
             tool(
                 "relay_http_request",
                 "Send an HTTP request through the gateway; it injects the credential and \
-                 returns the redacted response.",
+                 returns the redacted response. Give a secret (`secret_id` and `version`) or \
+                 a person's connection (`connection_id`, from `list_my_keys`), not both.",
                 true,
             ),
             obj(
-                &["secret_id", "version", "method", "url"],
+                &["method", "url"],
                 json!({"secret_id": id(), "version": {"type": "integer", "minimum": 1},
+                       "connection_id": id(),
                        "method": {"type": "string",
                                   "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]},
                        "url": {"type": "string", "format": "uri"},

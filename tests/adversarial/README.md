@@ -56,7 +56,10 @@ the ledger and a dump of every table to `ARTIFACT_DIR`, and the oracle scans the
 
 Fixtures. `fixtures/git_upstream.py` is A1's Git upstream. `fixtures/http_upstream.py` is A3b's
 reflecting API, run once as the provider and once as the attacker's host; everything the
-attacker's host receives is logged into `ARTIFACT_DIR`.
+attacker's host receives is logged into `ARTIFACT_DIR`. `fixtures/oauth_provider.py` is the
+OAuth provider (and the people's token issuer) of G13, G14 and the `oauth` live prompt, set up by
+`gateway/oauth_lib.sh`; `run_test.sh` checks that it enforces PKCE S256, single-use codes and
+client credentials.
 
 ## Gateway gate (S6)
 
@@ -78,6 +81,8 @@ and its own environment.
 | `G10` | hub MCP (control plane `/mcp`) | the same scans on the hub: the person signs in on Keycloak (as `just mcp-e2e`), the sentinel is a secret in their org, the six read tools are listed and succeed, the off `revoke_grant` and `pause_agents` and unknown names are refused by name and the grant is not revoked; `mcp.call` events only name layer, tool and reason (needs Keycloak and `just api` with the hub MCP URL; otherwise `skip: stack not running`) |
 | `G11` | Postgres relay | `psql` through the gateway's pgwire listener (TLS, agent token as password, hostile startup `user=postgres`) to a throwaway role whose password is the canary: a `RAISE NOTICE` and `RAISE EXCEPTION` that echo the canary (message, DETAIL, HINT) arrive redacted; `options=-c role=... -c session_authorization=...` and `replication=database` leave the session on the bound role; 45 CancelRequests with guessed keys (the upstream's real pid, random pairs) cancel nothing; one `db.session.opened`/`closed` pair per session, no `db.session.denied`. Startup parameter injection on the wire is a Rust test (`pg_relay_startup_parameter_injection_is_not_forwarded`); needs `just up`, `just api`, psql and openssl |
 | `G12` | AWS credential vending | `POST /v1/aws/credentials` against an STS stub (`fixtures/sts_stub.py`): an agent-supplied policy, scope, role and external id are ignored (STS gets the grant-rendered policy), over-duration is clamped to the grant maximum or refused and under 900 s is 400 with no STS call, an STS error body that echoes the role and the base credential becomes the fixed `sts_error` slug, an STS answer carrying the base credential is `redaction_failed`; the base credential is in no response, `smith aws credential-process` output, log or ledger event |
+| `G13` | OAuth token custody | a person's connection through the gateway's real OAuth endpoints against a provider stub (`fixtures/oauth_provider.py`) that issues the canary as access and refresh token: connect (extra scopes in the body ignored, PKCE S256), consent, callback (a redirect with `flow` and `result` only), confirm, the person's grant, relays through `smith relay --connection`, the gateway `/mcp`, `locksmith-mcp` and `/v1/relay` (also to an endpoint that reflects the bearer), one refresh on use, disconnect (revoked at the provider, material deleted, the next relay refused); `locksmith_app` cannot read `oauth_token_material`; the canary is in no response, `smith` output, log, stub log, database dump or ledger event (`apps/api` only when `E2E_NEST_API_URL` runs it) |
+| `G14` | OAuth flow integrity | the same stub: forged, tampered, missing and replayed `state` (`flow_not_found`, no token request), a stolen code refused by the provider without or with a wrong PKCE verifier, an attacker's code injected into a person's callback, a flow bob started confirmed by alice (`wrong_person`, tokens revoked and deleted), `return_to` on other origins and an unknown provider (400, no flow), a token endpoint that redirects (302, 307) to an internal address (not followed), relay without a grant (`no_grant`, provider not called) and to hosts that are not the provider's API host (`host_not_allowed`), and bob disconnecting alice's connection (403) |
 
 Residual register. `gateway/residuals.toml` lists the leak paths the gate accepts for now, each
 with a case, an oracle encoding label, a protection label (prevention, containment or detection)
@@ -102,7 +107,7 @@ Two tiers.
 
 Live mode. With `--agent claude`, `gateway/live.sh` sets up an org, a canary bound to the
 reflecting fixture, an attacker's host and a logged-in agent, then runs each prompt in
-`gateway/prompts/` (`env`, `reflection`, `header-echo`, `encodings`, `api`, `token`) as a
+`gateway/prompts/` (`env`, `reflection`, `header-echo`, `encodings`, `api`, `token`, `git`, `oauth`) as a
 headless `claude -p --bare` in the agent's environment, with only the Locksmith MCP server
 (`--mcp-config`, `--strict-mcp-config`) and Bash. Transcripts (stream-json) go to
 `transcripts/<prompt>.jsonl` and are scanned with `oracle.py scan --transcript`; a hit passes

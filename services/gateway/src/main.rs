@@ -17,6 +17,7 @@ use ls_gateway::grants::{GrantCache, GrantCacheSettings};
 use ls_gateway::mcp_clients::ClientsCache;
 use ls_gateway::mcp_endpoint::McpEndpoint;
 use ls_gateway::mcp_settings::SettingsCache;
+use ls_gateway::oauth::OAuth;
 use ls_gateway::pg::{Connector, PgListener, PgListenerOptions, PgRelayUpstream, tls_acceptor};
 use ls_gateway::relay::{Relay, RelayOptions};
 use ls_gateway::ttl::MAX_CACHE_TTL;
@@ -136,11 +137,15 @@ async fn main() -> ExitCode {
     // read on every `/mcp` request through a cache of at most 10 s, failing closed.
     let clients = Arc::new(ClientsCache::new(control_plane.clone(), MAX_CACHE_TTL));
     let audit = Arc::new(HttpAudit::new(control_plane.clone()));
+    let oauth_audit: Arc<dyn ls_gateway::audit::AuditSink> = audit.clone();
     // `/mcp` verifies with the same AgentAuth as `/v1` (one token, one verifier).
     let mcp = McpEndpoint::new(auth.clone(), &config.mcp_allowed_hosts)
         .with_settings_source(tool_settings)
         .with_clients(clients.clone());
     let binding_count = config.bindings.bindings.len();
+    let org_id = config.bindings.org_id;
+    let openbao_addr = config.openbao.addr.clone();
+    let oauth_config = config.oauth;
     // The static per-tool rules of the MCP upstreams (m2-mcp-gateway task 3.1).
     let tool_policy: Arc<dyn ls_mcp_server::upstream::ToolPolicy> = Arc::new(
         ls_gateway::mcp_upstream::policy::StaticToolPolicy::new(&config.bindings.mcp_upstreams),
@@ -157,7 +162,28 @@ async fn main() -> ExitCode {
     // Task 6.2: the non-secret inventory goes to the control plane in the background; a failure
     // only logs and never blocks the relay.
     bindings_publish::spawn_publish(control_plane, bindings_publish::summaries(&config.bindings));
-    let relay = Relay::new(
+    // OAuth connections (C1), on when LOCKSMITH_GATEWAY_OAUTH_CONSOLE_ORIGINS is set. The flow
+    // and token tables are reached through this pool, which connects as locksmith_gateway.
+    // Unconfirmed flows are revoked and deleted by a sweeper; the enabled providers are
+    // published to `oauth_providers` in the background (decision 9).
+    let mut oauth_sweeper = None;
+    let mut oauth_arc = None;
+    if let Some(oauth) = oauth_config {
+        match OAuth::from_config(oauth, org_id, database.clone(), &openbao_addr) {
+            Ok(o) => {
+                tracing::info!(providers = ?o.provider_ids(), "oauth connections enabled");
+                let o = Arc::new(o.with_audit(oauth_audit));
+                o.spawn_publish_providers();
+                oauth_sweeper = Some(o.spawn_sweeper(ls_gateway::oauth::SWEEP_INTERVAL));
+                oauth_arc = Some(o);
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "oauth connections could not be configured");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    let mut relay = Relay::new(
         auth,
         grants,
         config.bindings,
@@ -169,6 +195,9 @@ async fn main() -> ExitCode {
     // Short-lived credentials of a revoked agent are refused on `/v1` too (same 10 s cache).
     .with_revoked_agents(clients)
     .with_aws(aws);
+    if let Some(o) = &oauth_arc {
+        relay = relay.with_oauth(Arc::clone(o));
+    }
 
     let relay = Arc::new(relay);
 
@@ -233,12 +262,14 @@ async fn main() -> ExitCode {
         }
     };
 
-    let router = app::build(
-        AppState::new(readiness)
-            .with_relay(relay)
-            .with_mcp(mcp)
-            .with_tool_policy(tool_policy),
-    );
+    let mut state = AppState::new(readiness)
+        .with_relay(relay)
+        .with_mcp(mcp)
+        .with_tool_policy(tool_policy);
+    if let Some(o) = oauth_arc {
+        state = state.with_oauth(o);
+    }
+    let router = app::build(state);
     let listener = match tokio::net::TcpListener::bind(config.bind).await {
         Ok(l) => l,
         Err(e) => {
@@ -255,6 +286,9 @@ async fn main() -> ExitCode {
         .await;
     probe.abort();
     sweeper.abort();
+    if let Some(t) = oauth_sweeper {
+        t.abort();
+    }
     if let Some(t) = pg_task {
         t.abort();
     }

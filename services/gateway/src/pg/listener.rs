@@ -289,6 +289,7 @@ impl PgListener {
             status: None,
             attempt_id,
             issued: None,
+            connection: None,
         };
         let opened_id = match self
             .relay
@@ -553,6 +554,7 @@ impl PgListener {
             status: None,
             attempt_id: None,
             issued: None,
+            connection: None,
         };
         if let Err(e) = self.relay.audit().append(ev).await {
             tracing::warn!(error = %e, "pg: db.session.denied event not recorded");

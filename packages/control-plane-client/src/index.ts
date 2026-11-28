@@ -29,6 +29,7 @@ export type McpClient = components["schemas"]["McpClient"];
 export type BindingSummary = components["schemas"]["BindingSummary"];
 export type BindingKind = components["schemas"]["BindingKind"];
 export type Problem = components["schemas"]["Problem"];
+export * from "./oauth";
 
 /** Non-secret fields of a binding as label/value pairs for display, in a fixed order per kind; unset fields are skipped. */
 export function bindingDetails(b: BindingSummary): Array<[label: string, value: string]> {

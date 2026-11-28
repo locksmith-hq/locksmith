@@ -1680,7 +1680,7 @@ function Overview({ db }: { db: Db }) {
                 </b>
               ))}
             </span>
-            <span className="r">Left</span>
+            <span className="text-right">Left</span>
             <span />
           </div>
         )}
@@ -1711,7 +1711,7 @@ function Overview({ db }: { db: Db }) {
               {grid}
               <span className="bar" style={{ width: x(s.expires) }} />
             </span>
-            <span className="r mono left" title={`Token expires ${clock(s.expires)}`}>
+            <span className="text-right mono left" title={`Token expires ${clock(s.expires)}`}>
               {left(s.expires - NOW)}
             </span>
             <Button
@@ -2502,7 +2502,7 @@ function Agents({ db }: { db: Db }) {
                   </span>
                 </Button>
                 <span className="muted small">{plural(gs.length, "secret")}</span>
-                <span className="r muted small nowrap">{ago(a.lastSeen)}</span>
+                <span className="text-right muted small nowrap">{ago(a.lastSeen)}</span>
                 <span />
               </div>
               {open === a.name && (

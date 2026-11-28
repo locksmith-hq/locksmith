@@ -60,9 +60,7 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
   const [confirm, setConfirm] = useState("");
   const dirty = JSON.stringify(s) !== JSON.stringify(saved);
   const set = <K extends keyof S>(k: K, v: S[K]) => setS((x) => ({ ...x, [k]: v }));
-  const toggle = (k: Flag, label: string, keyed = false) => (
-    <Switch label={label} checked={s[k]} keyed={keyed} onChange={(on) => set(k, on)} />
-  );
+  const toggle = (k: Flag, label: string) => <Switch label={label} checked={s[k]} onChange={(on) => set(k, on)} />;
   const noSignIn = !s.password && !s.google && !s.github;
 
   return (
@@ -104,7 +102,7 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
 
       <Card className="panel" role="region" aria-labelledby="set-signin">
         <h2 id="set-signin">Sign-in</h2>
-        <Row title="Email and password">{toggle("password", "Allow email and password", true)}</Row>
+        <Row title="Email and password">{toggle("password", "Allow email and password")}</Row>
         <Row title="Google">{toggle("google", "Allow Google sign-in")}</Row>
         <Row title="GitHub">{toggle("github", "Allow GitHub sign-in")}</Row>
         <Row

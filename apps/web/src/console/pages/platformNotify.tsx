@@ -173,7 +173,7 @@ function Inbox({ say, unread }: { say: PageProps["say"]; unread: number }) {
         </Button>
       </Head>
       <Tabs at="" unread={unread} />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(view)} aria-label="Show">
           {(
             [

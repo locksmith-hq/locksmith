@@ -568,7 +568,7 @@ function CertList({ say }: { say: Say }) {
         </ul>
       )}
       <h2 className="ct-h">All certificates</h2>
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <label className="search">
           <span className="sr-only">Search by name</span>
           <Icon name="search" />

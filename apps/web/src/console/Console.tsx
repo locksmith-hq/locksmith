@@ -1052,7 +1052,7 @@ function Integrations({ say }: { say: (note: string) => void }) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(kind)} aria-label="Kind">
           {(["All", ...seed.kinds] as const).map((k) => (
             <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setKind(k)}>
@@ -2284,7 +2284,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
   return (
     <section>
       <Head title="Secrets" sub={p.description} />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={env ?? ""} aria-label="Environment">
           {p.envs.map((v) => (
             <ToggleGroupItem

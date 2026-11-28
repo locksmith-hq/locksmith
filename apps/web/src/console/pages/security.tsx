@@ -65,7 +65,7 @@ function FindingList() {
       <p className="sec-status" role="status">
         {open.length === 0 ? "No open findings." : `${plural(open.length, "open finding")}, ${crit} critical.`}
       </p>
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <Label className="field sc-search">
           Search
           <Input

@@ -121,7 +121,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 
 
 /* Keys */
-.toolbar { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
 .add { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 16px; }
 
 /* Relays */

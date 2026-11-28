@@ -617,7 +617,7 @@ function Keys({ say, sub }: PageProps) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <label className="search">
           <span className="sr-only">Find a key by name</span>
           <Icon name="search" />
@@ -1161,7 +1161,7 @@ function Activity({ say }: PageProps) {
         title="Activity"
         sub="Every encrypt, decrypt, sign and verify request, and every change made in this console."
       />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <Sel
           label="Filter by result"
           value={res}

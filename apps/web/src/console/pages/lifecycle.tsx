@@ -54,7 +54,7 @@ function History({ project, say }: PageProps) {
         title="History"
         sub={`Every change to the secrets and lifecycle settings in ${p}: who did it and what changed. Values are never shown.`}
       />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(env)} aria-label="Environment">
           {["All", ...envsOf(p)].map((e) => (
             <ToggleGroupItem key={e} size="sm" value={String(e)} onClick={() => setEnv(e)}>

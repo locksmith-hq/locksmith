@@ -613,7 +613,7 @@ function Grants({ say }: PageProps) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <Label className="field">
           Agent
           <Dropdown value={agent} onChange={(e) => setAgent(e)}>

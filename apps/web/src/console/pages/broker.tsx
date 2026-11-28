@@ -855,7 +855,7 @@ function Resources({ say }: PageProps) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(kind)} aria-label="Kind">
           {(["All", ...kinds] as const).map((k) => (
             <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setKind(k)}>
@@ -1314,7 +1314,7 @@ function SessionList({ say }: { say: PageProps["say"] }) {
           </div>
         </div>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(view)} aria-label="Show">
           {(
             [
@@ -1502,7 +1502,7 @@ function Recordings({ sub, say }: PageProps) {
         </Empty>
       ) : (
         <>
-          <div className="toolbar">
+          <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
             <label className="br-check">
               <Checkbox checked={ui.flagged} onCheckedChange={(on) => setUiState({ flagged: on === true })} />
               Flagged only

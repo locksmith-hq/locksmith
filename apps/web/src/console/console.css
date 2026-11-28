@@ -36,8 +36,6 @@ select {
   height: 32px; padding: 0 28px 0 10px; border: 1px solid var(--input); border-radius: 9px; background: var(--card);
   font: 13px var(--font-sans); color: var(--foreground);
 }
-.toolbar { align-items: center; }
-.toolbar .push { margin-left: auto; }
 
 /* Lists whose rows are links. */
 .list a.row { text-decoration: none; transition: background-color 120ms var(--ease-out); }

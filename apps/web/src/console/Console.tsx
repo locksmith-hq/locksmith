@@ -19,7 +19,7 @@ import { Dropdown, Option } from "../Dropdown";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { Fragment, useContext, useEffect, useLayoutEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { Icon, Logo, Switch, TabBusy, TabLoader, type IconName } from "./kit";
+import { Icon, Logo, SectionHead, Switch, TabBusy, TabLoader, type IconName } from "./kit";
 import { Loader as KitLoader } from "@locksmith-hq/ui/loader";
 import * as seed from "./data";
 import { paid } from "./paid";
@@ -813,9 +813,9 @@ function Hub({ db, org, name }: { db: Db; org: boolean; name: string }) {
       {groups.map((g, i) => (
         <Fragment key={g}>
           {groups.length > 1 && (
-            <div className={i ? "sec-h spaced" : "sec-h"}>
+            <SectionHead spaced={!!i}>
               <h2>{g}</h2>
-            </div>
+            </SectionHead>
           )}
           <div className="hub-grid">
             {seed.products
@@ -1607,7 +1607,7 @@ function Overview({ db }: { db: Db }) {
         <span className="mono id">{s.id}</span>
       </span>
       <span className="who-2">
-        {s.project} / <span className={s.env === "production" ? "prod" : undefined}>{s.env}</span> ·{" "}
+        {s.project} / <span className={s.env === "production" ? "text-(--warning-text)" : undefined}>{s.env}</span> ·{" "}
         {agentOf(s.agent)?.machine ?? "removed agent"}
       </span>
     </span>
@@ -1658,12 +1658,12 @@ function Overview({ db }: { db: Db }) {
           </Button>
         )}
       </Head>
-      <div className="sec-h">
+      <SectionHead inset>
         <h2>Sessions</h2>
         <span className="n">
           {live.length} live{ended.length > 0 && ` · ${ended.length} ended`}
         </span>
-      </div>
+      </SectionHead>
       <div className="tl-list" role="list" aria-label="Sessions">
         {live.length > 0 && (
           <div className="tl-row tl-axis" aria-hidden="true">
@@ -1745,12 +1745,12 @@ function Overview({ db }: { db: Db }) {
         ))}
       </div>
 
-      <div className="sec-h spaced">
+      <SectionHead spaced inset>
         <h2 id="h-events">Activity</h2>
         <a className="link" href="#/access/activity">
           All activity
         </a>
-      </div>
+      </SectionHead>
       <Log events={seed.events.slice(0, 10)} />
       <p className="log-foot">
         <Icon name="shield" />
@@ -1905,7 +1905,9 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
                 <TableRow key={s.id + g.agent}>
                   <TableCell className="strong">{g.agent}</TableCell>
                   <TableCell className="mono">{s.name}</TableCell>
-                  <TableCell className={s.env === "production" ? "prod" : undefined}>{s.env}</TableCell>
+                  <TableCell className={s.env === "production" ? "text-(--warning-text)" : undefined}>
+                    {s.env}
+                  </TableCell>
                   <TableCell className="muted">{until(g.expires)}</TableCell>
                   <TableCell className="num">
                     <Button
@@ -2163,7 +2165,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
                 setOpen(null);
               }}
             >
-              <span className={v === "production" ? "prod" : undefined}>{v}</span>
+              <span className={v === "production" ? "text-(--warning-text)" : undefined}>{v}</span>
             </ToggleGroupItem>
           ))}
         </ToggleGroup>

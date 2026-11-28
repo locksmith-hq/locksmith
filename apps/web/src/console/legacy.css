@@ -59,13 +59,8 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 
 /* Screen scaffolding */
 
-.sec-h { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; }
-.sec-h h2 { margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; }
-.sec-h .n { color: var(--muted-foreground); font-size: 13px; }
-.sec-h.spaced { margin-top: 32px; }
 
 .state-ic { width: 32px; height: 32px; flex: none; border-radius: 9px; display: grid; place-items: center; background: var(--muted); color: var(--muted-foreground); }
-.done { min-height: 20px; margin: 12px 0 0; color: var(--live-text); font-weight: 600; }
 
 /* Cards and lists */
 .sessions { display: flex; flex-direction: column; gap: 12px; }
@@ -80,7 +75,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .who { min-width: 0; }
 .who b { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; line-height: 20px; }
 .who > span { display: block; margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prod { color: var(--warning-text); }
 .live-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px var(--live-weak); }
 .scopes, .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .ls-scope { height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px 0 5px; border-radius: 7px; background: var(--muted); color: var(--chip-text); font: 500 12px var(--font-mono); font-variant-ligatures: none; }
@@ -96,7 +90,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 
 /* Overview. Signature: every live lease on one shared axis from "now" to the latest expiry. */
 .overview { max-width: 1120px; }
-.overview .sec-h { margin-bottom: 6px; padding: 0 10px; }
 .tl-list { --tl-cols: minmax(200px, 260px) 156px minmax(140px, 1fr) 72px 76px; }
 .tl-row {
   display: grid; grid-template-columns: var(--tl-cols); align-items: center; column-gap: 16px;

@@ -201,3 +201,29 @@ export function TabLoader() {
     </div>
   ) : null;
 }
+
+/** A section heading with a quiet count or action beside it. `inset` lines it up with the overview's list rows. */
+export function SectionHead({
+  children,
+  spaced,
+  inset,
+  top,
+}: {
+  children: ReactNode;
+  spaced?: boolean;
+  inset?: boolean;
+  top?: number;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-baseline gap-2.5 mb-3 [&_h2]:m-0 [&_h2]:text-base [&_h2]:leading-[22px] [&_h2]:font-semibold [&_h2]:tracking-[-0.01em] [&_.n]:text-[13px] [&_.n]:text-muted-foreground",
+        spaced && "mt-8",
+        inset && "mb-1.5 px-2.5",
+      )}
+      style={top === undefined ? undefined : { marginTop: top }}
+    >
+      {children}
+    </div>
+  );
+}

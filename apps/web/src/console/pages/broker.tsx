@@ -27,6 +27,7 @@ import {
   plural,
   type PageProps,
   type Pages,
+  SectionHead,
 } from "../kit";
 import "../settings.css";
 import "./broker.css";
@@ -743,7 +744,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
           </p>
         )}
         {r?.problem && (
-          <p className="hint prod">
+          <p className="hint !text-(--warning-text)">
             {res} cannot be reached right now ({r.problem}), so a session cannot open. Fix the connection first.
           </p>
         )}
@@ -843,7 +844,7 @@ function Resources({ say }: PageProps) {
               </Button>
             </div>
             {err && (
-              <p className="hint prod" role="alert">
+              <p className="hint !text-(--warning-text)" role="alert">
                 {err}
               </p>
             )}
@@ -1045,7 +1046,7 @@ function Accounts({ say }: PageProps) {
             </div>
             <WhoEditor label="Who may use it" draft={draft} setDraft={setDraft} />
             {err && (
-              <p className="hint prod" role="alert">
+              <p className="hint !text-(--warning-text)" role="alert">
                 {err}
               </p>
             )}
@@ -1128,7 +1129,7 @@ function Accounts({ say }: PageProps) {
                       >
                         <WhoEditor label="People, groups and agents" draft={who} setDraft={setWhoDraft} />
                         {dropped.length > 0 && (
-                          <p className="hint prod" role="status">
+                          <p className="hint !text-(--warning-text)" role="status">
                             Saving ends {plural(dropped.length, "live session")}: {dropped.map((s) => s.who).join(", ")}
                             .
                           </p>
@@ -1237,10 +1238,10 @@ function SessionList({ say }: { say: PageProps["say"] }) {
       {starting && <StartPanel onClose={() => setStarting(false)} say={say} />}
       {w.reqs.length > 0 && (
         <div className="br-sec">
-          <div className="sec-h">
+          <SectionHead>
             <h2>Waiting for approval</h2>
             <span className="n">{w.reqs.filter((r) => r.status === "waiting").length}</span>
-          </div>
+          </SectionHead>
           <div className="table-wrap">
             <Table>
               <TableHeader>
@@ -1448,10 +1449,10 @@ function SessionDetail({ id, say }: { id: string; say: PageProps["say"] }) {
         </Card>
       )}
       <Card className="panel br-sec">
-        <div className="sec-h">
+        <SectionHead>
           <h2>{isLive ? "Transcript so far" : "Transcript"}</h2>
           <span className="n">{plural(lines.length, "line")}</span>
-        </div>
+        </SectionHead>
         <Tx lines={lines} blocked={w.cfg.blocked} />
       </Card>
     </section>
@@ -1529,7 +1530,7 @@ function Recordings({ sub, say }: PageProps) {
                           {flagged(s) && (
                             <>
                               {" "}
-                              · <span className="prod">flagged</span>
+                              · <span className="text-(--warning-text)">flagged</span>
                             </>
                           )}
                         </p>
@@ -1652,7 +1653,7 @@ function BrokerSettings({ say }: PageProps) {
           {pick("maxLen", "Longest session", ["1 hour", "4 hours", "8 hours"])}
         </Row>
         {cut.length > 0 && (
-          <p className="hint prod" role="status">
+          <p className="hint !text-(--warning-text)" role="status">
             Saving this ends {plural(cut.length, "live session")} that already ran longer:{" "}
             {cut.map((x) => `${x.who} on ${x.res}`).join(", ")}.
           </p>

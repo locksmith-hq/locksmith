@@ -24,6 +24,7 @@ import {
   secrets as seedSecrets,
   type PageProps,
   type Pages,
+  SectionHead,
 } from "../kit";
 import {
   EXPIRY,
@@ -236,10 +237,10 @@ function HostList({ say }: { say: Say }) {
         </div>
       )}
 
-      <div className="sec-h" style={{ marginTop: 28 }}>
+      <SectionHead top={28}>
         <h2>Recently blocked</h2>
         <span className="n">{plural(attempts.length, "attempt")}</span>
-      </div>
+      </SectionHead>
       {attempts.length === 0 ? (
         <Empty icon="shield">
           <b>Nothing blocked lately.</b> When an agent tries to send a secret to a host that is not on the list, it
@@ -326,10 +327,10 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
           </Button>
         )}
       </Head>
-      <div className="sec-h">
+      <SectionHead>
         <h2>Secrets allowed here</h2>
         <span className="n">{names.length}</span>
-      </div>
+      </SectionHead>
       {names.length === 0 ? (
         <Empty icon="lock">
           <b>No secret may go to this host.</b>{" "}
@@ -374,10 +375,10 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
         </form>
       )}
 
-      <div className="sec-h" style={{ marginTop: 28 }}>
+      <SectionHead top={28}>
         <h2>Recent requests</h2>
         <span className="n">{mine.length}</span>
-      </div>
+      </SectionHead>
       {mine.length === 0 ? (
         <Empty icon="doc">
           <b>No requests yet.</b> Calls to this host appear here as they happen.
@@ -676,7 +677,7 @@ function Grants({ say }: PageProps) {
                       {r.project} / {r.env}
                     </div>
                   </TableCell>
-                  <TableCell className={r.expires === null ? "prod" : ""}>{when(r.expires)}</TableCell>
+                  <TableCell className={r.expires === null ? "text-(--warning-text)" : ""}>{when(r.expires)}</TableCell>
                   <TableCell className="muted">{ago(r.last)}</TableCell>
                   <TableCell className="num">
                     <Button

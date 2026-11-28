@@ -352,7 +352,15 @@ export const extras: Product[] = [
   },
 ];
 
-export const workspaces = [
+/** A workspace is an account: personal, or an organization's. Its icon (the company logo, say) is an uploaded image. */
+export interface Workspace {
+  name: string;
+  org: boolean;
+  sub: string;
+  /** An image as a data URL, once one is uploaded. */
+  icon?: string;
+}
+export const workspaces: Workspace[] = [
   { name: "Tomer", org: false, sub: "Personal" },
   { name: "Acme", org: true, sub: "5 members · 2 teams" },
 ];

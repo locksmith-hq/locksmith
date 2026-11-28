@@ -281,7 +281,7 @@ function Account({ appearance, setAppearance }: { appearance: Appearance; setApp
 /** A product stops being "Planned" once its first page exists, either built in or in ./pages. */
 const built = (p: seed.Product) => !!p.href || !!pageFor(`${p.id}/${seed.spaces[p.id]?.[0]?.[0]}`);
 /** The wordmark: the product's own typeface in spaced capitals. */
-const Word = () => <Wordmark size={20} />;
+const Word = () => <Wordmark size={18} />;
 
 /** Loading state: the small mark, its dial turning one notch at a time while the bolts draw in and out (all CSS). */
 const Loader = () => <KitLoader className="page-loader" />;
@@ -507,7 +507,7 @@ export function Console() {
               onMouseEnter={() => setBrandHover(true)}
               onMouseLeave={() => setBrandHover(false)}
             >
-              <Logo size={40} open={brandHover} />
+              <Logo size={36} open={brandHover} />
               <Word />
             </a>
             {product ? (

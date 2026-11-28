@@ -25,11 +25,25 @@ import * as seed from "./data";
 import { paid } from "./paid";
 import { EnvEditor } from "./EnvEditor";
 import { Environments } from "./Environments";
+import { PlanAndBilling } from "./PlanAndBilling";
 import { Settings } from "./Settings";
+import { WorkspaceIcon } from "./WorkspaceIcon";
+import { Upgrade } from "./Upgrade";
 import { pageFor } from "./pages";
 import { useSecrets } from "./pages/gateway-data";
 import { useNotices } from "./pages/platform-store";
-import { GateBadge, Locked, PlanContext, gateOf, lacks, planOf as limitsOf, useLocked, type PlanId } from "./plans";
+import {
+  GateBadge,
+  Locked,
+  PlanContext,
+  gateOf,
+  lacks,
+  planOf as limitsOf,
+  useLocked,
+  bestPlan,
+  workspaceCap,
+  type PlanId,
+} from "./plans";
 import { PRODUCT_ICON } from "./pages/platformNotify";
 import "./settings.css";
 import { NOW } from "./kit";
@@ -291,14 +305,33 @@ const Loader = () => <KitLoader className="page-loader" />;
 const TABBED = new Set(["members", "mcp", "notifications"]);
 
 /** Picks who the console is working for: one person, or an organization with members and teams. */
-function Workspace({ at, pick }: { at: number; pick: (i: number) => void }) {
+/** Said where a workspace would be added once the plan's limit is reached, with the way past it. */
+function WorkspaceLimit({ limit }: { limit: { best: PlanId; cap: number } }) {
+  return (
+    <p className="muted">
+      {limit.best === "Free" ? (
+        <>
+          The Free plan has {plural(limit.cap, "workspace")}. <a href="#/upgrade">Upgrade</a> for up to{" "}
+          {workspaceCap("Team")}.
+        </>
+      ) : (
+        <>
+          The {limit.best} plan has up to {limit.cap} workspaces.{" "}
+          <a href="mailto:sales@locksmith.example">Talk to us</a> for more.
+        </>
+      )}
+    </p>
+  );
+}
+
+function Workspace({ at, limit }: { at: number; limit: { best: PlanId; cap: number } | null }) {
   const w = seed.workspaces[at]!;
   return (
     <Selector
       title="Switch workspace"
       summary={
         <>
-          <span className="av">{w.name[0]}</span>
+          <WorkspaceIcon w={w} />
           <span>
             {w.name}
             <small>{w.org ? "Organization" : "Personal"}</small>
@@ -316,11 +349,12 @@ function Workspace({ at, pick }: { at: number; pick: (i: number) => void }) {
               type="button"
               aria-current={i === at || undefined}
               onClick={() => {
-                pick(i);
+                // Each workspace is its own account: switching to another one asks to sign in to it.
+                if (i !== at) location.hash = `#/switch/${i}`;
                 shut();
               }}
             >
-              <span className="av">{x.name[0]}</span>
+              <WorkspaceIcon w={x} />
               <span>
                 {x.name}
                 <small>{x.sub}</small>
@@ -328,12 +362,18 @@ function Workspace({ at, pick }: { at: number; pick: (i: number) => void }) {
               {i === at && <Check />}
             </Button>
           ))}
-          <a href="#/welcome" onClick={shut}>
-            <span className="av">
-              <Icon name="plus" />
-            </span>
-            New workspace
-          </a>
+          {limit ? (
+            <div className="ws-limit">
+              <WorkspaceLimit limit={limit} />
+            </div>
+          ) : (
+            <a href="#/welcome" onClick={shut}>
+              <span className="av">
+                <Icon name="plus" />
+              </span>
+              New workspace
+            </a>
+          )}
         </>
       )}
     </Selector>
@@ -439,8 +479,12 @@ export function Console() {
   const unread = useNotices()[0].filter((n) => !n.read).length;
   const HubPage = pageFor(`hub/${page}`);
   const [planOf, setPlanOf] = useState<PlanId[]>(["Free", "Team"]); // one subscription per workspace
+  // The account's best plan sets how many workspaces it may have (Free 1, Team 3, Enterprise by arrangement).
+  const best = bestPlan(planOf);
+  const wsCap = workspaceCap(best);
+  const wsLimit = wsCap !== null && seed.workspaces.length >= wsCap ? { best, cap: wsCap } : null;
   const gate = gateOf(route); // the feature this address needs, when it is not in every plan
-  const Billing = paid.billing; // only a build with the billing module has the page
+  const Billing = paid.billing ?? PlanAndBilling; // the billing module replaces the open page when a build has it
   const [viewerAt, preview] = useState(0);
   const [pm, setPm] = useState(seed.projectMembers);
   const viewer = seed.members[viewerAt]!;
@@ -583,7 +627,7 @@ export function Console() {
                           <li className="nav-h">Administration</li>
                         </SidebarGroupLabel>
                         {ws.org && link("members", "User Management", "sessions", seed.members.length)}
-                        {Billing && link("billing", "Usage and billing", "clock")}
+                        {link("billing", "Plan and billing", "clock")}
                         {link("projects", "Projects", "s_folder")}
                         {link("environments", "Environments", "s_layers")}
                         {link("settings", "Settings", "s_window")}
@@ -596,12 +640,12 @@ export function Console() {
             <div className="side-foot">
               <Selector
                 className="user"
-                title="Your account"
+                title={`${me.name}, your account`}
                 summary={
                   <>
                     <span className="av">{me.name[0]}</span>
                     <span>
-                      {me.name}
+                      {me.name.split(" ")[0]} <Badge className="tier">{planOf[at]}</Badge>
                       <small>{me.email}</small>
                     </span>
                     <Chevrons />
@@ -700,7 +744,7 @@ export function Console() {
                 </Button>
               )}
               <NoticeMenu />
-              <Workspace at={at} pick={setAt} />
+              <Workspace at={at} limit={wsLimit} />
             </div>
           </header>
           <TabBusy value={loaded.where !== where}>
@@ -735,7 +779,16 @@ export function Console() {
                 )
               ) : HubPage ? (
                 <HubPage sub={route[1]} say={say} />
-              ) : page === "billing" && Billing ? (
+              ) : page === "upgrade" ? (
+                <Upgrade
+                  name={ws.name}
+                  plan={planOf[at]!}
+                  setPlan={(p) => {
+                    setPlanOf((x) => x.map((v, i) => (i === at ? p : v)));
+                    say(`${ws.name} is now on ${p}`);
+                  }}
+                />
+              ) : page === "billing" ? (
                 <Billing
                   ws={at}
                   name={ws.name}
@@ -750,7 +803,7 @@ export function Console() {
               ) : page === "environments" ? (
                 <Environments />
               ) : page === "settings" ? (
-                <Settings key={ws.name} name={ws.name} org={ws.org} say={say} />
+                <Settings key={ws.name} ws={ws} say={say} />
               ) : page === "integrations" ? (
                 <Integrations say={say} />
               ) : page === "sharing" ? (
@@ -763,8 +816,30 @@ export function Console() {
                 <Account appearance={appearance} setAppearance={setAppearance} />
               ) : page === "app" ? (
                 <Soon id={route[1]} tab={product ? tab : undefined} sub={route[3]} say={say} />
+              ) : page === "switch" ? (
+                <SignInTo
+                  at={Number(route[1])}
+                  from={ws.name}
+                  signIn={(i) => {
+                    setAt(i);
+                    location.hash = "#/home";
+                  }}
+                />
               ) : page === "welcome" ? (
-                <Welcome pick={setAt} />
+                wsLimit ? (
+                  <section>
+                    <Head title="Create a workspace" />
+                    <WorkspaceLimit limit={wsLimit!} />
+                  </section>
+                ) : (
+                  <Welcome
+                    create={(w) => {
+                      seed.workspaces.push(w);
+                      setPlanOf((x) => [...x, "Free"]);
+                      setAt(seed.workspaces.length - 1);
+                    }}
+                  />
+                )
               ) : (
                 <Hub db={db} org={ws.org} name={ws.name} />
               )}
@@ -1295,7 +1370,7 @@ function Members({ acl, tab }: { acl: Acl; tab?: string }) {
         <Alert>
           <AlertDescription>
             This workspace has {users.length} of the {cap} users in the {plan} plan. Nobody is removed; to invite more,{" "}
-            <a className="ls-link" href="#/billing">
+            <a className="ls-link" href="#/upgrade">
               see the plans
             </a>
             .
@@ -1545,15 +1620,43 @@ function ProjectMembers({ acl, id }: { acl: Acl; id: string }) {
   );
 }
 
-const WHO = ["Just me", "My team or organization"];
-function Welcome({ pick }: { pick: (i: number) => void }) {
+/** Moving to another workspace: it is a different account, so it asks to sign in (sample: one button). */
+function SignInTo({ at, from, signIn }: { at: number; from: string; signIn: (i: number) => void }) {
+  const w = seed.workspaces[at];
+  if (!w)
+    return (
+      <p className="state">
+        There is no such workspace. <a href="#/home">Back to {from}</a>
+      </p>
+    );
+  return (
+    <section>
+      <Head
+        title={`Sign in to ${w.name}`}
+        sub={`${w.name} is ${w.org ? "an organization" : "a personal workspace"} with its own account. You are signed out of ${from} and sign in again to continue.`}
+      />
+      <div className="inline-form">
+        <Button type="button" onClick={() => signIn(at)}>
+          Sign in to {w.name}
+        </Button>
+        <Button asChild variant="ghost">
+          <a href="#/home">Stay in {from}</a>
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+const WHO = ["Personal", "Organization"];
+function Welcome({ create }: { create: (w: (typeof seed.workspaces)[number]) => void }) {
+  const [name, setName] = useState("");
   const [who, setWho] = useState(0);
   return (
     <form
       className="welcome"
       onSubmit={(e) => {
         e.preventDefault();
-        pick(who);
+        create({ name: name.trim(), org: who === 1, sub: who === 1 ? "1 member · 0 teams" : "Personal" });
         location.hash = "#/home";
       }}
     >
@@ -1571,7 +1674,14 @@ function Welcome({ pick }: { pick: (i: number) => void }) {
       <div className="add" style={{ margin: "16px 0 20px", gridTemplateColumns: "auto 1fr" }}>
         <Label className="field">
           {who === 0 ? "Workspace name" : "Organization name"}
-          <Input required autoFocus placeholder={who === 0 ? "Tomer" : "Acme"} autoComplete="off" />
+          <Input
+            required
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={who === 0 ? "Tomer" : "Acme"}
+            autoComplete="off"
+          />
         </Label>
       </div>
       <Button type="submit">Create workspace</Button>
@@ -2060,7 +2170,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
         <Alert>
           <AlertDescription>
             This workspace has {seed.projects.length} of the {projectCap} projects in the {plan} plan. To add another,{" "}
-            <a className="ls-link" href="#/billing">
+            <a className="ls-link" href="#/upgrade">
               see the plans
             </a>
             .

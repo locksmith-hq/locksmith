@@ -44,7 +44,6 @@ One row per component directory. `just test <name>` runs the row's test command,
 | `packages/core-client` | npm generated client | `just test core-client` | no | `services/core` | Types come from `services/core/openapi.json`; fixtures for every operation; a drift test fails when they differ |
 | `packages/sdk` | npm lib | `just test sdk` | no | `just test-web` | `@locksmith/sdk` typed client; vitest unit tests |
 | `packages/tsconfig` | npm config | `just test tsconfig` | no | `just test-web` | Shared tsconfig, checked by `tsc --noEmit` in the app builds |
-| `packages/ui` | npm shared UI | `just test ui` | no | `just test-web` | Built by `npm run build`; no tests of its own |
 | `integrations/claude-code` | agent plugin (files) | `just test claude-code` | no | `tests/adversarial` | Thin plugin (hooks, skills and commands); real integration tests come with P3 |
 | `integrations/copilot` | agent plugin (files) | `just test copilot` | no | `crates/smith-cli` | Generated hook and MCP files; drift test `agents`, wrapper replay in `smith-cli --test integrations`, handshake in `locksmith-mcp --test integrations` |
 | `integrations/cline` | agent plugin (files) | `just test cline` | no | `crates/smith-cli` | Generated hook script; drift test `agents`, script replay of the recorded Cline fixtures in `smith-cli --test integrations` |

@@ -27,11 +27,6 @@
         "tw-animate-css"
       ]
     },
-    "packages/ui": {
-      "project": [
-        "src/**/*.{ts,tsx}"
-      ]
-    },
     "packages/control-plane-client": {
       "project": [
         "src/**/*.ts"

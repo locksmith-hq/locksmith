@@ -12,6 +12,7 @@ export function EnvEditor({
   about,
   scope,
   readOnly = false,
+  href,
   children,
 }: {
   envs: string[];
@@ -21,6 +22,8 @@ export function EnvEditor({
   scope: string;
   /** The list is shown but cannot be changed (a project that inherits it). */
   readOnly?: boolean;
+  /** Makes each environment a link to its own page. */
+  href?: (env: string) => string;
   /** Shown under the heading, before the list. */
   children?: React.ReactNode;
 }) {
@@ -42,7 +45,13 @@ export function EnvEditor({
       <ul className="plain" style={{ margin: "12px 0" }}>
         {envs.map((e, i) => (
           <li key={e}>
-            <span className="mono">{e}</span>
+            {href ? (
+              <a className="mono ls-link" href={href(e)}>
+                {e}
+              </a>
+            ) : (
+              <span className="mono">{e}</span>
+            )}
             {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
             {!readOnly && envs.length > 1 && (
               <Button

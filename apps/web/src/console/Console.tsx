@@ -741,7 +741,7 @@ export function Console() {
               ) : page === "projects" ? (
                 <Projects db={db} acl={acl} all />
               ) : page === "environments" ? (
-                <Environments />
+                <Environments env={route[1]} secrets={db.secrets} />
               ) : page === "settings" ? (
                 <Settings key={ws.name} name={ws.name} org={ws.org} say={say} />
               ) : page === "integrations" ? (

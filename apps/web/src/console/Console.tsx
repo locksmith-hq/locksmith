@@ -400,6 +400,13 @@ export function Console() {
   // Beyond the page itself (the toggle of environments, a filter), a change of route is not a new page either:
   // a project page is secrets/<project>/<tab>, an Agent Gateway page access/<tab>.
   const whole = TABBED.has(route[0] ?? "") ? route[0]! : route.slice(0, route[0] === "access" ? 2 : 3).join("/");
+  // A note belongs to the moment it was said: it goes after a few seconds, and when the page changes.
+  useEffect(() => say(""), [where]);
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => say(""), 4000);
+    return () => clearTimeout(t);
+  }, [note]);
   const [loaded, setLoaded] = useState({ whole: "", where: "" });
   useEffect(() => {
     const t = setTimeout(

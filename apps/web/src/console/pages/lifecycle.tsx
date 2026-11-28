@@ -283,6 +283,7 @@ function Syncs({ project, say }: PageProps) {
                   <Switch
                     label={`Keep ${y.env} synced to ${y.target}`}
                     checked={y.on}
+                    keyed
                     onChange={(on) => {
                       up((x) => setSync(x, y.id, { on }));
                       say(on ? "Sync resumed" : "Sync paused. Nothing is pushed until you resume");

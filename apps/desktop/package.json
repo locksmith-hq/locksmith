@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run build --workspace @locksmith-hq/ui && tsc --noEmit && vite build",
     "test": "vitest run",
     "tauri": "tauri",
     "lint": "oxlint -c ../../.oxlintrc.json .",

@@ -23,10 +23,6 @@
 .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
 
 
-.daemon { display: flex; align-items: center; gap: 9px; margin: 0; padding: 12px 6px 2px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground); }
-.daemon b { color: var(--foreground); font-weight: 600; }
-.daemon .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--destructive); box-shadow: 0 0 0 3px var(--destructive-weak); }
-.daemon[data-up="true"] .dot { background: var(--live); box-shadow: 0 0 0 3px var(--live-weak); }
 
 .work { min-width: 0; overflow: auto; }
 main { padding: 28px 28px 40px; max-width: 1240px; }
@@ -37,7 +33,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
   background: color-mix(in srgb, var(--background) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
 }
 .vault-line { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0; }
-.vault-k { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .vault-state { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: var(--muted-foreground); }
 .vault-state .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; transform: translateY(-0.5px); }
 .vault[data-open="true"] .vault-state { color: var(--live-text); }
@@ -76,9 +71,7 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .who b { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; line-height: 20px; }
 .who > span { display: block; margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .live-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px var(--live-weak); }
-.scopes, .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.ls-scope { height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px 0 5px; border-radius: 7px; background: var(--muted); color: var(--chip-text); font: 500 12px var(--font-mono); font-variant-ligatures: none; }
-.ls-scope svg { width: 13px; height: 13px; stroke-width: 1.7; }
+.scopes { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
 
 .list { margin: 0; padding: 0; list-style: none; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-xs); }
 .list .row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 12px 16px; }
@@ -167,7 +160,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 
 /* Keys */
 .toolbar { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-.usable { display: flex; align-items: center; gap: 10px; margin: 0 0 9px; font-size: 13px; }
 .keys { margin-bottom: 20px; }
 .keys .row { padding: 10px 12px 10px 16px; }
 .keys .mono { font-size: 13px; }
@@ -181,15 +173,8 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .hosts .mono { font-size: 13px; font-weight: 500; }
 
 /* Relays */
-.relays { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .card.relay { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 18px; }
-.relay-h { display: flex; align-items: center; gap: 12px; }
-.relay-h h2 { margin: 0 auto 0 0; font-size: 15px; line-height: 20px; font-weight: 600; }
 .relay .av { width: 34px; height: 34px; border-radius: 10px; }
-.cmds code.block { margin-top: 6px; }
-.ls-pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--muted); color: var(--muted-foreground); }
-.ls-pill[data-up="true"] { background: var(--live-weak); color: var(--live-text); }
-.ls-pill .mono { font-size: 12px; }
 
 /* Audit */
 .verdict { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 12px 16px; border-radius: 12px; font-weight: 600; }
@@ -199,13 +184,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .dec { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted-foreground); }
 
 /* Daemon down */
-.down { max-width: 640px; padding-top: 72px; }
-.down-ic { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: var(--destructive-weak); color: var(--destructive-text); }
-.down-ic svg { width: 22px; height: 22px; }
-.down h1 { margin: 20px 0 8px; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -0.015em; }
-.down p { margin: 0 0 16px; max-width: 64ch; color: var(--muted-foreground); }
-.down pre { margin: 0 0 16px; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-xs); }
-.down pre code { background: none; padding: 0; font-size: 14px; color: var(--foreground); }
 
 @media (max-width: 1100px) {
   .tl-list { --tl-cols: minmax(160px, 200px) 152px minmax(120px, 1fr) 64px 70px; }
@@ -225,7 +203,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .sess .av svg { width: 16px; height: 16px; }
 .sess .who { display: grid; gap: 2px; min-width: 0; }
 .sess .who-1, .sess .who-2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reported { border-bottom: 1px dotted var(--muted-foreground); cursor: help; }
 .sess[data-state]:not([data-state="active"]) .who-name { color: var(--muted-foreground); font-weight: 500; }
 .sess-det { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 14px; margin: 0; padding: 4px 16px 14px 60px; font-size: 13px; }
 .sess-det dt { color: var(--muted-foreground); }
@@ -237,10 +214,7 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .av .src-claude svg, .who-1 .src-claude svg { stroke-width: 1.8; }
 .who-1 > svg.i { width: 14px; height: 14px; align-self: center; }
 .who-1 > .src-claude svg { width: 14px; height: 14px; }
-.who-2 .reported, .who-2 .muted { display: inline-block; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
-.tl-row .who > .who-3 { display: flex; gap: 4px; min-width: 0; }
-.who-3 > .reported, .who-3 > .muted { flex: 1 1 0; min-width: 0; max-width: none; }
-.who-3 > .src-lbl { flex: none; }
+.who-2 .muted { display: inline-block; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 
 /* Shared kit rules for the console. */
 

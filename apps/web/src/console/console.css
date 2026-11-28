@@ -271,7 +271,7 @@ a.brand .ls-wordmark { font-size: 1em; }
    blocks wrap too. */
 main :is([data-slot="table-cell"], [data-slot="table-head"]) { white-space: normal; }
 main [data-slot="table-cell"] { overflow-wrap: anywhere; }
-main [data-slot="table-cell"] :is(button, [data-slot="badge"], .ls-pill, .ls-scope, time) { white-space: nowrap; }
+main [data-slot="table-cell"] :is(button, [data-slot="badge"], time) { white-space: nowrap; }
 main [data-slot="table-cell"] :is(.kms-st, small) { white-space: normal; }
 #root main :is(pre, pre *, .pf-code) { white-space: pre-wrap; overflow-wrap: anywhere; }
 main .mono { overflow-wrap: anywhere; }

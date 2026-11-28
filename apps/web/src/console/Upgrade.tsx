@@ -29,10 +29,17 @@ export function Upgrade({ name, plan, setPlan }: { name: string; plan: PlanId; s
           const above = ORDER.indexOf(p.id) > ORDER.indexOf(plan);
           return (
             <Card key={p.id} className="panel plan" data-current={current || undefined}>
-              <div className="plan-head">
-                <h2>
-                  {p.id} {current && <Badge>Current plan</Badge>}
-                </h2>
+              <h2>{p.id}</h2>
+              <div className="plan-tag">{current && <Badge>Current plan</Badge>}</div>
+              <p className="muted">{p.who}</p>
+              {adds.length > 0 && (
+                <ul className="plan-adds">
+                  {adds.map((f) => (
+                    <li key={f.title}>{f.title}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="plan-action">
                 {above &&
                   (p.id === "Enterprise" ? (
                     <Button asChild variant="outline">
@@ -48,14 +55,6 @@ export function Upgrade({ name, plan, setPlan }: { name: string; plan: PlanId; s
                     </Button>
                   ))}
               </div>
-              <p className="muted">{p.who}</p>
-              {adds.length > 0 && (
-                <ul className="plan-adds">
-                  {adds.map((f) => (
-                    <li key={f.title}>{f.title}</li>
-                  ))}
-                </ul>
-              )}
             </Card>
           );
         })}

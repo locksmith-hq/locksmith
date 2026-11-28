@@ -299,9 +299,13 @@ main select[aria-hidden="true"] { min-width: 0; }
 /* The plan next to the name in the sidebar, and the plan cards of the Upgrade page. */
 /* The kit badge is a key tag with a hole at its left: the padding clears it, and the hole is smaller to match. */
 .user .tier { --hole: 5.5px; margin-left: 5px; height: 14px; padding: 0 5px 0 11px; font-size: 9.5px; line-height: 14px; vertical-align: 1px; }
-.plans { display: grid; gap: 12px; }
-.plan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
-.plan-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; }
-.plan-adds { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 24px; margin: 4px 0 0; padding: 12px 0 0; border-top: 1px solid var(--border); list-style: none; }
+/* Three tall cards side by side; below 700px they stack. The action sits at the foot of each. */
+.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.panel.plan:not(.form) { display: flex; flex-direction: column; } /* beats `.panel:not(.form) { display: block }` */
+.plan h2 { margin: 0; }
+.plan-tag { min-height: 20px; }
+.plan-adds { display: grid; gap: 8px; margin: 4px 0 0; padding: 12px 0 0; border-top: 1px solid var(--border); list-style: none; }
 .plan-adds li::before { content: "+"; margin-right: 8px; color: var(--brand-text); font-weight: 600; }
+.plan-action { margin-top: auto; padding-top: 12px; min-height: 48px; }
+@media (max-width: 700px) { .plans { grid-template-columns: minmax(0, 1fr); } }
 .plans [data-current] { border-color: var(--brand); }

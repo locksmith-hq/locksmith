@@ -603,7 +603,7 @@ export function Console() {
                   <>
                     <span className="av">{me.name[0]}</span>
                     <span>
-                      {me.name}
+                      {me.name} <Badge className="tier">{planOf[at]}</Badge>
                       <small>{me.email}</small>
                     </span>
                     <Chevrons />
@@ -618,12 +618,6 @@ export function Console() {
                       </span>
                       User settings
                     </a>
-                    <a href="#/billing" onClick={shut}>
-                      <span className="av">
-                        <Icon name="clock" />
-                      </span>
-                      Plan and billing
-                    </a>
                     <AppearanceSeg value={appearance} set={setAppearance} />
                     <Button variant="ghost" type="button">
                       <span className="av">
@@ -634,11 +628,6 @@ export function Console() {
                   </>
                 )}
               </Selector>
-              <a className="plan-strip" href={planOf[at] === "Free" ? "#/upgrade" : "#/billing"}>
-                <Badge className="tier">{planOf[at]}</Badge>
-                <span>{planOf[at] === "Free" ? "Upgrade" : "Plan and billing"}</span>
-                <Icon name="arrow" />
-              </a>
             </div>
           </SidebarProvider>
         </aside>

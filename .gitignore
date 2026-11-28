@@ -18,6 +18,9 @@ infra/compose/.audit-verifier.json
 infra/compose/.audit-export/
 __pycache__/
 
+# Self-host bundle: generated secrets and the gateway bindings written by bootstrap.sh
+infra/compose/selfhost/gateway-bindings.toml
+
 # Playwright output
 apps/web/test-results/
 apps/web/playwright-report/

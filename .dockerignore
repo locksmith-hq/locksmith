@@ -1,5 +1,6 @@
-target
-.git
-node_modules
-**/node_modules
 .env
+.env.*
+target/
+.git/
+node_modules/
+**/node_modules

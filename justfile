@@ -399,3 +399,41 @@ test name:
           elif grep -q 'just test-web' <<<"$cov"; then run just test-web; fi
         fi ;;
     esac
+
+# Build the control-plane and gateway images for the host architecture (P2). Extra flags (proxy, CA secret) go in IMAGE_BUILD_ARGS. Check: scripts/image-check.sh.
+images:
+    docker build ${IMAGE_BUILD_ARGS:-} -f infra/docker/control-plane.Dockerfile -t locksmith-control-plane:dev .
+    docker build ${IMAGE_BUILD_ARGS:-} -f infra/docker/gateway.Dockerfile -t locksmith-gateway:dev .
+
+# Self-host compose bundle (P2). Bootstraps secrets into infra/compose/selfhost/.env, then `up --wait`.
+# Args go to bootstrap.sh: --external-keys, --tls, --demo-oidc. Images come from .env (LOCKSMITH_VERSION or *_IMAGE).
+selfhost-up *args:
+    bash infra/compose/selfhost/bootstrap.sh {{args}}
+    docker compose --env-file infra/compose/selfhost/.env -f infra/compose/selfhost/compose.yaml up -d --wait --wait-timeout 240
+
+# Stop the self-host stack; volumes (data, keys, unseal material) are kept. Pass `-v` to delete them.
+selfhost-down *args:
+    docker compose --env-file infra/compose/selfhost/.env -f infra/compose/selfhost/compose.yaml --profile tls --profile demo-oidc --profile bundled-keys down {{args}}
+
+# Fresh self-host stack from locally built images (`just images` first): relay through the gateway, restart persistence, secret hygiene. Own project and volumes.
+selfhost-smoke:
+    bash scripts/selfhost-bootstrap.test.sh
+    bash scripts/selfhost-smoke.sh
+
+# Helm chart (P2): values schema tests, helm lint, template + kubeconform, then a kind install smoke. Stages whose tools are missing are skipped and the run says INCOMPLETE, never PASS.
+helm-test:
+    bash scripts/helm-test.sh
+
+# Release scripts (P2): manifest, verify-release (minisign, sha256, cosign identity, SBOM) and Homebrew formula tests with throwaway keys. Needs minisign and jq; says SKIP, never PASS, when they are missing.
+release-verify:
+    bash scripts/make-manifest.test.sh
+    bash scripts/verify-release.test.sh
+    bash scripts/gen-formula.test.sh
+
+# Release dry run (P2): one-triple smith build, manifest, SBOM, throwaway minisign key, then verify-release (cosign skipped locally). Says SKIP, never PASS, when a tool is missing.
+release-dry-run:
+    bash scripts/release-dry-run.sh
+
+# Installer (P2): scripts/install.sh against a local release directory with a throwaway minisign key (good install, bad signature, bad hash, missing verifier, unsupported platform, no credential reads). Needs minisign, jq and curl; says SKIP, never PASS, when missing.
+installer-test:
+    bash scripts/install.test.sh

@@ -43,8 +43,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 
 /* Controls */
 
-.link { border: 0; background: none; padding: 2px 0; margin-left: auto; font: 600 13px var(--font-sans); color: var(--brand-text); cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
-.link:hover { text-decoration-color: currentColor; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--foreground); }
 
 /* Screen scaffolding */

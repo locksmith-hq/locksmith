@@ -539,7 +539,10 @@ const NotFound = ({ what, id, back }: { what: string; id: string; back: [string,
         No {what} called “{id}”.
       </b>{" "}
       It may have been removed.{" "}
-      <a className="link" href={back[1]}>
+      <a
+        className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+        href={back[1]}
+      >
         Back to {back[0].toLowerCase()}
       </a>
     </Empty>
@@ -737,7 +740,10 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
         {r && options.length === 0 && (
           <p className="hint">
             {who} has no account on {res}. Ask an admin to add {who} to one of its accounts under{" "}
-            <a className="link" href={`${H}/accounts`}>
+            <a
+              className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+              href={`${H}/accounts`}
+            >
               Accounts
             </a>
             , or pick another resource.
@@ -1387,7 +1393,11 @@ function SessionList({ say }: { say: PageProps["say"] }) {
                         Terminate
                       </Button>
                     ) : (
-                      <a className="link" href={cl(s.id)} aria-label={`Open recording of ${s.id}`}>
+                      <a
+                        className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+                        href={cl(s.id)}
+                        aria-label={`Open recording of ${s.id}`}
+                      >
                         Recording
                       </a>
                     )}
@@ -1549,7 +1559,10 @@ function Recordings({ sub, say }: PageProps) {
                   {sel.acct}@{sel.res} · {ago(sel.started)} · {dur(sel.ended! - sel.started)} ·{" "}
                   {plural(flags, "flagged line")}. Sensitive values are replaced with [redacted] before the recording is
                   stored.{" "}
-                  <a className="link" style={{ margin: 0 }} href={sl(sel.id)}>
+                  <a
+                    className="cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+                    href={sl(sel.id)}
+                  >
                     View session
                   </a>
                 </p>
@@ -1582,7 +1595,10 @@ function Recordings({ sub, say }: PageProps) {
             ) : sub ? (
               <Empty icon="search">
                 <b>No recording called “{dec(sub)}”.</b> It may still be live, or the id is wrong.{" "}
-                <a className="link" href={`${H}/recordings`}>
+                <a
+                  className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+                  href={`${H}/recordings`}
+                >
                   Back to recordings
                 </a>
               </Empty>

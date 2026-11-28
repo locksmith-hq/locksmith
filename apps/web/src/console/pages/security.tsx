@@ -473,7 +473,10 @@ function SecuritySettings({ say }: PageProps) {
         sub={
           <>
             Choose when scans run and what happens automatically. Who is alerted about a finding is set in{" "}
-            <a className="link" href="#/notifications/rules">
+            <a
+              className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+              href="#/notifications/rules"
+            >
               Notification rules
             </a>
             .

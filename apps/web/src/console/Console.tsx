@@ -1857,7 +1857,10 @@ function Overview({ db }: { db: Db }) {
 
       <SectionHead spaced inset>
         <h2 id="h-events">Activity</h2>
-        <a className="link" href="#/access/activity">
+        <a
+          className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+          href="#/access/activity"
+        >
           All activity
         </a>
       </SectionHead>

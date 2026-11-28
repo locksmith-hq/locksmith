@@ -17,7 +17,10 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
         <Crumbs trail={[["Findings", href("findings")], ["Not found"]]} />
         <Empty icon="search">
           <b>No such finding.</b> It may have been removed.{" "}
-          <a className="link" href={href("findings")}>
+          <a
+            className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+            href={href("findings")}
+          >
             Back to findings
           </a>
         </Empty>

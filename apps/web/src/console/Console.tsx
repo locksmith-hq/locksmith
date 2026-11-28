@@ -2010,7 +2010,6 @@ function Projects({ db, acl }: { db: Db; acl: Acl }) {
       .replace(/[^a-z0-9-]/g, "-");
     if (!id || seed.projects.some((p) => p.id === id)) return;
     seed.projects.push(seed.newProject(id));
-    db.say(`Created ${id} with ${seed.defaults.envs.join(", ")}`);
     setNaming(false);
   };
   return (

@@ -577,6 +577,7 @@ export function Console() {
                         </SidebarGroupLabel>
                         {ws.org && link("members", "User Management", "sessions", seed.members.length)}
                         {Billing && link("billing", "Usage and billing", "clock")}
+                        {link("projects", "Projects", "s_folder")}
                         {link("environments", "Environments", "s_layers")}
                         {link("settings", "Settings", "s_window")}
                       </>
@@ -737,6 +738,8 @@ export function Console() {
                     say(`${ws.name} is now on ${p}`);
                   }}
                 />
+              ) : page === "projects" ? (
+                <Projects db={db} acl={acl} all />
               ) : page === "environments" ? (
                 <Environments />
               ) : page === "settings" ? (
@@ -1995,7 +1998,8 @@ function ProjectSettings({ p }: { p: seed.Project }) {
   );
 }
 
-function Projects({ db, acl }: { db: Db; acl: Acl }) {
+/** The projects list: in Secret Management, and as the organization's own Projects page (`all`). */
+function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean }) {
   const mine = seed.projects.filter((p) => acl.roleIn(p.id));
   const plan = useContext(PlanContext);
   const projectCap = limitsOf(plan).projects;
@@ -2015,7 +2019,7 @@ function Projects({ db, acl }: { db: Db; acl: Acl }) {
   return (
     <section>
       <Head
-        title="Secret Management"
+        title={all ? "Projects" : "Secret Management"}
         sub={
           acl.isAdmin
             ? "A project groups the secrets of one codebase, split by environment. As an organization admin you see every project."

@@ -1,7 +1,46 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import type { StatusView } from "@locksmith/api-types";
 import * as api from "./api";
-import { Icon, Logo, Wordmark, type IconName } from "@locksmith/ui";
+import {
+  Bot,
+  FileText,
+  Fingerprint,
+  FolderClosed,
+  KeyRound,
+  LayoutGrid,
+  Lock,
+  LockOpen,
+  Monitor,
+  Moon,
+  Plug,
+  Power,
+  ScrollText,
+  SquareTerminal,
+  Sun,
+  Ticket,
+  TriangleAlert,
+  Waypoints,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
+import { Button } from "@locksmith-hq/ui/button";
+import { Mark } from "@locksmith-hq/ui/mark";
+import { Pill } from "@locksmith-hq/ui/pill";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@locksmith-hq/ui/sidebar";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/ui/toggle-group";
+import { Wordmark } from "@locksmith-hq/ui/wordmark";
 import {
   Agents,
   Audit,
@@ -41,29 +80,29 @@ const TABS = {
   "MCP clients": McpClients,
 } as const;
 export type Tab = keyof typeof TABS;
-const TAB_ICON: Record<Tab, IconName> = {
-  Overview: "grid",
-  Sessions: "sessions",
-  Keys: "key",
-  Tokens: "token",
-  Agents: "sessions",
-  "Workload identities": "key",
-  Bindings: "relay",
-  Projects: "grid",
-  Secrets: "key",
-  Relays: "relay",
-  Audit: "doc",
-  "Org audit": "doc",
-  "MCP tools": "key",
-  "MCP clients": "sessions",
+const TAB_ICON: Record<Tab, LucideIcon> = {
+  Overview: LayoutGrid,
+  Sessions: SquareTerminal,
+  Keys: KeyRound,
+  Tokens: Ticket,
+  Agents: Bot,
+  "Workload identities": Fingerprint,
+  Bindings: Plug,
+  Projects: FolderClosed,
+  Secrets: Lock,
+  Relays: Waypoints,
+  Audit: FileText,
+  "Org audit": ScrollText,
+  "MCP tools": Wrench,
+  "MCP clients": Monitor,
 };
 const POLL_MS = 5000;
 
 type Appearance = "system" | "light" | "dark";
-const APPEARANCE: { v: Appearance; label: string; icon: IconName }[] = [
-  { v: "system", label: "System", icon: "monitor" },
-  { v: "light", label: "Light", icon: "sun" },
-  { v: "dark", label: "Dark", icon: "moon" },
+const APPEARANCE: { v: Appearance; label: string; Icon: LucideIcon }[] = [
+  { v: "system", label: "System", Icon: Monitor },
+  { v: "light", label: "Light", Icon: Sun },
+  { v: "dark", label: "Dark", Icon: Moon },
 ];
 const PREF = "locksmith.appearance";
 const readPref = (): Appearance => {
@@ -182,75 +221,103 @@ export function App() {
   const since = counts.since?.[open ? "UNLOCK" : "LOCK"];
 
   return (
-    <div className="app">
-      <aside className="side">
-        <div className="brand">
-          <Logo open={open} />
-          <Wordmark />
-        </div>
-        <nav className="nav" aria-label="Main">
-          {(Object.keys(TABS) as Tab[]).map((t) => (
-            <button key={t} type="button" aria-current={t === tab ? "page" : undefined} onClick={() => setTab(t)}>
-              <Icon name={TAB_ICON[t]} />
-              {t}
-              {count[t] !== undefined && <span className="count">{count[t]}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="side-foot">
-          <fieldset className="seg">
-            <legend className="sr-only">Appearance</legend>
-            {APPEARANCE.map((a) => (
-              <label key={a.v} title={`Appearance: ${a.label}`}>
-                <input
-                  type="radio"
-                  name="appearance"
-                  value={a.v}
-                  checked={appearance === a.v}
-                  onChange={() => setAppearance(a.v)}
-                />
-                <Icon name={a.icon} />
-                {a.label}
-              </label>
+    <SidebarProvider className="h-svh">
+      <Sidebar collapsible="none" className="h-svh border-r">
+        <SidebarHeader>
+          <div className="logo flex items-center gap-2.5 px-2 py-1.5">
+            <Mark small size={26} open={open} />
+            <Wordmark />
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <nav aria-label="Main">
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {(Object.keys(TABS) as Tab[]).map((t) => {
+                    const TabIcon = TAB_ICON[t];
+                    return (
+                      <SidebarMenuItem key={t}>
+                        <SidebarMenuButton
+                          type="button"
+                          isActive={t === tab}
+                          aria-current={t === tab ? "page" : undefined}
+                          onClick={() => setTab(t)}
+                        >
+                          <TabIcon />
+                          {t}
+                          {count[t] !== undefined && (
+                            <span className="ml-auto text-xs text-muted-foreground">{count[t]}</span>
+                          )}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </nav>
+        </SidebarContent>
+        <SidebarFooter className="gap-3">
+          <ToggleGroup
+            type="single"
+            size="sm"
+            aria-label="Appearance"
+            className="w-full"
+            value={appearance}
+            // Radix sends "" when the pressed item is pressed again; one appearance is always chosen.
+            onValueChange={(v) => v && setAppearance(v as Appearance)}
+          >
+            {APPEARANCE.map(({ v, label, Icon }) => (
+              <ToggleGroupItem key={v} value={v} title={`Appearance: ${label}`} className="flex-1 px-1 text-xs">
+                <Icon />
+                {label}
+              </ToggleGroupItem>
             ))}
-          </fieldset>
-          <p className="daemon" data-up={!down && !!st}>
-            <span className="dot" aria-hidden="true" />
+          </ToggleGroup>
+          <Pill tone={down ? "danger" : st ? "live" : undefined} className="w-fit">
             <span>
               <b>locksmithd</b> · {down ? "not running" : st ? "running" : "connecting"}
             </span>
-          </p>
-        </div>
-      </aside>
+          </Pill>
+        </SidebarFooter>
+      </Sidebar>
 
-      <div className="work">
+      <div className="min-w-0 flex-1 overflow-auto">
         {down ? (
-          <main className="down" aria-labelledby="h-down">
-            <span className="down-ic">
-              <Icon name="power" />
+          <main className="max-w-2xl px-7 pt-18 pb-10" aria-labelledby="h-down">
+            <span className="grid size-12 place-items-center rounded-xl bg-(--destructive-weak) text-(--destructive-text)">
+              <Power />
             </span>
-            <h1 id="h-down">The Locksmith daemon is not running</h1>
-            <p>
+            <h1 id="h-down" className="mt-5 mb-2 text-2xl font-bold tracking-tight">
+              The Locksmith daemon is not running
+            </h1>
+            <p className="mb-4 text-muted-foreground">
               This window reads everything from <code>locksmithd</code>. Start it in a terminal; this window reconnects
               on its own within a few seconds.
             </p>
-            <pre>
+            <pre className="mb-4 rounded-lg border bg-card px-4 py-3">
               <code>locksmithd</code>
             </pre>
-            <p className="muted small">Detail: {down}</p>
+            <p className="text-[13px] text-muted-foreground">Detail: {down}</p>
           </main>
         ) : (
           <>
-            <header className="vault" aria-label="Vault" data-open={open}>
-              <div className="vault-line" aria-live="polite" aria-atomic="true">
-                <span className="vault-k">Vault</span>
+            <header
+              className="sticky top-0 z-10 flex min-h-15 items-center gap-4 border-b bg-background/90 px-7 py-2.5 backdrop-blur"
+              aria-label="Vault"
+              data-open={open}
+            >
+              <div
+                className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <span className="text-[15px] font-bold">Vault</span>
                 {st ? (
                   <>
-                    <b className="vault-state">
-                      <span className="dot" aria-hidden="true" />
-                      {open ? "Unlocked" : "Locked"}
-                    </b>
-                    <span className="vault-meta">
+                    <Pill tone={open ? "live" : undefined}>{open ? "Unlocked" : "Locked"}</Pill>
+                    <span className="vault-meta text-[13px] text-muted-foreground">
                       {open ? (
                         <span>{plural(live.length, "session")}</span>
                       ) : (
@@ -259,7 +326,10 @@ export function App() {
                       {since !== undefined && (
                         <span>
                           since{" "}
-                          <time className="mono" dateTime={new Date(since * 1000).toISOString()}>
+                          <time
+                            className="font-mono text-xs text-foreground"
+                            dateTime={new Date(since * 1000).toISOString()}
+                          >
                             {clock(since)}
                           </time>
                         </span>
@@ -267,52 +337,52 @@ export function App() {
                     </span>
                   </>
                 ) : (
-                  <span className="vault-meta">Reading the vault…</span>
+                  <span className="text-[13px] text-muted-foreground">Reading the vault…</span>
                 )}
-                {note && <span className="vault-note">{note}</span>}
+                {note && <span className="text-[13px] font-semibold text-(--brand-text)">{note}</span>}
               </div>
               {st && (
-                <div className="acts">
-                  <button
+                <div className="flex flex-none gap-1.5">
+                  <Button
                     type="button"
-                    className="btn quiet danger-text"
+                    variant="ghost"
+                    className="text-(--destructive-text)"
                     aria-label="Revoke all sessions"
                     disabled={!live.length}
                     onClick={revokeAll}
                   >
                     Revoke all
-                  </button>
+                  </Button>
                   {open ? (
-                    <button type="button" className="btn primary" onClick={lock}>
-                      <Icon name="lock" />
+                    <Button type="button" onClick={lock}>
+                      <Lock />
                       Lock vault
-                    </button>
+                    </Button>
                   ) : (
-                    <button
+                    <Button
                       type="button"
-                      className="btn primary"
                       title="Opens a native Locksmith prompt; the passphrase never enters this window"
                       onClick={unlock}
                     >
-                      <Icon name="unlock" />
+                      <LockOpen />
                       Unlock vault
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
             </header>
-            <main>
+            <main className="max-w-[1240px] px-7 pt-7 pb-10">
               {err && (
-                <p role="alert" className="alert">
-                  <Icon name="alert" />
-                  {err}
-                </p>
+                <Alert variant="destructive" className="mb-4">
+                  <TriangleAlert />
+                  <AlertDescription>{err}</AlertDescription>
+                </Alert>
               )}
               <Screen st={st} act={act} go={setTab} />
             </main>
           </>
         )}
       </div>
-    </div>
+    </SidebarProvider>
   );
 }

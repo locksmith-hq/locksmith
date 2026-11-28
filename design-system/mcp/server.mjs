@@ -15,7 +15,7 @@ server.registerTool(
   "list_components",
   {
     description:
-      "List every Locksmith design system component: its name, npm package and what it is for. Call this first to find the component for a job before writing any UI.",
+      "List every Locksmith design system component: its name, import path and what it is for. Call this first to find the component for a job before writing any UI.",
     inputSchema: {},
   },
   async () => text(listComponents()),
@@ -52,7 +52,7 @@ server.registerTool(
   "get_guide",
   {
     description:
-      "How to install the kit in an app (registry, packages, the CSS imports Tailwind needs, fonts, theme) and how to add or change a component.",
+      "How to install the kit in an app (registry, the package, the CSS imports Tailwind needs, fonts, theme, translation) and how to add or change a component.",
     inputSchema: {},
   },
   async () => text(getGuide()),

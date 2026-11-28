@@ -1,9 +1,14 @@
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronsUpDown } from "lucide-react";
-import { Button } from "@locksmith-hq/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@locksmith-hq/dropdown-menu";
-import { Mark } from "@locksmith-hq/mark";
+import { Button } from "@locksmith-hq/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@locksmith-hq/ui/dropdown-menu";
+import { Mark } from "@locksmith-hq/ui/mark";
 import {
   Sidebar,
   SidebarContent,
@@ -17,8 +22,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-} from "@locksmith-hq/sidebar";
-import { Wordmark } from "@locksmith-hq/wordmark";
+} from "@locksmith-hq/ui/sidebar";
+import { Wordmark } from "@locksmith-hq/ui/wordmark";
 import type { Client } from "@locksmith/control-plane-client";
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

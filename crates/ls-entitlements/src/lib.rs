@@ -1,8 +1,8 @@
 //! What an organization may use: its plan, paid features and limits.
 //!
-//! This crate is the seam between the open-source core and the source-available `ee/` layer. The
+//! This crate is the seam between the open-source core and paid code, which is not in this repository. The
 //! core asks an [`EntitlementSource`]; with no license the answer is [`FreeTier`]. A paid source
-//! (see `ee/crates/ls-license`) implements the same trait. Core crates never depend on `ee/`.
+//! in the private repository implements the same trait. Nothing in this repository depends on paid code.
 //!
 //! Rule (AGENTS.md): licensing never blocks unlock or export. [`Entitlements::allows`] makes that
 //! structural: core operations are not features, so no plan can gate them.

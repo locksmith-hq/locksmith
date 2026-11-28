@@ -1,6 +1,6 @@
-import { Card } from "@locksmith-hq/card";
-import { Button } from "@locksmith-hq/button";
-import { PageHeader } from "@locksmith-hq/page-header";
+import { Card } from "@locksmith-hq/ui/card";
+import { Button } from "@locksmith-hq/ui/button";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
 import { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router";

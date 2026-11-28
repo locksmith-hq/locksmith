@@ -1,0 +1,296 @@
+/* Console additions on top of the desktop's Gatehouse styles (apps/desktop/src/styles.css). */
+/* In the base layer, under the kit's theme: a link drawn as a kit Button keeps the button's own text colour. */
+@layer base { a { color: inherit; } }
+h3 { margin: 0 0 8px; font-size: 13px; line-height: 18px; font-weight: 600; }
+
+/* Sidebar: links instead of buttons, so pages open in a new tab and survive a reload. */
+.nav a {
+  display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 9px;
+  font: 500 14px var(--font-sans); color: var(--muted-foreground); text-decoration: none;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.nav a:hover { background: var(--accent); color: var(--foreground); }
+.nav a[aria-current="page"] { background: var(--sidebar-accent); color: var(--foreground); font-weight: 600; box-shadow: inset 0 0 0 1px var(--border), var(--shadow-xs); }
+.nav a[aria-current="page"] svg { color: var(--brand-text); }
+.org {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 44px; padding: 0 8px; border-radius: 11px;
+  color: var(--foreground); font: 600 14px var(--font-sans); text-align: left; cursor: pointer;
+}
+.org .av { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; background: var(--brand-weak); color: var(--brand-text); }
+.org small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted-foreground); }
+.org svg { margin-left: auto; color: var(--muted-foreground); transform: rotate(90deg); }
+
+/* Paused: the org-wide stop is on, shown where the desktop shows a locked vault. */
+.vault[data-paused="true"] .vault-state { color: var(--destructive-text); }
+.vault[data-paused="true"] .vault-state .dot { background: var(--destructive); border-color: var(--destructive); }
+
+
+/* Every track can shrink to nothing, so a narrow page truncates the names instead of scrolling sideways. */
+.tl-list { --tl-cols: minmax(0, 250px) minmax(0, 230px) minmax(0, 1fr) 56px 76px; }
+/* Secret names are long: cut the list with an ellipsis instead of clipping mid-letter. */
+.scopes-t { display: block; text-overflow: ellipsis; }
+.scopes-t li { display: inline; }
+
+/* Selects and inline segmented filters share the input look. */
+select {
+  height: 32px; padding: 0 28px 0 10px; border: 1px solid var(--input); border-radius: 9px; background: var(--card);
+  font: 13px var(--font-sans); color: var(--foreground);
+}
+.toolbar { align-items: center; }
+.toolbar .push { margin-left: auto; }
+
+/* Lists whose rows are links. */
+.list a.row { text-decoration: none; transition: background-color 120ms var(--ease-out); }
+.list a.row:hover { background: var(--accent); }
+.list a.row:first-child { border-radius: 13px 13px 0 0; }
+.list a.row:last-child { border-radius: 0 0 13px 13px; }
+.row .meta { display: flex; align-items: center; gap: 14px; color: var(--muted-foreground); font-size: 13px; }
+.row b { font-weight: 600; }
+.row p { margin: 1px 0 0; color: var(--muted-foreground); font-size: 13px; }
+
+/* Secrets table: a row opens in place to show who can use the secret and its versions. */
+.cell-btn { display: inline-flex; align-items: center; gap: 8px; padding: 2px 6px 2px 0; border: 0; background: none; color: var(--foreground); font: 500 13px var(--font-mono); cursor: pointer; border-radius: 6px; }
+.cell-btn svg { width: 12px; height: 12px; color: var(--muted-foreground); transition: transform 160ms var(--ease-out); }
+.cell-btn[aria-expanded="true"] svg { transform: rotate(90deg); }
+.detail-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 32px; }
+.panel.form .add { margin-top: 14px; display: flex; flex-wrap: wrap; }
+.hint { margin: 12px 0 0 !important; max-width: 72ch; color: var(--muted-foreground); font-size: 13px; }
+.once { margin-bottom: 16px; border-color: var(--warning-border); background: var(--warning-weak); }
+.once code.block { background: var(--card); font-size: 13px; }
+
+.outcome { font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.outcome[data-o="denied"] { color: var(--warning-text); }
+.outcome[data-o="redaction_failed"] { color: var(--destructive-text); }
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .side { flex-direction: row; align-items: center; gap: 12px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .side .org, .side-foot, .ls-wordmark { display: none; }
+  .nav { flex-direction: row; }
+  .nav a { white-space: nowrap; }
+  main { padding: 20px 16px 32px; }
+  .vault { padding: 10px 16px; flex-wrap: wrap; }
+  .vault-line { flex-basis: 100%; }
+  .search.push { margin-left: 0; flex: 1 1 100%; }
+  .search input { width: 100%; }
+  .table-wrap { overflow-x: auto; }
+  .detail-cols { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .tl-list { --tl-cols: minmax(0, 1fr) 56px 76px; }
+  .tl-row > .tl, .tl-row > .scopes-t, .tl-axis { display: none; }
+  .panel.form .add { grid-template-columns: minmax(0, 1fr); }
+  .log li { grid-template-columns: 64px 8px minmax(0, 1fr); }
+  .log .tgt, .log .who-s { display: none; }
+}
+
+/* Hub: the workspace switcher, grouped sidebar and the product grid on Home. */
+.nav-h { margin: 14px 0 4px; padding: 0 10px; font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.ws { position: relative; }
+.ws summary { list-style: none; }
+.ws summary::-webkit-details-marker { display: none; }
+.ws-menu { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; right: 0; display: grid; gap: 2px; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); box-shadow: var(--shadow-md); }
+/* Menu rows. The appearance switch inside the menu is a ToggleGroup and keeps the kit look, so its items are left out. */
+.ws-menu button:where(:not([data-slot="toggle-group-item"])), .ws-menu a { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 42px; padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--foreground); font: 600 13px var(--font-sans); text-align: left; text-decoration: none; cursor: pointer; }
+.ws-menu button:where(:not([data-slot="toggle-group-item"])):hover, .ws-menu a:hover { background: var(--accent); }
+.ws-menu [aria-current] { background: var(--muted); }
+.ws-menu .av { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; }
+.ws-menu small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted-foreground); }
+
+.hub { max-width: 1120px; }
+.hub-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pcard {
+  /* The blurb's row takes the spare height, so the stats line sits at the foot of every card in a row. */
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 4px 12px; padding: 16px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: var(--shadow-xs); text-decoration: none;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+}
+.pcard:hover { border-color: var(--input); box-shadow: var(--shadow-sm); }
+.pcard[data-planned] { background: transparent; border-style: dashed; box-shadow: none; }
+.pic { grid-row: span 2; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--brand-weak); color: var(--brand-text); }
+.pic[data-tint="b"] { background: var(--av2); color: var(--av2-t); }
+.pic[data-tint="c"] { background: var(--av3); color: var(--av3-t); }
+.pic[data-tint="d"] { background: var(--warning-chip); color: var(--warning-text); }
+.pname { display: flex; align-items: center; font-size: 15px; line-height: 20px; font-weight: 600; }
+.pblurb { color: var(--muted-foreground); font-size: 13px; line-height: 18px; }
+.pstats { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted-foreground); }
+.pstats b { color: var(--foreground); font-weight: 600; }
+
+.tabs { display: flex; gap: 4px; margin: -4px 0 20px; border-bottom: 1px solid var(--border); }
+.tabs a { padding: 8px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent; font-weight: 500; color: var(--muted-foreground); text-decoration: none; }
+.tabs a:hover { color: var(--foreground); }
+.tabs a[aria-current] { color: var(--foreground); font-weight: 600; border-bottom-color: var(--brand); }
+
+.welcome { max-width: 680px; }
+
+@media (max-width: 1100px) { .hub-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 860px) {
+  .side .ws, .nav-h { display: none; }
+  .hub-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Project space: the sidebar leads with the way back to the workspace. */
+.back { display: flex; align-items: center; gap: 8px; margin-bottom: -8px; padding: 0 6px; font-size: 13px; font-weight: 500; color: var(--muted-foreground); text-decoration: none; }
+.back:hover { color: var(--foreground); }
+.back svg { width: 14px; height: 14px; transform: rotate(180deg); }
+
+/* Selectors (workspace, project): up-down chevrons, a search field, a tick on the current choice. */
+.org svg.sel { transform: none; }
+.ws[open] > .org { border-color: var(--brand); }
+.ws-menu input { height: 32px; margin-bottom: 2px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); font: 13px var(--font-sans); color: var(--foreground); }
+.ws-menu .tick { margin-left: auto; color: var(--brand-text); }
+.ws-menu p { margin: 0; padding: 8px; }
+.ws-menu .all { margin-top: 2px; border-top: 1px solid var(--border); border-radius: 0 0 8px 8px; color: var(--muted-foreground); }
+/* Product selector sits above the project selector; its icon tile is the product's own. */
+.org .pic, .ws-menu .pic { grid-row: auto; flex: none; width: 26px; height: 26px; border-radius: 7px; }
+.org .pic svg, .ws-menu .pic svg { margin: 0; width: 14px; height: 14px; color: inherit; transform: none; }
+.ws-menu .badge { margin-left: auto; }
+.ws + .ws { margin-top: -12px; }
+a.brand { text-decoration: none; border-radius: 8px; }
+
+/* Top bar breadcrumbs: workspace / product / project / page, each of the first three a selector. */
+.crumbbar { display: flex; align-items: center; gap: 2px; min-width: 0; flex-wrap: wrap; }
+.crumbbar > i { margin: 0 4px; font-style: normal; color: var(--input); }
+.crumbbar > span { padding: 0 8px; font-weight: 600; white-space: nowrap; }
+.crumbbar .org { width: auto; height: 34px; gap: 8px; padding: 0 6px 0 4px; border-color: transparent; background: none; box-shadow: none; font-size: 14px; white-space: nowrap; }
+.crumbbar .org:hover, .crumbbar .ws[open] > .org { background: var(--accent); border-color: var(--border); }
+.crumbbar .org small { display: none; }
+.crumbbar .org svg.sel { margin-left: 2px; }
+.crumbbar .org .av, .crumbbar .org .pic { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; }
+.crumbbar .ws-menu { right: auto; min-width: 250px; }
+.crumbbar .ws + .ws { margin-top: 0; }
+.vault { gap: 12px; }
+.vault-line { justify-content: flex-end; }
+@media (max-width: 860px) { .crumbbar { flex-basis: 100%; } .vault-line { justify-content: flex-start; } }
+
+/* Signed-in user at the foot of the sidebar; its menu opens upward. */
+.user .ws-menu { top: auto; bottom: calc(100% + 6px); }
+.user .org small { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user .org .av { border-radius: 50%; }
+.ws-menu [data-slot="toggle-group"] { margin: 4px 2px; width: auto; }
+.ws-menu [data-slot="toggle-group-item"] { gap: 6px; }
+.panel.form .add.share { grid-template-columns: repeat(4, auto) auto 1fr; }
+.field select { height: 38px; border-radius: 10px; font-size: 14px; }
+@media (max-width: 1100px) { .panel.form .add.share { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .add.share input { width: 100% !important; } }
+.previewing { padding: 2px 10px; border-radius: 999px; background: var(--warning-chip); color: var(--warning-text); font-size: 12.5px; font-weight: 600; }
+/* Organization selector lives at the top right; its menu hangs from the right edge. */
+.acts { align-items: center; margin-left: auto; }
+.acts .org { width: auto; height: 34px; gap: 8px; padding: 0 8px 0 5px; font-size: 14px; white-space: nowrap; }
+.acts .org small { display: none; }
+.acts .org .av { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; }
+.acts .ws-menu { left: auto; right: 0; min-width: 250px; }
+
+/* Folding the sidebar leaves an icon rail; labels come back as tooltips. */
+.fold { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; color: var(--muted-foreground); cursor: pointer; }
+.fold:hover { background: var(--accent); color: var(--foreground); }
+.app { transition: grid-template-columns 200ms var(--ease-out); }
+.app[data-folded] { grid-template-columns: 60px minmax(0, 1fr); }
+.app[data-folded] .side { padding-inline: 10px; overflow: visible; }
+.app[data-folded] :is(.ls-wordmark, .nav-h, .nav .count) { display: none; }
+.app[data-folded] .brand { padding: 0; justify-content: center; }
+.app[data-folded] .nav a { justify-content: center; padding: 0; font-size: 0; gap: 0; }
+.app[data-folded] .user .org { justify-content: center; padding: 0; border-color: transparent; background: none; box-shadow: none; }
+.app[data-folded] .user .org > :not(.av) { display: none; }
+.app[data-folded] .user .ws-menu { right: auto; width: 220px; }
+@media (max-width: 860px) { .fold { display: none; } .app[data-folded] { grid-template-columns: minmax(0, 1fr); } .app[data-folded] .nav a { font-size: 14px; padding: 0 10px; gap: 10px; } }
+
+/* Bigger mark in the sidebar, and the loading state built from the same mark. */
+a.brand { height: 36px; gap: 10px; }
+.ls-wordmark { font-size: 16px; }
+.work { position: relative; }
+/* The kit Loader, centred in the content area: right of the sidebar, below the top bar. */
+.page-loader { position: absolute; inset: 61px 0 0 0; padding: 0; pointer-events: none; }
+/* Long product menus: tighter group headings, and the sidebar scrolls on its own. */
+.nav .nav-h { margin: 10px 0 2px; }
+.nav .nav-h:first-child { margin-top: 0; }
+.nav a { height: 32px; }
+.side-foot { position: sticky; bottom: -14px; padding-bottom: 14px; background: var(--sidebar); }
+
+a.brand { font-size: 16px; }
+a.brand .ls-wordmark { font-size: 1em; }
+
+/* Access control: tabs with counts, and the role-by-permission matrix. */
+.tabs .n { margin-left: 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+.matrix th:not(:first-child), .matrix td:not(:first-child) { text-align: center; width: 120px; }
+.matrix thead th small { display: block; font-weight: 500; font-size: 11.5px; }
+.matrix tr.area th { padding-top: 14px; background: var(--popover); font-size: 12px; font-weight: 600; color: var(--muted-foreground); text-align: left; }
+.matrix tr.area:hover { background: none; }
+.matrix input { width: 16px; height: 16px; accent-color: var(--brand); }
+.matrix input:disabled { opacity: 0.7; }
+
+/* The one echo of the wordmark inside the app: sidebar group headings in spaced capitals. */
+.nav .nav-h { font-size: 10.5px; letter-spacing: 0.13em; text-transform: uppercase; }
+
+/* Integrations: each connection lists the products that depend on it. */
+.conns .row { align-items: start; }
+.conns .row .meta { align-self: center; }
+.conns .use { display: inline-block; margin: 4px 14px 0 0; }
+.conns .use b { color: var(--foreground); font-weight: 500; }
+.conns .warn { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--warning-text); font-weight: 600; }
+.conns .warn svg { width: 14px; height: 14px; }
+.conns .alert { flex-wrap: wrap; font-weight: 500; font-size: 13px; }
+.conns .alert .btn:first-of-type { margin-left: auto; }
+
+/* Phone: the page action drops under the heading, and request rows stack. */
+@media (max-width: 860px) {
+  .screen-head { flex-wrap: wrap; align-items: flex-start; }
+  .screen-head > div { flex-basis: 100%; }
+  .req .row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Phone with the sidebar folded: the menu strip must scroll inside itself, not widen the page. */
+@media (max-width: 860px) {
+  .side, .app[data-folded] .side { min-width: 0; overflow: auto hidden; padding-inline: 12px; }
+}
+
+/* Phone: nothing inside a page may be wider than the screen. Long addresses wrap, fixed-width inputs shrink,
+   and stacked detail layouts fall to one column that is allowed to shrink. */
+.screen-head > div { min-width: 0; }
+.screen-head h1 { overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  main input, main select { max-width: 100%; }
+  main [class$="-stack"], main [class*="-stack "] { grid-template-columns: minmax(0, 1fr); }
+  .lc-st { white-space: normal; }
+}
+
+/* The unread count on the notification bell in the top bar. */
+.bell-n { position: absolute; top: 2px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--destructive); color: #fff; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; }
+
+/* Tab bars scroll sideways inside themselves when there are more tabs than room. */
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs a, .tabs button { white-space: nowrap; flex: none; }
+
+.matrix .yes { color: var(--live-text); font-weight: 600; }
+
+/* A tab's content on its way: the loader under the tabs, and nothing of the tab that was there before. */
+.tab-busy { display: grid; place-items: center; min-height: 240px; }
+.tab-busy ~ * { display: none; }
+
+/* ---------- No sideways scrolling ----------
+   A page is as wide as its column. Table cells wrap (the kit's cells do not by default), headings stay on one
+   line, and a value with no spaces in it (an id, a path, a key name) may break anywhere. Code and command
+   blocks wrap too. */
+main :is([data-slot="table-cell"], [data-slot="table-head"]) { white-space: normal; }
+main [data-slot="table-cell"] { overflow-wrap: anywhere; }
+main [data-slot="table-cell"] :is(button, [data-slot="badge"], .ls-pill, .ls-scope, time) { white-space: nowrap; }
+main [data-slot="table-cell"] :is(.kms-st, small) { white-space: normal; }
+#root main :is(pre, pre *, .pf-code) { white-space: pre-wrap; overflow-wrap: anywhere; }
+main .mono { overflow-wrap: anywhere; }
+/* A row of tabs too long for the page wraps onto a second line. */
+main [data-slot="tabs-list"] { flex-wrap: wrap; max-width: 100%; }
+/* The kit's Select keeps a hidden native <select> for forms. The console's own select rules must not size it. */
+main select[aria-hidden="true"] { min-width: 0; }
+
+/* On a phone a table has no room for columns, so each row becomes a block: the first cell is its title and
+   every other cell is a line led by its column's heading (Console.tsx copies the heading into data-label). */
+@media (max-width: 640px) {
+  main :is([data-slot="table"], [data-slot="table-body"], [data-slot="table-row"], [data-slot="table-cell"]) { display: block; width: auto; }
+  main [data-slot="table-header"] { display: none; }
+  main [data-slot="table-row"] { padding: 10px 14px; }
+  main [data-slot="table-cell"] { padding: 2px 0 !important; text-align: left; }
+  main [data-slot="table-cell"]:first-child { font-weight: 600; }
+  main [data-slot="table-cell"]:empty { display: none; }
+  main [data-slot="table-cell"][data-label]::before { content: attr(data-label) ": "; color: var(--muted-foreground); font-weight: 400; }
+}
+
+/* A plan badge on a sidebar item sits at the far end, and the item's name wraps before the badge is cut. */
+.nav [data-plan] { margin-left: auto; flex: none; }
+.nav a:has([data-plan]) { height: auto; min-height: 32px; white-space: normal; }

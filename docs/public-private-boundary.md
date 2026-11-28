@@ -13,15 +13,17 @@ repository. This page says what goes where and how the checks enforce it.
   production and billing infrastructure, tenant data and customer names. It lives in `locksmith-cloud`
   (owner decision 2026-11-22).
 - The hosted service's own code and operations: the license server, billing, the plan catalog and SaaS-only
-  features. Paid self-host features are different: they live in `ee/` (see below).
+  features. Paid features of any kind, hosted or self-hosted, are private too (owner decision 2026-11-28,
+  replacing the `ee/` layer): console pages, API modules and Rust code that belong to a paid plan.
 - Owner or staff personal email addresses.
 
 Examples in code and docs use AWS's documented fake IDs (`123456789012`, `111122223333`).
 
 ## What may stay here
 
-- Paid self-host features as source-available code under `ee/` (see `LICENSING.md`, `ee/README.md`), reached only
-  through the `ls-entitlements` trait. Core never depends on `ee/` (`deny.toml`).
+- The seams paid features plug into, and their free defaults: `crates/ls-entitlements`, `apps/api/src/paid.ts`,
+  `apps/web/src/console/paid.ts`, and the kit's plan badge and upgrade notice. The names of paid features and
+  the plan each needs may appear here; their code, prices and limits may not.
 - Design docs and decisions that describe behaviour, not identifiers.
 
 ## How the checks enforce it

@@ -11,22 +11,22 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@locksmith-hq/breadcrumb";
-import { Button } from "@locksmith-hq/button";
-import { Input } from "@locksmith-hq/input";
-import { Kbd } from "@locksmith-hq/kbd";
-import { Link } from "@locksmith-hq/link";
-import { Loader } from "@locksmith-hq/loader";
-import { Mark } from "@locksmith-hq/mark";
-import { PageHeader } from "@locksmith-hq/page-header";
-import { Pill } from "@locksmith-hq/pill";
-import { ScopeChip } from "@locksmith-hq/scope-chip";
-import { Toaster } from "@locksmith-hq/sonner";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
-import { Tabs, TabsList, TabsTrigger } from "@locksmith-hq/tabs";
-import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/toggle-group";
-import { TooltipProvider } from "@locksmith-hq/tooltip";
-import { Wordmark } from "@locksmith-hq/wordmark";
+} from "@locksmith-hq/ui/breadcrumb";
+import { Button } from "@locksmith-hq/ui/button";
+import { Input } from "@locksmith-hq/ui/input";
+import { Kbd } from "@locksmith-hq/ui/kbd";
+import { Link } from "@locksmith-hq/ui/link";
+import { Loader } from "@locksmith-hq/ui/loader";
+import { Mark } from "@locksmith-hq/ui/mark";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
+import { Pill } from "@locksmith-hq/ui/pill";
+import { ScopeChip } from "@locksmith-hq/ui/scope-chip";
+import { Toaster } from "@locksmith-hq/ui/sonner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@locksmith-hq/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@locksmith-hq/ui/toggle-group";
+import { TooltipProvider } from "@locksmith-hq/ui/tooltip";
+import { Wordmark } from "@locksmith-hq/ui/wordmark";
 import API from "./api.json";
 import { DEMOS, code } from "./demos";
 
@@ -97,6 +97,8 @@ const GROUPS: [string, string[]][] = [
   ["Overlays", ["dialog", "alert-dialog", "confirm-dialog", "sheet", "popover", "dropdown-menu", "command", "tooltip"]],
   ["Navigation", ["sidebar", "tabs", "breadcrumb", "pagination", "stepper", "link"]],
   ["Layout and surfaces", ["page-header", "card", "accordion", "collapsible", "separator", "setting-row"]],
+  ["Plans", ["plan-badge", "upgrade-notice"]],
+  ["Setup", ["labels"]],
 ];
 const [[, FOUNDATIONS], ...COMPONENT_GROUPS] = GROUPS as [[string, string[]], ...[string, string[]][]];
 const ORDER = GROUPS.flatMap(([, names]) => names);
@@ -124,10 +126,10 @@ function usePage(): string {
 }
 
 const TYPE: [string, string, string][] = [
-  ["type-display", "Display 34/40", "Keys for agents, kept by people"],
-  ["type-title", "Title 26/32", "Secrets"],
-  ["type-code-title", "Code title 22/28", "STRIPE_SECRET_KEY"],
-  ["type-body", "Body 14/20", "Sealed in payments / production. Three agents hold a grant."],
+  ["ls-type-display", "Display 34/40", "Keys for agents, kept by people"],
+  ["ls-type-title", "Title 26/32", "Secrets"],
+  ["ls-type-code-title", "Code title 22/28", "STRIPE_SECRET_KEY"],
+  ["ls-type-body", "Body 14/20", "Sealed in payments / production. Three agents hold a grant."],
   ["type-mono", "Mono 12", "agt_01JD8Q9X4M7T2K5N8B3V6C0Z1Y"],
 ];
 const NOTES: Record<string, string> = {
@@ -142,7 +144,7 @@ function Foundation({ name }: { name: string }) {
       <div className="type-spec">
         {TYPE.map(([cls, label, sample]) => (
           <div key={cls} style={{ display: "contents" }}>
-            <span className="muted">{label}</span>
+            <span className="ls-muted">{label}</span>
             <p className={cls}>{sample}</p>
           </div>
         ))}
@@ -161,7 +163,7 @@ function Foundation({ name }: { name: string }) {
             <div className="motion-track">
               <i style={{ animationDuration: `var(--duration-${lane})` }} />
             </div>
-            <span className="muted">{use}</span>
+            <span className="ls-muted">{use}</span>
           </div>
         ))}
       </div>
@@ -186,10 +188,10 @@ function ApiSection({ name }: { name: string }) {
   return (
     <section className="api" aria-label="API">
       <h2>Install</h2>
-      {code(`npm install ${a.package} @locksmith-hq/styles`)}
+      {code("npm install @locksmith-hq/ui")}
       {code(`import { ${parts.slice(0, 4).join(", ")}${parts.length > 4 ? ", ..." : ""} } from "${a.package}";`, "tsx")}
       {a.shadcn ? (
-        <p className="muted">
+        <p className="ls-muted">
           This is shadcn/ui's {title(name)} with the Locksmith look applied by the theme. Its parts take the props of
           the element or primitive they render, plus <code>className</code>. Full reference:{" "}
           <Link href={`https://ui.shadcn.com/docs/components/${name}`} external>
@@ -252,7 +254,9 @@ function ApiSection({ name }: { name: string }) {
                     {p.required ? <span className="api-req"> required</span> : null}
                   </TableCell>
                   <TableCell className="font-mono text-xs">{p.type}</TableCell>
-                  <TableCell className="font-mono text-xs">{p.default ?? <span className="muted">–</span>}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {p.default ?? <span className="ls-muted">–</span>}
+                  </TableCell>
                   <TableCell>{prose(p.description)}</TableCell>
                 </TableRow>
               ))}
@@ -294,7 +298,7 @@ function ComponentPage({ name }: { name: string }) {
       <nav className="pager" aria-label="More components">
         {prev ? (
           <a href={href(prev)}>
-            <span className="muted">Previous</span>
+            <span className="ls-muted">Previous</span>
             {title(prev)}
           </a>
         ) : (
@@ -302,7 +306,7 @@ function ComponentPage({ name }: { name: string }) {
         )}
         {next ? (
           <a href={href(next)} data-next>
-            <span className="muted">Next</span>
+            <span className="ls-muted">Next</span>
             {title(next)}
           </a>
         ) : null}
@@ -367,7 +371,7 @@ function Scene() {
             </TableBody>
           </Table>
         ) : (
-          <p className="muted">
+          <p className="ls-muted">
             {tab === "versions"
               ? "Four versions. The current one was sealed 12 days ago."
               : "Nothing in the last hour."}
@@ -391,13 +395,13 @@ function Overview() {
       <Scene />
       <section className="api" aria-label="Use the kit">
         <h2>Use the kit</h2>
-        <p className="muted">
+        <p className="ls-muted">
           Every component is its own package on GitHub Packages. The kit needs React 19 and Tailwind CSS 4. Install the
           components you need with the styles, then set up your stylesheet once.
         </p>
-        {code("npm install @locksmith-hq/button @locksmith-hq/styles tailwindcss tw-animate-css")}
+        {code("npm install @locksmith-hq/ui tailwindcss tw-animate-css")}
         {code(
-          '@import "tailwindcss";\n@import "tw-animate-css";\n@import "@locksmith-hq/styles";\n@source "../node_modules/@locksmith-hq";',
+          '@import "tailwindcss";\n@import "tw-animate-css";\n@import "@locksmith-hq/ui/styles";\n@source "../node_modules/@locksmith-hq";',
         )}
       </section>
       <div className="index">

@@ -1,5 +1,5 @@
-import { PageHeader } from "@locksmith-hq/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/table";
+import { PageHeader } from "@locksmith-hq/ui/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { bindingDetails, type BindingSummary, type Client } from "@locksmith/control-plane-client";
 import { QueryState } from "../QueryState";

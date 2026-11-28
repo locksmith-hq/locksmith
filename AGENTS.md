@@ -12,12 +12,11 @@ Locksmith is an open-source secrets platform and credential gateway for AI codin
 | Path | Contents |
 |---|---|
 | `crates/` | Rust libraries and binaries |
-| `ee/` | source-available enterprise layer (Rust), see LICENSING.md |
 | `services/` | axum backends |
 | `apps/` | web, docs, desktop (Tauri), and `api` (the NestJS API) |
 | `packages/` | shared TypeScript |
 | `integrations/` | thin agent plugins |
-| `design-system/` | the component packages published as `@locksmith-hq/*` and their docs site. Owner-reviewed (CODEOWNERS): do not take work here unless the owner asks |
+| `design-system/` | the component kit, published as `@locksmith-hq/ui`, and its docs site. Owner-reviewed (CODEOWNERS): do not take work here unless the owner asks |
 | `infra/` | compose, helm (AWS and OpenTofu live in the private `locksmith-cloud` repo) |
 | `tests/` | e2e and adversarial tests |
 | `scripts/` | tooling |
@@ -32,6 +31,12 @@ The repo is public, so Actions minutes are free. Every PR runs:
 
 CI jobs call the same `just` recipes as `just ci`, so run `just quick` locally and let CI run the full suite.
 
+## Open and paid
+This repository is the free product, and it must build and run with nothing else. Paid features (pages, API modules, Rust code) live in the private `locksmith-cloud` repository and are never written here, not even behind a flag.
+- They plug in at three seams: `crates/ls-entitlements` (Rust: the open core asks, a private build injects), `apps/api/src/paid.ts` (NestJS modules) and `apps/web/src/console/paid.ts` (console pages). The `paid/` folders next to the last two are git-ignored and empty here.
+- Open code never imports from a `paid/` folder. A page whose plan is missing shows the kit's `UpgradeNotice`; an endpoint that is not in the build does not exist.
+- Unlock, export, read and write are not extension points.
+
 ## Security rules
 - Never print, log or serialize a plaintext secret.
 - Secrets live only in `secrecy`/`zeroize` types, with no Debug, Display or Clone.
@@ -41,8 +46,8 @@ CI jobs call the same `just` recipes as `just ci`, so run `just quick` locally a
 - Any test that needs an AWS API (STS, S3, DynamoDB, SQS, Cognito, KMS...) runs against Floci (https://github.com/floci-io/floci, `floci` in compose, `localhost:4566`), never real AWS, moto or LocalStack.
 
 ## UI rules
-- **Every web UI is built from the design system.** Websites and apps (`apps/web`, `apps/desktop`, `apps/docs` and any new one) use the `@locksmith-hq/*` components and `@locksmith-hq/styles` from `design-system/`. Do not hand-write a button, input, dialog, table or other control that the kit has, and do not add another UI library. If the kit lacks what you need, add it to the kit first (owner-reviewed), then use it.
-- **Every design system component is built on shadcn/ui** (https://ui.shadcn.com). When shadcn has the component, use its source unchanged and give it the Locksmith look in `design-system/packages/styles/theme.css`. When it has none, write ours the shadcn way: compose shadcn parts, pass `className` and native props through, set a `data-slot`, use lucide icons. See `design-system/README.md`.
+- **Every web UI is built from the design system.** Websites and apps (`apps/web`, `apps/desktop`, `apps/docs` and any new one) use the `@locksmith-hq/ui` components and `@locksmith-hq/ui/styles` from `design-system/`. Do not hand-write a button, input, dialog, table or other control that the kit has, and do not add another UI library. If the kit lacks what you need, add it to the kit first (owner-reviewed), then use it.
+- **Every design system component is built on shadcn/ui** (https://ui.shadcn.com). When shadcn has the component, use its source and give it the Locksmith look in `design-system/ui/styles/theme.css`; delete from the source only the classes that `design-system/ui/theme.test.mjs` lists. When it has none, write ours the shadcn way: compose shadcn parts, pass `className` and native props through, set a `data-slot`, use lucide icons. See `design-system/README.md`.
 
 ## How we work
 - **Evidence and reuse:** base decisions on evidence, not guesses. Reuse a maintained OSS package before writing one.

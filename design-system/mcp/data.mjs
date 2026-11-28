@@ -1,5 +1,5 @@
 // What the MCP server knows, read from the design system's own source so it cannot drift from it:
-// each package's exports, variants and documented props (the docs site's generator), its demo from the docs
+// each component's exports, variants and documented props (the docs site's generator), its demo from the docs
 // site, the colour tokens, and the README.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -33,22 +33,20 @@ function demos() {
   return out;
 }
 
-const describe = (name) => JSON.parse(read(`packages/${name}/package.json`)).description;
-
-/** Every component: its folder name, npm package and one-line description. */
+/** Every component: its folder name, import path and one-line description. */
 export function listComponents() {
   const d = demos();
   return Object.entries(load()).map(([name, c]) => ({
     name,
     package: c.package,
     from: c.shadcn ? "shadcn/ui" : "locksmith",
-    about: d[name]?.note || describe(name),
+    about: d[name]?.note || c.about,
   }));
 }
 
 /** One component in full, or null when there is none by that name. */
 export function getComponent(name) {
-  const key = name.toLowerCase().replace(/^@locksmith-hq\//, "");
+  const key = name.toLowerCase().replace(/^@locksmith-hq\/(ui\/)?/, "");
   const all = load();
   // "DataTable" and "data-table" both find the data-table package
   const found = all[key] ? key : Object.keys(all).find((k) => k.replaceAll("-", "") === key.replaceAll("-", ""));
@@ -59,9 +57,9 @@ export function getComponent(name) {
   return {
     name: found,
     package: c.package,
-    install: `npm install ${c.package} @locksmith-hq/styles`,
+    install: "npm install @locksmith-hq/ui",
     import: `import { ${parts.join(", ")} } from "${c.package}";`,
-    about: d?.note || describe(found),
+    about: d?.note || c.about,
     from: c.shadcn
       ? `shadcn/ui: its parts take the props of the element or primitive they render, plus className. Reference: https://ui.shadcn.com/docs/components/${found}`
       : "Locksmith-only: the props below are the whole API, plus className and the root element's native props.",
@@ -74,7 +72,7 @@ export function getComponent(name) {
 
 /** The colour tokens: `{ name: { light, dark } }`. Names holding `filter` are kept, case ignored. */
 export function getTokens(filter = "") {
-  const css = read("packages/styles/tokens.css");
+  const css = read("ui/styles/tokens.css");
   const block = (start) => {
     const from = css.indexOf(start);
     return Object.fromEntries(

@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "resolveJsonModule": true,
-    "paths": { "@locksmith-hq/*": ["../packages/*/src/index.tsx"] }
+    "paths": { "@locksmith-hq/ui/*": ["../ui/src/*/index.tsx"] }
   },
   "include": ["src"]
 }

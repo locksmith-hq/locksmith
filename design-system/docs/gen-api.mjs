@@ -1,16 +1,18 @@
-// Reads every package and writes src/api.json for the docs pages: what it exports, the variants its cva()
+// Reads every component and writes src/api.json for the docs pages: what it exports, the variants its cva()
 // calls define, and (for Locksmith-only components) each documented prop of its `<Name>Props` interface.
 // Fails when a documented interface has a prop with no description, so a new prop cannot ship undocumented.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import ts from "typescript";
 
-const root = new URL("../packages/", import.meta.url);
+const root = new URL("../ui/src/", import.meta.url);
+// What each component is, in one line; "from shadcn/ui" in it marks the ones taken from shadcn.
+const about = JSON.parse(readFileSync(new URL("../ui/components.json", import.meta.url), "utf8"));
 const api = {};
 const bad = [];
 for (const dir of readdirSync(root).sort()) {
-  const file = new URL(`${dir}/src/index.tsx`, root);
+  const file = new URL(`${dir}/index.tsx`, root);
   if (!existsSync(file)) continue;
-  const pkg = JSON.parse(readFileSync(new URL(`${dir}/package.json`, root), "utf8"));
+  if (!about[dir]) bad.push(`${dir}: no line in ui/components.json`);
   const sf = ts.createSourceFile(dir, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const exports = [],
     variants = {},
@@ -62,11 +64,18 @@ for (const dir of readdirSync(root).sort()) {
     }
   }
   if (!exports.length) continue;
-  api[dir] = { package: pkg.name, shadcn: pkg.description.includes("from shadcn/ui"), exports, variants, props };
+  api[dir] = {
+    package: `@locksmith-hq/ui/${dir}`,
+    about: about[dir],
+    shadcn: about[dir]?.includes("from shadcn/ui") ?? false,
+    exports,
+    variants,
+    props,
+  };
 }
 if (bad.length) {
-  console.error("props without a description:\n- " + bad.join("\n- "));
+  console.error("not documented:\n- " + bad.join("\n- "));
   process.exit(1);
 }
 writeFileSync(new URL("src/api.json", import.meta.url), JSON.stringify(api, null, 2) + "\n");
-console.log(`api.json: ${Object.keys(api).length} packages`);
+console.log(`api.json: ${Object.keys(api).length} components`);

@@ -1,4 +1,4 @@
-// Shared kit components and helpers for the web console and its mockup. No data, nothing talks to a server.
+// Shared kit components and helpers for the web console. No data, nothing talks to a server.
 import { useSyncExternalStore } from "react";
 import { Icon, type IconName } from "./brand";
 

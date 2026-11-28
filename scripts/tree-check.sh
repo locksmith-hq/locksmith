@@ -8,8 +8,8 @@ prune=( \( -name target -o -name node_modules -o -name .git -o -path ./.claude/w
 
 while IFS= read -r f; do
   case "$f" in
-    crates/*|ee/crates/*|services/*|apps/desktop/src-tauri/*|tests/e2e/*) ;;
-    *) echo "tree-check: Rust file outside crates/, ee/crates/, services/, tests/e2e/ or apps/desktop/src-tauri/: $f" >&2; fail=1 ;;
+    crates/*|services/*|apps/desktop/src-tauri/*|tests/e2e/*) ;;
+    *) echo "tree-check: Rust file outside crates/, services/, tests/e2e/ or apps/desktop/src-tauri/: $f" >&2; fail=1 ;;
   esac
 done < <(find . "${prune[@]}" -name '*.rs' -type f -print | sed 's|^\./||')
 

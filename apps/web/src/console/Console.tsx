@@ -603,7 +603,7 @@ export function Console() {
                   <>
                     <span className="av">{me.name[0]}</span>
                     <span>
-                      {me.name} <Badge className="tier">{planOf[at]}</Badge>
+                      {me.name}
                       <small>{me.email}</small>
                     </span>
                     <Chevrons />
@@ -634,6 +634,11 @@ export function Console() {
                   </>
                 )}
               </Selector>
+              <a className="plan-strip" href={planOf[at] === "Free" ? "#/upgrade" : "#/billing"}>
+                <Badge className="tier">{planOf[at]}</Badge>
+                <span>{planOf[at] === "Free" ? "Upgrade" : "Plan and billing"}</span>
+                <Icon name="arrow" />
+              </a>
             </div>
           </SidebarProvider>
         </aside>

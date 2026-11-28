@@ -297,6 +297,10 @@ main select[aria-hidden="true"] { min-width: 0; }
 .nav a:has([data-plan]) { height: auto; min-height: 32px; white-space: normal; }
 
 /* The plan next to the name in the sidebar, and the plan cards of the Upgrade page. */
-.user .tier { margin-left: 4px; vertical-align: 1px; }
+.plan-strip { display: flex; align-items: center; gap: 8px; margin: 2px 0 0; padding: 6px 10px; border-radius: 9px; color: var(--muted-foreground); font-size: 13px; text-decoration: none; }
+.plan-strip:hover { background: var(--accent); color: var(--foreground); }
+.plan-strip .i { margin-left: auto; width: 14px; height: 14px; }
+.app[data-folded] .plan-strip > :not(.tier) { display: none; }
+.app[data-folded] .plan-strip { justify-content: center; padding-inline: 0; }
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; align-items: start; }
 .plans [data-current] { border-color: var(--brand); }

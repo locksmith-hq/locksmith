@@ -1,2 +1,0 @@
-/* Data-bearing regions vary per run; remove them so layout, not data, is compared. */
-main table, main ul, main ol, main .panel, main .grid, [data-testid="signed-in-as"] { display: none !important; }

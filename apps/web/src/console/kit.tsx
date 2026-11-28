@@ -8,6 +8,8 @@ import { cn } from "cn";
 import {
   Activity,
   AppWindow,
+  FolderKanban,
+  Layers,
   ArrowRight,
   Ban,
   Bot,
@@ -86,6 +88,8 @@ const ICONS = {
   sessions: Activity,
   s_terminal: Terminal,
   s_window: AppWindow,
+  s_layers: Layers,
+  s_folder: FolderKanban,
   s_code: Code,
   s_spark: Sparkles,
   s_claude: Bot,

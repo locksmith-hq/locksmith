@@ -1,5 +1,5 @@
 // The Locksmith web console. This is the product's UI and where its work continues; it runs on sample data
-// until it is connected to the control plane. Served by `vite` at /console.html.
+// until it is connected to the control plane. Served by `vite` at /.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "../app.css";

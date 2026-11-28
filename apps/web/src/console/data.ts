@@ -9,7 +9,29 @@ const m = 60,
 export interface Project {
   id: string;
   description: string;
+  /** What the project has: the organization's environments while it inherits them, else its own list. */
   envs: string[];
+  /** Follows the organization's environments (`defaults`); editing `envs` makes the list its own. */
+  inherit: boolean;
+}
+
+/** The organization's environments: new projects start with them, and projects that inherit follow them. */
+export const defaults = { envs: ["development", "staging", "production"] };
+
+function project(id: string, description: string, own: string[] | null): Project {
+  let mine = own ?? [];
+  return {
+    id,
+    description,
+    inherit: own === null,
+    get envs() {
+      return this.inherit ? defaults.envs : mine;
+    },
+    set envs(v) {
+      mine = v;
+      this.inherit = false;
+    },
+  };
 }
 interface Grant {
   agent: string;
@@ -55,14 +77,13 @@ export interface Event {
   digest: string;
 }
 
+/** A project that has just been created: it inherits the organization's environments. */
+export const newProject = (id: string) => project(id, "", null);
+
 export const projects: Project[] = [
-  {
-    id: "acme-api",
-    description: "Public REST API and background workers",
-    envs: ["development", "staging", "production"],
-  },
-  { id: "acme-web", description: "Customer web app", envs: ["development", "production"] },
-  { id: "billing", description: "Invoices, payouts and the Stripe integration", envs: ["staging", "production"] },
+  project("acme-api", "Public REST API and background workers", null),
+  project("acme-web", "Customer web app", ["development", "production"]),
+  project("billing", "Invoices, payouts and the Stripe integration", ["staging", "production"]),
 ];
 
 export const agents: Agent[] = [

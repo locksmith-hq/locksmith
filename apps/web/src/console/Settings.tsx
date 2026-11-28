@@ -78,8 +78,8 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
           <h1>Settings</h1>
           <p className="lede">
             {org
-              ? `The name of ${name}, how its people sign in, and how to take its data out.`
-              : "Your personal workspace: its name, how you sign in, and how to take your data out."}
+              ? `The name of ${name} and how its people sign in.`
+              : "Your personal workspace: its name and how you sign in."}
           </p>
         </div>
       </div>
@@ -137,21 +137,6 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
         <Row title="Audit streaming" about={FEATURES.streaming.about} needs="streaming">
           <Paid feature="streaming" action="Set up" />
         </Row>
-      </Card>
-
-      <Card className="panel" role="region" aria-labelledby="set-data">
-        <h2 id="set-data">Take your data out</h2>
-        <p className="muted">
-          Locksmith's servers cannot read your secret values, so an export is made on your own machine, one project and
-          environment at a time. Only an owner can run it, and each run is recorded in that project's activity.
-        </p>
-        <pre className="cmd">
-          <code>smith export acme-api --env production --out acme-api.production.env</code>
-        </pre>
-        <p className="muted small">
-          The file holds real values. Treat it like the secrets themselves. Export works on every plan and is never
-          blocked by a billing problem.
-        </p>
       </Card>
 
       <Card className="panel danger-zone" role="region" aria-labelledby="set-danger">

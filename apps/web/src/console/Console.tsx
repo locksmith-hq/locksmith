@@ -19,10 +19,12 @@ import { Dropdown, Option } from "../Dropdown";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { Fragment, useContext, useEffect, useLayoutEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { Icon, Logo, TabBusy, TabLoader, type IconName } from "./kit";
+import { Icon, Logo, Switch, TabBusy, TabLoader, type IconName } from "./kit";
 import { Loader as KitLoader } from "@locksmith-hq/ui/loader";
 import * as seed from "./data";
 import { paid } from "./paid";
+import { EnvEditor } from "./EnvEditor";
+import { Environments } from "./Environments";
 import { Settings } from "./Settings";
 import { pageFor } from "./pages";
 import { useSecrets } from "./pages/gateway-data";
@@ -281,7 +283,7 @@ function Account({ appearance, setAppearance }: { appearance: Appearance; setApp
 /** A product stops being "Planned" once its first page exists, either built in or in ./pages. */
 const built = (p: seed.Product) => !!p.href || !!pageFor(`${p.id}/${seed.spaces[p.id]?.[0]?.[0]}`);
 /** The wordmark: the product's own typeface in spaced capitals. */
-const Word = () => <Wordmark />;
+const Word = () => <Wordmark size={18} />;
 
 /** Loading state: the small mark, its dial turning one notch at a time while the bolts draw in and out (all CSS). */
 const Loader = () => <KitLoader className="page-loader" />;
@@ -375,6 +377,7 @@ export function Console() {
   const live = sessions.filter((s) => s.state === "active");
   const page = route[0] ?? "home";
   // Folded sidebar: an icon-only rail. Remembered per browser; the page works the same if storage is blocked.
+  const [brandHover, setBrandHover] = useState(false);
   const [folded, setFolded] = useState(() => {
     try {
       return localStorage.getItem("locksmith.console.folded") === "1";
@@ -394,7 +397,9 @@ export function Console() {
   // shortcut: the console has no data to wait for, so every page change waits a fixed second to show the loading state (?load=5000 tries a slow one).
   const where = route.join("/");
   // On a page with tabs of its own, a change of tab reloads only what is under the tabs (TabLoader), not the page.
-  const whole = TABBED.has(route[0] ?? "") ? route[0]! : where;
+  // Beyond the page itself (the toggle of environments, a filter), a change of route is not a new page either:
+  // a project page is secrets/<project>/<tab>, an Agent Gateway page access/<tab>.
+  const whole = TABBED.has(route[0] ?? "") ? route[0]! : route.slice(0, route[0] === "access" ? 2 : 3).join("/");
   const [loaded, setLoaded] = useState({ whole: "", where: "" });
   useEffect(() => {
     const t = setTimeout(
@@ -499,8 +504,14 @@ export function Console() {
       <div className="app" data-folded={folded || undefined}>
         <aside className="side">
           <SidebarProvider className="contents">
-            <a className="brand" href="#/home" aria-label="Locksmith home">
-              <Logo size={34} />
+            <a
+              className="brand"
+              href="#/home"
+              aria-label="Locksmith home"
+              onMouseEnter={() => setBrandHover(true)}
+              onMouseLeave={() => setBrandHover(false)}
+            >
+              <Logo size={36} open={brandHover} />
               <Word />
             </a>
             {product ? (
@@ -520,9 +531,6 @@ export function Console() {
                               <Icon name={icon} />
                               {label}
                               {t === "secrets" && <span className="count">{own.length}</span>}
-                              {product === "secrets" && gateOf(["secrets", "", t]) && (
-                                <GateBadge feature={gateOf(["secrets", "", t])!} />
-                              )}
                               {product === "access" && t === "sessions" && <span className="count">{live.length}</span>}
                             </a>
                           </SidebarMenuButton>
@@ -569,6 +577,8 @@ export function Console() {
                         </SidebarGroupLabel>
                         {ws.org && link("members", "User Management", "sessions", seed.members.length)}
                         {Billing && link("billing", "Usage and billing", "clock")}
+                        {link("projects", "Projects", "s_folder")}
+                        {link("environments", "Environments", "s_layers")}
                         {link("settings", "Settings", "s_window")}
                       </>
                     )}
@@ -728,6 +738,10 @@ export function Console() {
                     say(`${ws.name} is now on ${p}`);
                   }}
                 />
+              ) : page === "projects" ? (
+                <Projects db={db} acl={acl} all />
+              ) : page === "environments" ? (
+                <Environments />
               ) : page === "settings" ? (
                 <Settings key={ws.name} name={ws.name} org={ws.org} say={say} />
               ) : page === "integrations" ? (
@@ -1913,86 +1927,41 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
 }
 
 function ProjectSettings({ p }: { p: seed.Project }) {
-  const [envs, setEnvs] = useState(p.envs);
-  const [gone, setGone] = useState<string | null>(null);
+  const [inherit, setInherit] = useState(p.inherit);
+  const [envs, setEnvsNow] = useState(p.envs);
   const [confirm, setConfirm] = useState("");
+  // Editing the list makes it this project's own (the setter on Project turns inheriting off).
+  const setEnvs = (change: (x: string[]) => string[]) => {
+    const next = change(envs);
+    p.envs = next;
+    setInherit(false);
+    setEnvsNow(next);
+  };
+  const inheritNow = (on: boolean) => {
+    if (on) p.inherit = true;
+    else p.envs = [...seed.defaults.envs];
+    setInherit(on);
+    setEnvsNow(p.envs);
+  };
   return (
     <section>
       <Head title="Settings" sub={`The environments of ${p.id}, its description, and deleting it.`} />
-      <Card className="panel form">
-        <h2>Environments</h2>
-        <p className="muted">
-          Each environment holds its own set of secrets. The last one is treated as production: access to it can be made
-          to need a second person.
-        </p>
-        <ul className="plain" style={{ margin: "12px 0" }}>
-          {envs.map((e, i) => (
-            <li key={e}>
-              <span className="mono">{e}</span>
-              {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
-              {envs.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-(--destructive-text)"
-                  type="button"
-                  aria-label={`Remove environment ${e}`}
-                  onClick={() => setGone(e)}
-                >
-                  Remove
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
-        {gone && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Removing {gone} deletes every secret in it and the access agents have to them.
-              <Button
-                variant="destructive"
-                size="sm"
-                type="button"
-                style={{ marginLeft: "auto" }}
-                onClick={() => {
-                  setEnvs((x) => x.filter((e) => e !== gone));
-                  setGone(null);
-                }}
-              >
-                Remove {gone}
-              </Button>
-              <Button variant="ghost" size="sm" type="button" onClick={() => setGone(null)}>
-                Keep
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-        <form
-          className="inline-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = e.currentTarget;
-            const v = String(new FormData(f).get("env"))
-              .trim()
-              .toLowerCase()
-              .replace(/[^a-z0-9-]/g, "-");
-            if (v && !envs.includes(v)) setEnvs((x) => [...x.slice(0, -1), v, x[x.length - 1]!]);
-            f.reset();
-          }}
-        >
-          <Input
-            name="env"
-            required
-            aria-label="New environment name"
-            placeholder="preview"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <Button variant="outline" size="sm" type="submit">
-            Add environment
-          </Button>
-        </form>
-      </Card>
+      <EnvEditor
+        envs={envs}
+        setEnvs={setEnvs}
+        readOnly={inherit}
+        about="Each environment holds its own set of secrets. The last one is treated as production: access to it can be made to need a second person."
+        scope="deletes every secret in it and the access agents have to them."
+      >
+        <label className="inline-form">
+          <Switch label="Inherit the organization's environments" checked={inherit} onChange={inheritNow} />
+          <span>
+            {inherit
+              ? "Follows the organization's list: a change there applies here."
+              : "Has its own list. Turn this on to follow the organization's again."}
+          </span>
+        </label>
+      </EnvEditor>
       <Card className="panel form">
         <form className="contents" onSubmit={(e) => e.preventDefault()}>
           <h2>Description</h2>
@@ -2029,15 +1998,28 @@ function ProjectSettings({ p }: { p: seed.Project }) {
   );
 }
 
-function Projects({ db, acl }: { db: Db; acl: Acl }) {
+/** The projects list: in Secret Management, and as the organization's own Projects page (`all`). */
+function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean }) {
   const mine = seed.projects.filter((p) => acl.roleIn(p.id));
   const plan = useContext(PlanContext);
   const projectCap = limitsOf(plan).projects;
   const projectsFull = projectCap !== null && seed.projects.length >= projectCap;
+  const [naming, setNaming] = useState(false);
+  // A new project starts out inheriting the organization's environments (`seed.defaults`).
+  const create = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const id = String(new FormData(e.currentTarget).get("name"))
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-");
+    if (!id || seed.projects.some((p) => p.id === id)) return;
+    seed.projects.push(seed.newProject(id));
+    setNaming(false);
+  };
   return (
     <section>
       <Head
-        title="Secret Management"
+        title={all ? "Projects" : "Secret Management"}
         sub={
           acl.isAdmin
             ? "A project groups the secrets of one codebase, split by environment. As an organization admin you see every project."
@@ -2047,7 +2029,8 @@ function Projects({ db, acl }: { db: Db; acl: Acl }) {
         {acl.isAdmin && (
           <Button
             type="button"
-            disabled={projectsFull}
+            onClick={() => setNaming(true)}
+            disabled={projectsFull || naming}
             title={projectsFull ? `The ${plan} plan has ${projectCap} projects` : undefined}
           >
             <Icon name="plus" />
@@ -2055,6 +2038,15 @@ function Projects({ db, acl }: { db: Db; acl: Acl }) {
           </Button>
         )}
       </Head>
+      {naming && (
+        <form className="inline-form" onSubmit={create}>
+          <Input name="name" required autoFocus aria-label="Project name" placeholder="my-project" autoComplete="off" />
+          <Button type="submit">Create project</Button>
+          <Button type="button" variant="ghost" onClick={() => setNaming(false)}>
+            Cancel
+          </Button>
+        </form>
+      )}
       {projectsFull && acl.isAdmin && (
         <Alert>
           <AlertDescription>

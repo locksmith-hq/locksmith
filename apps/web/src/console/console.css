@@ -193,7 +193,7 @@ a.brand { text-decoration: none; border-radius: 8px; }
 @media (max-width: 860px) { .fold { display: none; } .app[data-folded] { grid-template-columns: minmax(0, 1fr); } .app[data-folded] .nav a { font-size: 14px; padding: 0 10px; gap: 10px; } }
 
 /* Bigger mark in the sidebar, and the loading state built from the same mark. */
-a.brand { height: 36px; gap: 10px; }
+a.brand { height: 40px; gap: 10px; }
 .ls-wordmark { font-size: 16px; }
 .work { position: relative; }
 /* The kit Loader, centred in the content area: right of the sidebar, below the top bar. */
@@ -204,7 +204,7 @@ a.brand { height: 36px; gap: 10px; }
 .nav a { height: 32px; }
 .side-foot { position: sticky; bottom: -14px; padding-bottom: 14px; background: var(--sidebar); }
 
-a.brand { font-size: 16px; }
+a.brand { font-size: 18px; }
 a.brand .ls-wordmark { font-size: 1em; }
 
 /* Access control: tabs with counts, and the role-by-permission matrix. */
@@ -252,7 +252,7 @@ a.brand .ls-wordmark { font-size: 1em; }
 }
 
 /* The unread count on the notification bell in the top bar. */
-.bell-n { position: absolute; top: 2px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--destructive); color: #fff; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; }
+.bell-n { position: absolute; top: 4px; right: 3px; min-width: 11px; height: 11px; padding: 0 2px; border-radius: 6px; background: var(--destructive); color: #fff; font-size: 8px; font-weight: 700; line-height: 11px; text-align: center; }
 
 /* Tab bars scroll sideways inside themselves when there are more tabs than room. */
 .tabs { overflow-x: auto; scrollbar-width: none; }

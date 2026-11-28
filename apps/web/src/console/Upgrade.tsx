@@ -28,32 +28,34 @@ export function Upgrade({ name, plan, setPlan }: { name: string; plan: PlanId; s
           const current = p.id === plan;
           const above = ORDER.indexOf(p.id) > ORDER.indexOf(plan);
           return (
-            <Card key={p.id} className="panel" data-current={current || undefined}>
-              <h2>
-                {p.id} {current && <Badge>Current plan</Badge>}
-              </h2>
+            <Card key={p.id} className="panel plan" data-current={current || undefined}>
+              <div className="plan-head">
+                <h2>
+                  {p.id} {current && <Badge>Current plan</Badge>}
+                </h2>
+                {above &&
+                  (p.id === "Enterprise" ? (
+                    <Button asChild variant="outline">
+                      <a href="mailto:sales@locksmith.example">Talk to us</a>
+                    </Button>
+                  ) : paid.billing ? (
+                    <Button asChild>
+                      <a href="#/billing">Upgrade to {p.id}</a>
+                    </Button>
+                  ) : (
+                    <Button type="button" onClick={() => setPlan(p.id)}>
+                      Upgrade to {p.id}
+                    </Button>
+                  ))}
+              </div>
               <p className="muted">{p.who}</p>
               {adds.length > 0 && (
-                <ul className="plain">
+                <ul className="plan-adds">
                   {adds.map((f) => (
                     <li key={f.title}>{f.title}</li>
                   ))}
                 </ul>
               )}
-              {above &&
-                (p.id === "Enterprise" ? (
-                  <Button asChild variant="outline">
-                    <a href="mailto:sales@locksmith.example">Talk to us</a>
-                  </Button>
-                ) : paid.billing ? (
-                  <Button asChild>
-                    <a href="#/billing">Upgrade to {p.id}</a>
-                  </Button>
-                ) : (
-                  <Button type="button" onClick={() => setPlan(p.id)}>
-                    Upgrade to {p.id}
-                  </Button>
-                ))}
             </Card>
           );
         })}

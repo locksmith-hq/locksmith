@@ -67,6 +67,8 @@ fn grant(secret_id: Uuid) -> Grant {
         mode: "relay".to_owned(),
         expires_at: None,
         scope: None,
+        budget: None,
+        agent_budget: None,
     }
 }
 
@@ -532,6 +534,44 @@ async fn pg_auth_no_grant_is_refused_and_recorded() {
         (ev.agent_id, ev.host.as_deref(), ev.port),
         (AGENT, Some("db.test"), Some(5432))
     );
+}
+
+/// T9 task 2.3, DB session open: a session over the grant's burst limit is refused `53300`
+/// before any DNS, decrypt or upstream leg, and writes one `budget.exceeded` event.
+#[tokio::test]
+async fn pg_auth_over_budget_is_refused_53300_before_decrypt() {
+    let h = Harness::start().await;
+    let mut g = grant(APP);
+    g.budget = Some(crate::grants::Budget {
+        per_minute: Some(1),
+        per_day: None,
+    });
+    h.grants.set(AGENT, vec![g]);
+    let msgs = h.login("app", &h.valid_token()).await;
+    assert_eq!(msgs.last().map(|m| m.0), Some(b'R'), "inside the limit");
+    let (fetches, lookups, calls) = (
+        h.material.fetches.load(Ordering::SeqCst),
+        h.resolver.lookups.lock().unwrap().len(),
+        h.upstream.calls.load(Ordering::SeqCst),
+    );
+    let before = h.audit.events().len();
+
+    let msgs = h.login("app", &h.valid_token()).await;
+    assert_eq!(sqlstate_of(&msgs), "53300");
+    assert_eq!(
+        h.material.fetches.load(Ordering::SeqCst),
+        fetches,
+        "no decrypt"
+    );
+    assert_eq!(h.resolver.lookups.lock().unwrap().len(), lookups, "no DNS");
+    assert_eq!(
+        h.upstream.calls.load(Ordering::SeqCst),
+        calls,
+        "no upstream leg"
+    );
+    let ev = h.audit.events();
+    assert_eq!(ev[before..].len(), 1, "one event");
+    assert_eq!(ev[before].kind, EventKind::BudgetExceeded("per_minute"));
 }
 
 #[tokio::test]

@@ -41,6 +41,24 @@ pub struct Grant {
     pub scope: Option<crate::aws_policy::AwsGrantScope>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
+    /// This grant's call budget (T9); `None` means no grant-level limit.
+    #[serde(default)]
+    pub budget: Option<Budget>,
+    /// The agent-wide call budget (T9), copied onto every grant of the agent when the control
+    /// plane's answer is parsed; `None` means no agent-level limit.
+    #[serde(default)]
+    pub agent_budget: Option<Budget>,
+}
+
+/// Call limits for an agent or one grant (T9). A missing field means no limit of that kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct Budget {
+    /// Burst limit: calls per minute.
+    #[serde(default)]
+    pub per_minute: Option<u32>,
+    /// Daily limit: calls per UTC day.
+    #[serde(default)]
+    pub per_day: Option<u32>,
 }
 
 impl Grant {
@@ -107,6 +125,9 @@ pub trait GrantSource: Send + Sync {
 struct GrantSetJson {
     agent_id: Uuid,
     items: Vec<Grant>,
+    /// The agent-wide budget (T9); absent from older control planes.
+    #[serde(default)]
+    budget: Option<Budget>,
 }
 
 /// Parse the internal endpoint's answer and check it is for `agent_id`.
@@ -115,7 +136,11 @@ pub fn parse_grants(body: &[u8], agent_id: Uuid) -> Result<Vec<Grant>, GrantErro
     if set.agent_id != agent_id {
         return Err(GrantError::BadResponse);
     }
-    Ok(set.items)
+    let mut items = set.items;
+    for g in &mut items {
+        g.agent_budget = set.budget;
+    }
+    Ok(items)
 }
 
 impl ControlPlane {
@@ -460,6 +485,40 @@ mod tests {
         assert_eq!(client.grants(other).await, Ok(Vec::new()), "deleted agent");
     }
 
+    #[test]
+    fn budgets_are_optional_and_the_agent_budget_reaches_every_grant() {
+        let agent = Uuid::now_v7();
+        let old = serde_json::json!({"agent_id": agent, "items": [{
+            "grant_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(), "secret_name": "K",
+            "mode": "relay", "expires_at": null}]});
+        let g = parse_grants(old.to_string().as_bytes(), agent).unwrap();
+        assert_eq!(
+            (g[0].budget, g[0].agent_budget),
+            (None, None),
+            "old payload"
+        );
+
+        let new = serde_json::json!({"agent_id": agent, "budget": {"per_day": 100},
+            "items": [{"grant_id": Uuid::now_v7(), "secret_id": Uuid::now_v7(),
+            "secret_name": "K", "mode": "relay", "expires_at": null,
+            "budget": {"per_minute": 5, "per_day": 50}}]});
+        let g = parse_grants(new.to_string().as_bytes(), agent).unwrap();
+        assert_eq!(
+            g[0].budget,
+            Some(Budget {
+                per_minute: Some(5),
+                per_day: Some(50)
+            })
+        );
+        assert_eq!(
+            g[0].agent_budget,
+            Some(Budget {
+                per_minute: None,
+                per_day: Some(100)
+            })
+        );
+    }
+
     fn grant(secret_id: Uuid, mode: &str, expires_at: Option<OffsetDateTime>) -> Grant {
         Grant {
             grant_id: Uuid::now_v7(),
@@ -468,6 +527,8 @@ mod tests {
             mode: mode.to_owned(),
             scope: None,
             expires_at,
+            budget: None,
+            agent_budget: None,
         }
     }
 

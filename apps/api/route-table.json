@@ -27,6 +27,11 @@
       "owner": "rust"
     },
     {
+      "method": "POST",
+      "path": "/internal/v1/budgets/lease",
+      "owner": "rust"
+    },
+    {
       "method": "PUT",
       "path": "/internal/v1/gateway/bindings",
       "owner": "rust"
@@ -34,11 +39,6 @@
     {
       "method": "POST",
       "path": "/internal/v1/mcp/agent-calls",
-      "owner": "rust"
-    },
-    {
-      "method": "POST",
-      "path": "/internal/v1/mcp/upstream-calls",
       "owner": "rust"
     },
     {
@@ -54,6 +54,11 @@
     {
       "method": "GET",
       "path": "/internal/v1/mcp/revoked-agent-clients",
+      "owner": "rust"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v1/mcp/upstream-calls",
       "owner": "rust"
     },
     {

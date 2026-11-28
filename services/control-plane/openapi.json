@@ -688,6 +688,79 @@
         ],
         "type": "string"
       },
+      "BudgetLease": {
+        "description": "What the core granted from today's budget.",
+        "properties": {
+          "day": {
+            "description": "The UTC day the lease counts against (`YYYY-MM-DD`); the counter restarts at its end.",
+            "type": "string"
+          },
+          "granted": {
+            "description": "Calls granted now: between 0 and `count`, never past the daily limit. `0` means the\nday's budget is spent.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "used": {
+            "description": "Calls leased so far today, this lease included.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "granted",
+          "used",
+          "day"
+        ],
+        "type": "object"
+      },
+      "BudgetLeaseRequest": {
+        "additionalProperties": false,
+        "description": "Body of `POST /internal/v1/budgets/lease`: the gateway asks for a block of calls from an\nagent's daily budget.",
+        "properties": {
+          "agent_id": {
+            "description": "The agent the budget belongs to.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "count": {
+            "description": "How many calls the gateway wants now (`min(10, remaining)`).",
+            "format": "int32",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "daily_limit": {
+            "description": "The daily limit in calls, as the gateway read it from the grant or agent budget.",
+            "format": "int32",
+            "maximum": 1000000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "grant_id": {
+            "description": "The grant for a per-grant budget; absent for the agent-wide budget.",
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "agent_id",
+          "daily_limit",
+          "count"
+        ],
+        "type": "object"
+      },
+      "BudgetLimitKind": {
+        "description": "Which budget limit refused a call (`budget.exceeded`).",
+        "enum": [
+          "per_minute",
+          "per_day",
+          "per_day_unavailable"
+        ],
+        "type": "string"
+      },
       "ConditionView": {
         "description": "One claim test as shown to callers: `pattern` ends in `*` for a prefix match.",
         "properties": {
@@ -1345,6 +1418,17 @@
           },
           "kind": {
             "$ref": "#/components/schemas/RelayEventKind"
+          },
+          "limit_kind": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BudgetLimitKind",
+                "description": "Which limit refused the call (`budget.exceeded` only, required there)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "method": {
             "oneOf": [
@@ -2185,7 +2269,8 @@
           "db.session.denied",
           "db.session.opened",
           "db.session.closed",
-          "credential.issued"
+          "credential.issued",
+          "budget.exceeded"
         ],
         "type": "string"
       },
@@ -2889,6 +2974,125 @@
           }
         ],
         "summary": "Append a human sign-in, sign-out or personal-org event (NestJS API only)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/budgets/lease": {
+      "post": {
+        "description": "Atomically raises today's (UTC) call counter for the agent, or for one of its grants, by up to `count` and never past `daily_limit`, and answers how many were granted. Concurrent leases cannot together exceed the limit. `granted` is `0` once the day's budget is spent. The agent must exist in the org (else `404`), and a grant must belong to it. Counts and ids only.",
+        "operationId": "lease_budget_calls",
+        "parameters": [
+          {
+            "description": "The agent's org (the token's `org`)",
+            "in": "header",
+            "name": "X-Locksmith-Org",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetLeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetLease"
+                }
+              }
+            },
+            "description": "Leased (possibly 0)"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid service token or org header"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Email verification required"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The agent or grant does not exist in the org"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unsupported media type"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "security": [
+          {
+            "service_token": []
+          }
+        ],
+        "summary": "Lease a block of calls from an agent's daily budget (gateway only)",
         "tags": [
           "internal"
         ]

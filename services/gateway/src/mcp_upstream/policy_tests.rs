@@ -339,6 +339,16 @@ impl Rig {
         audit: Arc<dyn AuditSink>,
         options: RelayOptions,
     ) -> Self {
+        Self::build_budgeted(ttl, audit, options, None).await
+    }
+
+    /// [`Rig::build`] with a budget on the agent's grant for the upstream's secret.
+    pub(in crate::mcp_upstream) async fn build_budgeted(
+        ttl: Duration,
+        audit: Arc<dyn AuditSink>,
+        options: RelayOptions,
+        budget: Option<crate::grants::Budget>,
+    ) -> Self {
         use ToolDecision::{Allow, Deny, Hide, Hold};
         let probe = Arc::new(Probe::default());
         let fake = FakeUpstream(probe.clone());
@@ -372,7 +382,9 @@ impl Rig {
             JwksSettings::default(),
         ));
         let grants = Arc::new(StubGrants::default());
-        grants.set(AGENT, vec![grant(SECRET, "relay", None)]);
+        let mut g = grant(SECRET, "relay", None);
+        g.budget = budget;
+        grants.set(AGENT, vec![g]);
         let bindings = Bindings {
             org_id: ORG,
             bindings: Vec::new(),

@@ -67,6 +67,8 @@ pub(super) fn grant(secret_id: Uuid, mode: &str, expires_at: Option<OffsetDateTi
         mode: mode.to_owned(),
         scope: None,
         expires_at,
+        budget: None,
+        agent_budget: None,
     }
 }
 

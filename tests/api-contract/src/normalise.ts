@@ -7,8 +7,8 @@ const IS_UUID = new RegExp(`^${UUID.source}$`, "i");
 const TIMESTAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g;
 const JWT = /eyJ[\w-]+\.[\w-]+\.[\w-]*/g;
 const SECRET_KEY = /(token|secret|password|authorization)$/i;
-// JWKS key material differs per process and page cursors encode row ids; the shape is what the contract pins.
-const KEY_FIELD = /^(kid|x|next|handle|digest|prev_digest|ciphertext|wrapped_dek)$/;
+// A budget lease's UTC `day` changes with the clock; JWKS key material differs per process and page cursors encode row ids; the shape is what the contract pins.
+const KEY_FIELD = /^(kid|x|next|handle|digest|prev_digest|ciphertext|wrapped_dek|day)$/;
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 

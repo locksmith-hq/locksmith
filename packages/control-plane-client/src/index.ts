@@ -28,6 +28,8 @@ export type McpClient = components["schemas"]["McpClient"];
 /** One gateway binding, non-secret fields only (never a password, template, secret id or key). */
 export type BindingSummary = components["schemas"]["BindingSummary"];
 export type BindingKind = components["schemas"]["BindingKind"];
+export type BudgetLeaseRequest = components["schemas"]["BudgetLeaseRequest"];
+export type BudgetLease = components["schemas"]["BudgetLease"];
 export type Problem = components["schemas"]["Problem"];
 
 /** Non-secret fields of a binding as label/value pairs for display, in a fixed order per kind; unset fields are skipped. */

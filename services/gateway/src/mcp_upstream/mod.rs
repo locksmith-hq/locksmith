@@ -262,6 +262,54 @@ impl UpstreamMcp {
             .map_err(Self::hop_error)
     }
 
+    /// The agent's and the grant's budgets (T9) for one call to this upstream. A refusal is one
+    /// `budget.exceeded` event and the fixed `budget_exceeded` error with the retry delay; grants
+    /// that cannot be read fail closed.
+    async fn check_budget(&self, agent: AgentIdentity) -> Result<(), McpError> {
+        let grants = self
+            .relay
+            .grants()
+            .grants(agent.agent_id)
+            .await
+            .map_err(|e| {
+                tracing::warn!(reason = e.as_str(), "agent grants could not be read");
+                McpError::internal_error("grants_unavailable", None)
+            })?;
+        let secret_id = self.upstream.secret_id;
+        let Err(refusal) = self
+            .relay
+            .check_budget(
+                agent.agent_id,
+                &grants,
+                secret_id,
+                crate::grants::MODE_RELAY,
+            )
+            .await
+        else {
+            return Ok(());
+        };
+        drop(grants);
+        let ev = crate::audit::RelayEvent {
+            kind: crate::audit::EventKind::BudgetExceeded(refusal.kind()),
+            agent_id: agent.agent_id,
+            secret_id,
+            version: self.upstream.version,
+            method: None,
+            host: None,
+            port: None,
+            status: None,
+            attempt_id: None,
+            issued: None,
+        };
+        if self.relay.audit().append(ev).await.is_err() {
+            tracing::error!("mcp upstream budget event not appended");
+        }
+        Err(McpError::invalid_request(
+            crate::budget::BudgetRefusal::SLUG,
+            Some(serde_json::json!({ "retry_after_secs": refusal.retry_after_secs() })),
+        ))
+    }
+
     /// The policy's decision for every catalogue tool; a tool it does not name is hidden. An
     /// evaluator error is `None` (the caller hides everything and refuses the call).
     async fn decisions(
@@ -335,6 +383,9 @@ impl ServerHandler for UpstreamMcp {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let agent = Self::agent(&context)?;
+        // Budget (T9): first, before the catalogue fetch (which unwraps the key and calls the
+        // upstream) and before any unwrap or forward. A refused call costs no KMS call.
+        self.check_budget(agent).await?;
         let audit = CallAudit::new(&self.relay, agent, &self.upstream.name);
         let catalogue = match self.catalogue(agent).await {
             Ok(c) => c,

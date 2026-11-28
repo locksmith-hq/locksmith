@@ -13,7 +13,7 @@ pub(crate) mod audit;
 mod bindings;
 pub(crate) mod environments;
 pub(crate) mod extract;
-mod internal;
+pub(crate) mod internal;
 mod mcp;
 mod orgs;
 pub(crate) mod projects;
@@ -98,6 +98,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(internal::append_mcp_upstream_call))
         .routes(routes!(internal::upsert_agent_mcp_client))
         .routes(routes!(internal::revoked_agent_clients))
+        .routes(routes!(internal::lease_budget_calls))
         .routes(routes!(internal::append_event))
         .routes(routes!(internal::append_human_event))
 }

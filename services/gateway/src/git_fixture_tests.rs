@@ -325,6 +325,8 @@ fn grant(secret_id: Uuid) -> Grant {
         mode: "relay".to_owned(),
         scope: None,
         expires_at: None,
+        budget: None,
+        agent_budget: None,
     }
 }
 
@@ -348,6 +350,17 @@ async fn start_gateway_with(
     secrets: &[(Uuid, Vec<u8>)],
     github_api: Option<String>,
     audit: Arc<MemoryAudit>,
+) -> Gateway {
+    start_gateway_budget(git_bindings, secrets, github_api, audit, None).await
+}
+
+/// As [`start_gateway_with`], with a call budget (T9) on every grant.
+async fn start_gateway_budget(
+    git_bindings: Vec<GitBinding>,
+    secrets: &[(Uuid, Vec<u8>)],
+    github_api: Option<String>,
+    audit: Arc<MemoryAudit>,
+    budget: Option<crate::grants::Budget>,
 ) -> Gateway {
     let cp = MockServer::start().await;
     let bao = MockServer::start().await;
@@ -399,7 +412,13 @@ async fn start_gateway_with(
     let grants = Arc::new(StubGrants::default());
     grants.set(
         AGENT,
-        git_bindings.iter().map(|b| grant(b.secret_id)).collect(),
+        git_bindings
+            .iter()
+            .map(|b| Grant {
+                budget,
+                ..grant(b.secret_id)
+            })
+            .collect(),
     );
     let mut state = GitState::default().with_options(GitOptions {
         connect_timeout: Duration::from_secs(2),
@@ -640,6 +659,57 @@ async fn git_unbound_repo_is_403_with_no_decrypt_and_no_upstream_call() {
         0,
         "no upstream call"
     );
+}
+
+/// T9 task 2.3, Git: a call over the grant's burst limit is `429 budget_exceeded` with
+/// `Retry-After`, no material fetch for it, no upstream call, and one `budget.exceeded` event.
+#[tokio::test(flavor = "multi_thread")]
+async fn git_over_budget_is_429_before_unwrap() {
+    require_backend!();
+    let fx = start_fixture(&[basic(PAT)]).await;
+    let gw = start_gateway_budget(
+        all_bindings(fx.port),
+        &secrets(),
+        None,
+        Arc::new(MemoryAudit::default()),
+        Some(crate::grants::Budget {
+            per_minute: Some(1),
+            per_day: None,
+        }),
+    )
+    .await;
+    let h = http();
+    let url = format!(
+        "{}/git/127.0.0.1/acme/widgets.git/info/refs?service=git-upload-pack",
+        gw.base
+    );
+    let get = || {
+        h.get(&url)
+            .header("authorization", format!("Bearer {}", gw.token))
+            .send()
+    };
+    assert_eq!(get().await.unwrap().status(), 200, "inside the limit");
+    let (fetches, upstream) = (
+        gw.material_fetches().await,
+        fx.seen.authorized.load(Ordering::SeqCst),
+    );
+    let events = gw.audit.events().len();
+
+    let r = get().await.unwrap();
+    assert_eq!(r.status(), 429);
+    assert!(r.headers().contains_key("retry-after"));
+    let body = r.text().await.unwrap();
+    assert!(body.contains("budget_exceeded"), "{body}");
+    assert!(!body.contains(PAT));
+    assert_eq!(gw.material_fetches().await, fetches, "no decrypt");
+    assert_eq!(
+        fx.seen.authorized.load(Ordering::SeqCst),
+        upstream,
+        "no upstream call"
+    );
+    let ev = gw.audit.events();
+    assert_eq!(ev.len(), events + 1, "one event");
+    assert_eq!(ev[events].kind, EventKind::BudgetExceeded("per_minute"));
 }
 
 #[tokio::test(flavor = "multi_thread")]

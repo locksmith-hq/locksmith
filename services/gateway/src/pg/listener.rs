@@ -50,7 +50,7 @@ use crate::auth::AgentIdentity;
 use crate::config::PgBinding;
 use crate::decrypt::DecryptError;
 use crate::egress::{self, EgressError};
-use crate::grants::allows_relay;
+use crate::grants::{MODE_RELAY, allows_relay};
 use crate::relay::Relay;
 use crate::ttl::MAX_CACHE_TTL;
 
@@ -75,6 +75,8 @@ pub mod sqlstate {
     pub const UNABLE_TO_CONNECT: &str = "08001";
     /// `feature_not_supported`: the upstream leg is not available.
     pub const NOT_SUPPORTED: &str = "0A000";
+    /// `too_many_connections`: the agent's or grant's budget (T9) is spent.
+    pub const BUDGET_EXCEEDED: &str = "53300";
 }
 
 /// Listener timing.
@@ -195,6 +197,11 @@ const NOT_PERMITTED: Refusal = Refusal::answer(
     sqlstate::INVALID_AUTHORIZATION,
     "access to this database is not permitted",
     "denied",
+);
+const BUDGET_EXCEEDED: Refusal = Refusal::answer(
+    sqlstate::BUDGET_EXCEEDED,
+    "budget_exceeded: the agent's budget for this database is spent",
+    "budget_exceeded",
 );
 const UNREACHABLE: Refusal = Refusal::answer(
     sqlstate::UNABLE_TO_CONNECT,
@@ -488,6 +495,15 @@ impl PgListener {
             self.deny(agent, binding, Outcome::NoGrant).await;
             return Err(NOT_PERMITTED);
         }
+        // Budget (T9): a session open counts as one call, checked before egress and any unwrap.
+        if let Err(refusal) = relay
+            .check_budget(agent.agent_id, &grants, binding.secret_id, MODE_RELAY)
+            .await
+        {
+            drop(grants);
+            self.budget_denied(agent, binding, refusal.kind()).await;
+            return Err(BUDGET_EXCEEDED);
+        }
         drop(grants);
         let addrs = match egress::check_host(
             &binding.host,
@@ -535,6 +551,30 @@ impl PgListener {
     }
 
     /// Log and append one `db.session.denied` event. The host is the binding's (configuration).
+    async fn budget_denied(&self, agent: AgentIdentity, binding: &PgBinding, kind: &'static str) {
+        tracing::info!(
+            agent.id = %agent.agent_id,
+            secret.id = %binding.secret_id,
+            reason = kind,
+            "pg: session refused, budget exceeded"
+        );
+        let ev = RelayEvent {
+            kind: EventKind::BudgetExceeded(kind),
+            agent_id: agent.agent_id,
+            secret_id: binding.secret_id,
+            version: binding.version,
+            method: None,
+            host: Some(binding.host.clone()),
+            port: Some(binding.port),
+            status: None,
+            attempt_id: None,
+            issued: None,
+        };
+        if let Err(e) = self.relay.audit().append(ev).await {
+            tracing::warn!(error = %e, "pg: budget.exceeded event not recorded");
+        }
+    }
+
     async fn deny(&self, agent: AgentIdentity, binding: &PgBinding, why: Outcome) {
         tracing::info!(
             agent.id = %agent.agent_id,

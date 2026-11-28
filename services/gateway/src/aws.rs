@@ -29,12 +29,12 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::audit::{AuditError, AwsEvent, AwsEventKind, Outcome};
+use crate::audit::{AuditError, AwsEvent, AwsEventKind, EventKind, Outcome, RelayEvent};
 use crate::aws_policy::{
     AwsBinding, MIN_DURATION_SECS, PolicyError, clamp_duration, render_session_policy,
 };
 use crate::decrypt::{DecryptError, MaterialError};
-use crate::grants::{Grant, delegate_grant};
+use crate::grants::{Grant, MODE_DELEGATE, delegate_grant};
 use crate::relay::{Relay, error};
 
 /// AWS route options.
@@ -378,6 +378,37 @@ pub async fn handle(relay: Arc<Relay>, headers: HeaderMap, body: Bytes) -> Respo
             .await;
     };
     let scope = grant.scope.clone().unwrap_or_default();
+    // Budget (T9): after the grant, before the policy, STS or any unwrap. A refused call decrypts
+    // nothing and reaches no STS.
+    if let Err(refusal) = relay
+        .check_budget(agent.agent_id, &grants, binding.secret_id, MODE_DELEGATE)
+        .await
+    {
+        let ev = RelayEvent {
+            kind: EventKind::BudgetExceeded(refusal.kind()),
+            agent_id: agent.agent_id,
+            secret_id: binding.secret_id,
+            version: binding.version,
+            method: None,
+            host: None,
+            port: None,
+            status: None,
+            attempt_id: None,
+            issued: None,
+        };
+        if relay.audit().append(ev).await.is_err() {
+            tracing::error!("aws budget event not appended");
+        }
+        let mut r = error(
+            StatusCode::TOO_MANY_REQUESTS,
+            crate::budget::BudgetRefusal::SLUG,
+            &request_id,
+        );
+        if let Ok(v) = HeaderValue::from_str(&refusal.retry_after_secs().to_string()) {
+            r.headers_mut().insert(header::RETRY_AFTER, v);
+        }
+        return r;
+    }
     drop(grants);
     let duration = clamp_duration(binding, &scope, req.duration_secs);
     call.duration = Some(duration);

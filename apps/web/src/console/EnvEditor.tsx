@@ -4,6 +4,7 @@ import { Button } from "@locksmith-hq/ui/button";
 import { Card } from "@locksmith-hq/ui/card";
 import { Input } from "@locksmith-hq/ui/input";
 import { useState } from "react";
+import { EnvMenu } from "./EnvMenu";
 
 /** The environments of a project, or the starting set for new ones: add, remove, and the last one is production. */
 export function EnvEditor({
@@ -47,18 +48,16 @@ export function EnvEditor({
               <span className="mono">{e}</span>
             )}
             {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
-            {envs.length > 1 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-(--destructive-text)"
-                type="button"
-                aria-label={`Remove environment ${e}`}
-                onClick={() => setGone(e)}
-              >
-                Remove
-              </Button>
-            )}
+            <EnvMenu
+              env={e}
+              actions={[
+                ...(href ? [{ label: "Open page", run: () => (location.hash = href(e)) }] : []),
+                ...(i < envs.length - 1
+                  ? [{ label: "Make production", run: () => setEnvs((x) => [...x.filter((v) => v !== e), e]) }]
+                  : []),
+                ...(envs.length > 1 ? [{ label: "Remove", danger: true, run: () => setGone(e) }] : []),
+              ]}
+            />
           </li>
         ))}
       </ul>

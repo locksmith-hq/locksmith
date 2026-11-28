@@ -8,6 +8,7 @@ import { Card } from "@locksmith-hq/ui/card";
 import { Input } from "@locksmith-hq/ui/input";
 import { useState } from "react";
 import * as seed from "./data";
+import { EnvMenu } from "./EnvMenu";
 import { Head, Switch } from "./kit";
 
 const without = (xs: string[], x: string) => xs.filter((v) => v !== x);
@@ -84,18 +85,15 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
                     onChange={() => (status === "inherited" ? setCopying(e) : setBack(e))}
                   />
                 )}
-                {status !== "inherited" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-(--destructive-text)"
-                    type="button"
-                    aria-label={`Remove environment ${e}`}
-                    onClick={() => setGone(e)}
-                  >
-                    Remove
-                  </Button>
-                )}
+                <EnvMenu
+                  env={e}
+                  actions={[
+                    { label: "Open page", run: () => (location.hash = `#/environments/${encodeURIComponent(e)}`) },
+                    ...(status === "inherited" ? [{ label: "Stop inheriting", run: () => setCopying(e) }] : []),
+                    ...(status === "detached" ? [{ label: "Inherit again", run: () => setBack(e) }] : []),
+                    ...(status !== "inherited" ? [{ label: "Remove", danger: true, run: () => setGone(e) }] : []),
+                  ]}
+                />
               </li>
             );
           })}

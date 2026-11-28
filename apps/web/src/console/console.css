@@ -297,6 +297,7 @@ main select[aria-hidden="true"] { min-width: 0; }
 .nav a:has([data-plan]) { height: auto; min-height: 32px; white-space: normal; }
 
 /* The plan next to the name in the sidebar, and the plan cards of the Upgrade page. */
-.user .tier { margin-left: 5px; height: 14px; padding: 0 5px; font-size: 9.5px; line-height: 14px; vertical-align: 1px; }
+/* The kit badge is a key tag with a hole at its left: the padding clears it, and the hole is smaller to match. */
+.user .tier { --hole: 5.5px; margin-left: 5px; height: 14px; padding: 0 5px 0 11px; font-size: 9.5px; line-height: 14px; vertical-align: 1px; }
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; align-items: start; }
 .plans [data-current] { border-color: var(--brand); }

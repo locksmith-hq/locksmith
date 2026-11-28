@@ -337,14 +337,14 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
           {first ? `${first} was blocked here. Allow it with the button above.` : "Allow one below."}
         </Empty>
       ) : (
-        <ul className="plain" aria-label={`Secrets allowed at ${host}`}>
+        <ul className="m-0 mb-2.5 p-0 list-none" aria-label={`Secrets allowed at ${host}`}>
           {names.map((n) => (
-            <li key={n}>
+            <li key={n} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
               <span className="mono strong">{n}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-(--destructive-text)"
+                className="ml-auto text-(--destructive-text)"
                 type="button"
                 aria-label={`Stop sending ${n} to ${host}`}
                 onClick={() => dropName(n)}

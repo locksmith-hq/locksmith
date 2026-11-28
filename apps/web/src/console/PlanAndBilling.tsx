@@ -30,9 +30,14 @@ export function PlanAndBilling({
         {adds.length > 0 ? (
           <>
             <p className="muted">What {plan} adds to Free:</p>
-            <ul className="plain">
+            <ul className="m-0 mb-2.5 p-0 list-none">
               {adds.map((f) => (
-                <li key={f.title}>{f.title}</li>
+                <li
+                  key={f.title}
+                  className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0"
+                >
+                  {f.title}
+                </li>
               ))}
             </ul>
           </>
@@ -48,14 +53,14 @@ export function PlanAndBilling({
       <Card className="panel">
         <h2>Payment method</h2>
         {paying ? (
-          <ul className="plain">
-            <li>
+          <ul className="m-0 mb-2.5 p-0 list-none">
+            <li className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
               <span>
                 {CARD.brand} ending {CARD.last4}
               </span>
               <span className="muted">Expires {CARD.expires}</span>
             </li>
-            <li>
+            <li className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
               <span>Invoices go to</span>
               <span className="muted">{CARD.email}</span>
             </li>

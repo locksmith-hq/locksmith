@@ -818,9 +818,9 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
           </Card>
           <Card className="panel" role="region" aria-labelledby="cd-names">
             <h2 id="cd-names">Names it covers</h2>
-            <ul className="plain">
+            <ul className="m-0 p-0 list-none">
               {[c.name, ...c.names].map((n, i) => (
-                <li key={n}>
+                <li key={n} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
                   <span className="mono">{n}</span>
                   <span className="muted small">{i === 0 ? "Main name" : "Also covered"}</span>
                 </li>
@@ -928,12 +928,15 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
           </Card>
           <Card className="panel" role="region" aria-labelledby="cd-tl">
             <h2 id="cd-tl">What happened</h2>
-            <ul className="plain ct-time">
+            <ul className="m-0 p-0 list-none">
               {[...c.log]
                 .reverse()
                 .sort((a, b) => b.at - a.at)
                 .map((e, i) => (
-                  <li key={`${e.at}${i}`}>
+                  <li
+                    key={`${e.at}${i}`}
+                    className="flex min-h-[34px] items-start gap-2.5 border-t border-border py-2 first:border-t-0 [&>:nth-child(2)]:flex-1"
+                  >
                     <span className="ct-ico">
                       <Icon name={e.icon} />
                     </span>
@@ -1218,9 +1221,12 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
           ) : mine.length === 0 ? (
             <p className="muted small">It has not issued anything yet.</p>
           ) : (
-            <ul className="plain">
+            <ul className="m-0 p-0 list-none">
               {mine.map((c) => (
-                <li key={c.id}>
+                <li
+                  key={c.id}
+                  className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0"
+                >
                   <A tab="certificates" id={c.id}>
                     {c.name}
                   </A>

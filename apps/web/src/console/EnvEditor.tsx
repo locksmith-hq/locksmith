@@ -39,16 +39,16 @@ export function EnvEditor({
       <h2>Environments</h2>
       <p className="muted">{about}</p>
       {children}
-      <ul className="plain" style={{ margin: "12px 0" }}>
+      <ul className="my-3 p-0 list-none">
         {envs.map((e, i) => (
-          <li key={e}>
+          <li key={e} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
             <span className="mono">{e}</span>
             {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
             {!readOnly && envs.length > 1 && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-(--destructive-text)"
+                className="ml-auto text-(--destructive-text)"
                 type="button"
                 aria-label={`Remove environment ${e}`}
                 onClick={() => setGone(e)}

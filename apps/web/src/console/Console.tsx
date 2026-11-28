@@ -2447,15 +2447,18 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
             No agent can use this secret.
           </p>
         )}
-        <ul className="plain">
+        <ul className="m-0 mb-2.5 p-0 list-none">
           {s.grants.map((g) => (
-            <li key={g.agent}>
+            <li
+              key={g.agent}
+              className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0"
+            >
               <span className="strong">{g.agent}</span>
               <span className="muted small">relay · {until(g.expires)}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-(--destructive-text)"
+                className="ml-auto text-(--destructive-text)"
                 type="button"
                 onClick={() => {
                   patch((x) => ({ ...x, grants: x.grants.filter((y) => y !== g) }));
@@ -2489,9 +2492,9 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
       </div>
       <div>
         <h3>Versions</h3>
-        <ul className="plain">
+        <ul className="m-0 mb-2.5 p-0 list-none">
           {Array.from({ length: Math.min(3, s.version) }, (_, i) => (
-            <li key={i}>
+            <li key={i} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
               <span className="mono">v{s.version - i}</span>
               <span className="muted small">
                 {i === 0 ? `current · ${ago(s.updated)}` : ago(s.updated - i * 30 * 86400)}
@@ -2652,9 +2655,12 @@ function Agents({ db }: { db: Db }) {
                     {gs.length === 0 ? (
                       <span className="muted">Nothing yet. Open a secret in Secrets and grant this agent access.</span>
                     ) : (
-                      <ul className="plain">
+                      <ul className="m-0 mb-2.5 p-0 list-none">
                         {gs.map((s) => (
-                          <li key={s.id}>
+                          <li
+                            key={s.id}
+                            className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0"
+                          >
                             <span className="mono">{s.name}</span>
                             <span className="muted small">
                               {s.project} / {s.env} · {until(s.grants.find((g) => g.agent === a.name)!.expires)}
@@ -2662,7 +2668,7 @@ function Agents({ db }: { db: Db }) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-(--destructive-text)"
+                              className="ml-auto text-(--destructive-text)"
                               type="button"
                               onClick={() =>
                                 db.setSecrets((ss) =>

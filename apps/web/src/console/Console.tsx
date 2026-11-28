@@ -27,6 +27,7 @@ import { EnvEditor } from "./EnvEditor";
 import { Environments } from "./Environments";
 import { PlanAndBilling } from "./PlanAndBilling";
 import { Settings } from "./Settings";
+import { WorkspaceIcon } from "./WorkspaceIcon";
 import { Upgrade } from "./Upgrade";
 import { pageFor } from "./pages";
 import { useSecrets } from "./pages/gateway-data";
@@ -330,7 +331,7 @@ function Workspace({ at, limit }: { at: number; limit: { best: PlanId; cap: numb
       title="Switch workspace"
       summary={
         <>
-          <span className="av">{w.name[0]}</span>
+          <WorkspaceIcon w={w} />
           <span>
             {w.name}
             <small>{w.org ? "Organization" : "Personal"}</small>
@@ -353,7 +354,7 @@ function Workspace({ at, limit }: { at: number; limit: { best: PlanId; cap: numb
                 shut();
               }}
             >
-              <span className="av">{x.name[0]}</span>
+              <WorkspaceIcon w={x} />
               <span>
                 {x.name}
                 <small>{x.sub}</small>
@@ -802,7 +803,7 @@ export function Console() {
               ) : page === "environments" ? (
                 <Environments />
               ) : page === "settings" ? (
-                <Settings key={ws.name} name={ws.name} org={ws.org} say={say} />
+                <Settings key={ws.name} ws={ws} say={say} />
               ) : page === "integrations" ? (
                 <Integrations say={say} />
               ) : page === "sharing" ? (

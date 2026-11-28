@@ -6,6 +6,8 @@ import { Switch } from "./kit";
 import { Button } from "@locksmith-hq/ui/button";
 import { Input } from "@locksmith-hq/ui/input";
 import { useState } from "react";
+import * as seed from "./data";
+import { WorkspaceIcon } from "./WorkspaceIcon";
 import { FEATURES, GateBadge, useLocked, type Feature } from "./plans";
 import "./settings.css";
 
@@ -53,11 +55,29 @@ const Row = ({
   </div>
 );
 
-export function Settings({ name, org, say }: { name: string; org: boolean; say: (note: string) => void }) {
+const ICON_TYPES = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+const ICON_MAX = 1024 * 1024;
+
+export function Settings({ ws, say }: { ws: seed.Workspace; say: (note: string) => void }) {
+  const { name, org } = ws;
   const first: S = { ...START, name };
   const [saved, setSaved] = useState(first);
   const [s, setS] = useState(first);
   const [confirm, setConfirm] = useState("");
+  const [iconProblem, setIconProblem] = useState("");
+  // The icon is kept as a data URL on the workspace; saying so redraws the console, so the selector shows it at once.
+  const upload = (file: File | undefined) => {
+    if (!file) return;
+    if (!ICON_TYPES.includes(file.type)) return setIconProblem("Use a PNG, JPG, SVG or WebP image.");
+    if (file.size > ICON_MAX) return setIconProblem("The image is over 1 MB.");
+    const reader = new FileReader();
+    reader.onload = () => {
+      ws.icon = String(reader.result);
+      setIconProblem("");
+      say("Workspace icon updated");
+    };
+    reader.readAsDataURL(file);
+  };
   const dirty = JSON.stringify(s) !== JSON.stringify(saved);
   const set = <K extends keyof S>(k: K, v: S[K]) => setS((x) => ({ ...x, [k]: v }));
   const toggle = (k: Flag, label: string) => <Switch label={label} checked={s[k]} onChange={(on) => set(k, on)} />;
@@ -91,6 +111,44 @@ export function Settings({ name, org, say }: { name: string; org: boolean; say: 
           about="Shown in the selector at the top right and on invoices."
         >
           <Input aria-label="Name" value={s.name} onChange={(e) => set("name", e.target.value)} required />
+        </Row>
+        <Row
+          title="Icon"
+          about="Your logo, shown beside the name in the workspace selector. PNG, JPG, SVG or WebP, up to 1 MB."
+        >
+          <span className="icon-ctl">
+            <WorkspaceIcon w={{ name: s.name || name, icon: ws.icon }} />
+            <Button asChild variant="outline" size="sm">
+              <label>
+                Upload
+                <input
+                  type="file"
+                  accept={ICON_TYPES.join(",")}
+                  className="sr-only"
+                  aria-label="Upload a workspace icon"
+                  onChange={(e) => upload(e.target.files?.[0])}
+                />
+              </label>
+            </Button>
+            {ws.icon && (
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  ws.icon = undefined;
+                  say("Workspace icon removed");
+                }}
+              >
+                Remove
+              </Button>
+            )}
+            {iconProblem && (
+              <span role="alert" className="icon-problem">
+                {iconProblem}
+              </span>
+            )}
+          </span>
         </Row>
         <Row
           title="Region"

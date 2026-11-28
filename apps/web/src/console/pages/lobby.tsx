@@ -119,7 +119,7 @@ function Overview({ say }: PageProps) {
         <ul className="list">
           {open.map((a) => (
             <li key={a.id} className="row lb-row">
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 <Icon name={a.kind === "unused" ? "search" : a.kind === "stale" ? "clock" : "alert"} />
               </span>
               <div>

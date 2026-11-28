@@ -7,8 +7,6 @@
 .lc-day { margin: 22px 0 8px; }
 .lc-day:first-of-type { margin-top: 0; }
 .list .lc-row .meta { flex-wrap: wrap; justify-content: flex-end; }
-.lc-row .ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--muted); color: var(--muted-foreground); }
-.lc-row .ic svg { width: 16px; height: 16px; }
 .lc-row .badge { margin-left: 0; }
 .lc-row[data-undone="true"] b, .lc-row[data-undone="true"] p { color: var(--muted-foreground); text-decoration: line-through; }
 .lc-route { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }

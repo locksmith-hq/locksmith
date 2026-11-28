@@ -519,7 +519,7 @@ function CertList({ say }: { say: Say }) {
             const off = !a || chainOf(auths, a.id).some((x) => x.status === "Disabled");
             return (
               <li key={r.id} className="row">
-                <span className="ic">
+                <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                   <Icon name="clock" />
                 </span>
                 <div>

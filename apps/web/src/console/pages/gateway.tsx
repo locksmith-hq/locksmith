@@ -250,7 +250,7 @@ function HostList({ say }: { say: Say }) {
         <ul className="list">
           {attempts.map((a) => (
             <li key={a.id} className="row">
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 <Icon name="alert" />
               </span>
               <div>

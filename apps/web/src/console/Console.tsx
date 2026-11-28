@@ -1076,7 +1076,7 @@ function Integrations({ say }: { say: (note: string) => void }) {
         <ul className="list conns">
           {shown.map((c) => (
             <li key={c.id} className="row">
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 {c.icon === "s_claude" ? (
                   <span className="src-claude">
                     <Icon name="s_claude" />
@@ -2217,7 +2217,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
           const withAccess = new Set(own.flatMap((s) => s.grants.map((g) => g.agent))).size;
           return (
             <a key={p.id} className="row" href={`#/secrets/${p.id}`}>
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 <Icon name="key" />
               </span>
               <span>

@@ -76,8 +76,8 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
                 <a className="mono ls-link" href={`#/environments/${encodeURIComponent(e)}`}>
                   {e}
                 </a>
-                {e === production && <Badge variant="secondary">Production</Badge>}
-                {status === "inherited" && <Badge variant="outline">Inherited</Badge>}
+                {e === production && <Badge className="tag-prod">Production</Badge>}
+                {status === "inherited" && <Badge>Inherited</Badge>}
                 {status !== "own" && (
                   <Switch
                     label={`Inherit ${e}`}

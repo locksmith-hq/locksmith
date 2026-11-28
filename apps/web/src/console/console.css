@@ -294,3 +294,6 @@ main select[aria-hidden="true"] { min-width: 0; }
 /* A plan badge on a sidebar item sits at the far end, and the item's name wraps before the badge is cut. */
 .nav [data-plan] { margin-left: auto; flex: none; }
 .nav a:has([data-plan]) { height: auto; min-height: 32px; white-space: normal; }
+
+/* Environment tags: Production in the warning colours, Inherited in the brand ones (the Badge default). */
+[data-slot="badge"].tag-prod { background: var(--warning-chip); color: var(--warning-text); }

@@ -50,7 +50,7 @@ function EnvironmentPage({ env, secrets }: { env: string; secrets: seed.Secret[]
         title={env}
         sub={`${plural(using.length, "project")} ${using.length === 1 ? "has" : "have"} this environment.`}
       >
-        {isProd && <Badge variant="secondary">Production</Badge>}
+        {isProd && <Badge className="tag-prod">Production</Badge>}
       </Head>
       <Card className="panel">
         <h2>Projects</h2>

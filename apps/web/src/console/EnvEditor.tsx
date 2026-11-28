@@ -47,7 +47,7 @@ export function EnvEditor({
             ) : (
               <span className="mono">{e}</span>
             )}
-            {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
+            {i === envs.length - 1 && <Badge className="tag-prod">Production</Badge>}
             <EnvMenu
               env={e}
               actions={[

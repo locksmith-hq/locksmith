@@ -385,6 +385,7 @@ export const spaces: Record<string, [tab: string, label: string, icon: IconName,
     ["machines", "Machines", "run", "Access"],
     ["approvals", "Approvals", "token", "Access"],
     ["activity", "Activity", "doc", "Observe"],
+    ["environments", "Environments", "s_layers", "Project"],
     ["settings", "Settings", "s_window", "Project"],
   ],
   // Secret Management before a project is open.

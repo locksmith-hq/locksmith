@@ -464,7 +464,8 @@ export function Console() {
   const crumbProduct = product ?? (lobby ? "secrets" : undefined);
   // Members and Settings of a project are for its admins only.
   const items = (product ? seed.spaces[product]! : []).filter(
-    ([t]) => !proj || !["members", "machines", "settings"].includes(t) || acl.roleIn(proj.id) === "Admin",
+    ([t]) =>
+      !proj || !["members", "machines", "environments", "settings"].includes(t) || acl.roleIn(proj.id) === "Admin",
   );
   const base = product === "access" ? "#/access" : product === "secrets" ? `#/secrets/${route[1]}` : `#/app/${product}`;
   const tab = (product === "access" ? route[1] : route[2]) ?? items[0]?.[0] ?? "";
@@ -1926,10 +1927,10 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
   );
 }
 
-function ProjectSettings({ p }: { p: seed.Project }) {
+/** The environments of one project: the organization's, while it inherits them, else its own list. */
+function ProjectEnvironments({ p }: { p: seed.Project }) {
   const [inherit, setInherit] = useState(p.inherit);
   const [envs, setEnvsNow] = useState(p.envs);
-  const [confirm, setConfirm] = useState("");
   // Editing the list makes it this project's own (the setter on Project turns inheriting off).
   const setEnvs = (change: (x: string[]) => string[]) => {
     const next = change(envs);
@@ -1945,11 +1946,15 @@ function ProjectSettings({ p }: { p: seed.Project }) {
   };
   return (
     <section>
-      <Head title="Settings" sub={`The environments of ${p.id}, its description, and deleting it.`} />
+      <Head
+        title="Environments"
+        sub={`What ${p.id} can keep secrets in. It follows the organization's environments, or has a list of its own.`}
+      />
       <EnvEditor
         envs={envs}
         setEnvs={setEnvs}
         readOnly={inherit}
+        href={(e) => `#/secrets/${p.id}/secrets/${encodeURIComponent(e)}`}
         about="Each environment holds its own set of secrets. The last one is treated as production: access to it can be made to need a second person."
         scope="deletes every secret in it and the access agents have to them."
       >
@@ -1962,6 +1967,15 @@ function ProjectSettings({ p }: { p: seed.Project }) {
           </span>
         </label>
       </EnvEditor>
+    </section>
+  );
+}
+
+function ProjectSettings({ p }: { p: seed.Project }) {
+  const [confirm, setConfirm] = useState("");
+  return (
+    <section>
+      <Head title="Settings" sub={`The description of ${p.id}, and deleting it.`} />
       <Card className="panel form">
         <form className="contents" onSubmit={(e) => e.preventDefault()}>
           <h2>Description</h2>
@@ -2108,6 +2122,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
       </p>
     );
   if (tab === "members") return <ProjectMembers acl={acl} id={id} />;
+  if (tab === "environments") return <ProjectEnvironments p={p} />;
   if (tab && !["secrets", "access", "activity", "settings"].includes(tab))
     return <Soon id="secrets" tab={tab} project={id} sub={envParam} say={db.say} />;
   if (tab === "access") return <ProjectAccess db={db} id={id} />;

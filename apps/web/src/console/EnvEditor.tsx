@@ -53,6 +53,7 @@ export function EnvEditor({
               <span className="mono">{e}</span>
             )}
             {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
+            {readOnly && <Badge variant="outline">Inherited</Badge>}
             {!readOnly && envs.length > 1 && (
               <Button
                 variant="ghost"

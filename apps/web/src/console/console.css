@@ -309,3 +309,6 @@ main select[aria-hidden="true"] { min-width: 0; }
 .plan-action { margin-top: auto; padding-top: 12px; min-height: 48px; }
 @media (max-width: 700px) { .plans { grid-template-columns: minmax(0, 1fr); } }
 .plans [data-current] { border-color: var(--brand); }
+.ws-limit { padding: 8px 10px; font-size: 13px; }
+.ws-limit a { display: inline; height: auto; padding: 0; background: none; color: var(--brand-text); text-decoration: underline; }
+.plan-limit { margin-top: 8px; font-weight: 600; }

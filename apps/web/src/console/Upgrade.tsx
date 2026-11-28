@@ -6,7 +6,7 @@ import { Button } from "@locksmith-hq/ui/button";
 import { Card } from "@locksmith-hq/ui/card";
 import { Head } from "./kit";
 import { paid } from "./paid";
-import { FEATURES, type PlanId } from "./plans";
+import { FEATURES, workspaceCap, type PlanId } from "./plans";
 
 const PLANS: { id: PlanId; who: string }[] = [
   { id: "Free", who: "One person or a small project, with everything needed to keep secrets from agents." },
@@ -32,6 +32,13 @@ export function Upgrade({ name, plan, setPlan }: { name: string; plan: PlanId; s
               <h2>{p.id}</h2>
               <div className="plan-tag">{current && <Badge>Current plan</Badge>}</div>
               <p className="muted">{p.who}</p>
+              <p className="plan-limit">
+                {workspaceCap(p.id) === null
+                  ? "As many workspaces as you need"
+                  : workspaceCap(p.id) === 1
+                    ? "1 workspace"
+                    : `Up to ${workspaceCap(p.id)} workspaces`}
+              </p>
               {adds.length > 0 && (
                 <ul className="plan-adds">
                   {adds.map((f) => (

@@ -22,6 +22,8 @@ export interface Plan {
   users: number | null;
   projects: number | null;
   agents: number | null;
+  /** Workspaces one account may have. Null is as many as it needs, arranged with sales. */
+  workspaces?: number | null;
   identities: number | null;
   requests: number | null;
   auditDays: number | null;
@@ -89,6 +91,12 @@ export const lacks = (plan: PlanId, feature: Feature) => RANK[plan] < RANK[FEATU
 /** A plan's limits on users and projects. Null is unlimited, which is also the answer with no catalog. */
 export const planOf = (plan: PlanId): Pick<Plan, "users" | "projects"> =>
   paid.plans?.find((p) => p.id === plan) ?? { users: null, projects: null };
+
+/** How many workspaces an account may have on a plan: the catalog's number, else these (null: by arrangement). */
+const WORKSPACES: Record<PlanId, number | null> = { Free: 1, Team: 3, Enterprise: null };
+export const workspaceCap = (plan: PlanId) => paid.plans?.find((p) => p.id === plan)?.workspaces ?? WORKSPACES[plan];
+/** The best plan among an account's workspaces: it sets how many workspaces the account may have. */
+export const bestPlan = (plans: PlanId[]) => plans.reduce((a, b) => (RANK[b] > RANK[a] ? b : a), "Free" as PlanId);
 
 /** The plan of the workspace on screen. */
 export const PlanContext = createContext<PlanId>("Free");

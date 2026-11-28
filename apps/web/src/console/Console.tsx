@@ -31,7 +31,18 @@ import { Upgrade } from "./Upgrade";
 import { pageFor } from "./pages";
 import { useSecrets } from "./pages/gateway-data";
 import { useNotices } from "./pages/platform-store";
-import { GateBadge, Locked, PlanContext, gateOf, lacks, planOf as limitsOf, useLocked, type PlanId } from "./plans";
+import {
+  GateBadge,
+  Locked,
+  PlanContext,
+  gateOf,
+  lacks,
+  planOf as limitsOf,
+  useLocked,
+  bestPlan,
+  workspaceCap,
+  type PlanId,
+} from "./plans";
 import { PRODUCT_ICON } from "./pages/platformNotify";
 import "./settings.css";
 import { NOW } from "./kit";
@@ -293,7 +304,34 @@ const Loader = () => <KitLoader className="page-loader" />;
 const TABBED = new Set(["members", "mcp", "notifications"]);
 
 /** Picks who the console is working for: one person, or an organization with members and teams. */
-function Workspace({ at, pick }: { at: number; pick: (i: number) => void }) {
+/** Said where a workspace would be added once the plan's limit is reached, with the way past it. */
+function WorkspaceLimit({ limit }: { limit: { best: PlanId; cap: number } }) {
+  return (
+    <p className="muted">
+      {limit.best === "Free" ? (
+        <>
+          The Free plan has {plural(limit.cap, "workspace")}. <a href="#/upgrade">Upgrade</a> for up to{" "}
+          {workspaceCap("Team")}.
+        </>
+      ) : (
+        <>
+          The {limit.best} plan has up to {limit.cap} workspaces.{" "}
+          <a href="mailto:sales@locksmith.example">Talk to us</a> for more.
+        </>
+      )}
+    </p>
+  );
+}
+
+function Workspace({
+  at,
+  pick,
+  limit,
+}: {
+  at: number;
+  pick: (i: number) => void;
+  limit: { best: PlanId; cap: number } | null;
+}) {
   const w = seed.workspaces[at]!;
   return (
     <Selector
@@ -330,12 +368,18 @@ function Workspace({ at, pick }: { at: number; pick: (i: number) => void }) {
               {i === at && <Check />}
             </Button>
           ))}
-          <a href="#/welcome" onClick={shut}>
-            <span className="av">
-              <Icon name="plus" />
-            </span>
-            New workspace
-          </a>
+          {limit ? (
+            <div className="ws-limit">
+              <WorkspaceLimit limit={limit} />
+            </div>
+          ) : (
+            <a href="#/welcome" onClick={shut}>
+              <span className="av">
+                <Icon name="plus" />
+              </span>
+              New workspace
+            </a>
+          )}
         </>
       )}
     </Selector>
@@ -441,6 +485,10 @@ export function Console() {
   const unread = useNotices()[0].filter((n) => !n.read).length;
   const HubPage = pageFor(`hub/${page}`);
   const [planOf, setPlanOf] = useState<PlanId[]>(["Free", "Team"]); // one subscription per workspace
+  // The account's best plan sets how many workspaces it may have (Free 1, Team 3, Enterprise by arrangement).
+  const best = bestPlan(planOf);
+  const wsCap = workspaceCap(best);
+  const wsLimit = wsCap !== null && seed.workspaces.length >= wsCap ? { best, cap: wsCap } : null;
   const gate = gateOf(route); // the feature this address needs, when it is not in every plan
   const Billing = paid.billing ?? PlanAndBilling; // the billing module replaces the open page when a build has it
   const [viewerAt, preview] = useState(0);
@@ -702,7 +750,7 @@ export function Console() {
                 </Button>
               )}
               <NoticeMenu />
-              <Workspace at={at} pick={setAt} />
+              <Workspace at={at} pick={setAt} limit={wsLimit} />
             </div>
           </header>
           <TabBusy value={loaded.where !== where}>
@@ -775,7 +823,20 @@ export function Console() {
               ) : page === "app" ? (
                 <Soon id={route[1]} tab={product ? tab : undefined} sub={route[3]} say={say} />
               ) : page === "welcome" ? (
-                <Welcome pick={setAt} />
+                wsLimit ? (
+                  <section>
+                    <Head title="Create a workspace" />
+                    <WorkspaceLimit limit={wsLimit!} />
+                  </section>
+                ) : (
+                  <Welcome
+                    create={(w) => {
+                      seed.workspaces.push(w);
+                      setPlanOf((x) => [...x, "Free"]);
+                      setAt(seed.workspaces.length - 1);
+                    }}
+                  />
+                )
               ) : (
                 <Hub db={db} org={ws.org} name={ws.name} />
               )}
@@ -1557,14 +1618,15 @@ function ProjectMembers({ acl, id }: { acl: Acl; id: string }) {
 }
 
 const WHO = ["Just me", "My team or organization"];
-function Welcome({ pick }: { pick: (i: number) => void }) {
+function Welcome({ create }: { create: (w: (typeof seed.workspaces)[number]) => void }) {
+  const [name, setName] = useState("");
   const [who, setWho] = useState(0);
   return (
     <form
       className="welcome"
       onSubmit={(e) => {
         e.preventDefault();
-        pick(who);
+        create({ name: name.trim(), org: who === 1, sub: who === 1 ? "1 member · 0 teams" : "Personal" });
         location.hash = "#/home";
       }}
     >
@@ -1582,7 +1644,14 @@ function Welcome({ pick }: { pick: (i: number) => void }) {
       <div className="add" style={{ margin: "16px 0 20px", gridTemplateColumns: "auto 1fr" }}>
         <Label className="field">
           {who === 0 ? "Workspace name" : "Organization name"}
-          <Input required autoFocus placeholder={who === 0 ? "Tomer" : "Acme"} autoComplete="off" />
+          <Input
+            required
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={who === 0 ? "Tomer" : "Acme"}
+            autoComplete="off"
+          />
         </Label>
       </div>
       <Button type="submit">Create workspace</Button>

@@ -58,20 +58,12 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .state-ic { width: 32px; height: 32px; flex: none; border-radius: 9px; display: grid; place-items: center; background: var(--muted); color: var(--muted-foreground); }
 
 /* Cards and lists */
-.sessions { display: flex; flex-direction: column; gap: 12px; }
-.card {
-  display: grid; grid-template-columns: 40px minmax(110px, 144px) minmax(0, 1fr) 100px auto; align-items: center; gap: 14px;
-  padding: 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
-}
 .av { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-weight: 700; font-size: 15px; background: var(--muted); color: var(--muted-foreground); }
-.av.av2 { background: var(--av2); color: var(--av2-t); }
-.av.av3 { background: var(--av3); color: var(--av3-t); }
 .av svg { width: 18px; height: 18px; }
 .who { min-width: 0; }
 .who b { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; line-height: 20px; }
 .who > span { display: block; margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .live-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px var(--live-weak); }
-.scopes { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
 
 .list { margin: 0; padding: 0; list-style: none; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-xs); }
 .list .row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 12px 16px; }
@@ -166,20 +158,12 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .add { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 16px; }
 
 /* Tokens */
-.card.token { grid-template-columns: 40px minmax(160px, 1fr) minmax(160px, 1fr) minmax(180px, 1.1fr) auto; }
-.card.token .who b { font-size: 14px; }
-.card.token .who > span.mono, .card.token .who > span .mono { font-size: 12px; }
 .hosts { flex-wrap: wrap; gap: 4px 10px !important; }
 .hosts .mono { font-size: 13px; font-weight: 500; }
 
 /* Relays */
-.card.relay { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 18px; }
-.relay .av { width: 34px; height: 34px; border-radius: 10px; }
 
 /* Audit */
-.verdict { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 12px 16px; border-radius: 12px; font-weight: 600; }
-.verdict.ok { background: var(--live-weak); color: var(--live-text); border: 1px solid var(--border); }
-.verdict.broken { background: var(--destructive); color: #fff; }
 
 .dec { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted-foreground); }
 

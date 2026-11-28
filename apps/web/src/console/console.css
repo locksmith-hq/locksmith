@@ -78,8 +78,6 @@ select {
   .tl-list { --tl-cols: minmax(0, 1fr) 56px 76px; }
   .tl-row > .tl, .tl-row > .scopes-t, .tl-axis { display: none; }
   .panel.form .add { grid-template-columns: minmax(0, 1fr); }
-  .log li { grid-template-columns: 64px 8px minmax(0, 1fr); }
-  .log .tgt, .log .who-s { display: none; }
 }
 
 /* Hub: the workspace switcher, grouped sidebar and the product grid on Home. */

@@ -1862,7 +1862,7 @@ function Overview({ db }: { db: Db }) {
         </a>
       </SectionHead>
       <Log events={seed.events.slice(0, 10)} />
-      <p className="log-foot">
+      <p className="mx-0 mb-0 mt-2.5 flex items-center gap-2 px-2.5 text-xs text-muted-foreground [&>svg]:size-3.5 [&>svg]:text-(--live-text)">
         <Icon name="shield" />
         Ledger chain verified {ago(NOW - 240)} · 18,420 entries
       </p>
@@ -1870,25 +1870,46 @@ function Overview({ db }: { db: Db }) {
   );
 }
 
+const LOG_KIND = {
+  allowed: { mk: "size-[7px] rounded-full bg-(--live) opacity-80", what: "font-medium", tgt: "text-muted-foreground" },
+  blocked: {
+    mk: "size-2 rotate-45 rounded-[1px] border-[1.5px] border-(--warning)",
+    what: "font-semibold text-(--warning-text)",
+    tgt: "text-(--warning-text)",
+  },
+  revoked: {
+    mk: "h-0.5 w-2 rounded-[1px] bg-(--destructive)",
+    what: "font-medium text-(--destructive-text)",
+    tgt: "text-muted-foreground",
+  },
+} as const;
+
 const Log = ({ events }: { events: seed.Event[] }) =>
   events.length === 0 ? (
-    <p className="quiet-state">Nothing in the ledger yet.</p>
+    <p className="m-0 border-t border-border px-2.5 py-3 text-muted-foreground">Nothing in the ledger yet.</p>
   ) : (
-    <ol className="log" aria-label="Activity">
-      {events.map((e) => (
-        <li
-          key={e.seq}
-          data-kind={e.outcome === "ok" ? (e.label.includes("revoked") ? "revoked" : "allowed") : "blocked"}
-        >
-          <time className="mono">{clock(e.at)}</time>
-          <span className="mk" aria-hidden="true" />
-          <span className="what">{e.label}</span>
-          <span className="mono tgt" title={e.target}>
-            {e.target}
-          </span>
-          <span className="who-s">{e.actor}</span>
-        </li>
-      ))}
+    <ol className="m-0 list-none p-0" aria-label="Activity">
+      {events.map((e) => {
+        const kind = e.outcome === "ok" ? (e.label.includes("revoked") ? "revoked" : "allowed") : "blocked";
+        const k = LOG_KIND[kind];
+        return (
+          <li
+            key={e.seq}
+            data-kind={kind}
+            className="grid min-h-[34px] grid-cols-[64px_8px_160px_minmax(0,1fr)_minmax(0,190px)] items-center gap-x-3 border-t border-border px-2.5 text-[13px] last:border-b hover:bg-accent max-[1100px]:grid-cols-[64px_8px_150px_minmax(0,1fr)_minmax(0,150px)] max-[860px]:grid-cols-[64px_8px_minmax(0,1fr)]"
+          >
+            <time className="mono text-muted-foreground">{clock(e.at)}</time>
+            <span className={`${k.mk}`} aria-hidden="true" />
+            <span className={`truncate ${k.what}`}>{e.label}</span>
+            <span className={`mono min-w-0 truncate max-[860px]:hidden ${k.tgt}`} title={e.target}>
+              {e.target}
+            </span>
+            <span className="min-w-0 truncate text-right text-[12.5px] text-muted-foreground max-[860px]:hidden">
+              {e.actor}
+            </span>
+          </li>
+        );
+      })}
     </ol>
   );
 

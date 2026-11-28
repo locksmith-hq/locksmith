@@ -1,6 +1,6 @@
 // The environments of one project. The organization's environments are inherited: they cannot be changed here.
-// Turning an environment's switch off gives the project a copy of its own, which can be changed or removed but never
-// goes back to being inherited. Environments of the project's own can always be added and removed.
+// Turning an environment's switch off gives the project a copy of its own, which can be changed or removed. Turning it
+// back on drops the copy and every change made to it. Environments of the project's own can always be added and removed.
 import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
 import { Badge } from "@locksmith-hq/ui/badge";
 import { Button } from "@locksmith-hq/ui/button";
@@ -16,6 +16,7 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
   const [, redraw] = useState(0);
   const [gone, setGone] = useState<string | null>(null);
   const [copying, setCopying] = useState<string | null>(null);
+  const [back, setBack] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const change = (f: () => void) => {
     f();
@@ -28,6 +29,12 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
     change(() => {
       p.own = [...p.own, e];
       setCopying(null);
+    });
+  // The copy goes, with every change made to it, and the project follows the organization's environment again.
+  const inheritAgain = (e: string) =>
+    change(() => {
+      p.own = without(p.own, e);
+      setBack(null);
     });
   const remove = (e: string) =>
     change(() => {
@@ -70,8 +77,13 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
                 </a>
                 {e === production && <Badge variant="secondary">Production</Badge>}
                 {status === "inherited" && <Badge variant="outline">Inherited</Badge>}
-                {status === "detached" && <Badge variant="outline">Copy</Badge>}
-                {status === "inherited" && <Switch label={`Inherit ${e}`} checked onChange={() => setCopying(e)} />}
+                {status !== "own" && (
+                  <Switch
+                    label={`Inherit ${e}`}
+                    checked={status === "inherited"}
+                    onChange={() => (status === "inherited" ? setCopying(e) : setBack(e))}
+                  />
+                )}
                 {status !== "inherited" && (
                   <Button
                     variant="ghost"
@@ -92,12 +104,32 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
           <Alert>
             <AlertDescription>
               Stop inheriting {copying}? {p.id} gets a copy of it that stays as it is when the organization changes{" "}
-              {copying}. A copy cannot be inherited again.
+              {copying}. You can inherit it again later.
               <Button size="sm" type="button" style={{ marginLeft: "auto" }} onClick={() => copy(copying)}>
                 Make a copy
               </Button>
               <Button variant="ghost" size="sm" type="button" onClick={() => setCopying(null)}>
                 Keep inheriting
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        {back && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Inherit {back} again? Every change made to {back} in {p.id} will not be saved: it goes back to the
+              organization's {back}.
+              <Button
+                variant="destructive"
+                size="sm"
+                type="button"
+                style={{ marginLeft: "auto" }}
+                onClick={() => inheritAgain(back)}
+              >
+                Inherit {back}
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setBack(null)}>
+                Keep my changes
               </Button>
             </AlertDescription>
           </Alert>

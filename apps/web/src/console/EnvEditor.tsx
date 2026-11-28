@@ -4,6 +4,7 @@ import { Button } from "@locksmith-hq/ui/button";
 import { Card } from "@locksmith-hq/ui/card";
 import { Input } from "@locksmith-hq/ui/input";
 import { useState } from "react";
+import { EnvMenu } from "./EnvMenu";
 
 /** The environments of a project, or the starting set for new ones: add, remove, and the last one is production. */
 export function EnvEditor({
@@ -11,20 +12,18 @@ export function EnvEditor({
   setEnvs,
   about,
   scope,
-  readOnly = false,
-  children,
+  href,
 }: {
   envs: string[];
   setEnvs: (next: (x: string[]) => string[]) => void;
   about: string;
   /** What removing an environment does, after its name. */
   scope: string;
-  /** The list is shown but cannot be changed (a project that inherits it). */
-  readOnly?: boolean;
-  /** Shown under the heading, before the list. */
-  children?: React.ReactNode;
+  /** Makes each environment a link to its own page. */
+  href?: (env: string) => string;
 }) {
   const [gone, setGone] = useState<string | null>(null);
+  // The add row is not a <form>: the page this can sit in may be one, and forms cannot nest.
   const [draft, setDraft] = useState("");
   const add = () => {
     const v = draft
@@ -38,24 +37,27 @@ export function EnvEditor({
     <Card className="panel form">
       <h2>Environments</h2>
       <p className="muted">{about}</p>
-      {children}
       <ul className="plain" style={{ margin: "12px 0" }}>
         {envs.map((e, i) => (
           <li key={e}>
-            <span className="mono">{e}</span>
-            {i === envs.length - 1 && <Badge variant="secondary">Production</Badge>}
-            {!readOnly && envs.length > 1 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-(--destructive-text)"
-                type="button"
-                aria-label={`Remove environment ${e}`}
-                onClick={() => setGone(e)}
-              >
-                Remove
-              </Button>
+            {href ? (
+              <a className="mono ls-link" href={href(e)}>
+                {e}
+              </a>
+            ) : (
+              <span className="mono">{e}</span>
             )}
+            {i === envs.length - 1 && <Badge className="tag-prod">Production</Badge>}
+            <EnvMenu
+              env={e}
+              actions={[
+                ...(href ? [{ label: "Open page", run: () => (location.hash = href(e)) }] : []),
+                ...(i < envs.length - 1
+                  ? [{ label: "Make production", run: () => setEnvs((x) => [...x.filter((v) => v !== e), e]) }]
+                  : []),
+                ...(envs.length > 1 ? [{ label: "Remove", danger: true, run: () => setGone(e) }] : []),
+              ]}
+            />
           </li>
         ))}
       </ul>
@@ -81,28 +83,25 @@ export function EnvEditor({
           </AlertDescription>
         </Alert>
       )}
-      {!readOnly && (
-        // Not a <form>: the Settings page this sits in is one, and forms cannot nest.
-        <div className="inline-form">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                add();
-              }
-            }}
-            aria-label="New environment name"
-            placeholder="preview"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <Button variant="outline" size="sm" type="button" onClick={add}>
-            Add environment
-          </Button>
-        </div>
-      )}
+      <div className="inline-form">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          aria-label="New environment name"
+          placeholder="preview"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <Button variant="outline" size="sm" type="button" onClick={add}>
+          Add environment
+        </Button>
+      </div>
     </Card>
   );
 }

@@ -19,11 +19,11 @@ import { Dropdown, Option } from "../Dropdown";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { Fragment, useContext, useEffect, useLayoutEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { Icon, Logo, Switch, TabBusy, TabLoader, type IconName } from "./kit";
+import { Icon, Logo, TabBusy, TabLoader, type IconName } from "./kit";
 import { Loader as KitLoader } from "@locksmith-hq/ui/loader";
 import * as seed from "./data";
 import { paid } from "./paid";
-import { EnvEditor } from "./EnvEditor";
+import { ProjectEnvironments } from "./ProjectEnvironments";
 import { Environments } from "./Environments";
 import { PlanAndBilling } from "./PlanAndBilling";
 import { Settings } from "./Settings";
@@ -515,7 +515,8 @@ export function Console() {
   const crumbProduct = product ?? (lobby ? "secrets" : undefined);
   // Members and Settings of a project are for its admins only.
   const items = (product ? seed.spaces[product]! : []).filter(
-    ([t]) => !proj || !["members", "machines", "settings"].includes(t) || acl.roleIn(proj.id) === "Admin",
+    ([t]) =>
+      !proj || !["members", "machines", "environments", "settings"].includes(t) || acl.roleIn(proj.id) === "Admin",
   );
   const base = product === "access" ? "#/access" : product === "secrets" ? `#/secrets/${route[1]}` : `#/app/${product}`;
   const tab = (product === "access" ? route[1] : route[2]) ?? items[0]?.[0] ?? "";
@@ -801,7 +802,7 @@ export function Console() {
               ) : page === "projects" ? (
                 <Projects db={db} acl={acl} all />
               ) : page === "environments" ? (
-                <Environments />
+                <Environments env={route[1]} secrets={db.secrets} />
               ) : page === "settings" ? (
                 <Settings key={ws.name} ws={ws} say={say} />
               ) : page === "integrations" ? (
@@ -2044,41 +2045,10 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
 }
 
 function ProjectSettings({ p }: { p: seed.Project }) {
-  const [inherit, setInherit] = useState(p.inherit);
-  const [envs, setEnvsNow] = useState(p.envs);
   const [confirm, setConfirm] = useState("");
-  // Editing the list makes it this project's own (the setter on Project turns inheriting off).
-  const setEnvs = (change: (x: string[]) => string[]) => {
-    const next = change(envs);
-    p.envs = next;
-    setInherit(false);
-    setEnvsNow(next);
-  };
-  const inheritNow = (on: boolean) => {
-    if (on) p.inherit = true;
-    else p.envs = [...seed.defaults.envs];
-    setInherit(on);
-    setEnvsNow(p.envs);
-  };
   return (
     <section>
-      <Head title="Settings" sub={`The environments of ${p.id}, its description, and deleting it.`} />
-      <EnvEditor
-        envs={envs}
-        setEnvs={setEnvs}
-        readOnly={inherit}
-        about="Each environment holds its own set of secrets. The last one is treated as production: access to it can be made to need a second person."
-        scope="deletes every secret in it and the access agents have to them."
-      >
-        <label className="inline-form">
-          <Switch label="Inherit the organization's environments" checked={inherit} onChange={inheritNow} />
-          <span>
-            {inherit
-              ? "Follows the organization's list: a change there applies here."
-              : "Has its own list. Turn this on to follow the organization's again."}
-          </span>
-        </label>
-      </EnvEditor>
+      <Head title="Settings" sub={`The description of ${p.id}, and deleting it.`} />
       <Card className="panel form">
         <form className="contents" onSubmit={(e) => e.preventDefault()}>
           <h2>Description</h2>
@@ -2225,6 +2195,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
       </p>
     );
   if (tab === "members") return <ProjectMembers acl={acl} id={id} />;
+  if (tab === "environments") return <ProjectEnvironments p={p} />;
   if (tab && !["secrets", "access", "activity", "settings"].includes(tab))
     return <Soon id="secrets" tab={tab} project={id} sub={envParam} say={db.say} />;
   if (tab === "access") return <ProjectAccess db={db} id={id} />;

@@ -72,7 +72,7 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
             const status = seed.envStatus(p, e);
             return (
               <li key={e}>
-                <a className="mono ls-link" href={`#/secrets/${p.id}/secrets/${encodeURIComponent(e)}`}>
+                <a className="mono ls-link" href={`#/environments/${encodeURIComponent(e)}`}>
                   {e}
                 </a>
                 {e === production && <Badge variant="secondary">Production</Badge>}

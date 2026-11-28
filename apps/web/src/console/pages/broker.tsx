@@ -665,7 +665,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
               Run this in a terminal to connect. The password is never shown: the broker types it in for you.
             </p>
             <CommandBox cmd={done.cmd} say={say} />
-            <div className="inline-form">
+            <div className="flex flex-wrap items-center gap-2">
               <Button asChild size="sm">
                 <a href={sl(done.id)}>Open session</a>
               </Button>
@@ -681,7 +681,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
               Your request is in the “Waiting for approval” list on Sessions. A second person approves it, and then the
               session opens.
             </p>
-            <div className="inline-form">
+            <div className="flex flex-wrap items-center gap-2">
               <Button asChild size="sm">
                 <a href={`${H}/sessions`}>See requests</a>
               </Button>
@@ -761,7 +761,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
               : "No approval is needed. The session opens at once and is recorded."}
           </p>
         )}
-        <div className="inline-form" style={{ marginTop: 12 }}>
+        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
           <Button type="submit" disabled={!chosen || !r || !!r.problem}>
             {ask ? "Ask for approval" : "Start session"}
           </Button>
@@ -1056,7 +1056,7 @@ function Accounts({ say }: PageProps) {
                 {err}
               </p>
             )}
-            <div className="inline-form">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="submit">Add account</Button>
               <Button
                 variant="ghost"
@@ -1140,7 +1140,7 @@ function Accounts({ say }: PageProps) {
                             .
                           </p>
                         )}
-                        <div className="inline-form" style={{ marginTop: 12 }}>
+                        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
                           <Button size="sm" type="submit">
                             Save
                           </Button>
@@ -1566,7 +1566,7 @@ function Recordings({ sub, say }: PageProps) {
                     View session
                   </a>
                 </p>
-                <div className="inline-form" style={{ margin: "10px 0" }}>
+                <div className="flex flex-wrap items-center gap-2" style={{ margin: "10px 0" }}>
                   <Label className="field" style={{ flexDirection: "row", alignItems: "center" }}>
                     Search this transcript
                     <Input
@@ -1581,7 +1581,7 @@ function Recordings({ sub, say }: PageProps) {
                   </span>
                 </div>
                 <Tx lines={lines} blocked={blocked} q={ui.q} />
-                <div className="inline-form" style={{ marginTop: 12 }}>
+                <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1724,7 +1724,7 @@ function BrokerSettings({ say }: PageProps) {
             <li className="muted">Nothing is blocked. Every command is allowed and recorded.</li>
           )}
         </ul>
-        <div className="inline-form">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             aria-label="Command to block"
             placeholder="DROP TABLE"

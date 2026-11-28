@@ -83,7 +83,7 @@ export function EnvEditor({
       )}
       {!readOnly && (
         // Not a <form>: the Settings page this sits in is one, and forms cannot nest.
-        <div className="inline-form">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}

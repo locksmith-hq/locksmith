@@ -148,7 +148,6 @@ main { padding: 28px 28px 40px; max-width: 1240px; }
 .plain li { display: flex; align-items: center; gap: 10px; min-height: 34px; border-top: 1px solid var(--border); }
 .plain li:first-child { border-top: 0; }
 .plain li > :last-child:is(button) { margin-left: auto; }
-.inline-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .panel.form { margin-bottom: 16px; }
 /* A switch: the native checkbox, redrawn. */

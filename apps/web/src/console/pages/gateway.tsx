@@ -357,7 +357,7 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
       )}
       {h && free.length > 0 && (
         <form
-          className="inline-form"
+          className="flex flex-wrap items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (choice) allow(choice);

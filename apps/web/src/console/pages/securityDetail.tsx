@@ -136,7 +136,7 @@ export function FindingView({ id, say }: { id: string; say: (note: string) => vo
             <h2 id="fd-act">Not a real secret?</h2>
             {asking ? (
               <form
-                className="inline-form"
+                className="flex flex-wrap items-center gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
                   setW(dismiss(w, f.id, String(new FormData(e.currentTarget).get("reason"))));

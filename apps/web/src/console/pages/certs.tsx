@@ -800,7 +800,7 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                 {c.revoked ? (
                   <span>Off</span>
                 ) : (
-                  <span className="inline-form">
+                  <span className="ct-form flex flex-wrap items-center gap-2">
                     <Switch
                       label={`Renew ${c.name} automatically`}
                       checked={c.auto}
@@ -859,7 +859,7 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                     <Alert variant="destructive" style={{ margin: 0 }}>
                       <AlertDescription>This cannot be undone.</AlertDescription>
                     </Alert>
-                    <span className="inline-form">
+                    <span className="ct-form flex flex-wrap items-center gap-2">
                       <Button
                         variant="destructive"
                         type="button"
@@ -1262,7 +1262,7 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
                 Disable authority
               </Button>
               {disabling && (
-                <span className="inline-form ct-gap">
+                <span className="ct-form flex flex-wrap items-center gap-2 ct-gap">
                   <Button variant="destructive" type="button" onClick={() => setStatus("Disabled")}>
                     Yes, disable {a.name}
                   </Button>
@@ -1366,7 +1366,7 @@ function ProfileForm({ p, say }: { p: Profile; say: Say }) {
               ))}
             </Dropdown>
           </Label>
-          <span className="inline-form">
+          <span className="ct-form flex flex-wrap items-center gap-2">
             <Switch label={`${d.name} needs approval`} checked={d.approval} onChange={(on) => set("approval", on)} />{" "}
             Needs approval before issuing
           </span>
@@ -1374,7 +1374,7 @@ function ProfileForm({ p, say }: { p: Profile; say: Say }) {
         <p className="hint">
           Changes apply to new certificates and renewals. Existing certificates keep their dates until renewed.
         </p>
-        <span className="inline-form ct-gap">
+        <span className="ct-form flex flex-wrap items-center gap-2 ct-gap">
           <Button type="submit" disabled={bad || !dirty}>
             Save profile
           </Button>
@@ -1485,7 +1485,7 @@ function ProfileList({ say }: { say: Say }) {
                   ))}
                 </Dropdown>
               </Label>
-              <label className="inline-form">
+              <label className="ct-form flex flex-wrap items-center gap-2">
                 <Checkbox name="approval" /> Needs approval
               </label>
               <Button type="submit">Add profile</Button>
@@ -1600,7 +1600,7 @@ function CertSettings({ say }: PageProps) {
           title="Renew when this many days remain"
           about="Marks certificates as expiring soon, and renews automatic ones."
         >
-          <span className="inline-form">
+          <span className="ct-form flex flex-wrap items-center gap-2">
             <Input
               className="num-in"
               type="number"
@@ -1621,7 +1621,7 @@ function CertSettings({ say }: PageProps) {
             </>
           }
         >
-          <span className="inline-form">
+          <span className="ct-form flex flex-wrap items-center gap-2">
             <Input
               className="num-in"
               type="number"

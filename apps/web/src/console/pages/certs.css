@@ -26,7 +26,7 @@
 .ct-col { display: grid; gap: 16px; min-width: 0; }
 .ct-one { max-width: 720px; }
 .ct-col .plain { margin-bottom: 0; }
-.ct-col .inline-form { margin-top: 10px; }
+.ct-col .ct-form { margin-top: 10px; }
 .ct-sort { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
 .ct-sort svg { width: 11px; height: 11px; opacity: 0; transition: transform 160ms var(--ease-out); }
 .ct-sort[data-dir] svg { opacity: 1; transform: rotate(90deg); }

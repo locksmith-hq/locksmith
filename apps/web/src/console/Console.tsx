@@ -1591,7 +1591,7 @@ function ProjectMembers({ acl, id }: { acl: Acl; id: string }) {
       </div>
       {free.length > 0 && (
         <form
-          className="inline-form"
+          className="flex flex-wrap items-center gap-2"
           style={{ marginTop: 16 }}
           onSubmit={(e) => {
             e.preventDefault();
@@ -1635,7 +1635,7 @@ function SignInTo({ at, from, signIn }: { at: number; from: string; signIn: (i: 
         title={`Sign in to ${w.name}`}
         sub={`${w.name} is ${w.org ? "an organization" : "a personal workspace"} with its own account. You are signed out of ${from} and sign in again to continue.`}
       />
-      <div className="inline-form">
+      <div className="flex flex-wrap items-center gap-2">
         <Button type="button" onClick={() => signIn(at)}>
           Sign in to {w.name}
         </Button>
@@ -2096,7 +2096,7 @@ function ProjectSettings({ p }: { p: seed.Project }) {
         about="Each environment holds its own set of secrets. The last one is treated as production: access to it can be made to need a second person."
         scope="deletes every secret in it and the access agents have to them."
       >
-        <label className="inline-form">
+        <label className="flex flex-wrap items-center gap-2">
           <Switch label="Inherit the organization's environments" checked={inherit} onChange={inheritNow} />
           <span>
             {inherit
@@ -2124,7 +2124,7 @@ function ProjectSettings({ p }: { p: seed.Project }) {
         <p className="muted">
           Deletes every secret and grant in {p.id}. Agents lose access at once. This cannot be undone.
         </p>
-        <div className="inline-form" style={{ marginTop: 12 }}>
+        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
           <Input
             aria-label={`Type ${p.id} to confirm`}
             placeholder={`Type ${p.id} to confirm`}
@@ -2182,7 +2182,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
         )}
       </Head>
       {naming && (
-        <form className="inline-form" onSubmit={create}>
+        <form className="flex flex-wrap items-center gap-2" onSubmit={create}>
           <Input name="name" required autoFocus aria-label="Project name" placeholder="my-project" autoComplete="off" />
           <Button type="submit">Create project</Button>
           <Button type="button" variant="ghost" onClick={() => setNaming(false)}>
@@ -2468,7 +2468,7 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
           ))}
         </ul>
         {free.length > 0 && (
-          <form className="inline-form" onSubmit={grant}>
+          <form className="flex flex-wrap items-center gap-2" onSubmit={grant}>
             <Dropdown name="agent" aria-label="Agent">
               {free.map((a) => (
                 <Option key={a.name}>{a.name}</Option>
@@ -2501,7 +2501,7 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
         </ul>
         {rotating ? (
           <form
-            className="inline-form"
+            className="flex flex-wrap items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               patch((x) => ({ ...x, version: x.version + 1, updated: NOW }));
@@ -2680,7 +2680,7 @@ function Agents({ db }: { db: Db }) {
                     )}
                   </dd>
                   <dt>Enrollment</dt>
-                  <dd className="inline-form">
+                  <dd className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm" type="button" onClick={() => setOnce(a.name)}>
                       <Icon name="rotate" />
                       Rotate enrollment secret

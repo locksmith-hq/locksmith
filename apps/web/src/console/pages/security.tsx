@@ -369,7 +369,7 @@ function Rules({ say }: PageProps) {
         Ignored paths<span className="n">{w.paths.length}</span>
       </h2>
       <form
-        className="inline-form sc-pathform"
+        className="flex flex-wrap items-center gap-2 sc-pathform"
         onSubmit={(e) => {
           e.preventDefault();
           const p = path.trim();

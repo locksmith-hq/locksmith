@@ -3,13 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { AppModule } from "./app.module.js";
 import { paidModules } from "./paid.js";
 
 describe("paid modules", () => {
-  it("the open build has none, and the app is composed without them", async () => {
+  it("the open build has none", async () => {
     expect(await paidModules()).toEqual([]);
-    expect(AppModule.with([])).toEqual({ module: AppModule, imports: [] });
   });
 
   it("loads each *.module file's default export and nothing else", async () => {

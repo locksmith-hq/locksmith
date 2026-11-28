@@ -6,7 +6,7 @@
 .set-row:first-of-type { border-top: 0; }
 .set-row b { font-weight: 600; }
 .set-row p { margin: 2px 0 0; max-width: 56ch; color: var(--muted-foreground); font-size: 13px; }
-.set-ctl input:not(.switch), .settings .inline-form input { height: 36px; width: 240px; padding: 0 10px; border: 1px solid var(--input); border-radius: 9px; background: var(--card); font: 14px var(--font-sans); color: var(--foreground); }
+.set-ctl input:not(.switch), .settings .set-form input { height: 36px; width: 240px; padding: 0 10px; border: 1px solid var(--input); border-radius: 9px; background: var(--card); font: 14px var(--font-sans); color: var(--foreground); }
 .set-ctl select { height: 36px; min-width: 180px; font-size: 14px; }
 .affix { display: inline-flex; align-items: center; border: 1px solid var(--input); border-radius: 9px; background: var(--popover); }
 .affix span { padding: 0 2px 0 10px; color: var(--muted-foreground); font-size: 13px; }
@@ -22,7 +22,7 @@
 
 @media (max-width: 860px) {
   .set-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  .set-ctl input:not(.switch), .settings .inline-form input { width: 100%; }
+  .set-ctl input:not(.switch), .settings .set-form input { width: 100%; }
 }
 
 /* A command the person runs themselves. */

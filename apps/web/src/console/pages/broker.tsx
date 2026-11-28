@@ -27,6 +27,7 @@ import {
   plural,
   type PageProps,
   type Pages,
+  SectionHead,
 } from "../kit";
 import "../settings.css";
 import "./broker.css";
@@ -538,7 +539,10 @@ const NotFound = ({ what, id, back }: { what: string; id: string; back: [string,
         No {what} called “{id}”.
       </b>{" "}
       It may have been removed.{" "}
-      <a className="link" href={back[1]}>
+      <a
+        className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+        href={back[1]}
+      >
         Back to {back[0].toLowerCase()}
       </a>
     </Empty>
@@ -661,7 +665,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
               Run this in a terminal to connect. The password is never shown: the broker types it in for you.
             </p>
             <CommandBox cmd={done.cmd} say={say} />
-            <div className="inline-form">
+            <div className="flex flex-wrap items-center gap-2">
               <Button asChild size="sm">
                 <a href={sl(done.id)}>Open session</a>
               </Button>
@@ -677,7 +681,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
               Your request is in the “Waiting for approval” list on Sessions. A second person approves it, and then the
               session opens.
             </p>
-            <div className="inline-form">
+            <div className="flex flex-wrap items-center gap-2">
               <Button asChild size="sm">
                 <a href={`${H}/sessions`}>See requests</a>
               </Button>
@@ -736,14 +740,17 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
         {r && options.length === 0 && (
           <p className="hint">
             {who} has no account on {res}. Ask an admin to add {who} to one of its accounts under{" "}
-            <a className="link" href={`${H}/accounts`}>
+            <a
+              className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+              href={`${H}/accounts`}
+            >
               Accounts
             </a>
             , or pick another resource.
           </p>
         )}
         {r?.problem && (
-          <p className="hint prod">
+          <p className="hint !text-(--warning-text)">
             {res} cannot be reached right now ({r.problem}), so a session cannot open. Fix the connection first.
           </p>
         )}
@@ -754,7 +761,7 @@ function StartPanel({ onClose, say }: { onClose: () => void; say: PageProps["say
               : "No approval is needed. The session opens at once and is recorded."}
           </p>
         )}
-        <div className="inline-form" style={{ marginTop: 12 }}>
+        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
           <Button type="submit" disabled={!chosen || !r || !!r.problem}>
             {ask ? "Ask for approval" : "Start session"}
           </Button>
@@ -843,7 +850,7 @@ function Resources({ say }: PageProps) {
               </Button>
             </div>
             {err && (
-              <p className="hint prod" role="alert">
+              <p className="hint !text-(--warning-text)" role="alert">
                 {err}
               </p>
             )}
@@ -854,7 +861,7 @@ function Resources({ say }: PageProps) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(kind)} aria-label="Kind">
           {(["All", ...kinds] as const).map((k) => (
             <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setKind(k)}>
@@ -1045,11 +1052,11 @@ function Accounts({ say }: PageProps) {
             </div>
             <WhoEditor label="Who may use it" draft={draft} setDraft={setDraft} />
             {err && (
-              <p className="hint prod" role="alert">
+              <p className="hint !text-(--warning-text)" role="alert">
                 {err}
               </p>
             )}
-            <div className="inline-form">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="submit">Add account</Button>
               <Button
                 variant="ghost"
@@ -1128,12 +1135,12 @@ function Accounts({ say }: PageProps) {
                       >
                         <WhoEditor label="People, groups and agents" draft={who} setDraft={setWhoDraft} />
                         {dropped.length > 0 && (
-                          <p className="hint prod" role="status">
+                          <p className="hint !text-(--warning-text)" role="status">
                             Saving ends {plural(dropped.length, "live session")}: {dropped.map((s) => s.who).join(", ")}
                             .
                           </p>
                         )}
-                        <div className="inline-form" style={{ marginTop: 12 }}>
+                        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
                           <Button size="sm" type="submit">
                             Save
                           </Button>
@@ -1237,10 +1244,10 @@ function SessionList({ say }: { say: PageProps["say"] }) {
       {starting && <StartPanel onClose={() => setStarting(false)} say={say} />}
       {w.reqs.length > 0 && (
         <div className="br-sec">
-          <div className="sec-h">
+          <SectionHead>
             <h2>Waiting for approval</h2>
             <span className="n">{w.reqs.filter((r) => r.status === "waiting").length}</span>
-          </div>
+          </SectionHead>
           <div className="table-wrap">
             <Table>
               <TableHeader>
@@ -1313,7 +1320,7 @@ function SessionList({ say }: { say: PageProps["say"] }) {
           </div>
         </div>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(view)} aria-label="Show">
           {(
             [
@@ -1386,7 +1393,11 @@ function SessionList({ say }: { say: PageProps["say"] }) {
                         Terminate
                       </Button>
                     ) : (
-                      <a className="link" href={cl(s.id)} aria-label={`Open recording of ${s.id}`}>
+                      <a
+                        className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+                        href={cl(s.id)}
+                        aria-label={`Open recording of ${s.id}`}
+                      >
                         Recording
                       </a>
                     )}
@@ -1448,10 +1459,10 @@ function SessionDetail({ id, say }: { id: string; say: PageProps["say"] }) {
         </Card>
       )}
       <Card className="panel br-sec">
-        <div className="sec-h">
+        <SectionHead>
           <h2>{isLive ? "Transcript so far" : "Transcript"}</h2>
           <span className="n">{plural(lines.length, "line")}</span>
-        </div>
+        </SectionHead>
         <Tx lines={lines} blocked={w.cfg.blocked} />
       </Card>
     </section>
@@ -1501,7 +1512,7 @@ function Recordings({ sub, say }: PageProps) {
         </Empty>
       ) : (
         <>
-          <div className="toolbar">
+          <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
             <label className="br-check">
               <Checkbox checked={ui.flagged} onCheckedChange={(on) => setUiState({ flagged: on === true })} />
               Flagged only
@@ -1529,7 +1540,7 @@ function Recordings({ sub, say }: PageProps) {
                           {flagged(s) && (
                             <>
                               {" "}
-                              · <span className="prod">flagged</span>
+                              · <span className="text-(--warning-text)">flagged</span>
                             </>
                           )}
                         </p>
@@ -1548,11 +1559,14 @@ function Recordings({ sub, say }: PageProps) {
                   {sel.acct}@{sel.res} · {ago(sel.started)} · {dur(sel.ended! - sel.started)} ·{" "}
                   {plural(flags, "flagged line")}. Sensitive values are replaced with [redacted] before the recording is
                   stored.{" "}
-                  <a className="link" style={{ margin: 0 }} href={sl(sel.id)}>
+                  <a
+                    className="cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+                    href={sl(sel.id)}
+                  >
                     View session
                   </a>
                 </p>
-                <div className="inline-form" style={{ margin: "10px 0" }}>
+                <div className="flex flex-wrap items-center gap-2" style={{ margin: "10px 0" }}>
                   <Label className="field" style={{ flexDirection: "row", alignItems: "center" }}>
                     Search this transcript
                     <Input
@@ -1567,7 +1581,7 @@ function Recordings({ sub, say }: PageProps) {
                   </span>
                 </div>
                 <Tx lines={lines} blocked={blocked} q={ui.q} />
-                <div className="inline-form" style={{ marginTop: 12 }}>
+                <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1581,7 +1595,10 @@ function Recordings({ sub, say }: PageProps) {
             ) : sub ? (
               <Empty icon="search">
                 <b>No recording called “{dec(sub)}”.</b> It may still be live, or the id is wrong.{" "}
-                <a className="link" href={`${H}/recordings`}>
+                <a
+                  className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+                  href={`${H}/recordings`}
+                >
                   Back to recordings
                 </a>
               </Empty>
@@ -1652,7 +1669,7 @@ function BrokerSettings({ say }: PageProps) {
           {pick("maxLen", "Longest session", ["1 hour", "4 hours", "8 hours"])}
         </Row>
         {cut.length > 0 && (
-          <p className="hint prod" role="status">
+          <p className="hint !text-(--warning-text)" role="status">
             Saving this ends {plural(cut.length, "live session")} that already ran longer:{" "}
             {cut.map((x) => `${x.who} on ${x.res}`).join(", ")}.
           </p>
@@ -1707,7 +1724,7 @@ function BrokerSettings({ say }: PageProps) {
             <li className="muted">Nothing is blocked. Every command is allowed and recorded.</li>
           )}
         </ul>
-        <div className="inline-form">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             aria-label="Command to block"
             placeholder="DROP TABLE"

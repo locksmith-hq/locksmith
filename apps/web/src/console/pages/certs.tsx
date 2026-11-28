@@ -519,7 +519,7 @@ function CertList({ say }: { say: Say }) {
             const off = !a || chainOf(auths, a.id).some((x) => x.status === "Disabled");
             return (
               <li key={r.id} className="row">
-                <span className="ic">
+                <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                   <Icon name="clock" />
                 </span>
                 <div>
@@ -568,7 +568,7 @@ function CertList({ say }: { say: Say }) {
         </ul>
       )}
       <h2 className="ct-h">All certificates</h2>
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <label className="search">
           <span className="sr-only">Search by name</span>
           <Icon name="search" />
@@ -800,7 +800,7 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                 {c.revoked ? (
                   <span>Off</span>
                 ) : (
-                  <span className="inline-form">
+                  <span className="ct-form flex flex-wrap items-center gap-2">
                     <Switch
                       label={`Renew ${c.name} automatically`}
                       checked={c.auto}
@@ -818,9 +818,9 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
           </Card>
           <Card className="panel" role="region" aria-labelledby="cd-names">
             <h2 id="cd-names">Names it covers</h2>
-            <ul className="plain">
+            <ul className="m-0 p-0 list-none">
               {[c.name, ...c.names].map((n, i) => (
-                <li key={n}>
+                <li key={n} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
                   <span className="mono">{n}</span>
                   <span className="muted small">{i === 0 ? "Main name" : "Also covered"}</span>
                 </li>
@@ -859,7 +859,7 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
                     <Alert variant="destructive" style={{ margin: 0 }}>
                       <AlertDescription>This cannot be undone.</AlertDescription>
                     </Alert>
-                    <span className="inline-form">
+                    <span className="ct-form flex flex-wrap items-center gap-2">
                       <Button
                         variant="destructive"
                         type="button"
@@ -928,12 +928,15 @@ function CertDetail({ id, say }: { id: string; say: Say }) {
           </Card>
           <Card className="panel" role="region" aria-labelledby="cd-tl">
             <h2 id="cd-tl">What happened</h2>
-            <ul className="plain ct-time">
+            <ul className="m-0 p-0 list-none">
               {[...c.log]
                 .reverse()
                 .sort((a, b) => b.at - a.at)
                 .map((e, i) => (
-                  <li key={`${e.at}${i}`}>
+                  <li
+                    key={`${e.at}${i}`}
+                    className="flex min-h-[34px] items-start gap-2.5 border-t border-border py-2 first:border-t-0 [&>:nth-child(2)]:flex-1"
+                  >
                     <span className="ct-ico">
                       <Icon name={e.icon} />
                     </span>
@@ -1218,9 +1221,12 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
           ) : mine.length === 0 ? (
             <p className="muted small">It has not issued anything yet.</p>
           ) : (
-            <ul className="plain">
+            <ul className="m-0 p-0 list-none">
               {mine.map((c) => (
-                <li key={c.id}>
+                <li
+                  key={c.id}
+                  className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0"
+                >
                   <A tab="certificates" id={c.id}>
                     {c.name}
                   </A>
@@ -1262,7 +1268,7 @@ function AuthDetail({ id, say }: { id: string; say: Say }) {
                 Disable authority
               </Button>
               {disabling && (
-                <span className="inline-form ct-gap">
+                <span className="ct-form flex flex-wrap items-center gap-2 ct-gap">
                   <Button variant="destructive" type="button" onClick={() => setStatus("Disabled")}>
                     Yes, disable {a.name}
                   </Button>
@@ -1366,7 +1372,7 @@ function ProfileForm({ p, say }: { p: Profile; say: Say }) {
               ))}
             </Dropdown>
           </Label>
-          <span className="inline-form">
+          <span className="ct-form flex flex-wrap items-center gap-2">
             <Switch label={`${d.name} needs approval`} checked={d.approval} onChange={(on) => set("approval", on)} />{" "}
             Needs approval before issuing
           </span>
@@ -1374,7 +1380,7 @@ function ProfileForm({ p, say }: { p: Profile; say: Say }) {
         <p className="hint">
           Changes apply to new certificates and renewals. Existing certificates keep their dates until renewed.
         </p>
-        <span className="inline-form ct-gap">
+        <span className="ct-form flex flex-wrap items-center gap-2 ct-gap">
           <Button type="submit" disabled={bad || !dirty}>
             Save profile
           </Button>
@@ -1485,7 +1491,7 @@ function ProfileList({ say }: { say: Say }) {
                   ))}
                 </Dropdown>
               </Label>
-              <label className="inline-form">
+              <label className="ct-form flex flex-wrap items-center gap-2">
                 <Checkbox name="approval" /> Needs approval
               </label>
               <Button type="submit">Add profile</Button>
@@ -1600,7 +1606,7 @@ function CertSettings({ say }: PageProps) {
           title="Renew when this many days remain"
           about="Marks certificates as expiring soon, and renews automatic ones."
         >
-          <span className="inline-form">
+          <span className="ct-form flex flex-wrap items-center gap-2">
             <Input
               className="num-in"
               type="number"
@@ -1621,7 +1627,7 @@ function CertSettings({ say }: PageProps) {
             </>
           }
         >
-          <span className="inline-form">
+          <span className="ct-form flex flex-wrap items-center gap-2">
             <Input
               className="num-in"
               type="number"

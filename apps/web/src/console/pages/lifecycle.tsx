@@ -54,7 +54,7 @@ function History({ project, say }: PageProps) {
         title="History"
         sub={`Every change to the secrets and lifecycle settings in ${p}: who did it and what changed. Values are never shown.`}
       />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(env)} aria-label="Environment">
           {["All", ...envsOf(p)].map((e) => (
             <ToggleGroupItem key={e} size="sm" value={String(e)} onClick={() => setEnv(e)}>
@@ -99,7 +99,7 @@ function History({ project, say }: PageProps) {
             <ul className="list">
               {items.map((e) => (
                 <li key={e.id} className="row lc-row" data-undone={e.undone ? "true" : undefined}>
-                  <span className="ic">
+                  <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground [&_svg]:size-4">
                     <Icon name={ACT_ICON[e.act]} />
                   </span>
                   <div>
@@ -239,7 +239,7 @@ function Syncs({ project, say }: PageProps) {
             const st = syncState(s, p, y);
             return (
               <li key={y.id} className="row lc-row">
-                <span className="ic">
+                <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground [&_svg]:size-4">
                   <Icon name={y.c.icon} />
                 </span>
                 <div>

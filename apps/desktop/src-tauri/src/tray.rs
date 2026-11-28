@@ -48,7 +48,7 @@ pub enum Glyph {
 }
 
 impl Glyph {
-    /// 36 px (@2x of the 18 px grid in packages/ui/brand/tray-*.svg); the menu bar draws it at 18 pt.
+    /// 36 px (@2x of the 18 px grid in icons/source/tray-*.svg); the menu bar draws it at 18 pt.
     fn png(self) -> &'static [u8] {
         match self {
             Glyph::Locked => include_bytes!("../icons/tray/locked@2x.png"),

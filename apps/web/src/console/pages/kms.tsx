@@ -617,7 +617,7 @@ function Keys({ say, sub }: PageProps) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <label className="search">
           <span className="sr-only">Find a key by name</span>
           <Icon name="search" />
@@ -835,9 +835,9 @@ function KeyDetail({ name, say }: { name: string; say: (n: string) => void }) {
           New data always uses the current version. Older versions are kept only to{" "}
           {k.use === "crypt" ? "decrypt" : "verify"} what they already protected.
         </p>
-        <ul className="plain">
+        <ul className="m-0 mb-2.5 p-0 list-none">
           {k.versions.map((x, i) => (
-            <li key={x.n}>
+            <li key={x.n} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
               <span className="mono">v{x.n}</span>
               <span className="muted">created {ago(x.created)}</span>
               {i === 0 ? (
@@ -1161,7 +1161,7 @@ function Activity({ say }: PageProps) {
         title="Activity"
         sub="Every encrypt, decrypt, sign and verify request, and every change made in this console."
       />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <Sel
           label="Filter by result"
           value={res}

@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="packages/ui/brand/app-icon-dark.svg">
-  <img src="packages/ui/brand/app-icon-light.svg" alt="Locksmith logo" width="120" height="120">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/app-icon-dark.svg">
+  <img src="docs/brand/app-icon-light.svg" alt="Locksmith logo" width="120" height="120">
 </picture>
 
 # Locksmith

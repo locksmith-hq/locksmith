@@ -24,6 +24,7 @@ import {
   secrets as seedSecrets,
   type PageProps,
   type Pages,
+  SectionHead,
 } from "../kit";
 import {
   EXPIRY,
@@ -236,10 +237,10 @@ function HostList({ say }: { say: Say }) {
         </div>
       )}
 
-      <div className="sec-h" style={{ marginTop: 28 }}>
+      <SectionHead top={28}>
         <h2>Recently blocked</h2>
         <span className="n">{plural(attempts.length, "attempt")}</span>
-      </div>
+      </SectionHead>
       {attempts.length === 0 ? (
         <Empty icon="shield">
           <b>Nothing blocked lately.</b> When an agent tries to send a secret to a host that is not on the list, it
@@ -249,7 +250,7 @@ function HostList({ say }: { say: Say }) {
         <ul className="list">
           {attempts.map((a) => (
             <li key={a.id} className="row">
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 <Icon name="alert" />
               </span>
               <div>
@@ -326,24 +327,24 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
           </Button>
         )}
       </Head>
-      <div className="sec-h">
+      <SectionHead>
         <h2>Secrets allowed here</h2>
         <span className="n">{names.length}</span>
-      </div>
+      </SectionHead>
       {names.length === 0 ? (
         <Empty icon="lock">
           <b>No secret may go to this host.</b>{" "}
           {first ? `${first} was blocked here. Allow it with the button above.` : "Allow one below."}
         </Empty>
       ) : (
-        <ul className="plain" aria-label={`Secrets allowed at ${host}`}>
+        <ul className="m-0 mb-2.5 p-0 list-none" aria-label={`Secrets allowed at ${host}`}>
           {names.map((n) => (
-            <li key={n}>
+            <li key={n} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
               <span className="mono strong">{n}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-(--destructive-text)"
+                className="ml-auto text-(--destructive-text)"
                 type="button"
                 aria-label={`Stop sending ${n} to ${host}`}
                 onClick={() => dropName(n)}
@@ -356,7 +357,7 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
       )}
       {h && free.length > 0 && (
         <form
-          className="inline-form"
+          className="flex flex-wrap items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (choice) allow(choice);
@@ -374,10 +375,10 @@ function HostDetail({ host, say }: { host: string; say: Say }) {
         </form>
       )}
 
-      <div className="sec-h" style={{ marginTop: 28 }}>
+      <SectionHead top={28}>
         <h2>Recent requests</h2>
         <span className="n">{mine.length}</span>
-      </div>
+      </SectionHead>
       {mine.length === 0 ? (
         <Empty icon="doc">
           <b>No requests yet.</b> Calls to this host appear here as they happen.
@@ -612,7 +613,7 @@ function Grants({ say }: PageProps) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <Label className="field">
           Agent
           <Dropdown value={agent} onChange={(e) => setAgent(e)}>
@@ -676,7 +677,7 @@ function Grants({ say }: PageProps) {
                       {r.project} / {r.env}
                     </div>
                   </TableCell>
-                  <TableCell className={r.expires === null ? "prod" : ""}>{when(r.expires)}</TableCell>
+                  <TableCell className={r.expires === null ? "text-(--warning-text)" : ""}>{when(r.expires)}</TableCell>
                   <TableCell className="muted">{ago(r.last)}</TableCell>
                   <TableCell className="num">
                     <Button

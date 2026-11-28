@@ -19,7 +19,7 @@ import { Dropdown, Option } from "../Dropdown";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { Fragment, useContext, useEffect, useLayoutEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { Icon, Logo, Switch, TabBusy, TabLoader, type IconName } from "./kit";
+import { Icon, Logo, SectionHead, Switch, TabBusy, TabLoader, type IconName } from "./kit";
 import { Loader as KitLoader } from "@locksmith-hq/ui/loader";
 import * as seed from "./data";
 import { paid } from "./paid";
@@ -888,9 +888,9 @@ function Hub({ db, org, name }: { db: Db; org: boolean; name: string }) {
       {groups.map((g, i) => (
         <Fragment key={g}>
           {groups.length > 1 && (
-            <div className={i ? "sec-h spaced" : "sec-h"}>
+            <SectionHead spaced={!!i}>
               <h2>{g}</h2>
-            </div>
+            </SectionHead>
           )}
           <div className="hub-grid">
             {seed.products
@@ -954,7 +954,7 @@ function Soon({
     <section>
       <Head title={item ? item[1] : p.name} sub={seed.about[`${key}/${tab}`] ?? p.blurb} />
       <div className="state empty">
-        <span className="state-ic">
+        <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
           <Icon name={item ? item[2] : p.icon} />
         </span>
         <div>
@@ -1052,7 +1052,7 @@ function Integrations({ say }: { say: (note: string) => void }) {
           </form>
         </Card>
       )}
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(kind)} aria-label="Kind">
           {(["All", ...seed.kinds] as const).map((k) => (
             <ToggleGroupItem key={k} size="sm" value={String(k)} onClick={() => setKind(k)}>
@@ -1064,7 +1064,7 @@ function Integrations({ say }: { say: (note: string) => void }) {
       </div>
       {shown.length === 0 ? (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="relay" />
           </span>
           <div>
@@ -1076,7 +1076,7 @@ function Integrations({ say }: { say: (note: string) => void }) {
         <ul className="list conns">
           {shown.map((c) => (
             <li key={c.id} className="row">
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 {c.icon === "s_claude" ? (
                   <span className="src-claude">
                     <Icon name="s_claude" />
@@ -1234,7 +1234,7 @@ function Sharing({ say }: { say: (note: string) => void }) {
       )}
       {rows.length === 0 ? (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="arrow" />
           </span>
           <div>
@@ -1591,7 +1591,7 @@ function ProjectMembers({ acl, id }: { acl: Acl; id: string }) {
       </div>
       {free.length > 0 && (
         <form
-          className="inline-form"
+          className="flex flex-wrap items-center gap-2"
           style={{ marginTop: 16 }}
           onSubmit={(e) => {
             e.preventDefault();
@@ -1635,7 +1635,7 @@ function SignInTo({ at, from, signIn }: { at: number; from: string; signIn: (i: 
         title={`Sign in to ${w.name}`}
         sub={`${w.name} is ${w.org ? "an organization" : "a personal workspace"} with its own account. You are signed out of ${from} and sign in again to continue.`}
       />
-      <div className="inline-form">
+      <div className="flex flex-wrap items-center gap-2">
         <Button type="button" onClick={() => signIn(at)}>
           Sign in to {w.name}
         </Button>
@@ -1717,7 +1717,7 @@ function Overview({ db }: { db: Db }) {
         <span className="mono id">{s.id}</span>
       </span>
       <span className="who-2">
-        {s.project} / <span className={s.env === "production" ? "prod" : undefined}>{s.env}</span> ·{" "}
+        {s.project} / <span className={s.env === "production" ? "text-(--warning-text)" : undefined}>{s.env}</span> ·{" "}
         {agentOf(s.agent)?.machine ?? "removed agent"}
       </span>
     </span>
@@ -1768,12 +1768,12 @@ function Overview({ db }: { db: Db }) {
           </Button>
         )}
       </Head>
-      <div className="sec-h">
+      <SectionHead inset>
         <h2>Sessions</h2>
         <span className="n">
           {live.length} live{ended.length > 0 && ` · ${ended.length} ended`}
         </span>
-      </div>
+      </SectionHead>
       <div className="tl-list" role="list" aria-label="Sessions">
         {live.length > 0 && (
           <div className="tl-row tl-axis" aria-hidden="true">
@@ -1790,7 +1790,7 @@ function Overview({ db }: { db: Db }) {
                 </b>
               ))}
             </span>
-            <span className="r">Left</span>
+            <span className="text-right">Left</span>
             <span />
           </div>
         )}
@@ -1821,7 +1821,7 @@ function Overview({ db }: { db: Db }) {
               {grid}
               <span className="bar" style={{ width: x(s.expires) }} />
             </span>
-            <span className="r mono left" title={`Token expires ${clock(s.expires)}`}>
+            <span className="text-right mono left" title={`Token expires ${clock(s.expires)}`}>
               {left(s.expires - NOW)}
             </span>
             <Button
@@ -1855,14 +1855,17 @@ function Overview({ db }: { db: Db }) {
         ))}
       </div>
 
-      <div className="sec-h spaced">
+      <SectionHead spaced inset>
         <h2 id="h-events">Activity</h2>
-        <a className="link" href="#/access/activity">
+        <a
+          className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+          href="#/access/activity"
+        >
           All activity
         </a>
-      </div>
+      </SectionHead>
       <Log events={seed.events.slice(0, 10)} />
-      <p className="log-foot">
+      <p className="mx-0 mb-0 mt-2.5 flex items-center gap-2 px-2.5 text-xs text-muted-foreground [&>svg]:size-3.5 [&>svg]:text-(--live-text)">
         <Icon name="shield" />
         Ledger chain verified {ago(NOW - 240)} · 18,420 entries
       </p>
@@ -1870,25 +1873,46 @@ function Overview({ db }: { db: Db }) {
   );
 }
 
+const LOG_KIND = {
+  allowed: { mk: "size-[7px] rounded-full bg-(--live) opacity-80", what: "font-medium", tgt: "text-muted-foreground" },
+  blocked: {
+    mk: "size-2 rotate-45 rounded-[1px] border-[1.5px] border-(--warning)",
+    what: "font-semibold text-(--warning-text)",
+    tgt: "text-(--warning-text)",
+  },
+  revoked: {
+    mk: "h-0.5 w-2 rounded-[1px] bg-(--destructive)",
+    what: "font-medium text-(--destructive-text)",
+    tgt: "text-muted-foreground",
+  },
+} as const;
+
 const Log = ({ events }: { events: seed.Event[] }) =>
   events.length === 0 ? (
-    <p className="quiet-state">Nothing in the ledger yet.</p>
+    <p className="m-0 border-t border-border px-2.5 py-3 text-muted-foreground">Nothing in the ledger yet.</p>
   ) : (
-    <ol className="log" aria-label="Activity">
-      {events.map((e) => (
-        <li
-          key={e.seq}
-          data-kind={e.outcome === "ok" ? (e.label.includes("revoked") ? "revoked" : "allowed") : "blocked"}
-        >
-          <time className="mono">{clock(e.at)}</time>
-          <span className="mk" aria-hidden="true" />
-          <span className="what">{e.label}</span>
-          <span className="mono tgt" title={e.target}>
-            {e.target}
-          </span>
-          <span className="who-s">{e.actor}</span>
-        </li>
-      ))}
+    <ol className="m-0 list-none p-0" aria-label="Activity">
+      {events.map((e) => {
+        const kind = e.outcome === "ok" ? (e.label.includes("revoked") ? "revoked" : "allowed") : "blocked";
+        const k = LOG_KIND[kind];
+        return (
+          <li
+            key={e.seq}
+            data-kind={kind}
+            className="grid min-h-[34px] grid-cols-[64px_8px_160px_minmax(0,1fr)_minmax(0,190px)] items-center gap-x-3 border-t border-border px-2.5 text-[13px] last:border-b hover:bg-accent max-[1100px]:grid-cols-[64px_8px_150px_minmax(0,1fr)_minmax(0,150px)] max-[860px]:grid-cols-[64px_8px_minmax(0,1fr)]"
+          >
+            <time className="mono text-muted-foreground">{clock(e.at)}</time>
+            <span className={`${k.mk}`} aria-hidden="true" />
+            <span className={`truncate ${k.what}`}>{e.label}</span>
+            <span className={`mono min-w-0 truncate max-[860px]:hidden ${k.tgt}`} title={e.target}>
+              {e.target}
+            </span>
+            <span className="min-w-0 truncate text-right text-[12.5px] text-muted-foreground max-[860px]:hidden">
+              {e.actor}
+            </span>
+          </li>
+        );
+      })}
     </ol>
   );
 
@@ -2015,7 +2039,9 @@ function ProjectAccess({ db, id }: { db: Db; id: string }) {
                 <TableRow key={s.id + g.agent}>
                   <TableCell className="strong">{g.agent}</TableCell>
                   <TableCell className="mono">{s.name}</TableCell>
-                  <TableCell className={s.env === "production" ? "prod" : undefined}>{s.env}</TableCell>
+                  <TableCell className={s.env === "production" ? "text-(--warning-text)" : undefined}>
+                    {s.env}
+                  </TableCell>
                   <TableCell className="muted">{until(g.expires)}</TableCell>
                   <TableCell className="num">
                     <Button
@@ -2070,7 +2096,7 @@ function ProjectSettings({ p }: { p: seed.Project }) {
         about="Each environment holds its own set of secrets. The last one is treated as production: access to it can be made to need a second person."
         scope="deletes every secret in it and the access agents have to them."
       >
-        <label className="inline-form">
+        <label className="flex flex-wrap items-center gap-2">
           <Switch label="Inherit the organization's environments" checked={inherit} onChange={inheritNow} />
           <span>
             {inherit
@@ -2098,7 +2124,7 @@ function ProjectSettings({ p }: { p: seed.Project }) {
         <p className="muted">
           Deletes every secret and grant in {p.id}. Agents lose access at once. This cannot be undone.
         </p>
-        <div className="inline-form" style={{ marginTop: 12 }}>
+        <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
           <Input
             aria-label={`Type ${p.id} to confirm`}
             placeholder={`Type ${p.id} to confirm`}
@@ -2156,7 +2182,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
         )}
       </Head>
       {naming && (
-        <form className="inline-form" onSubmit={create}>
+        <form className="flex flex-wrap items-center gap-2" onSubmit={create}>
           <Input name="name" required autoFocus aria-label="Project name" placeholder="my-project" autoComplete="off" />
           <Button type="submit">Create project</Button>
           <Button type="button" variant="ghost" onClick={() => setNaming(false)}>
@@ -2177,7 +2203,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
       )}
       {mine.length === 0 && (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="key" />
           </span>
           <div>
@@ -2191,7 +2217,7 @@ function Projects({ db, acl, all = false }: { db: Db; acl: Acl; all?: boolean })
           const withAccess = new Set(own.flatMap((s) => s.grants.map((g) => g.agent))).size;
           return (
             <a key={p.id} className="row" href={`#/secrets/${p.id}`}>
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 <Icon name="key" />
               </span>
               <span>
@@ -2261,7 +2287,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
   return (
     <section>
       <Head title="Secrets" sub={p.description} />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={env ?? ""} aria-label="Environment">
           {p.envs.map((v) => (
             <ToggleGroupItem
@@ -2273,7 +2299,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
                 setOpen(null);
               }}
             >
-              <span className={v === "production" ? "prod" : undefined}>{v}</span>
+              <span className={v === "production" ? "text-(--warning-text)" : undefined}>{v}</span>
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -2328,7 +2354,7 @@ function Project({ db, acl, id, tab, env: envParam }: { db: Db; acl: Acl; id: st
 
       {rows.length === 0 ? (
         <div className="state empty">
-          <span className="state-ic">
+          <span className="grid size-8 flex-none place-items-center rounded-[5px] border border-input bg-background text-muted-foreground">
             <Icon name="key" />
           </span>
           <div>
@@ -2421,15 +2447,18 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
             No agent can use this secret.
           </p>
         )}
-        <ul className="plain">
+        <ul className="m-0 mb-2.5 p-0 list-none">
           {s.grants.map((g) => (
-            <li key={g.agent}>
+            <li
+              key={g.agent}
+              className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0"
+            >
               <span className="strong">{g.agent}</span>
               <span className="muted small">relay · {until(g.expires)}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-(--destructive-text)"
+                className="ml-auto text-(--destructive-text)"
                 type="button"
                 onClick={() => {
                   patch((x) => ({ ...x, grants: x.grants.filter((y) => y !== g) }));
@@ -2442,7 +2471,7 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
           ))}
         </ul>
         {free.length > 0 && (
-          <form className="inline-form" onSubmit={grant}>
+          <form className="flex flex-wrap items-center gap-2" onSubmit={grant}>
             <Dropdown name="agent" aria-label="Agent">
               {free.map((a) => (
                 <Option key={a.name}>{a.name}</Option>
@@ -2463,9 +2492,9 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
       </div>
       <div>
         <h3>Versions</h3>
-        <ul className="plain">
+        <ul className="m-0 mb-2.5 p-0 list-none">
           {Array.from({ length: Math.min(3, s.version) }, (_, i) => (
-            <li key={i}>
+            <li key={i} className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0">
               <span className="mono">v{s.version - i}</span>
               <span className="muted small">
                 {i === 0 ? `current · ${ago(s.updated)}` : ago(s.updated - i * 30 * 86400)}
@@ -2475,7 +2504,7 @@ function SecretDetail({ s, db, patch }: { s: Secret; db: Db; patch: (f: (s: Secr
         </ul>
         {rotating ? (
           <form
-            className="inline-form"
+            className="flex flex-wrap items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               patch((x) => ({ ...x, version: x.version + 1, updated: NOW }));
@@ -2584,39 +2613,39 @@ function Agents({ db }: { db: Db }) {
           </Button>
         </Card>
       )}
-      <ul className="sess-list">
+      <ul className="m-0 list-none rounded-[14px] border border-border bg-card p-0 shadow-xs">
         {db.agents.map((a) => {
           const gs = grantsOf(a.name);
           const live = db.sessions.some((s) => s.agent === a.name && s.state === "active");
           return (
-            <li key={a.name} className="sess">
-              <div className="sess-main">
+            <li key={a.name} className="[&+&]:border-t [&+&]:border-border">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 py-2.5 pr-4 pl-2 min-[761px]:grid-cols-[minmax(0,1fr)_auto_72px_76px]">
                 <Button
                   variant="ghost"
                   type="button"
-                  className="sess-toggle"
+                  className="flex h-auto min-w-0 items-center justify-start gap-3 rounded-[10px] px-2 py-1 text-left text-[length:inherit] leading-[inherit] font-[inherit] font-normal hover:bg-accent"
                   aria-expanded={open === a.name}
                   onClick={() => setOpen(open === a.name ? null : a.name)}
                 >
-                  <span className="av">
+                  <span className="av size-8 flex-none rounded-[9px] bg-muted text-(--chip-text)">
                     <AgentIcon a={a} />
                   </span>
-                  <span className="who">
-                    <span className="who-1">
+                  <span className="who grid gap-0.5">
+                    <span className="who-1 truncate">
                       <span className="who-name">{a.name}</span>
                       {live && <span className="live-dot" title="Has a live session" />}
                     </span>
-                    <span className="who-2">
+                    <span className="who-2 truncate">
                       {a.description} · {a.machine}
                     </span>
                   </span>
                 </Button>
                 <span className="muted small">{plural(gs.length, "secret")}</span>
-                <span className="r muted small nowrap">{ago(a.lastSeen)}</span>
+                <span className="text-right muted small nowrap">{ago(a.lastSeen)}</span>
                 <span />
               </div>
               {open === a.name && (
-                <dl className="sess-det">
+                <dl className="m-0 grid grid-cols-[110px_minmax(0,1fr)] gap-x-3.5 gap-y-1 pt-1 pr-4 pb-3.5 pl-15 text-[13px] [&>dd]:m-0 [&>dd]:wrap-anywhere [&>dt]:text-muted-foreground">
                   <dt>Enrolled</dt>
                   <dd>
                     {ago(a.enrolled)} on {a.machine}
@@ -2626,9 +2655,12 @@ function Agents({ db }: { db: Db }) {
                     {gs.length === 0 ? (
                       <span className="muted">Nothing yet. Open a secret in Secrets and grant this agent access.</span>
                     ) : (
-                      <ul className="plain">
+                      <ul className="m-0 mb-2.5 p-0 list-none">
                         {gs.map((s) => (
-                          <li key={s.id}>
+                          <li
+                            key={s.id}
+                            className="flex min-h-[34px] items-center gap-2.5 border-t border-border first:border-t-0"
+                          >
                             <span className="mono">{s.name}</span>
                             <span className="muted small">
                               {s.project} / {s.env} · {until(s.grants.find((g) => g.agent === a.name)!.expires)}
@@ -2636,7 +2668,7 @@ function Agents({ db }: { db: Db }) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-(--destructive-text)"
+                              className="ml-auto text-(--destructive-text)"
                               type="button"
                               onClick={() =>
                                 db.setSecrets((ss) =>
@@ -2654,7 +2686,7 @@ function Agents({ db }: { db: Db }) {
                     )}
                   </dd>
                   <dt>Enrollment</dt>
-                  <dd className="inline-form">
+                  <dd className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm" type="button" onClick={() => setOnce(a.name)}>
                       <Icon name="rotate" />
                       Rotate enrollment secret

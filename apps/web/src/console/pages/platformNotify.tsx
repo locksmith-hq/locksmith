@@ -118,7 +118,7 @@ function Inbox({ say, unread }: { say: PageProps["say"]; unread: number }) {
     const meta = META[x.id] ?? FALLBACK;
     return (
       <li key={x.id} className="row pf-row" data-unread={!x.read}>
-        <span className="ic">
+        <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground mt-0.5">
           <Icon name={PRODUCT_ICON[x.product] ?? "alert"} />
         </span>
         <div>
@@ -173,7 +173,7 @@ function Inbox({ say, unread }: { say: PageProps["say"]; unread: number }) {
         </Button>
       </Head>
       <Tabs at="" unread={unread} />
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <ToggleGroup type="single" value={String(view)} aria-label="Show">
           {(
             [

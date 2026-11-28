@@ -13,7 +13,6 @@
 
 /* Inbox and channel rows */
 .list .pf-row { align-items: start; }
-.pf-row .ic { margin-top: 2px; }
 .pf-row > div { min-width: 0; overflow-wrap: anywhere; }
 .pf-title { color: var(--foreground); font-weight: 500; text-decoration: none; }
 .pf-title:hover { text-decoration: underline; }

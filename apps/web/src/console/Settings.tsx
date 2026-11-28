@@ -203,7 +203,7 @@ export function Settings({ ws, say }: { ws: seed.Workspace; say: (note: string) 
           Deletes every project, secret, grant and connection in {name}. Agents lose access at once. This cannot be
           undone, so export what you need first.
         </p>
-        <div className="inline-form" style={{ marginTop: 12 }}>
+        <div className="set-form flex flex-wrap items-center gap-2" style={{ marginTop: 12 }}>
           <Input
             aria-label={`Type ${name} to confirm`}
             placeholder={`Type ${name} to confirm`}

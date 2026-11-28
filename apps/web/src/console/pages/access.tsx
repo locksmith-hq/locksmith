@@ -109,9 +109,9 @@ function Machines({ project, say }: PageProps) {
               )}
               <fieldset className="ac-fs">
                 <legend className="field ac-leg">May read</legend>
-                <div className="inline-form">
+                <div className="flex flex-wrap items-center gap-2">
                   {a.envs.map((e) => (
-                    <label key={e} className="inline-form ac-chk">
+                    <label key={e} className="flex flex-wrap items-center gap-2 ac-chk">
                       <Checkbox name="env" value={e} defaultChecked={e !== a.prod} />
                       {e}
                     </label>

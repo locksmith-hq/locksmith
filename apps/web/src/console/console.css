@@ -36,8 +36,6 @@ select {
   height: 32px; padding: 0 28px 0 10px; border: 1px solid var(--input); border-radius: 9px; background: var(--card);
   font: 13px var(--font-sans); color: var(--foreground);
 }
-.toolbar { align-items: center; }
-.toolbar .push { margin-left: auto; }
 
 /* Lists whose rows are links. */
 .list a.row { text-decoration: none; transition: background-color 120ms var(--ease-out); }
@@ -78,8 +76,6 @@ select {
   .tl-list { --tl-cols: minmax(0, 1fr) 56px 76px; }
   .tl-row > .tl, .tl-row > .scopes-t, .tl-axis { display: none; }
   .panel.form .add { grid-template-columns: minmax(0, 1fr); }
-  .log li { grid-template-columns: 64px 8px minmax(0, 1fr); }
-  .log .tgt, .log .who-s { display: none; }
 }
 
 /* Hub: the workspace switcher, grouped sidebar and the product grid on Home. */
@@ -271,7 +267,7 @@ a.brand .ls-wordmark { font-size: 1em; }
    blocks wrap too. */
 main :is([data-slot="table-cell"], [data-slot="table-head"]) { white-space: normal; }
 main [data-slot="table-cell"] { overflow-wrap: anywhere; }
-main [data-slot="table-cell"] :is(button, [data-slot="badge"], .ls-pill, .ls-scope, time) { white-space: nowrap; }
+main [data-slot="table-cell"] :is(button, [data-slot="badge"], time) { white-space: nowrap; }
 main [data-slot="table-cell"] :is(.kms-st, small) { white-space: normal; }
 #root main :is(pre, pre *, .pf-code) { white-space: pre-wrap; overflow-wrap: anywhere; }
 main .mono { overflow-wrap: anywhere; }

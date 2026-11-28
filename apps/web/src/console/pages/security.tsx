@@ -65,7 +65,7 @@ function FindingList() {
       <p className="sec-status" role="status">
         {open.length === 0 ? "No open findings." : `${plural(open.length, "open finding")}, ${crit} critical.`}
       </p>
-      <div className="toolbar">
+      <div className="mb-4 flex flex-wrap items-center gap-4 [&_.push]:ml-auto">
         <Label className="field sc-search">
           Search
           <Input
@@ -254,7 +254,7 @@ function Sources({ say }: PageProps) {
                   const n = openCount(w, s.id);
                   return (
                     <li key={s.id} className="row sec-row">
-                      <span className="ic">
+                      <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                         <Icon name={g === "Repositories" ? "git" : g === "CI logs" ? "run" : "s_terminal"} />
                       </span>
                       <div>
@@ -369,7 +369,7 @@ function Rules({ say }: PageProps) {
         Ignored paths<span className="n">{w.paths.length}</span>
       </h2>
       <form
-        className="inline-form sc-pathform"
+        className="flex flex-wrap items-center gap-2 sc-pathform"
         onSubmit={(e) => {
           e.preventDefault();
           const p = path.trim();
@@ -405,7 +405,7 @@ function Rules({ say }: PageProps) {
             const n = w.findings.filter((f) => ignored([p], f)).length;
             return (
               <li key={p} className="row sc-prow">
-                <span className="ic">
+                <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                   <Icon name="doc" />
                 </span>
                 <span>
@@ -473,7 +473,10 @@ function SecuritySettings({ say }: PageProps) {
         sub={
           <>
             Choose when scans run and what happens automatically. Who is alerted about a finding is set in{" "}
-            <a className="link" href="#/notifications/rules">
+            <a
+              className="ml-auto cursor-pointer rounded-sm py-0.5 text-[13px] font-semibold text-[var(--brand-text)] underline decoration-1 underline-offset-[3px] hover:decoration-2"
+              href="#/notifications/rules"
+            >
               Notification rules
             </a>
             .

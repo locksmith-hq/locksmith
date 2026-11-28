@@ -3,7 +3,7 @@
 import { Button } from "@locksmith-hq/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@locksmith-hq/ui/table";
 import { useState } from "react";
-import { Empty, Head, Icon, NOW, DAY, ago, plural, projects, type PageProps, type Pages } from "../kit";
+import { Empty, Head, Icon, SectionHead, NOW, DAY, ago, plural, projects, type PageProps, type Pages } from "../kit";
 import { useSecrets, type Secret } from "./gateway-data";
 import "./lobby.css";
 
@@ -107,10 +107,10 @@ function Overview({ say }: PageProps) {
   return (
     <section>
       <Head title="Overview" sub="What to look at first across all your projects, and how each project stands." />
-      <div className="sec-h">
+      <SectionHead>
         <h2>Needs attention</h2>
         <span className="n">{plural(open.length, "item")}</span>
-      </div>
+      </SectionHead>
       {open.length === 0 ? (
         <Empty icon="shield">
           <b>Nothing needs attention.</b> New items appear here as secrets age or are shared.
@@ -119,7 +119,7 @@ function Overview({ say }: PageProps) {
         <ul className="list">
           {open.map((a) => (
             <li key={a.id} className="row lb-row">
-              <span className="ic">
+              <span className="grid size-8 place-items-center rounded-[9px] bg-muted text-[13px] text-muted-foreground">
                 <Icon name={a.kind === "unused" ? "search" : a.kind === "stale" ? "clock" : "alert"} />
               </span>
               <div>
@@ -130,7 +130,7 @@ function Overview({ say }: PageProps) {
                   {a.s.project} / {a.s.env}
                 </span>
                 <p>
-                  <span className="prod">{KINDS[a.kind].label}.</span> {KINDS[a.kind].why(a.s)}
+                  <span className="text-(--warning-text)">{KINDS[a.kind].label}.</span> {KINDS[a.kind].why(a.s)}
                 </p>
                 {confirm === a.id && (
                   <p className="lb-confirm" role="alert">
@@ -158,10 +158,10 @@ function Overview({ say }: PageProps) {
           ))}
         </ul>
       )}
-      <div className="sec-h" style={{ marginTop: 28 }}>
+      <SectionHead top={28}>
         <h2>Projects</h2>
         <span className="n">{projects.length}</span>
-      </div>
+      </SectionHead>
       <div className="table-wrap">
         <Table>
           <TableHeader>

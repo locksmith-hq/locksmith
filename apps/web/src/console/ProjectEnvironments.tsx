@@ -77,7 +77,7 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
                   {e}
                 </a>
                 {e === production && <Badge className="tag-prod">Production</Badge>}
-                {status === "inherited" && <Badge>Inherited</Badge>}
+                {status === "inherited" && <Badge className="tag-inherited">Inherited</Badge>}
                 {status !== "own" && (
                   <Switch
                     label={`Inherit ${e}`}

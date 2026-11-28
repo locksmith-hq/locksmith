@@ -188,7 +188,7 @@ jobs:
 
       - uses: sigstore/cosign-installer@v4
         with:
-          cosign-release: v3.1.4
+          cosign-release: v3.1.6
 
       - uses: docker/setup-buildx-action@v4
         if: env.DRY_RUN != 'true'
@@ -285,7 +285,7 @@ jobs:
 
       - uses: sigstore/cosign-installer@v4
         with:
-          cosign-release: v3.1.4
+          cosign-release: v3.1.6
 
       - name: Verify release (required)
         run: |

@@ -1,6 +1,6 @@
-// The environments of one project. The organization's environments are inherited: they cannot be changed here
-// until the project stops inheriting that environment (its switch). Environments of the project's own can always be
-// added and removed.
+// The environments of one project. The organization's environments are inherited: they cannot be changed here.
+// Turning an environment's switch off gives the project a copy of its own, which can be changed or removed but never
+// goes back to being inherited. Environments of the project's own can always be added and removed.
 import { Alert, AlertDescription } from "@locksmith-hq/ui/alert";
 import { Badge } from "@locksmith-hq/ui/badge";
 import { Button } from "@locksmith-hq/ui/button";
@@ -15,19 +15,19 @@ const without = (xs: string[], x: string) => xs.filter((v) => v !== x);
 export function ProjectEnvironments({ p }: { p: seed.Project }) {
   const [, redraw] = useState(0);
   const [gone, setGone] = useState<string | null>(null);
+  const [copying, setCopying] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const change = (f: () => void) => {
     f();
     redraw((n) => n + 1);
   };
   const production = p.envs.at(-1);
-  const removed = seed.defaults.envs.filter((e) => seed.envStatus(p, e) === "removed");
 
-  // Switch on: follow the organization again. Off: the environment becomes the project's to change.
-  const inherit = (e: string, on: boolean) =>
+  // One way: the project gets a copy of the environment, which stays when the organization's changes.
+  const copy = (e: string) =>
     change(() => {
-      p.own = on ? without(p.own, e) : [...p.own, e];
-      p.removed = without(p.removed, e);
+      p.own = [...p.own, e];
+      setCopying(null);
     });
   const remove = (e: string) =>
     change(() => {
@@ -40,7 +40,11 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, "-");
-    if (v && !p.envs.includes(v) && !removed.includes(v)) change(() => (p.own = [...p.own, v]));
+    if (v && !p.envs.includes(v))
+      change(() => {
+        p.own = [...p.own, v];
+        p.removed = without(p.removed, v); // a name the organization has, added again, is a new copy
+      });
     setDraft("");
   };
 
@@ -48,7 +52,7 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
     <section>
       <Head
         title="Environments"
-        sub={`What ${p.id} can keep secrets in. It inherits the organization's environments; stop inheriting one to change or remove it here.`}
+        sub={`What ${p.id} can keep secrets in. It inherits the organization's environments; stop inheriting one to get a copy you can change or remove.`}
       />
       <Card className="panel form">
         <h2>Environments</h2>
@@ -66,9 +70,8 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
                 </a>
                 {e === production && <Badge variant="secondary">Production</Badge>}
                 {status === "inherited" && <Badge variant="outline">Inherited</Badge>}
-                {status !== "own" && (
-                  <Switch label={`Inherit ${e}`} checked={status === "inherited"} onChange={(on) => inherit(e, on)} />
-                )}
+                {status === "detached" && <Badge variant="outline">Copy</Badge>}
+                {status === "inherited" && <Switch label={`Inherit ${e}`} checked onChange={() => setCopying(e)} />}
                 {status !== "inherited" && (
                   <Button
                     variant="ghost"
@@ -85,6 +88,20 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
             );
           })}
         </ul>
+        {copying && (
+          <Alert>
+            <AlertDescription>
+              Stop inheriting {copying}? {p.id} gets a copy of it that stays as it is when the organization changes{" "}
+              {copying}. A copy cannot be inherited again.
+              <Button size="sm" type="button" style={{ marginLeft: "auto" }} onClick={() => copy(copying)}>
+                Make a copy
+              </Button>
+              <Button variant="ghost" size="sm" type="button" onClick={() => setCopying(null)}>
+                Keep inheriting
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         {gone && (
           <Alert variant="destructive">
             <AlertDescription>
@@ -124,20 +141,6 @@ export function ProjectEnvironments({ p }: { p: seed.Project }) {
           </Button>
         </div>
       </Card>
-      {removed.length > 0 && (
-        <Card className="panel">
-          <h2>Removed from this project</h2>
-          <p className="muted">Organization environments this project no longer has. Inherit one to bring it back.</p>
-          <ul className="plain" style={{ margin: "12px 0 0" }}>
-            {removed.map((e) => (
-              <li key={e}>
-                <span className="mono">{e}</span>
-                <Switch label={`Inherit ${e}`} checked={false} onChange={(on) => inherit(e, on)} />
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
     </section>
   );
 }

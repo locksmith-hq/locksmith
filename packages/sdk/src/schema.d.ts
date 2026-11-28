@@ -221,6 +221,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/orgs/{org_id}/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The org's plan and paid feature keys (service token only)
+         * @description The org in the path must be the org named in `X-Locksmith-Org`; another org is a `404`. A Free org has no features.
+         */
+        get: operations["get_org_entitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/secrets/{secret_id}/versions/{version}/material": {
         parameters: {
             query?: never;
@@ -1398,6 +1418,14 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description The plan and paid features of one org. */
+        OrgEntitlements: {
+            /** @description Stable feature keys the plan includes, for example `audit_streaming`; sorted. */
+            features: string[];
+            /** Format: uuid */
+            org_id: string;
+            plan: components["schemas"]["PlanKey"];
+        };
         /** @description One page of a list. `next` is absent on the last page. */
         Paged_Agent: {
             items: {
@@ -1535,6 +1563,11 @@ export interface components {
             description?: string | null;
             name?: string | null;
         };
+        /**
+         * @description An org's plan.
+         * @enum {string}
+         */
+        PlanKey: "free" | "enterprise";
         /** @description The JSON body of an error response. */
         Problem: {
             detail?: string | null;
@@ -2464,6 +2497,68 @@ export interface operations {
             };
             /** @description Unsupported media type */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_org_entitlements: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The org the caller acts for */
+                "X-Locksmith-Org": string;
+            };
+            path: {
+                /** @description Org id */
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The org's entitlements */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgEntitlements"];
+                };
+            };
+            /** @description Missing or invalid service token or org header */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Email verification required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not found (including another org's secret) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

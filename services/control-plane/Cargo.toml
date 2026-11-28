@@ -50,6 +50,8 @@ opentelemetry-otlp = { version = "0.33.1", default-features = false, features = 
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 # S2: per-version envelope encryption and the OpenBao transit DEK wrapper.
 ls-envelope = { path = "../../crates/ls-envelope" }
+# T10 OC-6: the entitlement seam; the default source is the free tier. Never depends on ee/.
+ls-entitlements = { path = "../../crates/ls-entitlements" }
 zeroize = "1.9.1"
 # S3: constant-time comparison of the gateway service token on the internal material endpoint.
 subtle = "2.6.1"

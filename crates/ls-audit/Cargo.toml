@@ -30,3 +30,5 @@ sqlx-postgres = { version = "0.9.0", default-features = false, features = ["uuid
 proptest = { workspace = true }
 ls-pg-test = { path = "../ls-pg-test" }
 tokio = { version = "1.54", features = ["macros", "rt-multi-thread", "time"] }
+# Task 1.1 (t10-audit-streaming): fixtures validate against the pinned OCSF JSON Schemas.
+jsonschema = { version = "0.63.1", default-features = false }

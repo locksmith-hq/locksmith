@@ -2869,6 +2869,7 @@ version = "0.0.1-alpha.4"
 dependencies = [
  "ed25519-dalek",
  "hex",
+ "jsonschema",
  "ls-pg-test",
  "proptest",
  "serde_json",
@@ -2922,6 +2923,7 @@ dependencies = [
  "ls-agent-token",
  "ls-audit",
  "ls-crypto",
+ "ls-entitlements",
  "ls-envelope",
  "ls-http",
  "ls-mcp-server",
